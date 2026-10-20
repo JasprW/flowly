@@ -73,6 +73,7 @@ for (const [agentId, list] of byAgent) {
       }
       turn.ended = true;
       turn.last = e.at;
+      if (e.model) turn.model = e.model;
       continue;
     }
     if (e.actor !== "agent") continue;
@@ -97,20 +98,34 @@ for (const t of turns) {
   t.suggested = !!t.setAfter && !t.none;
 }
 
-// A Move to Done suggestion taken: the card went to Done (by a person) before the session's next turn began.
-const nextStart = (turn) => {
-  const list = byAgent.get(turn.agentId);
-  const i = list.indexOf(turn.setAfter);
-  const next = list.slice(i + 1).find((e) => e.action === "agent.turn_started");
-  return next ? Date.parse(next.at) : Infinity;
-};
+// Picked: a suggestion set is answered by the card going to Done (when the set offered Move to Done) or by
+// the session's next turn, whose turn_ended carries `pick` (>= 0 taken, -1 answered with something else,
+// absent unknown). Unanswered or unknown sets are left out.
 for (const turn of turns) {
   if (!turn.suggested) continue;
-  const offersDone = !!turn.setAfter.offersDone;
-  const limit = nextStart(turn);
+  const list = byAgent.get(turn.agentId);
+  const at = list.indexOf(turn.setAfter);
+  const next = list.slice(at + 1).find((e) => e.action === "agent.turn_started");
+  const limit = next ? Date.parse(next.at) : Infinity;
   const moved = events.some((e) => e.taskId === turn.taskId && e.actor === "human" && e.action === "status_changed" && e.to === "done" && Date.parse(e.at) > Date.parse(turn.setAfter.at) && Date.parse(e.at) < limit);
-  turn.offered = offersDone && moved ? 1 : 0; // only Done outcomes are known in history
-  turn.picked = turn.offered;
+  if (turn.setAfter.offersDone && moved) {
+    turn.offered = 1;
+    turn.picked = 1;
+    continue;
+  }
+  if (!next) continue;
+  let ended = null;
+  for (const e of list.slice(list.indexOf(next) + 1)) {
+    if (e.action === "agent.turn_started") break;
+    if (e.action === "agent.turn_ended") {
+      ended = e;
+      break;
+    }
+  }
+  if (ended && typeof ended.pick === "number") {
+    turn.offered = 1;
+    turn.picked = ended.pick >= 0 ? 1 : 0;
+  }
 }
 
 const blank = () => ({ deliveries: 0, results: 0, questions: 0, moves: 0, none: 0, movesAny: 0, ideas: 0, offered: 0, picked: 0 });
@@ -129,13 +144,16 @@ const add = (into, t) => {
 };
 const perDay = Object.fromEntries(days.map((d) => [d, blank()]));
 const perSession = {};
+const perModel = {};
 for (const t of turns) {
   const d = dayOf(t.last);
   if (!perDay[d]) continue;
   add(perDay[d], t);
   add((perSession[t.agentId] ??= blank()), t);
+  // A turn without a stamped model (everything before the stamp existed) is grouped as "history".
+  add((perModel[t.model || "history"] ??= blank()), t);
 }
 const total = blank();
 for (const d of days) for (const k of Object.keys(total)) total[k] += perDay[d][k];
 
-console.log(JSON.stringify({ flowFile, zone, days, raw, perDay, perSession, total }, null, 2));
+console.log(JSON.stringify({ flowFile, zone, days, raw, perDay, perSession, perModel, total }, null, 2));

@@ -40,8 +40,10 @@ describe.skipIf(!dir)("counters equal the hand count of the frozen board", () =>
       expect({ day: d.day, ...counts }).toEqual({ day: d.day, ...expected.perDay[d.day] });
     }
     expect(actual.total).toEqual(expected.total);
-    expect(actual.models).toHaveLength(1);
-    expect(actual.models[0]).toMatchObject({ model: "history", ...expected.total });
+    // Per model: turns with a stamped model keep it, the rest are grouped as "history" (modelOf above).
+    const used = (c: Record<string, number>) => c.deliveries + c.results + c.questions + c.movesAny + c.ideas > 0;
+    const wantModels = Object.fromEntries(Object.entries(expected.perModel as Record<string, Record<string, number>>).filter(([, c]) => used(c)));
+    expect(Object.fromEntries(actual.models.map(({ model, ...counts }) => [model, counts]))).toEqual(wantModels);
 
     const flags = (list: { kind: string; miss: string; n: number; agentId?: string }[]) =>
       list.filter((f) => f.kind === "session").map((f) => `${f.agentId}:${f.miss}:${f.n}`).sort();
