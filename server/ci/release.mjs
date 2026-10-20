@@ -13,6 +13,16 @@ if (action === 'validate') {
   run('git', ['fetch', '--no-tags', 'origin', 'main']);
   run('git', ['merge-base', '--is-ancestor', 'HEAD', 'origin/main']);
   console.log(`Release source validated: ${tag ?? 'dry run on main'} ${run('git', ['rev-parse', 'HEAD'])}`);
+} else if (action === 'rehearse') {
+  assert(dryRun, 'Rehearsal must explicitly enable dry-run');
+  const meta = json('dist/npm/release.json');
+  const info = validateVersions(json('package.json'), json('package-lock.json'), tag);
+  assert.equal(meta.version, info.version);
+  assert.equal(meta.sha, run('git', ['rev-parse', 'HEAD']));
+  assert.equal(meta.filename, `paseo-flowly-${meta.version}.tgz`);
+  const tarball = join('dist/npm', meta.filename);
+  assertIntegrity(meta.integrity, `sha512-${createHash('sha512').update(readFileSync(tarball)).digest('base64')}`);
+  run('npm', ['publish', tarball, '--dry-run', '--ignore-scripts', '--access', 'public', '--tag', info.distTag], { stdio: 'inherit' });
 } else if (action === 'publish') {
   assert(!dryRun && tag, 'Publishing requires an explicit non-dry tag release');
   assert.equal(process.env.GITHUB_REPOSITORY, 'JasprW/flowly');
@@ -42,5 +52,5 @@ if (action === 'validate') {
   }
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `version=${meta.version}\nprerelease=${meta.prerelease}\nfilename=${meta.filename}\n`);
 } else {
-  throw new Error('Usage: node scripts/ci/release.mjs validate|publish');
+  throw new Error('Usage: node server/ci/release.mjs validate|rehearse|publish');
 }

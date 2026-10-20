@@ -5,7 +5,7 @@ Status: implementation contract, 2026-10-21. Delivery channels are the existing
 
 ## Observable behavior
 
-- Every pull request, push to main, and CI branch push runs reproducible `npm ci`
+- Every pull request and push to main runs reproducible `npm ci`
   with the existing peer-dependency policy, typecheck and all Vitest checks on
   GitHub-hosted Ubuntu with Node 22 and 24. A stable `CI gate` job requires all
   checks. Manual CI runs are available. No credentials are exposed to PR jobs.

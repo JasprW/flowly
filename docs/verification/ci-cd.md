@@ -23,3 +23,17 @@ security documentation linked in the operations guide.
 
 Remote verification and npm configuration: pending; see final evidence below.
 Independent testing: [Luna report](ci-cd-luna.md).
+
+## First remote checkpoint (40b92a0)
+
+- PASS [PR CI](https://github.com/JasprW/flowly/actions/runs/39458649458):
+  Node 22 + 24 types/tests/guard checks; 678 passed /65 skipped on each;
+  Node 24 package manifest install PASS; CI gate PASS.
+- Initial branch-push CI also passed (39458648543). Subsequent configuration
+  removes CI branch-push triggering to avoid repeating the PR matrix.
+- Main protection configured: strict CI gate from GitHub Actions app15368,
+  admins included, PR required (0 extra approvals), linear history and resolved
+  conversations; force pushes/deletions disabled.
+- npm GitHub environment configured with only main branch and v* tags.
+- npm settings access is blocked by the owner's security-key authentication;
+  user notified through the async question tool. No token copied to GitHub.

@@ -1,6 +1,6 @@
 # CI/CD operations
 
-CI is in `.github/workflows/ci.yml`. PRs, main, and ci/** branch pushes run Node
+CI is in `.github/workflows/ci.yml`. PRs and main pushes run Node
 22 and 24 typecheck + Vitest + release guard tests on Ubuntu. Node 24 also packs,
 inspects and installs the actual npm tarball with the plugin manifest commands.
 `CI gate` is the required branch check. Artifacts expire after 7 days.
@@ -17,7 +17,7 @@ owner `JasprW`, repository `flowly`, workflow filename `release.yml`, environmen
 package two-factor authentication enabled. The publishing job uses Node 24 and
 npm >=11.5.1; other jobs have neither OIDC nor release write permission.
 
-The `npm` GitHub environment permits protected main and release tags. Main is
+The `npm` GitHub environment permits main and v* release tags. Main is
 protected with `CI gate`; force pushes and branch deletion are disabled.
 Changes go through a PR; no second human review is required for this solo repo.
 
@@ -42,7 +42,8 @@ References: [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/)
    its own [submission](https://github.com/getpaseo/plugins/issues/new/choose).
 
 To rehearse, run Release manually on main with `dry_run=true` (default). It runs
-source checks and CI/package validation, and skips the publishing job. It does
+source checks and CI/package validation, downloads the artifact, verifies its
+checksum and runs npm publish --dry-run; it skips the publishing job. It does
 not create a version, npm package, tag or GitHub Release. A manual real publish
 requires selecting a v* tag that already contains the workflows.
 
