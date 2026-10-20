@@ -586,3 +586,17 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - PASS (live, 2026-10-20): five `codex/gpt-6-luna` full-access sessions on a temporary Tinylink card (`docs/verification/delivery-reminders.md`): `reminders` arrive over MCP and over the CLI; sessions allowed to act made the named call (`moves: []` over MCP, `next-moves` over CLI) and the second delivery no longer carried the next-moves reminder; an explicit `[]` on the delivery call also avoids it. Card, sessions and workspace cleaned up and checked in the board and the native registry.
 - NOT SHOWN: that Luna acts on the reminder unprompted (S2, told to end its turn, did not; the ideas reminder led to no idea in 5 sessions); phone layout; non-English; `question`/`result` and replay live.
 - Onboarding upkeep: no welcome-tour change and no new tip. Agent-facing change; users only see more suggestion chips and ideas, which the existing `next-move` and `first-idea` tips already introduce.
+
+## GitHub CI/CD — 2026-10-21
+
+- Implemented in an isolated branch from origin/main (5e53249), preserving the
+  active checkout's unrelated changes. Contract: [CI-CD-SPEC](CI-CD-SPEC.md).
+- CI on Node 22/24; stable CI gate; exact npm tarball install; generated shipped
+  shrinkwrap, OIDC tag release, prerelease channel, retry integrity, release
+  assets/checksums, weekly action updates, Makefile and [operations](CI-CD.md).
+- PASS local: npm ci; typecheck; npm test (678 passed, 65 skipped); focused
+  release guard tests (4); package extraction + declared install; actionlint.
+- Remote runs, repository settings and independent Luna evidence are recorded
+  in [verification/ci-cd.md](verification/ci-cd.md) when completed. No new npm
+  version or actual publish is part of this setup's verification.
+- Onboarding: contributor tooling only; no welcome-tour or one-time tip change.

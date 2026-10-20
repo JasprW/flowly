@@ -1,9 +1,10 @@
 # Release workflow for Flowly (the Paseo plugin). Run `make help`.
 #
-#   make release VERSION=1.1.0     check, bump, commit, tag, push, publish to npm, GitHub release
+#   make release VERSION=1.1.0     check an already merged version, tag, push; GitHub Actions publishes
 #   make release VERSION=1.1.0 DRY_RUN=1    print every outward step instead of running it
 #
-# Every outward step (push, npm publish, GitHub release) asks first; pass YES=1 to skip the questions.
+# Every local outward step asks first; pass YES=1 to skip the questions.
+# Normal publication uses release.yml with npm OIDC. publish/github-release are recovery targets.
 # npm credentials: put NPM_TOKEN (a granular token that bypasses 2FA) in .env, which is git-ignored
 # (copy .env.example), or export it, or rely on `npm login`. NPM_OTP=123456 supplies a one-time code.
 # The token is only written to a temporary file while npm runs, never printed.
@@ -39,8 +40,8 @@ check: ## Typecheck and run the tests
 	npm run typecheck
 	npm test
 
-pack: ## List what the npm package would contain (nothing is published)
-	npm pack --dry-run --ignore-scripts
+pack: ## Validate and smoke-install the release tarball (nothing is published)
+	npm run ci:package
 
 verify-clean: ## Fail unless on main, with a clean tree, in sync with origin
 	@test "$$(git branch --show-current)" = "$(BRANCH)" || { echo "not on $(BRANCH)"; exit 1; }
@@ -54,20 +55,18 @@ bump: ## Set the version in package.json and the lockfile (VERSION=x.y.z)
 	@if git rev-parse -q --verify "refs/tags/v$(VERSION)" >/dev/null; then echo "tag v$(VERSION) already exists"; exit 1; fi
 	npm version "$(VERSION)" --no-git-tag-version --ignore-scripts
 
-tag: ## Commit the version bump and create the annotated tag for the current version
-	git add package.json package-lock.json
-	git commit -q -m "Release v$(CUR)"$$'\n\n'"Co-Authored-By: Codex claude-sonnet-5-5 <noreply@anthropic.com>"
+tag: ## Annotate the already committed current version (merge the bump PR first)
 	git tag -a "v$(CUR)" -m "Flowly v$(CUR): the agent-native workflow for Paseo"
 
-push: ## Push main and the tag for the current version to origin
-	$(call confirm,Push $(BRANCH) and v$(REL) to origin?)
-	$(Q)$(RUN) git push origin $(BRANCH) "v$(REL)"
+push: ## Push the tag for the current version to origin
+	$(call confirm,Push v$(REL) to origin?)
+	$(Q)$(RUN) git push origin "v$(REL)"
 
-publish: ## Publish the current version to npm, then wait until it is live
+publish: pack ## Recovery only: publish the validated tarball locally, then wait until live
 	$(call confirm,Publish $(PKG)@$(REL) to npm?)
 	@set -e; t=$$(mktemp); trap 'rm -f "$$t"' EXIT; \
 	if [ -n "$$NPM_TOKEN" ]; then printf '//registry.npmjs.org/:_authToken=%s\n' "$$NPM_TOKEN" > "$$t"; export NPM_CONFIG_USERCONFIG="$$t"; fi; \
-	$(RUN) npm publish --ignore-scripts $${NPM_OTP:+--otp=$$NPM_OTP}
+	$(RUN) npm publish "dist/npm/$(PKG)-$(CUR).tgz" --ignore-scripts $${NPM_OTP:+--otp=$$NPM_OTP}
 	@if [ -z "$(DRY_RUN)" ]; then $(MAKE) --no-print-directory wait-npm; fi
 
 npm-whoami: ## Show which npm account the token in .env (or your npm login) belongs to
@@ -86,15 +85,14 @@ github-release: ## Create the GitHub release for the current tag (generated note
 	$(call confirm,Create GitHub release v$(REL)?)
 	$(Q)$(RUN) gh release create "v$(REL)" --verify-tag --title "Flowly v$(REL)" --generate-notes
 
-release: ## Full release: make release VERSION=x.y.z [DRY_RUN=1] [YES=1] [NO_GH_RELEASE=1]
+release: ## Validate the merged version and push its tag; GitHub Actions publishes (DRY_RUN=1 previews)
 	@test -n "$(VERSION)" || { echo "usage: make release VERSION=x.y.z"; exit 1; }
 	@$(MAKE) --no-print-directory verify-clean
 	@$(MAKE) --no-print-directory check
-	@$(RUN) make bump VERSION=$(VERSION)
+	@if [ -z "$(DRY_RUN)" ] && [ "$(VERSION)" != "$(CUR)" ]; then echo "Merge a version-bump PR first: make bump VERSION=$(VERSION)"; exit 1; fi
 	@$(RUN) make tag
 	@$(MAKE) --no-print-directory push
-	@$(MAKE) --no-print-directory publish
-	@if [ -z "$(NO_GH_RELEASE)" ]; then $(MAKE) --no-print-directory github-release; fi
+	@echo "GitHub Actions owns npm and GitHub publication: https://github.com/JasprW/flowly/actions/workflows/release.yml"
 	@$(MAKE) --no-print-directory registry
 
 registry: ## Print how to update the Paseo registry listing (Git updates there are manual)

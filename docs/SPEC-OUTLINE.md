@@ -249,3 +249,7 @@ R2、R3 均建立在 R1 的关联及持久化能力上；R4 按模块分别评�
 | 规则灵活性 | 先定义默认卡片流程和必要配置 | 列与状态的具体范围；复杂规则编辑留到后续评估 |
 
 后续具体设计沿用本文件的已确认约定。本文保持计划和大纲层级，具体数据结构、接口和交互细节在下一阶段展开。
+
+2026-10-21 GitHub CI/CD: PR/main CI, installed-package smoke and OIDC npm/GitHub
+releases from validated version tags. [Spec](CI-CD-SPEC.md),
+[operations](CI-CD.md). No product UI or task automation change.

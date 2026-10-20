@@ -12,7 +12,8 @@
       "--omit=dev",
       "--ignore-scripts",
       "--no-audit",
-      "--no-fund"
+      "--no-fund",
+      "--legacy-peer-deps"
     ]
   ]
 }

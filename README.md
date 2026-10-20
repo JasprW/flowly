@@ -132,7 +132,7 @@ npm run typecheck
 npm test
 ```
 
-Releases run through the Makefile: `make help` lists the steps, and `make release VERSION=x.y.z DRY_RUN=1` previews a full release (checks, version bump, tag, push, npm publish, GitHub release). Every outward step asks first.
+GitHub Actions checks every PR and main push (Node 22/24, types, tests and a real package install). `make release VERSION=x.y.z` checks an already merged version and pushes an annotated tag; the tag workflow publishes the tested tarball to npm using OIDC and creates a GitHub Release. `DRY_RUN=1` previews local release steps. See [CI/CD setup and recovery](docs/CI-CD.md).
 
 To add or change text, wrap it in `t()` / `tn()` and add the translation to every file in [`shared/i18n/`](shared/i18n/); `npm test` lists what is missing. See [`docs/I18N-SPEC.md`](docs/I18N-SPEC.md).
 

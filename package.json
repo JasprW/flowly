@@ -36,12 +36,16 @@
     "!**/*.test.ts",
     "!**/*.test.tsx",
     "!shared/i18n-keys.ts",
-    "!shared/zz-*"
+    "!shared/zz-*",
+    "npm-shrinkwrap.json",
+    "!server/ci/"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "dev": "vitest"
+    "dev": "vitest",
+    "test:ci": "node --test server/ci/release.checks.mjs",
+    "ci:package": "node server/ci/package.mjs"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.11.2",

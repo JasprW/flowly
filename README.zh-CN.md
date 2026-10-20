@@ -132,7 +132,7 @@ npm run typecheck
 npm test
 ```
 
-发布流程用 Makefile：`make help` 列出所有步骤，`make release VERSION=x.y.z DRY_RUN=1` 预览完整发布（检查、改版本号、打标签、推送、发布到 npm、创建 GitHub release）。每个对外的步骤都会先确认。
+GitHub Actions 对 PR 和 main 运行 Node 22/24 的类型检查、测试和真实安装包验证。`make release VERSION=x.y.z` 检查已合入的版本并推送 annotated tag，tag 流水线通过 OIDC 发布已验证的 tarball 到 npm，并创建 GitHub Release；`DRY_RUN=1` 预览本地步骤。配置和恢复见 [CI/CD 文档](docs/CI-CD.md)。
 
 新增或修改文案时，用 `t()` / `tn()` 包起来，并在 [`shared/i18n/`](shared/i18n/) 的每个语言文件里补上译文；`npm test` 会列出缺失项。详见 [`docs/I18N-SPEC.md`](docs/I18N-SPEC.md)。
 
