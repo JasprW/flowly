@@ -5,7 +5,8 @@ Date: 2026-10-21 (Asia/Singapore)
 ## Scope and source identity
 
 - Requested starting source: `5e532494e3d6db5b836bd7d8230501ff169040e5` (`origin/main`).
-- Implementation was committed during this review as `40b92a03de60304588f1efe3b2e686def6205513`; the safe artifact rehearsal hardening was subsequently committed as `afe0061956638a1bedef31d0cd4977cf565b3464` (`HEAD`, `origin/ci/github-actions`). The final workflow/rehearsal review is against `afe0061`.
+- Independent test session: `eab8ccb3-26b4-443d-b35f-0a1b50d77b9a`, full-access mode.
+- Implementation was committed during this review as `40b92a03de60304588f1efe2b3e686def6205513`; the safe artifact rehearsal hardening was subsequently committed as `afe0061956638a1bedef31d0cd4977cf565b3464` (`HEAD`, `origin/ci/github-actions`). The final workflow/rehearsal review is against `afe0061`.
 - Final `git status --porcelain`: only untracked `docs/verification/ci-cd-environment.json` and `docs/verification/ci-cd-protection.json`, created by the parent task. I did not modify or remove them. My only persistent write is this evidence file.
 - Environment: macOS, Node `v26.9.0`, npm `11.19.1`. No Paseo resources, GitHub settings, npm state, or publication endpoints were changed.
 
