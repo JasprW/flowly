@@ -16,7 +16,7 @@ Status: implementation contract, 2026-10-21. Delivery channels are the existing
   package-lock.json, but the plugin's declared install uses npm ci. The generator
   never replaces an existing shrinkwrap file. The generated file is removed in
   finally; only dist/npm artifacts remain. A disposable extraction runs the
-  manifest's exact install commands and verifies runtime module resolution.
+  manifest's exact install commands and verifies the runtime dependency tree.
 - A push of a v-prefixed SemVer tag triggers Release. The tag must match both
   package versions and point to a commit reachable from origin/main. Invalid or
   off-main tags fail before publishing. Release reruns the same CI gate at the

@@ -37,3 +37,16 @@ Independent testing: [Luna report](ci-cd-luna.md).
 - npm GitHub environment configured with only main branch and v* tags.
 - npm settings access is blocked by the owner's security-key authentication;
   user notified through the async question tool. No token copied to GitHub.
+
+## Final implementation checkpoint (afe0061)
+
+- PASS [final PR CI](https://github.com/JasprW/flowly/actions/runs/39459112976):
+  both Node versions and CI gate, with the same 678 passed /65 skipped suite.
+- PASS independent `codex/gpt-6-luna`, full-access session
+  `eab8ccb3-26b4-443d-b35f-0a1b50d77b9a`: four focused tests, disposable real Git
+  fixtures for invalid tag/non-tag/off-main/missing-artifact guards, fake-npm
+  rehearsal with no writes, binary-safe existing-asset path and actionlint.
+  No substantive defect; all its test-created fixtures removed. Full suites
+  were intentionally reused. Full evidence: [ci-cd-luna.md](ci-cd-luna.md).
+- Configuration snapshots: [main protection](ci-cd-protection.json) and
+  [npm environment policies](ci-cd-environment.json).
