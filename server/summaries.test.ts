@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { BoardStore } from "./store";
 import { SummaryService, SummaryStore } from "./summaries";
 import type { SummarySettings } from "../shared/summary";
+import { summaryRow } from "../shared/native-session";
 
 const roots: string[] = [];
 const settle = () => new Promise((r) => setTimeout(r, 30));
@@ -27,6 +28,10 @@ async function setup(options: { claude?: boolean } = {}) {
   const replies: Reply[] = [];
   const created: { workspaceId: string; parent: string; provider: string; prompt: string; labels: Record<string, string> }[] = [];
   let archived = 0;
+  const appended: { agentId: string; row: unknown }[] = [];
+  const archivedIds = new Set<string>(), gone = new Set<string>();
+  let appendFails = false,
+    appendHangs = false;
   const paseo = {
     providers: {
       listAvailable: async () => ({
@@ -57,11 +62,23 @@ async function setup(options: { claude?: boolean } = {}) {
         },
       }),
     },
-    agents: {},
+    agents: {
+      ref: (id: string) => ({
+        refresh: async () => (gone.has(id) ? null : { agent: { id, archivedAt: archivedIds.has(id) ? now : null } }),
+        timeline: {
+          append: async (row: unknown) => {
+            if (appendFails) throw new Error("append failed");
+            if (appendHangs) return new Promise(() => undefined);
+            appended.push({ agentId: id, row });
+            return { seq: appended.length, epoch: "e" };
+          },
+        },
+      }),
+    },
   } as unknown as PaseoApi;
   let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true };
   const store = new SummaryStore(board.directory);
-  const service = new SummaryService(board, store, async () => settings);
+  const service = new SummaryService(board, store, async () => settings, undefined, 50);
   const turn = (text: string) => [{ type: "user_message", text }, { type: "assistant_message", text: "ok " + text }];
   const json = (state: string, update = true) => JSON.stringify({ update, state, target: "Goal: g", recap: "r", next: "n" });
   return {
@@ -73,6 +90,11 @@ async function setup(options: { claude?: boolean } = {}) {
     replies,
     created,
     archived: () => archived,
+    appended,
+    archivedIds,
+    gone,
+    failAppend: () => (appendFails = true),
+    hangAppend: () => (appendHangs = true),
     turn,
     json,
     setSettings: (s: Partial<SummarySettings>) => (settings = { ...settings, ...s }),
@@ -232,7 +254,11 @@ test("manual refresh summarizes the latest turn of the most recent managed sessi
     ],
   };
   (x.paseo.agents as unknown as { ref: unknown }).ref = (id: string) => ({
-    timeline: { refetch: async () => ({ entries: timelines[id] }) },
+    refresh: async () => ({ agent: { id, archivedAt: null } }),
+    timeline: {
+      refetch: async () => ({ entries: timelines[id] }),
+      append: async (row: unknown) => void x.appended.push({ agentId: id, row }),
+    },
   });
   await expect(x.service.refresh("t", [], x.paseo)).rejects.toThrow(/no Kanban sessions/);
   x.replies.push({ text: x.json("refreshed") });
@@ -241,6 +267,8 @@ test("manual refresh summarizes the latest turn of the most recent managed sessi
   expect(x.created[0].prompt).toContain("User: latest ask");
   expect(x.created[0].prompt).not.toContain("User: earlier");
   expect((await x.store.latest("t"))?.agentIds).toEqual(["new"]);
+  // The row goes to the refreshed session (NATIVE-SESSION-SPEC §5.1).
+  expect(x.appended.map((a) => a.agentId)).toEqual(["new"]);
 });
 
 test("overview lists latest per card, running cards, errors and the setting", async () => {
@@ -267,4 +295,76 @@ test("versions written before target existed read with an empty target", async (
   await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
   expect(x.created[0].prompt).toContain("Target: (not set yet)");
   expect((await x.store.latest("t"))?.target).toBe("g");
+});
+
+test("a new version is appended as one flowly-summary row to the session whose turn produced it (NATIVE-SESSION-SPEC §5.1)", async () => {
+  const x = await setup();
+  x.replies.push({ text: x.json("实现完成") });
+  await x.service.enqueue("t", "a1", x.turn("做登录"), x.paseo, new Date().toISOString());
+  await settle();
+  const latest = (await x.store.latest("t"))!;
+  expect(x.appended).toEqual([{ agentId: "a1", row: summaryRow(latest, "w") }]);
+  expect(x.appended[0].row).toMatchObject({ type: "plugin", id: `flowly-summary-${latest.id}`, kind: "flowly-summary", version: 1 });
+});
+
+test("merged turns append to the last session of the batch", async () => {
+  const x = await setup();
+  let release!: () => void;
+  x.replies.push({ text: x.json("one"), gate: new Promise<void>((r) => (release = r)) }, { text: x.json("two") });
+  const first = x.service.enqueue("t", "a1", x.turn("first"), x.paseo);
+  await settle();
+  await x.service.enqueue("t", "a2", x.turn("second"), x.paseo);
+  release();
+  await first;
+  await settle();
+  expect(x.appended.map((a) => a.agentId)).toEqual(["a1", "a2"]);
+});
+
+test("no row for update=false or a failed run", async () => {
+  const x = await setup();
+  x.replies.push({ text: x.json("first") });
+  await x.service.enqueue("t", "a1", x.turn("hi"), x.paseo);
+  x.replies.push({ text: x.json("same", false) }, { status: "error", error: "boom" });
+  await x.service.enqueue("t", "a1", x.turn("thanks"), x.paseo);
+  await x.service.enqueue("t", "a1", x.turn("again"), x.paseo);
+  await settle();
+  expect(x.appended).toHaveLength(1);
+});
+
+test("skips the row when that session started a newer turn, but keeps the version", async () => {
+  const x = await setup();
+  const endedAt = new Date(Date.now() - 60_000).toISOString();
+  await x.board.mutate((b) => {
+    b.events.push({ id: "ev", taskId: "t", actor: "system", action: "agent.turn_started", agentId: "a1", at: new Date().toISOString() } as never);
+  });
+  x.replies.push({ text: x.json("s") });
+  await x.service.enqueue("t", "a1", x.turn("x"), x.paseo, endedAt);
+  await settle();
+  expect(await x.store.latest("t")).toMatchObject({ state: "s" });
+  expect(x.appended).toEqual([]);
+});
+
+test("skips the row for an archived or missing session; an append failure keeps the version and records no error", async () => {
+  const x = await setup();
+  x.archivedIds.add("a1");
+  x.gone.add("a2");
+  x.replies.push({ text: x.json("one") }, { text: x.json("two") }, { text: x.json("three") });
+  await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
+  await x.service.enqueue("t", "a2", x.turn("y"), x.paseo);
+  await settle();
+  expect(x.appended).toEqual([]);
+  x.failAppend();
+  await x.service.enqueue("t", "a3", x.turn("z"), x.paseo);
+  await settle();
+  expect(await x.store.latest("t")).toMatchObject({ state: "three" });
+  expect((await x.store.read()).errors).toEqual([]);
+});
+
+test("a hung append never holds up the card's next summary", async () => {
+  const x = await setup();
+  x.hangAppend();
+  x.replies.push({ text: x.json("one") }, { text: x.json("two") });
+  await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
+  await x.service.enqueue("t", "a1", x.turn("y"), x.paseo);
+  expect((await x.store.latest("t"))?.state).toBe("two");
 });

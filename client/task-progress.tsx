@@ -117,7 +117,7 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
 }
 
 /** Each field in full: brevity comes from the prompt, never from cutting text (TASK-SUMMARY-SPEC §3, §7). */
-function SummaryBody({ entry }: { entry: Pick<SummaryEntry, "state" | "target" | "recap" | "next"> }) {
+export function SummaryBody({ entry }: { entry: Pick<SummaryEntry, "state" | "target" | "recap" | "next"> }) {
   return (
     <CardBody>
       {!!entry.state && <CardHeadline>{entry.state}</CardHeadline>}

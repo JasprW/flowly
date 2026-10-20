@@ -1,0 +1,346 @@
+{
+  "round": 3,
+  "testSessionId": "e63b5616-a0db-47cd-9b11-4c3691dcde10",
+  "testSessionModel": "codex/gpt-6-luna",
+  "testSessionMode": "full-access",
+  "fixtureModel": "claude/claude-haiku-5-5",
+  "settingsBeforeFile": "settings-before.json",
+  "startedAt": "2026-10-20T15:24:08.934Z",
+  "steps": [
+    {
+      "at": "2026-10-20T15:24:09.554Z",
+      "step": "card-a-created",
+      "cardId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+      "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+      "workspaceId": "wks_b9b122aa3eb49e8c",
+      "title": "[test] native session round 3 a 5d8e71a1",
+      "mode": "directory",
+      "createdAt": "2026-10-20T15:24:09.552Z"
+    },
+    {
+      "at": "2026-10-20T15:24:09.749Z",
+      "step": "session-a-created",
+      "agentId": "3c82e691-c29d-458a-a8bd-545530443e1a",
+      "model": "claude/claude-haiku-5-5",
+      "modeId": "bypassPermissions"
+    },
+    {
+      "at": "2026-10-20T15:24:24.824Z",
+      "step": "move-a-ready",
+      "row": {
+        "type": "plugin",
+        "id": "flowly-next-moves-a33008ab-004d-45c3-a46a-2dc5330c308d",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "workspaceId": "wks_b9b122aa3eb49e8c",
+          "eventId": "a33008ab-004d-45c3-a46a-2dc5330c308d",
+          "moves": [
+            {
+              "label": "Move to Done",
+              "moveTo": "done"
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      },
+      "task": {
+        "id": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+        "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+        "workspaceId": "wks_b9b122aa3eb49e8c",
+        "sourcePath": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+        "repoPaths": [
+          "/Users/bofan.wang/Developer/personal/flowly-test/tinylink"
+        ],
+        "title": "[test] native session round 3 a 5d8e71a1",
+        "description": "Round 3 D7 fixture a. No source file edits; owned temporary workspace.",
+        "status": "in_review",
+        "priority": "normal",
+        "position": 4,
+        "revision": 2,
+        "operationId": "native-session-r3-a-15fe9a45-6df0-4a34-ba6e-cdecb1336d37",
+        "createdAt": "2026-10-20T15:24:09.527Z",
+        "updatedAt": "2026-10-20T15:24:21.274Z",
+        "archivedAt": null,
+        "ownsWorkspace": true
+      }
+    },
+    {
+      "at": "2026-10-20T15:24:24.825Z",
+      "step": "fixture-a-initialized",
+      "managedAgentId": "3c82e691-c29d-458a-a8bd-545530443e1a",
+      "readyMoveRow": {
+        "type": "plugin",
+        "id": "flowly-next-moves-a33008ab-004d-45c3-a46a-2dc5330c308d",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "workspaceId": "wks_b9b122aa3eb49e8c",
+          "eventId": "a33008ab-004d-45c3-a46a-2dc5330c308d",
+          "moves": [
+            {
+              "label": "Move to Done",
+              "moveTo": "done"
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      },
+      "autoWrapupAtSetup": true,
+      "nextMoveTapAtSetup": "fill"
+    },
+    {
+      "at": "2026-10-20T15:26:26.712Z",
+      "step": "fixture-a-reopened",
+      "before": "done",
+      "after": "development",
+      "revision": 4
+    },
+    {
+      "at": "2026-10-20T15:26:42.996Z",
+      "step": "fixture-a-second-move-ready",
+      "turnStatus": "idle",
+      "row": {
+        "type": "plugin",
+        "id": "flowly-next-moves-a33008ab-004d-45c3-a46a-2dc5330c308d",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "workspaceId": "wks_b9b122aa3eb49e8c",
+          "eventId": "a33008ab-004d-45c3-a46a-2dc5330c308d",
+          "moves": [
+            {
+              "label": "Move to Done",
+              "moveTo": "done"
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      },
+      "task": {
+        "id": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+        "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+        "workspaceId": "wks_b9b122aa3eb49e8c",
+        "sourcePath": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+        "repoPaths": [
+          "/Users/bofan.wang/Developer/personal/flowly-test/tinylink"
+        ],
+        "title": "[test] native session round 3 a 5d8e71a1",
+        "description": "Round 3 D7 fixture a. No source file edits; owned temporary workspace.",
+        "status": "in_review",
+        "priority": "normal",
+        "position": 4,
+        "revision": 5,
+        "operationId": "native-session-r3-a-15fe9a45-6df0-4a34-ba6e-cdecb1336d37",
+        "createdAt": "2026-10-20T15:24:09.527Z",
+        "updatedAt": "2026-10-20T15:26:39.839Z",
+        "archivedAt": null,
+        "ownsWorkspace": true
+      }
+    },
+    {
+      "at": "2026-10-20T15:27:32.993Z",
+      "step": "fixture-a-second-move-readback",
+      "rows": [
+        {
+          "type": "plugin",
+          "id": "flowly-next-moves-a33008ab-004d-45c3-a46a-2dc5330c308d",
+          "kind": "flowly-next-moves",
+          "version": 1,
+          "data": {
+            "status": "ready",
+            "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+            "workspaceId": "wks_b9b122aa3eb49e8c",
+            "eventId": "a33008ab-004d-45c3-a46a-2dc5330c308d",
+            "moves": [
+              {
+                "label": "Move to Done",
+                "moveTo": "done"
+              }
+            ]
+          },
+          "pluginId": "flowly"
+        },
+        {
+          "type": "plugin",
+          "id": "flowly-next-moves-c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+          "kind": "flowly-next-moves",
+          "version": 1,
+          "data": {
+            "status": "ready",
+            "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+            "workspaceId": "wks_b9b122aa3eb49e8c",
+            "eventId": "c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+            "moves": [
+              {
+                "label": "Move to Done",
+                "moveTo": "done"
+              }
+            ]
+          },
+          "pluginId": "flowly"
+        }
+      ],
+      "selected": {
+        "type": "plugin",
+        "id": "flowly-next-moves-c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "workspaceId": "wks_b9b122aa3eb49e8c",
+          "eventId": "c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+          "moves": [
+            {
+              "label": "Move to Done",
+              "moveTo": "done"
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      }
+    },
+    {
+      "at": "2026-10-20T15:28:26.191Z",
+      "step": "card-b-created",
+      "cardId": "f8195786-d9fd-4af2-953a-b2a4f37a9264",
+      "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+      "workspaceId": "wks_6f4530b911c9404d",
+      "title": "[test] native session round 3 b e9b9a0e9",
+      "mode": "directory",
+      "createdAt": "2026-10-20T15:28:26.189Z"
+    },
+    {
+      "at": "2026-10-20T15:28:26.286Z",
+      "step": "session-b-created",
+      "agentId": "4f3f1dfb-cc9c-45a5-bc93-ee186cce168b",
+      "model": "claude/claude-haiku-5-5",
+      "modeId": "bypassPermissions"
+    },
+    {
+      "at": "2026-10-20T15:28:42.367Z",
+      "step": "move-b-ready",
+      "row": {
+        "type": "plugin",
+        "id": "flowly-next-moves-bf0734f1-dade-451f-be8e-24e622d5584f",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "f8195786-d9fd-4af2-953a-b2a4f37a9264",
+          "workspaceId": "wks_6f4530b911c9404d",
+          "eventId": "bf0734f1-dade-451f-be8e-24e622d5584f",
+          "moves": [
+            {
+              "label": "Move to Done",
+              "moveTo": "done"
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      },
+      "task": {
+        "id": "f8195786-d9fd-4af2-953a-b2a4f37a9264",
+        "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+        "workspaceId": "wks_6f4530b911c9404d",
+        "sourcePath": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+        "repoPaths": [
+          "/Users/bofan.wang/Developer/personal/flowly-test/tinylink"
+        ],
+        "title": "[test] native session round 3 b e9b9a0e9",
+        "description": "Round 3 D7 fixture b. No source file edits; owned temporary workspace.",
+        "status": "in_review",
+        "priority": "normal",
+        "position": 4,
+        "revision": 2,
+        "operationId": "native-session-r3-b-2566e071-db4e-48b2-afb4-02d07856f0ea",
+        "createdAt": "2026-10-20T15:28:26.176Z",
+        "updatedAt": "2026-10-20T15:28:39.097Z",
+        "archivedAt": null,
+        "ownsWorkspace": true
+      }
+    },
+    {
+      "at": "2026-10-20T15:31:25.708Z",
+      "step": "cleanup-a-delete",
+      "id": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+      "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-6bd565b0-4f53-4027-ab6d-7e047935abe3-2026-10-20T15-31-25-690Z.json",
+      "archived": {
+        "sessions": 0,
+        "workspace": false
+      }
+    },
+    {
+      "at": "2026-10-20T15:31:25.785Z",
+      "step": "cleanup-b-delete",
+      "id": "f8195786-d9fd-4af2-953a-b2a4f37a9264",
+      "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-f8195786-d9fd-4af2-953a-b2a4f37a9264-2026-10-20T15-31-25-770Z.json",
+      "archived": {
+        "sessions": 0,
+        "workspace": false
+      }
+    },
+    {
+      "at": "2026-10-20T15:31:28.904Z",
+      "step": "cleanup-verify",
+      "a": {
+        "cardAbsent": true,
+        "sessionArchived": true,
+        "sessionStatus": "closed",
+        "workspaceAbsent": true
+      },
+      "b": {
+        "cardAbsent": true,
+        "sessionArchived": true,
+        "sessionStatus": "idle",
+        "workspaceAbsent": true
+      }
+    }
+  ],
+  "fixtures": {
+    "a": {
+      "cardId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+      "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+      "workspaceId": "wks_b9b122aa3eb49e8c",
+      "title": "[test] native session round 3 a 5d8e71a1",
+      "mode": "directory",
+      "createdAt": "2026-10-20T15:24:09.552Z",
+      "managedAgentId": "3c82e691-c29d-458a-a8bd-545530443e1a",
+      "moveRowId": "flowly-next-moves-a33008ab-004d-45c3-a46a-2dc5330c308d",
+      "eventId": "a33008ab-004d-45c3-a46a-2dc5330c308d",
+      "moves": [
+        {
+          "label": "Move to Done",
+          "moveTo": "done"
+        }
+      ],
+      "secondMoveRowId": "flowly-next-moves-c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+      "secondEventId": "c44f2f3e-f0b6-466a-aad8-d1228bb55494"
+    },
+    "b": {
+      "cardId": "f8195786-d9fd-4af2-953a-b2a4f37a9264",
+      "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+      "workspaceId": "wks_6f4530b911c9404d",
+      "title": "[test] native session round 3 b e9b9a0e9",
+      "mode": "directory",
+      "createdAt": "2026-10-20T15:28:26.189Z",
+      "managedAgentId": "4f3f1dfb-cc9c-45a5-bc93-ee186cce168b",
+      "moveRowId": "flowly-next-moves-bf0734f1-dade-451f-be8e-24e622d5584f",
+      "eventId": "bf0734f1-dade-451f-be8e-24e622d5584f",
+      "moves": [
+        {
+          "label": "Move to Done",
+          "moveTo": "done"
+        }
+      ]
+    }
+  },
+  "updatedAt": "2026-10-20T15:31:28.904Z"
+}

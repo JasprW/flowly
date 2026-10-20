@@ -58,3 +58,31 @@ export function hasOpenNextMoves(events: readonly BoardEvent[]) {
   const agents = new Set(events.filter((e) => e.action === nextMovesAction && e.agentId).map((e) => e.agentId!));
   return [...agents].some((agentId) => !!openNextMoves(events, agentId));
 }
+
+/**
+ * The Next chip in Paseo's session view (NATIVE-SESSION-SPEC §6.1): the same
+ * rules as Flowly's suggestion row. The session is idle, nothing waits for an
+ * answer, the user has not written since, and this set was not hidden here.
+ */
+export function chipMoves(input: {
+  events: readonly BoardEvent[];
+  agent: {
+    id: string;
+    status: string;
+    pendingPermissions?: readonly unknown[] | null;
+    attentionReason?: string | null;
+    lastUserMessageAt?: string | null;
+    archivedAt?: string | null;
+  };
+  cardFinished: boolean;
+  hidden: (eventId: string) => boolean;
+}): { eventId: string; moves: NextMove[] } | null {
+  const { agent } = input;
+  if (agent.archivedAt || agent.status === "running" || agent.status === "initializing") return null;
+  if (agent.pendingPermissions?.length || agent.attentionReason === "permission") return null;
+  const suggestion = openNextMoves(input.events, agent.id);
+  if (!suggestion || input.hidden(suggestion.id)) return null;
+  if (agent.lastUserMessageAt && Date.parse(agent.lastUserMessageAt) > Date.parse(suggestion.at)) return null;
+  const moves = shownMoves(suggestion.moves, input.cardFinished);
+  return moves.length ? { eventId: suggestion.id, moves: [...moves] } : null;
+}

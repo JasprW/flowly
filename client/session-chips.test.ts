@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { registerSessionChips } from "./session-link";
 
 const project = { id: "p" };
@@ -104,4 +104,198 @@ test("the first chip round waits for the start delay, so it stays off the plugin
   registerSessionChips(idle.client as never, 1000, 2500)();
   await vi.advanceTimersByTimeAsync(5000);
   expect(idle.calls.board).toHaveLength(0);
+});
+
+describe("Next and Ideas pills (NATIVE-SESSION-SPEC §6-8)", () => {
+  const popovers = { ideas: () => null };
+  const at = (s: number) => `2026-10-20T00:00:${String(s).padStart(2, "0")}.000Z`;
+  function fakeNative() {
+    const state = {
+      etag: "e1",
+      managed: ["a1"],
+      ideasOn: true,
+      events: [
+        { id: "ev1", taskId: "t1", actor: "agent", action: "next_moves_suggested", agentId: "a1", at: at(1), moves: [{ label: "Verify", prompt: "Verify it" }, { label: "Commit", prompt: "Commit it" }] },
+        { id: "ev2", taskId: "t1", actor: "agent", action: "next_moves_suggested", agentId: "a2", at: at(1), moves: [{ label: "X", prompt: "x" }] },
+      ] as unknown[],
+      ideas: [{ id: "i1", taskId: "t1", status: "open", createdAt: at(1), updatedAt: at(1), title: "Idea" }],
+      live: [
+        { id: "a1", workspaceId: "w1", archivedAt: null, title: "a1", labels: {}, status: "idle", pendingPermissions: [], lastUserMessageAt: at(0) },
+        { id: "a2", workspaceId: "w1", archivedAt: null, title: "a2", labels: {}, status: "idle", pendingPermissions: [], lastUserMessageAt: at(0) },
+      ],
+    };
+    const pills: { id: string; agentId: string; label: string; removed: boolean; updates: number }[] = [];
+    let gate: Promise<void> | null = null;
+    const client = {
+      rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+        if (def.name === "sessions.native-chips") {
+          await gate;
+          return { managed: state.managed.map((agentId) => ({ agentId, taskId: "t1", workspaceId: "w1" })), ideas: state.ideasOn, autoWrapup: false, nextMoveTap: "fill" };
+        }
+        if (input.etag === state.etag) return { etag: state.etag };
+        return { etag: state.etag, value: { projects: [project], tasks: [{ ...task("Card"), status: "development", archivedAt: null }], events: state.events, ideas: state.ideas } };
+      }),
+      paseo: {
+        agents: {
+          list: vi.fn(async ({ filter }: { filter: { includeArchived: boolean } }) => ({
+            entries: (filter.includeArchived ? state.live : state.live).map((a) => ({ agent: a })),
+            pageInfo: { nextCursor: null },
+          })),
+        },
+      },
+      addComposerPill: vi.fn((c: { id: string; agentId: string; button: { label: string } }) => {
+        const pill = { id: c.id, agentId: c.agentId, label: c.button.label, removed: false, updates: 0 };
+        pills.push(pill);
+        return {
+          update: (b: { label: string }) => {
+            pill.label = b.label;
+            pill.updates++;
+          },
+          remove: () => void (pill.removed = true),
+        };
+      }),
+      openScreen: vi.fn(),
+    };
+    const active = (id: string) => pills.filter((p) => p.id === id && !p.removed);
+    return { client, state, pills, active, hold: (p: Promise<void>) => (gate = p) };
+  }
+
+  test("no Next pill: a managed session's current moves go to the timeline card's store; an unmanaged one gets none", async () => {
+    const { client, active } = fakeNative();
+    const { chipState } = await import("./native-chips");
+    const stop = registerSessionChips(client as never, 1000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(active("flowly-next")).toEqual([]);
+    expect(chipState("a1")?.moves).toEqual({ eventId: "ev1", moves: [{ label: "Verify", prompt: "Verify it" }, { label: "Commit", prompt: "Commit it" }] });
+    expect(chipState("a1")?.nextMoveTap).toBe("fill");
+    expect(chipState("a2")).toBeNull();
+    // The Task chip still shows on both sessions.
+    expect(active("kanban-task").map((p) => p.agentId).sort()).toEqual(["a1", "a2"]);
+    stop();
+  });
+
+  test("the Ideas pill shows the open idea count, follows the Ideas switch and goes at 0", async () => {
+    const { client, state, active } = fakeNative();
+    const stop = registerSessionChips(client as never, 1000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(active("flowly-ideas").map((p) => p.label)).toEqual(["Ideas · 1"]);
+    state.ideas = [{ ...state.ideas[0], status: "dismissed", updatedAt: at(5) }];
+    state.etag = "e2";
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(active("flowly-ideas")).toEqual([]);
+    state.ideas = [{ ...state.ideas[0], status: "open", updatedAt: at(6) }];
+    state.ideasOn = false;
+    state.etag = "e3";
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(active("flowly-ideas")).toEqual([]);
+    stop();
+  });
+
+  test("the Ideas pill updates only when what it shows changes; a new turn clears the card's moves", async () => {
+    const { client, state, pills, active } = fakeNative();
+    const stop = registerSessionChips(client as never, 1000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    state.etag = "e2"; // board changed, same suggestion
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(pills.filter((p) => p.id !== "kanban-task").every((p) => p.updates === 0)).toBe(true);
+    state.events = [...state.events, { id: "ev3", taskId: "t1", actor: "system", action: "agent.turn_started", agentId: "a1", at: at(9) }];
+    state.etag = "e3";
+    await vi.advanceTimersByTimeAsync(1000);
+    const { chipState } = await import("./native-chips");
+    expect(chipState("a1")?.moves).toBeNull();
+    stop();
+  });
+
+  test("hiding a set takes the card's moves away without waiting for the next round", async () => {
+    const { client } = fakeNative();
+    const { hideMoves } = await import("./hidden-moves");
+    const { chipState } = await import("./native-chips");
+    const stop = registerSessionChips(client as never, 60_000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.moves?.eventId).toBe("ev1");
+    hideMoves("ev1");
+    expect(chipState("a1")?.moves).toBeNull();
+    stop();
+    expect(chipState("a1")).toBeNull();
+  });
+
+  test("stop() during an in-flight round registers nothing afterwards and removes every pill", async () => {
+    const { client, active, hold } = fakeNative();
+    let release!: () => void;
+    hold(new Promise<void>((r) => (release = r)));
+    const stop = registerSessionChips(client as never, 1000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    release();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(active("flowly-ideas")).toEqual([]);
+    expect(active("kanban-task")).toEqual([]);
+  });
+});
+
+test("idea links: absent is null, valid parses, partial or malformed fails closed (NATIVE-SESSION-SPEC §7.3)", async () => {
+  const { parseIdeaLink } = await import("./session-link");
+  expect(parseIdeaLink(undefined)).toBeNull();
+  expect(parseIdeaLink({ taskId: "t" })).toBeNull();
+  expect(parseIdeaLink({ ideaId: "i1", requestId: "r1" })).toEqual({ ideaId: "i1", requestId: "r1" });
+  expect(() => parseIdeaLink({ ideaId: "i1" })).toThrow(/Invalid idea link/);
+  expect(() => parseIdeaLink({ ideaId: "", requestId: "r" })).toThrow(/Invalid idea link/);
+});
+
+test("an idea link is not read as a malformed session link", async () => {
+  const { parseSessionLink } = await import("./session-link");
+  expect(parseSessionLink({ ideaId: "i1", requestId: "r1" })).toBeNull();
+  expect(() => parseSessionLink({ taskId: "t", requestId: "r1" })).toThrow();
+});
+
+test("an action asks for a refresh now: the Ideas pill goes without waiting for the next round, and rounds never overlap", async () => {
+  const { refreshChipsNow } = await import("./native-chips");
+  const state = { etag: "e1", ideas: [{ id: "i1", taskId: "t1", status: "open", createdAt: "x", updatedAt: "1", title: "Idea" }] };
+  let inFlight = 0,
+    maxInFlight = 0;
+  const pills: { id: string; removed: boolean }[] = [];
+  const client = {
+    rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+      if (def.name === "sessions.native-chips") return { managed: [{ agentId: "a1", taskId: "t1", workspaceId: "w1" }], ideas: true, autoWrapup: false, nextMoveTap: "fill" };
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 50));
+      inFlight--;
+      if (input.etag === state.etag) return { etag: state.etag };
+      return { etag: state.etag, value: { projects: [project], tasks: [{ ...task("Card"), status: "development", archivedAt: null }], events: [], ideas: state.ideas } };
+    }),
+    paseo: { agents: { list: vi.fn(async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w1", archivedAt: null, title: "a1", labels: {}, status: "idle", pendingPermissions: [] } }], pageInfo: { nextCursor: null } })) } },
+    addComposerPill: vi.fn((c: { id: string }) => {
+      const pill = { id: c.id, removed: false };
+      pills.push(pill);
+      return { update: () => undefined, remove: () => void (pill.removed = true) };
+    }),
+    openScreen: vi.fn(),
+  };
+  const stop = registerSessionChips(client as never, 60_000, 0, { ideas: () => null });
+  await vi.advanceTimersByTimeAsync(100);
+  expect(pills.filter((p) => p.id === "flowly-ideas" && !p.removed)).toHaveLength(1);
+  state.ideas = [{ ...state.ideas[0], status: "dismissed", updatedAt: "2" }];
+  state.etag = "e2";
+  refreshChipsNow();
+  refreshChipsNow(); // a second request while one runs only queues one more round
+  await vi.advanceTimersByTimeAsync(200);
+  expect(pills.filter((p) => p.id === "flowly-ideas" && !p.removed)).toEqual([]);
+  expect(maxInFlight).toBe(1);
+  stop();
+  refreshChipsNow(); // after teardown: nothing
+});
+
+test("the Next moves card keeps an open wrap-up question after its moves stop being current (NATIVE-SESSION-SPEC §6.4)", async () => {
+  const { cardView, setWrapPending } = await import("./native-chips");
+  const ready = { status: "ready" as const, taskId: "t1", workspaceId: "w1", eventId: "ev1", moves: [{ label: "Done", moveTo: "done" as const }] };
+  const state = { moves: { eventId: "ev1", moves: ready.moves } } as never;
+  expect(cardView(ready, state, "a1")).toBe("moves");
+  expect(cardView(ready, { moves: null } as never, "a1")).toBe("hidden");
+  expect(cardView({ status: "dismissed" }, state, "a1")).toBe("hidden");
+  setWrapPending("a1", "ev1", { need: "ask", state: {} as never });
+  expect(cardView(ready, { moves: null } as never, "a1")).toBe("wrap");
+  expect(cardView(ready, null, "a1")).toBe("wrap");
+  setWrapPending("a1", "ev1", null);
+  expect(cardView(ready, null, "a1")).toBe("hidden");
 });

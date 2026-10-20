@@ -1,0 +1,32 @@
+{
+  "mode": "move-done",
+  "startedAt": "2026-10-20T14:27:01.509Z",
+  "pageErrors": [],
+  "checks": {
+    "moveToDoneChipShown": true,
+    "moveToDonePopoverShown": true,
+    "popoverButtons": [
+      {
+        "text": "",
+        "label": "Dismiss"
+      },
+      {
+        "text": "Move to Done",
+        "label": "Suggested next steps"
+      },
+      {
+        "text": "Move to Done",
+        "label": "Suggested next step: Move to Done"
+      },
+      {
+        "text": "Dismiss",
+        "label": "Hide suggestions"
+      }
+    ],
+    "movedToastVisible": true,
+    "wrapUpQuestionAppeared": false,
+    "wrapUpChoices": [],
+    "notNowChosen": false
+  },
+  "endedAt": "2026-10-20T14:27:14.753Z"
+}

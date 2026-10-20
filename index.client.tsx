@@ -2,6 +2,10 @@ import { bootAt } from "./client/boot";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { BoardScreen, WorkspaceBoard } from "./client/board";
 import { registerSessionChips } from "./client/session-link";
+import { NativeSummaryItem } from "./client/summary-row";
+import { IdeasPopover } from "./client/native-popovers";
+import { NativeNextMovesItem } from "./client/next-move-card";
+import { nextRowKind, nextRowSchema, nextRowVersion, summaryRowKind, summaryRowSchema, summaryRowVersion } from "./shared/native-session";
 import { SidebarEntry } from "./client/sidebar";
 import { intentParams, type BoardIntent } from "./client/shortcuts";
 import { deviceLocale, msg, setLocale, t } from "./shared/i18n";
@@ -77,6 +81,20 @@ export default function contribute(client: PluginClientContext) {
     context: "workspace",
     Component: WorkspaceBoard,
   });
+  // The progress summary as a row in Paseo's own timeline (NATIVE-SESSION-SPEC §5).
+  client.addTimelineRenderer({
+    kind: summaryRowKind,
+    version: summaryRowVersion,
+    schema: summaryRowSchema,
+    Component: NativeSummaryItem,
+  });
+  // This turn's suggested next steps as a card under the agent's last reply (NATIVE-SESSION-SPEC §6).
+  client.addTimelineRenderer({
+    kind: nextRowKind,
+    version: nextRowVersion,
+    schema: nextRowSchema,
+    Component: NativeNextMovesItem,
+  });
   let commandItems = registerCommandItems(client);
   let stopped = false;
   // The bundle carries no translations: ask the daemon for the device language, then rebuild the titles.
@@ -86,7 +104,8 @@ export default function contribute(client: PluginClientContext) {
       commandItems();
       commandItems = registerCommandItems(client);
     });
-  const stopChips = registerSessionChips(client);
+  // The Task chip, plus the Ideas chip on Flowly-managed sessions (NATIVE-SESSION-SPEC §7).
+  const stopChips = registerSessionChips(client, undefined, undefined, { ideas: IdeasPopover });
   perfEarly("plugin.load", perfNow() - bootAt);
   return () => {
     stopped = true;

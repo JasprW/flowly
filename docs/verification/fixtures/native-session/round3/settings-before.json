@@ -1,0 +1,14 @@
+{
+  "recordedAt": "2026-10-20T15:17:48.751Z",
+  "recordedVia": "Headless Playwright, Flowly Settings UI",
+  "settings": {
+    "autoWrapup": true,
+    "autoArchiveOnDelete": true,
+    "nextMoveTap": "fill"
+  },
+  "uiEvidence": {
+    "autoWrapup": "switch track green, thumb translated 14px (on)",
+    "autoArchiveOnDelete": "switch track green, thumb translated 14px (on)",
+    "nextMoveTap": "visible selected label Fill the message box"
+  }
+}

@@ -98,3 +98,8 @@ test("target drops a leading goal label", () => {
   expect(targetText("Ship login\n- Goal: keep")).toBe("Ship login\n- Goal: keep");
   expect(parseModelOutput('{"update":true,"state":"s","target":"goal: x","recap":"","next":""}').target).toBe("x");
 });
+
+test("turnText ignores plugin rows, so a summary row is never summarized again (NATIVE-SESSION-SPEC §5.5 #6)", () => {
+  const row = { type: "plugin", kind: "flowly-summary", data: { state: "S" } };
+  expect(turnText([{ type: "assistant_message", text: "A" }, row])).toBe("Assistant: A");
+});

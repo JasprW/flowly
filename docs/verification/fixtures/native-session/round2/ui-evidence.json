@@ -1,0 +1,1207 @@
+{
+  "round": 2,
+  "testSessionId": "e63b5616-a0db-47cd-9b11-4c3691dcde10",
+  "steps": [
+    {
+      "name": "error-desktop-fill-copy",
+      "at": "2026-10-20T14:58:55.435Z",
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Copy', exact: true }).last()\u001b[22m\n\n    at selectNextMoveMode (/Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round2/ui.mjs:120:113)\n    at async file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round2/ui.mjs:202:21",
+      "pageErrors": []
+    },
+    {
+      "name": "d3-copy-setting",
+      "at": "2026-10-20T15:00:03.797Z",
+      "initialMode": "fill",
+      "setCopy": "copy"
+    },
+    {
+      "name": "d1-d3-desktop-fill-copy",
+      "at": "2026-10-20T15:00:17.819Z",
+      "d1": {
+        "viewport": "1700x1000 desktop",
+        "cardUnderLastReply": true,
+        "rawRow": {
+          "type": "plugin",
+          "id": "flowly-next-moves-2a67a2d8-c16a-4766-940f-e0d1fe11f631",
+          "kind": "flowly-next-moves",
+          "version": 1,
+          "data": {
+            "status": "ready",
+            "taskId": "362b1dc5-6868-45c2-9c91-aef6a5206fa9",
+            "workspaceId": "wks_01858c75920f019f",
+            "eventId": "2a67a2d8-c16a-4766-940f-e0d1fe11f631",
+            "moves": [
+              {
+                "label": "Inspect row",
+                "prompt": "Inspect the native timeline row and verify its event id."
+              },
+              {
+                "label": "Verify fill",
+                "prompt": "Verify that this prompt fills the correct session input."
+              }
+            ]
+          },
+          "pluginId": "flowly"
+        },
+        "rowData": {
+          "status": "ready",
+          "taskId": "362b1dc5-6868-45c2-9c91-aef6a5206fa9",
+          "workspaceId": "wks_01858c75920f019f",
+          "eventId": "2a67a2d8-c16a-4766-940f-e0d1fe11f631",
+          "moves": [
+            {
+              "label": "Inspect row",
+              "prompt": "Inspect the native timeline row and verify its event id."
+            },
+            {
+              "label": "Verify fill",
+              "prompt": "Verify that this prompt fills the correct session input."
+            }
+          ]
+        },
+        "noNextComposerChip": true,
+        "ideasChipVisible": true,
+        "nativeChipRpc": {
+          "managedListed": true,
+          "nextMoveTap": "fill"
+        }
+      },
+      "d2": {
+        "composerOwner": {
+          "agentId": "24f2a7bd-69f8-4b93-9613-ef497b772fad",
+          "workspaceId": "wks_01858c75920f019f",
+          "alternateAgentId": "24f2a7bd-69f8-4b93-9613-ef497b772fad"
+        },
+        "allComposerOwners": [
+          {
+            "agentId": "24f2a7bd-69f8-4b93-9613-ef497b772fad",
+            "workspaceId": "wks_01858c75920f019f",
+            "alternateAgentId": "24f2a7bd-69f8-4b93-9613-ef497b772fad"
+          }
+        ],
+        "firstPrompt": "Inspect the native timeline row and verify its event id.",
+        "fillExactPrompt": true,
+        "appendedExistingText": true,
+        "focusAfterFill": true,
+        "noMessageSent": true,
+        "userMessagesBeforeAfter": {
+          "beforeCount": 1,
+          "afterFirstCount": 1,
+          "afterSecondCount": 1
+        }
+      },
+      "d3": {
+        "initialMode": "fill",
+        "settingWhileCopy": "copy",
+        "toastVisible": true,
+        "clipboardText": "Inspect the native timeline row and verify its event id.",
+        "clipboardMatchesPrompt": true,
+        "composerUnchanged": true,
+        "noMessageSent": true,
+        "restoredMode": "fill"
+      }
+    },
+    {
+      "name": "d5-d6-hide-and-ideas",
+      "at": "2026-10-20T15:00:40.770Z",
+      "d5": {
+        "cardVisibleBefore": true,
+        "hiddenImmediately": true,
+        "rawRowStillReady": true,
+        "flowlySuggestionTestIdCount": 1,
+        "flowlySuggestionButtons": 2,
+        "flowlySuggestionStillVisible": true
+      },
+      "d6": {
+        "ideaChipGoneWithinOneSecond": true,
+        "idea": {
+          "id": "6c13394b-8328-4065-bb69-2b2a7db9e969",
+          "taskId": "362b1dc5-6868-45c2-9c91-aef6a5206fa9",
+          "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+          "agentId": "24f2a7bd-69f8-4b93-9613-ef497b772fad",
+          "eventId": "bba091e4-3f31-44c6-9253-acf191357e19",
+          "title": "Document native timeline behavior",
+          "detail": "Write up how the native session timeline renders next-moves cards and how the message box fill/copy behaves, so the round 2 fixture behavior is documented.",
+          "rationale": "Round 2 fixture for native next-moves timeline cards and message-box fill/copy; behavior is currently undocumented.",
+          "context": "",
+          "scope": "here",
+          "status": "dismissed",
+          "createdAt": "2026-10-20T14:57:47.524Z",
+          "updatedAt": "2026-10-20T15:00:40.486Z"
+        }
+      }
+    },
+    {
+      "name": "d4-send-dismiss",
+      "at": "2026-10-20T15:01:04.376Z",
+      "rowBefore": {
+        "type": "plugin",
+        "id": "flowly-next-moves-2a67a2d8-c16a-4766-940f-e0d1fe11f631",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "362b1dc5-6868-45c2-9c91-aef6a5206fa9",
+          "workspaceId": "wks_01858c75920f019f",
+          "eventId": "2a67a2d8-c16a-4766-940f-e0d1fe11f631",
+          "moves": [
+            {
+              "label": "Inspect row",
+              "prompt": "Inspect the native timeline row and verify its event id."
+            },
+            {
+              "label": "Verify fill",
+              "prompt": "Verify that this prompt fills the correct session input."
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      },
+      "rowAfter": {
+        "type": "plugin",
+        "id": "flowly-next-moves-2a67a2d8-c16a-4766-940f-e0d1fe11f631",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "dismissed"
+        },
+        "pluginId": "flowly"
+      },
+      "rowStatusDismissedSameId": true,
+      "userMessageCountBefore": 1,
+      "userMessageAfter": "Round 2 composer send: begin a new turn to dismiss this suggestions card.",
+      "sendTextMatches": true,
+      "composerOwner": {
+        "agentId": "24f2a7bd-69f8-4b93-9613-ef497b772fad",
+        "workspaceId": "wks_01858c75920f019f",
+        "alternateAgentId": "24f2a7bd-69f8-4b93-9613-ef497b772fad"
+      },
+      "sendButtons": [
+        {
+          "text": "",
+          "label": "Send message"
+        },
+        {
+          "text": "Send",
+          "label": null
+        }
+      ],
+      "cardGoneOnCurrentPage": true,
+      "cardGoneAfterReload": true,
+      "rowAfterReload": {
+        "type": "plugin",
+        "id": "flowly-next-moves-2a67a2d8-c16a-4766-940f-e0d1fe11f631",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "dismissed"
+        },
+        "pluginId": "flowly"
+      }
+    },
+    {
+      "name": "d9-unmanaged",
+      "at": "2026-10-20T15:01:18.089Z",
+      "taskChipPresent": true,
+      "noNextMovesCard": true,
+      "noIdeasChip": true,
+      "noNextComposerChip": true,
+      "rpcManagedFalse": true
+    },
+    {
+      "name": "error-compact",
+      "at": "2026-10-20T15:01:27.072Z",
+      "error": "Error: Tinylink workspace button not found\n    at openFlowlyBoardBase (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round2/ui.mjs:56:41)\n    at async openFlowlyTask (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round2/ui.mjs:83:3)\n    at async openNative (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round2/ui.mjs:100:3)\n    at async file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round2/ui.mjs:267:5",
+      "pageErrors": []
+    },
+    {
+      "name": "auto-wrapup-disabled-for-d7",
+      "at": "2026-10-20T15:02:11.180Z",
+      "before": true,
+      "after": false,
+      "willRestore": true
+    },
+    {
+      "name": "d7-move-to-done",
+      "at": "2026-10-20T15:02:25.987Z",
+      "moveButtonWasVisible": true,
+      "promptAppeared": false,
+      "wrapupButtons": [],
+      "notNowChosen": false,
+      "statusAfterMove": "done"
+    },
+    {
+      "name": "capture-native-url",
+      "at": "2026-10-20T15:03:03.660Z",
+      "url": "https://app.paseo.sh/h/srv_90C-XtZzxWEH/workspace/wks_01858c75920f019f",
+      "title": "[test] native session round 2 managed"
+    },
+    {
+      "name": "d8-compact",
+      "at": "2026-10-20T15:04:02.664Z",
+      "viewport": "430x900 isMobile+hasTouch",
+      "cardVisible": false,
+      "messageMovesPresent": false,
+      "noHorizontalCardOverflow": false,
+      "cardBoundingBox": null,
+      "mobileRouteError": "Tinylink workspace button not found",
+      "pageTitle": "[test] native session round 2 unmanaged",
+      "currentUrl": "https://app.paseo.sh/h/srv_90C-XtZzxWEH/workspace/wks_01858c75920f019f"
+    },
+    {
+      "name": "d8-compact",
+      "at": "2026-10-20T15:05:03.480Z",
+      "viewport": "430x900 isMobile+hasTouch",
+      "cardVisible": false,
+      "messageMovesPresent": false,
+      "noHorizontalCardOverflow": false,
+      "cardBoundingBox": null,
+      "mobileRouteError": "Tinylink workspace button not found",
+      "pageTitle": "[test] native session round 2 unmanaged",
+      "currentUrl": "https://app.paseo.sh/h/srv_90C-XtZzxWEH/workspace/wks_01858c75920f019f",
+      "compactButtons": [
+        {
+          "text": "",
+          "label": "Open menu",
+          "title": null
+        },
+        {
+          "text": "2",
+          "label": "Switch tabs (2 open)",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Workspace actions",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Open Explorer sidebar",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Rewind to this message",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Copy message",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Copy turn",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Fork chat from here",
+          "title": null
+        },
+        {
+          "text": "Worked for 5s\nWorked for 5s",
+          "label": "Worked for 5s, ended 10:57 PM",
+          "title": null
+        },
+        {
+          "text": "Defer",
+          "label": "Defer a message to this session",
+          "title": null
+        },
+        {
+          "text": "Task · [test] native session round …",
+          "label": "Open Kanban task: [test] native session round 2 efdb87ff",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Add attachment",
+          "title": null
+        },
+        {
+          "text": "Haiku 5.5\nMedium",
+          "label": "Select model (Haiku 5.5)",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Context window 4% used",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Start dictation",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Enable Voice mode",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Close Explorer sidebar",
+          "title": null
+        },
+        {
+          "text": "main",
+          "label": "Current branch: main. Press to switch branch.",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Workspace actions",
+          "title": null
+        },
+        {
+          "text": "Committed",
+          "label": "Diff mode",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Refresh",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Diff options",
+          "title": null
+        },
+        {
+          "text": "Commits",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "New file",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "New folder",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Hide hidden files",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Refresh files",
+          "title": null
+        },
+        {
+          "text": "New workspace",
+          "label": "New workspace",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Close sidebar",
+          "title": null
+        },
+        {
+          "text": "History",
+          "label": "History",
+          "title": null
+        },
+        {
+          "text": "Search",
+          "label": "Search",
+          "title": null
+        },
+        {
+          "text": "Schedules",
+          "label": "Schedules",
+          "title": null
+        },
+        {
+          "text": "Flowly",
+          "label": "Flowly",
+          "title": null
+        },
+        {
+          "text": "Paseo Cafe",
+          "label": "Paseo Cafe",
+          "title": null
+        },
+        {
+          "text": "Deferred",
+          "label": "Deferred",
+          "title": null
+        },
+        {
+          "text": "Aaside-acp",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Bdeep/bff-search",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Eengine-proxy",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Eeven-v2ex",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch_calc",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch_workspace",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch-edison",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssra-toolkit",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ttolaria-vault",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "23%100%100%888K8.8M",
+          "label": "Host status: CPU 23%, memory 100%, disk 81%",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Add project",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Usage",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Hosts",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Help and support",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Settings",
+          "title": null
+        },
+        {
+          "text": "Quote",
+          "label": null,
+          "title": "Quote into the message box"
+        },
+        {
+          "text": "Reply",
+          "label": null,
+          "title": "Reply to this passage"
+        },
+        {
+          "text": "Side chat",
+          "label": null,
+          "title": "Ask about this in a side chat"
+        },
+        {
+          "text": "",
+          "label": null,
+          "title": "Copy as Markdown"
+        },
+        {
+          "text": "Cancel",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Add to chat",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Send",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ask",
+          "label": null,
+          "title": null
+        }
+      ]
+    },
+    {
+      "name": "d8-compact",
+      "at": "2026-10-20T15:05:50.464Z",
+      "viewport": "430x900 isMobile+hasTouch",
+      "cardVisible": false,
+      "messageMovesPresent": true,
+      "noHorizontalCardOverflow": false,
+      "cardBoundingBox": null,
+      "mobileRouteError": "Tinylink workspace button not found",
+      "pageTitle": "[test] native session round 2 managed",
+      "currentUrl": "https://app.paseo.sh/h/srv_90C-XtZzxWEH/workspace/wks_01858c75920f019f",
+      "compactButtons": [
+        {
+          "text": "",
+          "label": "Open menu",
+          "title": null
+        },
+        {
+          "text": "2",
+          "label": "Switch tabs (2 open)",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Workspace actions",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Open Explorer sidebar",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Rewind to this message",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Copy message",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Copy turn",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Fork chat from here",
+          "title": null
+        },
+        {
+          "text": "Worked for 5s\nWorked for 5s",
+          "label": "Worked for 5s, ended 10:57 PM",
+          "title": null
+        },
+        {
+          "text": "Defer",
+          "label": "Defer a message to this session",
+          "title": null
+        },
+        {
+          "text": "Task · [test] native session round …",
+          "label": "Open Kanban task: [test] native session round 2 efdb87ff",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Add attachment",
+          "title": null
+        },
+        {
+          "text": "Haiku 5.5\nMedium",
+          "label": "Select model (Haiku 5.5)",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Context window 4% used",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Start dictation",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Enable Voice mode",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Close Explorer sidebar",
+          "title": null
+        },
+        {
+          "text": "main",
+          "label": "Current branch: main. Press to switch branch.",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Workspace actions",
+          "title": null
+        },
+        {
+          "text": "Committed",
+          "label": "Diff mode",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Refresh",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Diff options",
+          "title": null
+        },
+        {
+          "text": "Commits",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "New file",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "New folder",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Hide hidden files",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Refresh files",
+          "title": null
+        },
+        {
+          "text": "New workspace",
+          "label": "New workspace",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Close sidebar",
+          "title": null
+        },
+        {
+          "text": "History",
+          "label": "History",
+          "title": null
+        },
+        {
+          "text": "Search",
+          "label": "Search",
+          "title": null
+        },
+        {
+          "text": "Schedules",
+          "label": "Schedules",
+          "title": null
+        },
+        {
+          "text": "Flowly",
+          "label": "Flowly",
+          "title": null
+        },
+        {
+          "text": "Paseo Cafe",
+          "label": "Paseo Cafe",
+          "title": null
+        },
+        {
+          "text": "Deferred",
+          "label": "Deferred",
+          "title": null
+        },
+        {
+          "text": "Aaside-acp",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Bdeep/bff-search",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Eengine-proxy",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Eeven-v2ex",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch_calc",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch_workspace",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch-edison",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssra-toolkit",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ttolaria-vault",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "24%99%100%888K8.8M",
+          "label": "Host status: CPU 24%, memory 99%, disk 81%",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Add project",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Usage",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Hosts",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Help and support",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Settings",
+          "title": null
+        },
+        {
+          "text": "Quote",
+          "label": null,
+          "title": "Quote into the message box"
+        },
+        {
+          "text": "Reply",
+          "label": null,
+          "title": "Reply to this passage"
+        },
+        {
+          "text": "Side chat",
+          "label": null,
+          "title": "Ask about this in a side chat"
+        },
+        {
+          "text": "",
+          "label": null,
+          "title": "Copy as Markdown"
+        },
+        {
+          "text": "Cancel",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Add to chat",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Send",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ask",
+          "label": null,
+          "title": null
+        }
+      ]
+    },
+    {
+      "name": "d8-compact",
+      "at": "2026-10-20T15:08:52.773Z",
+      "viewport": "430x900 isMobile+hasTouch",
+      "cardVisible": true,
+      "messageMovesPresent": true,
+      "noHorizontalCardOverflow": true,
+      "cardBoundingBox": {
+        "x": 46,
+        "y": 375.5,
+        "width": 325,
+        "height": 17
+      },
+      "mobileRouteError": "Tinylink workspace button not found",
+      "pageTitle": "[test] native session round 2 managed",
+      "currentUrl": "https://app.paseo.sh/h/srv_90C-XtZzxWEH/workspace/wks_01858c75920f019f",
+      "compactButtons": [
+        {
+          "text": "",
+          "label": "Open menu",
+          "title": null
+        },
+        {
+          "text": "2",
+          "label": "Switch tabs (2 open)",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Workspace actions",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Open Explorer sidebar",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Rewind to this message",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Copy message",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Copy turn",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Fork chat from here",
+          "title": null
+        },
+        {
+          "text": "Worked for 5s\nWorked for 5s",
+          "label": "Worked for 5s, ended 10:57 PM",
+          "title": null
+        },
+        {
+          "text": "Defer",
+          "label": "Defer a message to this session",
+          "title": null
+        },
+        {
+          "text": "Task · [test] native session round …",
+          "label": "Open Kanban task: [test] native session round 2 efdb87ff",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Add attachment",
+          "title": null
+        },
+        {
+          "text": "Haiku 5.5\nMedium",
+          "label": "Select model (Haiku 5.5)",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Context window 4% used",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Start dictation",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Enable Voice mode",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Close Explorer sidebar",
+          "title": null
+        },
+        {
+          "text": "main",
+          "label": "Current branch: main. Press to switch branch.",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Workspace actions",
+          "title": null
+        },
+        {
+          "text": "Committed",
+          "label": "Diff mode",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Refresh",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Diff options",
+          "title": null
+        },
+        {
+          "text": "Commits",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "New file",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "New folder",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Hide hidden files",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Refresh files",
+          "title": null
+        },
+        {
+          "text": "New workspace",
+          "label": "New workspace",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Close sidebar",
+          "title": null
+        },
+        {
+          "text": "History",
+          "label": "History",
+          "title": null
+        },
+        {
+          "text": "Search",
+          "label": "Search",
+          "title": null
+        },
+        {
+          "text": "Schedules",
+          "label": "Schedules",
+          "title": null
+        },
+        {
+          "text": "Flowly",
+          "label": "Flowly",
+          "title": null
+        },
+        {
+          "text": "1",
+          "label": "Open Needs attention, 1 card",
+          "title": null
+        },
+        {
+          "text": "Paseo Cafe",
+          "label": "Paseo Cafe",
+          "title": null
+        },
+        {
+          "text": "Deferred",
+          "label": "Deferred",
+          "title": null
+        },
+        {
+          "text": "Aaside-acp",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Bdeep/bff-search",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Eengine-proxy",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Eeven-v2ex",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch_calc",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch_workspace",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssearch-edison",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ssra-toolkit",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ttolaria-vault",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "17%100%100%888K8.8M",
+          "label": "Host status: CPU 17%, memory 100%, disk 81%",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Add project",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Usage",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Hosts",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Help and support",
+          "title": null
+        },
+        {
+          "text": "",
+          "label": "Settings",
+          "title": null
+        },
+        {
+          "text": "Quote",
+          "label": null,
+          "title": "Quote into the message box"
+        },
+        {
+          "text": "Reply",
+          "label": null,
+          "title": "Reply to this passage"
+        },
+        {
+          "text": "Side chat",
+          "label": null,
+          "title": "Ask about this in a side chat"
+        },
+        {
+          "text": "",
+          "label": null,
+          "title": "Copy as Markdown"
+        },
+        {
+          "text": "Cancel",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Add to chat",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Send",
+          "label": null,
+          "title": null
+        },
+        {
+          "text": "Ask",
+          "label": null,
+          "title": null
+        }
+      ]
+    },
+    {
+      "name": "d7-move-to-done",
+      "at": "2026-10-20T15:10:06.125Z",
+      "moveButtonWasVisible": true,
+      "promptAppeared": false,
+      "wrapupButtons": [],
+      "notNowChosen": false,
+      "statusAfterMove": "done",
+      "wrapupCheck": {
+        "taskId": "362b1dc5-6868-45c2-9c91-aef6a5206fa9",
+        "revision": 10,
+        "workspace": {
+          "id": "wks_01858c75920f019f",
+          "kind": "local_checkout",
+          "directory": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink"
+        },
+        "archiveWorkspace": true,
+        "sessions": 2,
+        "git": null,
+        "blockers": [],
+        "warnings": []
+      },
+      "autoWrapupAfter": false
+    },
+    {
+      "name": "auto-wrapup-restored",
+      "at": "2026-10-20T15:10:23.644Z",
+      "before": false,
+      "desired": true,
+      "after": true,
+      "restored": true
+    }
+  ],
+  "pageErrors": []
+}

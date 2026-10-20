@@ -1,12 +1,17 @@
 import { z } from "zod";
 import type { PaseoAgent, PaseoApi } from "@getpaseo/client";
+import type { ComponentType } from "react";
 import type {
+  PluginButtonContentProps,
   PluginClientContext,
   PluginButtonRegistration,
   PluginScreenParams,
 } from "@getpaseo/plugin/client";
 import type { RpcOutput } from "@getpaseo/plugin";
-import { readBoard, readBoardChanged } from "../shared/rpc";
+import { nativeChips, readBoard, readBoardChanged } from "../shared/rpc";
+import { chipMoves } from "../shared/next-moves";
+import { movesHidden, onMovesHidden } from "./hidden-moves";
+import { chipStateIds, clearChipStates, setChipClient, setChipRefresher, setChipState, type ChipState } from "./native-chips";
 import { listAgents } from "./resources";
 import { readBoardDelta, type Board } from "./board-read";
 import { t } from "../shared/i18n";
@@ -28,6 +33,8 @@ export function parseSessionLink(
 ): CardSessionLink | null {
   if (
     !params ||
+    // An idea link ("Start a new task" from the Ideas chip) also carries a requestId.
+    "ideaId" in params ||
     !["taskId", "sessionId", "workspaceId", "requestId"].some(
       (key) => key in params,
     )
@@ -38,6 +45,15 @@ export function parseSessionLink(
     throw new Error(
       t("Invalid Kanban session link. Open it again from the session chip."),
     );
+  return result.data;
+}
+const ideaLinkSchema = z.object({ ideaId: id, requestId: id });
+export type IdeaLink = z.infer<typeof ideaLinkSchema>;
+/** "Start a new task" from the native Ideas chip: open Flowly's new-card form for this idea (NATIVE-SESSION-SPEC §7.3). */
+export function parseIdeaLink(params?: PluginScreenParams): IdeaLink | null {
+  if (!params || !("ideaId" in params)) return null;
+  const result = ideaLinkSchema.safeParse(params);
+  if (!result.success) throw new Error(t("Invalid idea link. Open it again from the Ideas chip."));
   return result.data;
 }
 export function sessionLinkKey(link: CardSessionLink) {
@@ -96,15 +112,33 @@ const newRequestId = () => `${Date.now()}-${++requestSequence}`;
 /** The first chip round waits this long, so it does not compete with the plugin's own first paint (PERFORMANCE-SPEC, Cold start). */
 export const CHIPS_START_DELAY_MS = 2500;
 
+/** The Ideas chip's popover (NATIVE-SESSION-SPEC §7); passed in so this module stays free of UI code. */
+export type ChipPopovers = {
+  ideas: ComponentType<PluginButtonContentProps>;
+};
+
 export function registerSessionChips(
   client: PluginClientContext,
   interval = 5000,
   startDelay = CHIPS_START_DELAY_MS,
+  popovers?: ChipPopovers,
 ) {
   const registrations = new Map<
     string,
     { binding: string; label: string; chip: PluginButtonRegistration }
   >();
+  // The Ideas pills, by session; `signature` covers what the popover shows. The Next moves card is a timeline row
+  // (NATIVE-SESSION-SPEC §6): this refresh only records which suggestion set is current for it.
+  type Extra = { binding: string; signature: string; chip: PluginButtonRegistration };
+  const ideaPills = new Map<string, Extra>();
+  let chipInfo: { managed: Set<string>; ideas: boolean; autoWrapup: boolean; nextMoveTap: "fill" | "copy" } | null = null,
+    chipInfoAt = 0;
+  if (popovers) setChipClient(client);
+  let lastRound: { current: LinkBoard; live: PaseoAgent[]; tasks: Map<string, LinkBoard["tasks"][number]> } | null = null;
+  // Hiding a set on the Next moves card takes it away at once, not at the next round.
+  const stopHidden = onMovesHidden(() => {
+    if (!disposed && lastRound) syncExtras(lastRound.current, lastRound.live, lastRound.tasks);
+  });
   // This poll runs on every client, phones included, where each response is
   // decoded on the JS thread while the user may be typing in a composer
   // (PERFORMANCE-SPEC). So: the board is re-read only when its etag changed,
@@ -119,9 +153,76 @@ export function registerSessionChips(
   let disposed = false,
     timer: ReturnType<typeof setTimeout> | undefined,
     latestClick = 0;
+  function clearExtras() {
+    for (const { chip } of ideaPills.values()) chip.remove();
+    ideaPills.clear();
+    clearChipStates();
+  }
   function clear() {
     for (const { chip } of registrations.values()) chip.remove();
     registrations.clear();
+    clearExtras();
+    lastRound = null;
+  }
+  // Adds, updates in place, or removes one Next/Ideas pill; `button` is null to remove.
+  function syncPill(
+    pills: Map<string, Extra>,
+    id: string,
+    agentId: string,
+    workspaceId: string,
+    binding: string,
+    signature: string,
+    button: ReturnType<typeof ideasButton> | null,
+  ) {
+    let existing = pills.get(agentId);
+    if (existing && (!button || existing.binding !== binding)) {
+      existing.chip.remove();
+      pills.delete(agentId);
+      existing = undefined;
+    }
+    if (!button) return;
+    if (existing) {
+      if (existing.signature !== signature) {
+        existing.chip.update(button);
+        existing.signature = signature;
+      }
+    } else pills.set(agentId, { binding, signature, chip: client.addComposerPill({ id, workspaceId, agentId, button }) });
+  }
+  // Built in their own calls (Hermes, see chipButton). The content comes from the chip store, keyed by session.
+  function ideasButton(state: ChipState) {
+    return {
+      title: t("Ideas for this card"),
+      label: t("Ideas · {n}", { n: state.ideas.length }),
+      icon: "Lightbulb",
+      behavior: { kind: "popover" as const, Content: popovers!.ideas },
+    };
+  }
+  /** NATIVE-SESSION-SPEC §6.1, §7.1: managed, live sessions of an active card only. */
+  function syncExtras(current: LinkBoard, agents: readonly PaseoAgent[], tasks: Map<string, LinkBoard["tasks"][number]>) {
+    if (!popovers || !chipInfo) return;
+    const seen = new Set<string>();
+    for (const actor of agents) {
+      const task = actor.workspaceId ? tasks.get(actor.workspaceId) : undefined;
+      const project = task && current.projects.find((p) => p.id === task.projectId);
+      if (!task || !project || task.archivedAt || project.archivedAt || actor.archivedAt || !chipInfo.managed.has(actor.id)) continue;
+      seen.add(actor.id);
+      const finished = task.status === "done" || task.status === "cancelled";
+      const moves = chipMoves({ events: current.events ?? [], agent: actor, cardFinished: finished, hidden: movesHidden });
+      const ideas = chipInfo.ideas
+        ? (current.ideas ?? []).filter((i) => i.taskId === task.id && i.status === "open").sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        : [];
+      const state: ChipState = { task, project, agentId: actor.id, moves, ideas, autoWrapup: chipInfo.autoWrapup, nextMoveTap: chipInfo.nextMoveTap };
+      setChipState(actor.id, state);
+      const binding = JSON.stringify([task.id, task.workspaceId]);
+      syncPill(ideaPills, "flowly-ideas", actor.id, task.workspaceId, binding,
+        JSON.stringify(ideas.map((i) => [i.id, i.updatedAt])), ideas.length ? ideasButton(state) : null);
+    }
+    for (const agentId of [...ideaPills.keys()]) {
+      if (seen.has(agentId)) continue;
+      ideaPills.get(agentId)?.chip.remove();
+      ideaPills.delete(agentId);
+    }
+    for (const agentId of chipStateIds()) if (!seen.has(agentId)) setChipState(agentId, null);
   }
   // The board screen re-reads and validates the link before showing anything
   // (fail-closed), so the chip only navigates. Keeping SDK/RPC calls out of
@@ -151,7 +252,21 @@ export function registerSessionChips(
       },
     };
   }
+  // One round at a time: an extra request while a round runs queues exactly one more, right after it.
+  let running = false,
+    again = false;
+  function refreshNow() {
+    if (disposed) return;
+    if (running) {
+      again = true;
+      return;
+    }
+    clearTimeout(timer);
+    void refresh();
+  }
+  if (popovers) setChipRefresher(refreshNow);
   async function refresh() {
+    running = true;
     try {
       const [boardResult, liveResult] = await Promise.allSettled([
         // The daemon may answer an etag with a patch of what changed, which readBoardDelta applies to the board held here.
@@ -178,6 +293,20 @@ export function registerSessionChips(
         if (disposed) return;
         archived = all.filter((a) => !!a.archivedAt);
         archivedAt = Date.now();
+      }
+      // Managed sessions and the Ideas switch: when the board changed, else once a minute (a setting change alone).
+      // A session in a card's workspace that is not known as managed yet may just have been prepared: check sooner.
+      const unknown =
+        !!chipInfo &&
+        Date.now() - chipInfoAt >= 15_000 &&
+        live.some((a) => !chipInfo!.managed.has(a.id) && !!a.workspaceId && board!.tasks.some((x) => x.workspaceId === a.workspaceId));
+      if (popovers && (changed || unknown || !chipInfo || Date.now() - chipInfoAt >= archivedEvery)) {
+        const info = await client.rpc(nativeChips, {}).catch(() => null);
+        if (disposed) return;
+        chipInfo = info
+          ? { managed: new Set(info.managed.map((m) => m.agentId)), ideas: info.ideas, autoWrapup: info.autoWrapup, nextMoveTap: info.nextMoveTap }
+          : chipInfo;
+        chipInfoAt = Date.now();
       }
       const agents = [...live, ...archived.filter((a) => !liveIds.has(a.id))];
       const current = board!;
@@ -226,13 +355,21 @@ export function registerSessionChips(
           registrations.delete(agentId);
         }
       }
+      lastRound = { current, live, tasks };
+      syncExtras(current, live, tasks);
     } catch {
       if (!disposed) clear();
     } finally {
-      if (!disposed)
-        timer = setTimeout(() => {
+      running = false;
+      if (!disposed) {
+        if (again) {
+          again = false;
           void refresh();
-        }, interval);
+        } else
+          timer = setTimeout(() => {
+            void refresh();
+          }, interval);
+      }
     }
   }
   if (startDelay > 0)
@@ -244,6 +381,12 @@ export function registerSessionChips(
     disposed = true;
     latestClick++;
     clearTimeout(timer);
+    stopHidden();
     clear();
+    lastRound = null;
+    if (popovers) {
+      setChipClient(null);
+      setChipRefresher(null);
+    }
   };
 }

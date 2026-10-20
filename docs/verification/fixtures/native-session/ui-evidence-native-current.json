@@ -1,0 +1,12 @@
+{
+  "mode": "native-current",
+  "startedAt": "2026-10-20T14:23:55.866Z",
+  "pageErrors": [],
+  "checks": {
+    "taskChip": true,
+    "nextChip": false,
+    "ideasChip": false,
+    "nativeProgressCard": true
+  },
+  "endedAt": "2026-10-20T14:24:06.238Z"
+}

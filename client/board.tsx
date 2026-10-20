@@ -102,6 +102,7 @@ import { enabledStatuses, laneName } from "../shared/lanes";
 import { boardSortText, boardSorts, latestTurnEnds, sortTasks, turnEndActivity, type BoardSort } from "../shared/sort";
 import { projectTagStats, tagPrefixes, taskMatchesSearch, taskMatchesTagFilter } from "../shared/tags";
 import {
+  parseIdeaLink,
   parseSessionLink,
   resolveSessionLink,
   sessionLinkKey,
@@ -233,6 +234,17 @@ function BoardContent(
     refetchOnReconnect: false,
   });
   const appliedLink = useRef("");
+  // "Start a new task" from the native Ideas chip (NATIVE-SESSION-SPEC §7.3), applied once per request.
+  const ideaInput = useMemo(() => {
+    try {
+      return { link: parseIdeaLink(props.params), error: "" };
+    } catch (error) {
+      return { link: null, error: message(error) };
+    }
+  }, [props.params?.ideaId, props.params?.requestId]);
+  const appliedIdea = useRef(""),
+    // An idea newer than this board copy: re-read the board once before calling it gone.
+    ideaRetried = useRef("");
   const [sessionEntry, setSessionEntry] = useState<
     (SessionEntry & { taskId: string }) | null
   >(null);
@@ -857,6 +869,38 @@ function BoardContent(
       },
     }),
   );
+  useEffect(() => {
+    if (ideaInput.error) {
+      setError(ideaInput.error);
+      return;
+    }
+    const link = ideaInput.link;
+    if (!link || !board || appliedIdea.current === link.requestId) return;
+    const idea = board.ideas.find((i) => i.id === link.ideaId);
+    const card = idea && board.tasks.find((x) => x.id === idea.taskId);
+    // Never another idea: a gone or closed one is an error on the board.
+    if (!idea || idea.status !== "open" || !card) {
+      if (ideaRetried.current !== link.requestId) {
+        ideaRetried.current = link.requestId;
+        // Found after the re-read: the new board runs this effect again. Still missing (or an unchanged board): say so.
+        void data.refetch().then((result) => {
+          if (appliedIdea.current === link.requestId) return;
+          if (result.data?.ideas.some((i) => i.id === link.ideaId && i.status === "open")) return;
+          appliedIdea.current = link.requestId;
+          setError(t("This idea is no longer open."));
+        });
+        return;
+      }
+      appliedIdea.current = link.requestId;
+      setError(t("This idea is no longer open."));
+      return;
+    }
+    appliedIdea.current = link.requestId;
+    setError("");
+    setPage(null);
+    setProject(card.projectId);
+    createFromIdea(idea);
+  }, [ideaInput, board]);
   // CARD-LINKS-SPEC §5.5: the new-task form, linked as a follow-up of `source`.
   const followUp = useStableCallback((source: Task) =>
     setTaskForm({

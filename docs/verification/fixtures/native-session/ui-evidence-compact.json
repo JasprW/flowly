@@ -1,0 +1,8 @@
+{
+  "mode": "compact",
+  "startedAt": "2026-10-20T14:15:21.151Z",
+  "pageErrors": [],
+  "checks": {},
+  "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /Open task \\[test\\] native session/ })\u001b[22m\n\n    at openFlowlyCard (/Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/ui.mjs:48:81)\n    at async file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/ui.mjs:183:5",
+  "endedAt": "2026-10-20T14:15:57.048Z"
+}

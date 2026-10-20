@@ -4,7 +4,7 @@ import { BoardStore, columnOrder } from "./server/store";
 import { BoardService, dataDirectory, migrateLegacyPluginData } from "./server/service";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
-import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues } from "./shared/settings";
+import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { WrapupService } from "./server/wrapup";
@@ -26,6 +26,7 @@ import { TicketService } from "./server/tickets";
 import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
 import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./server/progress-rules";
+import { NextMoveRows } from "./server/next-move-rows";
 import { SummaryService, SummaryStore } from "./server/summaries";
 import { UsageService } from "./server/usage";
 import { summarySettings, summarySettingsValues } from "./shared/summary";
@@ -45,6 +46,7 @@ export default function contribute(server: PluginServerContext) {
   const wrapupPrefs = server.registerSettings(wrapupSettings);
   const statusPrefs = server.registerSettings(statusSettings);
   const ideasPrefs = server.registerSettings(ideasSettings);
+  const nativePrefs = server.registerSettings(nativeSessionSettings);
   const perfPrefs = server.registerSettings(performanceSettings);
   // The global switch for rules A1/A1r; unreadable settings keep the default (on).
   const autoStatusOn = async () => {
@@ -53,6 +55,8 @@ export default function contribute(server: PluginServerContext) {
   };
   if (!process.env.FLOWLY_DATA_DIR && !process.env.ULTRA_KANBAN_DATA_DIR) migrateLegacyPluginData();
   const store = new BoardStore(dataDirectory());
+  // The Next moves card in Paseo's own timeline (NATIVE-SESSION-SPEC §6.1).
+  const nextRows = new NextMoveRows(store);
   const summaries = new SummaryService(
     store,
     new SummaryStore(store.directory),
@@ -179,6 +183,15 @@ export default function contribute(server: PluginServerContext) {
     return boardDeltas.read(await store.view(), input);
   });
   server.handle(rpc.managedSessions, () => tools.secrets.managedSessions());
+  server.handle(rpc.nativeChips, async () => {
+    const [wrap, native] = await Promise.all([wrapupPrefs.read().catch(() => null), nativePrefs.read().catch(() => null)]);
+    return {
+      managed: await tools.secrets.managedSessions(),
+      ideas: await tools.agents.ideasOn(),
+      autoWrapup: wrapupSettingsValues(wrap?.status === "ready" ? wrap.values : {}).autoWrapup,
+      nextMoveTap: nativeSessionSettingsValues(native?.status === "ready" ? native.values : {}).nextMoveTap,
+    };
+  });
   server.handle(rpc.refreshSummary, async (input, { paseo }) => {
     const managed = (await tools.secrets.managedSessions()).filter((s) => s.taskId === input.taskId);
     return summaries.refresh(input.taskId, managed.map((s) => s.agentId), paseo);
@@ -363,6 +376,8 @@ export default function contribute(server: PluginServerContext) {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
     if (!identity) return;
+    // The previous turn's Next moves card goes (in place) as this turn starts; never blocks the hook.
+    void nextRows.turnStarted(identity.agentId, paseo);
     const auto = await autoStatusOn();
     await store.mutate((board) => {
       recordLifecycle(store, board, identity, "agent.turn_started");
@@ -370,6 +385,8 @@ export default function contribute(server: PluginServerContext) {
     });
   });
   server.on("agent.turn_ended", async (event, { paseo }) => {
+    // Before any await: a turn of this session that starts later skips its summary row (NATIVE-SESSION-SPEC §5.1).
+    const endedAt = new Date().toISOString();
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
     if (!identity) return;
@@ -385,9 +402,11 @@ export default function contribute(server: PluginServerContext) {
     void workpads.recordTurn(identity, event.timeline, paseo).catch((e) =>
       console.error("Kanban workpad plan not recorded:", e instanceof Error ? e.message : String(e)),
     );
+    // This turn's suggested next steps as a card under the reply in Paseo's timeline; never blocks the hook.
+    if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
     // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
     if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
-      void summaries.enqueue(identity.taskId, identity.agentId, event.timeline, paseo);
+      void summaries.enqueue(identity.taskId, identity.agentId, event.timeline, paseo, endedAt);
   });
   // Queued follow-ups go out when any session's turn ends (Paseo "queue").
   server.on("agent.turn_ended", async (event, { paseo }) => {

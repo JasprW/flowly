@@ -1,0 +1,31 @@
+{
+  "round": 3,
+  "fixture": {
+    "cardId": "f8195786-d9fd-4af2-953a-b2a4f37a9264",
+    "workspaceId": "wks_6f4530b911c9404d",
+    "managedAgentId": "4f3f1dfb-cc9c-45a5-bc93-ee186cce168b",
+    "rowId": "flowly-next-moves-bf0734f1-dade-451f-be8e-24e622d5584f"
+  },
+  "ui": {
+    "action": "Tapped Suggested next step: Move to Done in the managed session's native view with Auto wrap up enabled.",
+    "wrapupQuestion": "Not observed during the 15-second UI poll. The browser run advanced to its post-action board/state RPC, which failed because Flowly was temporarily unavailable. The resulting screenshot shows Workspace unavailable and no wrap-up question.",
+    "screenshot": "../../../native-session/round3/error-b-auto.png"
+  },
+  "readbackAfterPluginReady": {
+    "taskStatus": "done",
+    "taskRevision": 3,
+    "taskArchivedAt": null,
+    "autoWrapup": true,
+    "sessionStatus": "closed",
+    "sessionArchivedAt": "2026-10-20T15:28:58.322Z",
+    "workspacePresent": false,
+    "workspaceAutoArchivedEventAt": "2026-10-20T15:28:58.942Z",
+    "workspaceAutoArchivedEvent": "Workspace and 1 session(s) archived; the directory stays on disk."
+  },
+  "transientServiceRestart": {
+    "stopAt": "2026-10-20T15:29:12.594Z",
+    "readyAt": "2026-10-20T15:29:15.227Z",
+    "observedFrom": "paseo plugin logs flowly",
+    "initiatedByThisTest": false
+  }
+}

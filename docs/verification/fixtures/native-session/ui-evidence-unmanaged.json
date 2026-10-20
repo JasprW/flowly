@@ -1,0 +1,12 @@
+{
+  "mode": "unmanaged",
+  "startedAt": "2026-10-20T14:24:34.869Z",
+  "pageErrors": [],
+  "checks": {
+    "taskChipPresent": true,
+    "nextChipAbsent": true,
+    "ideasChipAbsent": true,
+    "noNativeProgressRow": true
+  },
+  "endedAt": "2026-10-20T14:24:43.700Z"
+}

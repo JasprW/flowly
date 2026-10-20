@@ -5,9 +5,11 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { AccessibilityInfo, Animated, Easing, Platform, type ViewProps } from "react-native";
+import { reduceMotionNow, subscribeReduceMotion } from "./reduce-motion";
 
 export const motionDuration = { feedback: 120, forward: 220, reverse: 160 } as const;
 /** Entrances decelerate into place; exits accelerate away (no lingering, near-invisible tail). */
@@ -332,5 +334,14 @@ export function useReducedMotion() {
  * (modals render outside this tree, where the default is "reduced").
  */
 export function MotionBridge({ reduced, children }: { reduced: boolean; children: ReactNode }) {
+  return <ReduceMotion.Provider value={reduced}>{children}</ReduceMotion.Provider>;
+}
+
+/**
+ * The Reduce Motion preference for rows Paseo renders in its own views (timeline rows, chip popovers), which sit
+ * outside `MotionProvider` and would otherwise always skip animation. One shared subscription for all of them.
+ */
+export function SharedMotionProvider({ children }: { children: ReactNode }) {
+  const reduced = useSyncExternalStore(subscribeReduceMotion, reduceMotionNow);
   return <ReduceMotion.Provider value={reduced}>{children}</ReduceMotion.Provider>;
 }

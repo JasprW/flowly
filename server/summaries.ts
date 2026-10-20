@@ -21,6 +21,7 @@ import {
   type SummarySettings,
   type SummaryState,
 } from "../shared/summary";
+import { summaryRow } from "../shared/native-session";
 
 /** `summaries.json`: serialized writes, backup, atomic replacement; invalid data is preserved. */
 export class SummaryStore {
@@ -131,10 +132,22 @@ export class SummaryStore {
   }
 }
 
-type Batch = { text: string; agentIds: string[] };
+/** `endedAt`: when the (last merged) turn ended; a later turn of that session skips the timeline row (NATIVE-SESSION-SPEC §5.1). */
+type Batch = { text: string; agentIds: string[]; endedAt: string };
 type TimelineEntry = { item: { type: string }; timestamp?: string };
 
 export const SUMMARY_TIMEOUT_MS = 120_000;
+/** The timeline row is best effort: a hung refresh or append must not hold up the card's next summary. */
+export const SUMMARY_ROW_TIMEOUT_MS = 10_000;
+export function within<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timed out")), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 /**
  * Runs the cheap summarizer after Kanban-managed turns. One run per card at a
@@ -148,6 +161,7 @@ export class SummaryService {
     readonly store: SummaryStore,
     readonly settings: () => Promise<SummarySettings>,
     private timeoutMs = SUMMARY_TIMEOUT_MS,
+    private rowTimeoutMs = SUMMARY_ROW_TIMEOUT_MS,
   ) {}
 
   running() {
@@ -162,10 +176,16 @@ export class SummaryService {
   }
 
   /** Queues a turn for summarizing. Resolves when this card's queue is drained. */
-  enqueue(taskId: string, agentId: string, timeline: readonly { type: string }[], paseo: PaseoApi): Promise<void> {
+  enqueue(
+    taskId: string,
+    agentId: string,
+    timeline: readonly { type: string }[],
+    paseo: PaseoApi,
+    endedAt = new Date().toISOString(),
+  ): Promise<void> {
     const text = turnText(timeline);
     if (!text.trim()) return Promise.resolve();
-    const batch = { text, agentIds: [agentId] };
+    const batch = { text, agentIds: [agentId], endedAt };
     const queue = this.queues.get(taskId);
     if (queue) {
       queue.push(batch);
@@ -190,25 +210,31 @@ export class SummaryService {
         const queue = this.queues.get(taskId)!;
         if (!queue.length) return;
         const merged = queue.splice(0, queue.length);
-        await this.run(
-          taskId,
-          {
-            text: merged.map((b) => b.text).join("\n\n---\n\n"),
-            agentIds: [...new Set(merged.flatMap((b) => b.agentIds))],
-          },
-          paseo,
-        ).catch((e) => this.store.setError(taskId, e instanceof Error ? e.message : String(e)).catch(() => undefined));
+        const batch = {
+          text: merged.map((b) => b.text).join("\n\n---\n\n"),
+          agentIds: [...new Set(merged.flatMap((b) => b.agentIds))],
+          endedAt: merged[merged.length - 1].endedAt,
+        };
+        const entry = await this.run(taskId, batch, paseo).catch((e) =>
+          this.store
+            .setError(taskId, e instanceof Error ? e.message : String(e))
+            .catch(() => undefined)
+            .then(() => null),
+        );
+        // In the background: the native row never holds up or changes Flowly's own summaries.
+        if (entry) void this.appendRow(taskId, merged[merged.length - 1].agentIds[0], batch.endedAt, entry, paseo);
       }
     } finally {
       this.queues.delete(taskId);
     }
   }
 
-  private async run(taskId: string, batch: Batch, paseo: PaseoApi) {
+  /** The new version, or null when nothing was written. */
+  private async run(taskId: string, batch: Batch, paseo: PaseoApi): Promise<SummaryEntry | null> {
     const board = await this.board.read();
     const task = board.tasks.find((t) => t.id === taskId);
     const project = task && board.projects.find((p) => p.id === task.projectId);
-    if (!task || !project || task.archivedAt || project.archivedAt) return;
+    if (!task || !project || task.archivedAt || project.archivedAt) return null;
     const settings = await this.settings();
     const model = resolveModel(settings.summaryModel, await availableModels(paseo, settings.summaryModel));
     const previous = await this.store.latest(taskId);
@@ -246,9 +272,32 @@ export class SummaryService {
     }
     if (!output.update && previous) {
       await this.store.clearError(taskId);
-      return;
+      return null;
     }
-    await this.store.add({ taskId, model, agentIds: batch.agentIds, state: output.state, target: output.target, recap: output.recap, next: output.next });
+    return this.store.add({ taskId, model, agentIds: batch.agentIds, state: output.state, target: output.target, recap: output.recap, next: output.next });
+  }
+
+  /**
+   * The version as a row in the session's native timeline (NATIVE-SESSION-SPEC §5.1). Best effort: Paseo keeps
+   * these rows in memory only. Skipped when that session started a newer turn (the row would read as a summary of
+   * the new message) or is archived; a failure is only logged and never touches the stored version.
+   */
+  private async appendRow(taskId: string, agentId: string, endedAt: string, entry: SummaryEntry, paseo: PaseoApi) {
+    try {
+      const board = await this.board.read();
+      const task = board.tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      const newer = board.events.some(
+        (e) => e.agentId === agentId && e.action === "agent.turn_started" && Date.parse(e.at) > Date.parse(endedAt),
+      );
+      if (newer) return;
+      const session = paseo.agents.ref(agentId);
+      const snapshot = await within(session.refresh(), this.rowTimeoutMs);
+      if (!snapshot?.agent || snapshot.agent.archivedAt) return;
+      await within(session.timeline.append(summaryRow(entry, task.workspaceId)), this.rowTimeoutMs);
+    } catch (e) {
+      console.error("Flowly summary row not added:", e instanceof Error ? e.message : String(e));
+    }
   }
 
   /** Manual refresh: the last turn of the card's most recently active managed session. */
@@ -267,7 +316,7 @@ export class SummaryService {
       if (!best || at > best.at) best = { agentId, at, items: lastTurn(entries.map((e) => e.item)) };
     }
     if (!best) throw new Error("No conversation to summarize yet.");
-    void this.enqueue(taskId, best.agentId, best.items, paseo);
+    void this.enqueue(taskId, best.agentId, best.items, paseo, best.at || undefined);
     return { queued: true };
   }
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { BoardEvent } from "./model";
-import { hasOpenNextMoves, isNoMoves, needsNextMoves, nextMoveDraft, openNextMoves, shownMoves } from "./next-moves";
+import { chipMoves, hasOpenNextMoves, isNoMoves, needsNextMoves, nextMoveDraft, openNextMoves, shownMoves } from "./next-moves";
 
 const ev = (id: string, action: string, agentId = "a", extra: Partial<BoardEvent> = {}): BoardEvent => ({
   id, taskId: "t", actor: action.startsWith("agent.") ? "system" : "agent", action, agentId,
@@ -71,4 +71,24 @@ test("a session still owes next moves until it suggests some, or none, in its cu
   // No turn start retained (lifecycle events missing): the history is one turn, which only silences a reminder.
   expect(needsNextMoves([ev("1", "next_moves_suggested", "a", moves("Verify"))], "t", "a")).toBe(false);
   expect(needsNextMoves([], "t", "a")).toBe(true);
+});
+
+test("the native Next chip follows Flowly's suggestion row (NATIVE-SESSION-SPEC §6.1)", () => {
+  const events = [ev("1", "agent.turn_started"), ev("2", "next_moves_suggested", "a", { moves: [{ label: "Verify", prompt: "Verify it" }, { label: "Done", moveTo: "done" }] }), ev("3", "agent.turn_ended")];
+  const idle = { id: "a", status: "idle", pendingPermissions: [], attentionReason: "finished", lastUserMessageAt: "2026-10-19T00:00:00Z", archivedAt: null } as const;
+  const base = { events, agent: idle, cardFinished: false, hidden: () => false };
+  expect(chipMoves(base)).toEqual({ eventId: "2", moves: [{ label: "Verify", prompt: "Verify it" }, { label: "Done", moveTo: "done" }] });
+  expect(chipMoves({ ...base, agent: { ...idle, status: "running" } })).toBeNull();
+  expect(chipMoves({ ...base, agent: { ...idle, status: "initializing" } })).toBeNull();
+  expect(chipMoves({ ...base, agent: { ...idle, pendingPermissions: [{}] as never } })).toBeNull();
+  expect(chipMoves({ ...base, agent: { ...idle, attentionReason: "permission" } })).toBeNull();
+  expect(chipMoves({ ...base, agent: { ...idle, archivedAt: "2026-10-20T00:00:00Z" } })).toBeNull();
+  // The user already wrote after the suggestion (lifecycle events missing).
+  expect(chipMoves({ ...base, agent: { ...idle, lastUserMessageAt: "2026-10-19T00:00:09Z" } })).toBeNull();
+  expect(chipMoves({ ...base, hidden: (id) => id === "2" })).toBeNull();
+  expect(chipMoves({ ...base, events: [...events, ev("4", "agent.turn_started")] })).toBeNull();
+  expect(chipMoves({ ...base, events: [ev("1", "next_moves_suggested", "a", { moves: [] })] })).toBeNull();
+  // A finished card keeps only message moves; nothing left hides the chip.
+  expect(chipMoves({ ...base, cardFinished: true })?.moves).toEqual([{ label: "Verify", prompt: "Verify it" }]);
+  expect(chipMoves({ ...base, cardFinished: true, events: [ev("2", "next_moves_suggested", "a", { moves: [{ label: "Done", moveTo: "done" }] })] })).toBeNull();
 });

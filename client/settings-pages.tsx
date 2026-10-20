@@ -8,6 +8,8 @@ import {
   boardViewValues,
   ideasSettings,
   ideasSettingsValues,
+  nativeSessionSettings,
+  nativeSessionSettingsValues,
   languageSettings,
   languageSettingsValues,
   modelSettings,
@@ -233,9 +235,14 @@ export function WorkflowPage() {
 export function AiPage() {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const ideas = useStored(useSettings(ideasSettings), ideasSettingsValues);
+  const native = useStored(useSettings(nativeSessionSettings), nativeSessionSettingsValues);
+  const tapOptions = [
+    { value: "fill", label: t("Fill the message box") },
+    { value: "copy", label: t("Copy") },
+  ];
   return (
     <SettingsPage title={t("AI features")} description={t("What the board writes and suggests for you. The model is chosen under Models.")}>
-      <Problem text={summary.problem || ideas.problem} />
+      <Problem text={summary.problem || ideas.problem || native.problem} />
       <SettingsGroup
         title={t("Task progress summary")}
         description={t("After each agent turn on a card, a cheap model updates the card's state, recap and next step. It runs as a short child session that is archived right after.")}
@@ -262,6 +269,20 @@ export function AiPage() {
           value={ideas.values?.ideas ?? true}
           disabled={ideas.busy}
           onChange={(value) => ideas.save({ ideas: value })}
+        />
+      </SettingsGroup>
+      <SettingsGroup
+        title={t("Paseo's session view")}
+        description={t("Flowly sessions opened in Paseo itself show the agent's suggested next steps as a card under its last reply.")}
+      >
+        <SettingSelect
+          title={t("Tapping a suggested next step")}
+          detail={t("Fill puts it in that session's message box on web and desktop; nothing is sent. Where that is not possible, and with Copy, it is copied for you to paste.")}
+          value={native.values?.nextMoveTap ?? "fill"}
+          placeholder={tapOptions.find((o) => o.value === (native.values?.nextMoveTap ?? "fill"))?.label ?? ""}
+          disabled={native.busy}
+          options={tapOptions}
+          onChange={(next) => native.save({ nextMoveTap: next === "copy" ? "copy" : "fill" })}
         />
       </SettingsGroup>
       <SettingsGroup title={t("Artifacts")} description={t("Each card lists its inputs and outputs: files and links it worked from or delivered. You can always add them by hand.")}>

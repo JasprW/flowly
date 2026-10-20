@@ -484,6 +484,20 @@ export const managedSessions = defineRpc({
     z.object({ agentId: z.string(), taskId: z.string(), workspaceId: z.string() }),
   ),
 });
+/** What the native session pane's Flowly chips need besides the board (NATIVE-SESSION-SPEC §8). */
+export const nativeChips = defineRpc({
+  name: "sessions.native-chips",
+  input: z.strictObject({}),
+  output: z.object({
+    managed: z.array(z.object({ agentId: z.string(), taskId: z.string(), workspaceId: z.string() })),
+    /** The Ideas switch (IDEAS-INBOX-SPEC §10): off hides the Ideas chip. */
+    ideas: z.boolean(),
+    /** Auto wrap up (MULTITASK-SPEC): on, Move to Done on the Next moves card asks nothing. */
+    autoWrapup: z.boolean(),
+    /** What tapping a message suggestion on the Next moves card does (NATIVE-SESSION-SPEC §6.4). */
+    nextMoveTap: z.enum(["fill", "copy"]),
+  }),
+});
 export const configureSession = defineRpc({
   name: "sessions.configure",
   input: z

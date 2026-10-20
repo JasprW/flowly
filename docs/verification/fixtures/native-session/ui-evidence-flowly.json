@@ -1,0 +1,23 @@
+{
+  "mode": "flowly",
+  "startedAt": "2026-10-20T14:02:26.571Z",
+  "endedAt": "2026-10-20T14:02:33.822Z",
+  "checks": {
+    "boardRendersFixture": true,
+    "drawerProgress": true,
+    "nativeSessionTipVisible": false,
+    "flowlyTranscriptProgressCount": 0,
+    "flowlyTranscriptHasNoProgress": true,
+    "flowlySuggestionRowVisible": true,
+    "flowlySuggestionFillsComposer": true,
+    "flowlyOwnHideButtonWorks": true
+  },
+  "pageErrors": [],
+  "screenshots": [
+    "docs/verification/native-session/flowly-drawer-current.png",
+    "docs/verification/native-session/flowly-session-current.png",
+    "docs/verification/native-session/flowly-suggestion-filled.png",
+    "docs/verification/native-session/flowly-session-own-suggestions-hidden.png"
+  ],
+  "source": "Saved from the successful live Playwright flowly-mode output; the per-mode evidence filename was added after this run."
+}

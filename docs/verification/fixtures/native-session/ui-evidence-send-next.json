@@ -1,0 +1,24 @@
+{
+  "mode": "send-next",
+  "startedAt": "2026-10-20T14:04:25.464Z",
+  "endedAt": "2026-10-20T14:04:33.808Z",
+  "checks": {
+    "nextMoveEditorPrefilled": true,
+    "editedValueShownBeforeSend": true,
+    "nativeTimelineShowsExactEditedText": true,
+    "nextChipDisappearsOnNewTurn": false,
+    "sessionShowsRunningOrTurnStarted": true,
+    "sentText": "Edited in Paseo: verify the native summary card exactly."
+  },
+  "pageErrors": [],
+  "laterObservation": {
+    "at": "2026-10-20T14:05:51.733Z",
+    "nextChipPresent": false,
+    "note": "A fresh UI navigation after the turn had ended no longer showed Next; the immediate post-send snapshot still did."
+  },
+  "screenshots": [
+    "docs/verification/native-session/native-next-edited-before-send.png",
+    "docs/verification/native-session/native-next-sent.png"
+  ],
+  "source": "Saved from the successful live Playwright send-next output and later fresh-page observation."
+}

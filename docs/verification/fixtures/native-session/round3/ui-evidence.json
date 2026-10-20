@@ -1,0 +1,320 @@
+{
+  "round": 3,
+  "testSessionId": "e63b5616-a0db-47cd-9b11-4c3691dcde10",
+  "steps": [
+    {
+      "step": "error-a-first",
+      "at": "2026-10-20T15:24:43.590Z",
+      "error": "locator.evaluate: ReferenceError: label is not defined\n    at eval (eval at evaluate (:370:30), <anonymous>:5:14)\n    at UtilityScript.evaluate (<anonymous>:372:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at readSwitch (/Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round3/ui.mjs:58:49)\n    at setAutoWrap (/Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round3/ui.mjs:67:24)\n    at async file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round3/ui.mjs:97:20"
+    },
+    {
+      "step": "error-a-first",
+      "at": "2026-10-20T15:25:11.652Z",
+      "error": "TypeError: page.title(...).includes is not a function\n    at file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/docs/verification/fixtures/native-session/round3/ui.mjs:99:47"
+    },
+    {
+      "step": "set-auto-wrapup-true",
+      "at": "2026-10-20T15:25:37.818Z",
+      "before": {
+        "label": "Auto wrap up",
+        "on": false,
+        "trackColor": "rgb(244, 244, 245)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 0, 0)"
+      },
+      "desired": true,
+      "after": {
+        "label": "Auto wrap up",
+        "on": false,
+        "trackColor": "rgb(244, 244, 245)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 0, 0)"
+      },
+      "rpcValue": true
+    },
+    {
+      "step": "settings-final-restored",
+      "at": "2026-10-20T15:25:55.381Z",
+      "autoWrapup": {
+        "label": "Auto wrap up",
+        "on": true,
+        "trackColor": "rgb(32, 116, 74)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 14, 0)"
+      },
+      "autoArchiveOnDelete": {
+        "label": "Auto archive on delete",
+        "on": true,
+        "trackColor": "rgb(32, 116, 74)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 14, 0)"
+      },
+      "nextMoveTap": "fill",
+      "expected": {
+        "autoWrapup": true,
+        "autoArchiveOnDelete": true,
+        "nextMoveTap": "fill"
+      }
+    },
+    {
+      "step": "d7a-auto-wrapup-off-not-now",
+      "at": "2026-10-20T15:26:19.073Z",
+      "initialNativeChipsAutoWrapup": true,
+      "row": {
+        "type": "plugin",
+        "id": "flowly-next-moves-a33008ab-004d-45c3-a46a-2dc5330c308d",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "workspaceId": "wks_b9b122aa3eb49e8c",
+          "eventId": "a33008ab-004d-45c3-a46a-2dc5330c308d",
+          "moves": [
+            {
+              "label": "Move to Done",
+              "moveTo": "done"
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      },
+      "toggle": {
+        "before": {
+          "label": "Auto wrap up",
+          "on": true,
+          "trackColor": "rgb(32, 116, 74)",
+          "thumbTransform": "matrix(1, 0, 0, 1, 14, 0)"
+        },
+        "desired": false,
+        "after": {
+          "label": "Auto wrap up",
+          "on": false,
+          "trackColor": "rgb(244, 244, 245)",
+          "thumbTransform": "matrix(1, 0, 0, 1, 13.6529, 0)"
+        },
+        "rpcValue": false
+      },
+      "stillOnNativeSession": true,
+      "autoWrapupAtAction": false,
+      "action": {
+        "rowBefore": {
+          "type": "plugin",
+          "id": "flowly-next-moves-a33008ab-004d-45c3-a46a-2dc5330c308d",
+          "kind": "flowly-next-moves",
+          "version": 1,
+          "data": {
+            "status": "ready",
+            "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+            "workspaceId": "wks_b9b122aa3eb49e8c",
+            "eventId": "a33008ab-004d-45c3-a46a-2dc5330c308d",
+            "moves": [
+              {
+                "label": "Move to Done",
+                "moveTo": "done"
+              }
+            ]
+          },
+          "pluginId": "flowly"
+        },
+        "label": "Move to Done",
+        "body": "New workspace\nHistory\nSearch\nSchedules\nFlowly\nPaseo Cafe\nDeferred\nPinned\nS\nReduce latency via orchestration and perf tuning\n4d\n5950 Merged\n·\npassed\nA\nSummarize joonhung's recent questions to SMITH\n5d\n184 Merged\n·\npassed\nWorkspaces\nA\naside-acp\nNew workspace\ncore-fe-sr/search-admin\n以live环境本地启动\nSep 18\nA\ndeep/agent-smith\nAdd undo and modify to SeaTalk feedback\nOct 2\nAudit Agent SMITH online session data gaps and Arsenal skill needs\nOct 13\nCheck live environment deploy time and commit\n4d\nharness2研究\n4h\nReview Search Agent architecture and design flaws\nOct 10\nself improvement优化\n6d\nB\ndeep/bff-search\nNew workspace\nD\ndynamic_ui\nMerge dynamic_ui MR !300\n5d\n297 Merged\n·\npassed\nengine_application/search-oracle\nfeature/experiment-flow-prototype\nJul 31\nE\nengine-proxy\nNew workspace\nE\neven-v2ex\nNew workspace\nP\nJasprW/PetCam\nfeat/custom-toy-sound-effects\nSep 18\nonboarding-soundpacks-volume-auto\nSep 18\nW\nJasprW/WeModern\nmain\nSep 18\nP\npaseo-utlra-kanban\npaseo project settings互通\n1d\nsidebar session 优化\nnow\nsummary、next move、ideas上原生session\nnow\n更多connector接入\n42m\n项目记忆：可审阅的跨卡共享记忆 + 完成卡复盘\n23h\nP\npeek\nFix peek split button transparency on dark theme\nSep 18\nS\nSearch System\nApprove search MR !5953 and bff-search MR !1522\n1d\nInit\n5d\n设计端到端测试方案\n5h\nS\nsearch_calc\nNew workspace\nS\nsearch_workspace\nNew workspace\nS\nsearch-arsenal\nArsenal skill 依赖 sra 技能并统一 credential\nOct 10\n233\n·\npassed\nBuild search-wtf jargon glossary skill\nOct 3\n217\n·\npassed\nFix search-skills-feedback auto-issue creation\nOct 13\nIdentify search-gitlab-browser skill author and purpose\nOct 10\n232\n·\npassed\nInitialize search-tutor-me skill\nSep 25\nS\nsearch-edison\nNew workspace\nS\nshopee-server/search\nClean up item card 3.0 code, preserve video/live bass\nOct 13\n5897\n·\npassed\nS\nsra-toolkit\nNew workspace\nT\ntinylink\nT\ntolaria-vault\nNew workspace\nU\nuser_search\nAdd instant mart debug logging\nAug 28\n266\n·\npassed\nSet up worktree scripts\nAdd setup commands so new worktrees can install dependencies and prepare themselves automatically.\nOpen project settings\n43%\n97%\n81%\n100%\n888K\n8.8M\n[test] native session round 3 a 5d8e71a1\ntinylink\n[test] native session round 3 a\n[test] native session round 3 a\nNo file edits. Use flowly_update_status to deliver this card to in_review with a short note and exactly [{label:\"Move to Done\", moveTo:\"done\"}] as nextMoves. Set acknowledgeOpen:true only if required. Do not move the card to Done yourself.\n11:24 PM\nToolsearch\nmcp__ultra-kanban__flowly_get_task\nmcp__ultra-kanban__flowly_update_status\n\nThe card is now in review. I moved it from Todo to In review (task revision 2) with the note that no source files were edited and no workpad checks were defined. The only next move recorded is \"Move to Done\", which I did not select.\n\nI made no file edits. The card had no workpad items, so nothing was open and I did not need to acknowledge open items.\n\nThe system flagged that this card has no ideas proposed. I did not propose any: I reviewed nothing in the code, so I had no follow-ups to suggest.\n\nSuggested next steps\nWrap up this card?\nArchives this card's sessions and its own workspace. The card stays on the board.\nNot now\nOpen in Flowly\nWrap up\nProgress\nIn review; no file edits; waiting on reviewer\nTarget\nDeliver fixture card to in review without editing source files.\n- No source file edits in owned temporary workspace\n- Deliver card to in review with a short note\n- Leave the move to Done to the person\nRecap\n- Card moved from Todo to In review (revision 2)\n- No file edits made; no workpad items open\n- Note records that no source files were edited\nNext\nWaiting for the person to choose Move to Done.\nShow more\nUpdated 2m ago · Haiku 5.5\nOpen card\nWorked for 23s\nWorked for 23s\nDefer\nTask · [test] native session round …\n⌘L to focus\nHaiku 5.5\nMedium\nBypass\nDrop files here\nMoved to Done",
+        "questionShown": true
+      },
+      "offered": [
+        {
+          "label": "Not now",
+          "text": "Not now"
+        },
+        {
+          "label": "Open in Flowly",
+          "text": "Open in Flowly"
+        },
+        {
+          "label": "Wrap up",
+          "text": "Wrap up"
+        }
+      ],
+      "notNowChosen": true,
+      "questionClosed": true,
+      "nextCardGone": true,
+      "after": {
+        "task": {
+          "id": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "status": "done",
+          "revision": 3,
+          "archivedAt": null
+        },
+        "session": {
+          "status": "idle",
+          "archivedAt": null
+        },
+        "workspacePresent": true,
+        "wrapupCheck": {
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "revision": 3,
+          "workspace": {
+            "id": "wks_b9b122aa3eb49e8c",
+            "kind": "local_checkout",
+            "directory": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink"
+          },
+          "archiveWorkspace": true,
+          "sessions": 1,
+          "git": null,
+          "blockers": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "step": "d7b-wrap-up-manually",
+      "at": "2026-10-20T15:27:53.864Z",
+      "row": {
+        "type": "plugin",
+        "id": "flowly-next-moves-c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+        "kind": "flowly-next-moves",
+        "version": 1,
+        "data": {
+          "status": "ready",
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "workspaceId": "wks_b9b122aa3eb49e8c",
+          "eventId": "c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+          "moves": [
+            {
+              "label": "Move to Done",
+              "moveTo": "done"
+            }
+          ]
+        },
+        "pluginId": "flowly"
+      },
+      "settingAtOpen": false,
+      "action": {
+        "rowBefore": {
+          "type": "plugin",
+          "id": "flowly-next-moves-c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+          "kind": "flowly-next-moves",
+          "version": 1,
+          "data": {
+            "status": "ready",
+            "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+            "workspaceId": "wks_b9b122aa3eb49e8c",
+            "eventId": "c44f2f3e-f0b6-466a-aad8-d1228bb55494",
+            "moves": [
+              {
+                "label": "Move to Done",
+                "moveTo": "done"
+              }
+            ]
+          },
+          "pluginId": "flowly"
+        },
+        "label": "Move to Done",
+        "body": "New workspace\nHistory\nSearch\nSchedules\nFlowly\nPaseo Cafe\nDeferred\nPinned\nS\nReduce latency via orchestration and perf tuning\n4d\n5950 Merged\n·\npassed\nA\nSummarize joonhung's recent questions to SMITH\n5d\n184 Merged\n·\npassed\nWorkspaces\nA\naside-acp\nNew workspace\ncore-fe-sr/search-admin\n以live环境本地启动\nSep 18\nA\ndeep/agent-smith\nAdd undo and modify to SeaTalk feedback\nOct 2\nAudit Agent SMITH online session data gaps and Arsenal skill needs\nOct 13\nCheck live environment deploy time and commit\n4d\nharness2研究\n4h\nReview Search Agent architecture and design flaws\nOct 10\nself improvement优化\n6d\nB\ndeep/bff-search\nNew workspace\nD\ndynamic_ui\nMerge dynamic_ui MR !300\n5d\n297 Merged\n·\npassed\nengine_application/search-oracle\nfeature/experiment-flow-prototype\nJul 31\nE\nengine-proxy\nNew workspace\nE\neven-v2ex\nNew workspace\nP\nJasprW/PetCam\nfeat/custom-toy-sound-effects\nSep 18\nonboarding-soundpacks-volume-auto\nSep 18\nW\nJasprW/WeModern\nmain\nSep 18\nP\npaseo-utlra-kanban\npaseo project settings互通\n1d\nsidebar session 优化\nnow\nsummary、next move、ideas上原生session\nnow\n更多connector接入\n43m\n项目记忆：可审阅的跨卡共享记忆 + 完成卡复盘\n23h\nP\npeek\nFix peek split button transparency on dark theme\nSep 18\nS\nSearch System\nApprove search MR !5953 and bff-search MR !1522\n1d\nInit\n5d\n设计端到端测试方案\n5h\nS\nsearch_calc\nNew workspace\nS\nsearch_workspace\nNew workspace\nS\nsearch-arsenal\nArsenal skill 依赖 sra 技能并统一 credential\nOct 10\n233\n·\npassed\nBuild search-wtf jargon glossary skill\nOct 3\n217\n·\npassed\nFix search-skills-feedback auto-issue creation\nOct 13\nIdentify search-gitlab-browser skill author and purpose\nOct 10\n232\n·\npassed\nInitialize search-tutor-me skill\nSep 25\nS\nsearch-edison\nNew workspace\nS\nshopee-server/search\nClean up item card 3.0 code, preserve video/live bass\nOct 13\n5897\n·\npassed\nS\nsra-toolkit\nNew workspace\nT\ntinylink\nT\ntolaria-vault\nNew workspace\nU\nuser_search\nAdd instant mart debug logging\nAug 28\n266\n·\npassed\nSet up worktree scripts\nAdd setup commands so new worktrees can install dependencies and prepare themselves automatically.\nOpen project settings\n15%\n100%\n81%\n100%\n888K\n8.8M\n[test] native session round 3 a 5d8e71a1\ntinylink\n[test] native session round 3 a\n[test] native session round 3 a\nNo file edits. Use flowly_update_status to deliver this card to in_review with a short note and exactly [{label:\"Move to Done\", moveTo:\"done\"}] as nextMoves. Set acknowledgeOpen:true only if required. Do not move the card to Done yourself.\n11:24 PM\nToolsearch\nmcp__ultra-kanban__flowly_get_task\nmcp__ultra-kanban__flowly_update_status\n\nThe card is now in review. I moved it from Todo to In review (task revision 2) with the note that no source files were edited and no workpad checks were defined. The only next move recorded is \"Move to Done\", which I did not select.\n\nI made no file edits. The card had no workpad items, so nothing was open and I did not need to acknowledge open items.\n\nThe system flagged that this card has no ideas proposed. I did not propose any: I reviewed nothing in the code, so I had no follow-ups to suggest.\n\nProgress\nIn review; no file edits; waiting on reviewer\nTarget\nDeliver fixture card to in review without editing source files.\n- No source file edits in owned temporary workspace\n- Deliver card to in review with a short note\n- Leave the move to Done to the person\nRecap\n- Card moved from Todo to In review (revision 2)\n- No file edits made; no workpad items open\n- Note records that no source files were edited\nNext\nWaiting for the person to choose Move to Done.\nShow more\nUpdated 3m ago · Haiku 5.5\nOpen card\nWorked for 23s\nWorked for 23s\nNo file edits. Use flowly_update_status to deliver this card to in_review with a short note and exactly [{label:\"Move to Done\", moveTo:\"done\"}] as nextMoves. Set acknowledgeOpen:true only if required. Do not move the card to Done yourself.\n11:26 PM\nmcp__ultra-kanban__flowly_get_task\nToolsearch\nmcp__ultra-kanban__flowly_get_task\n\nThe card is now in Development. History shows a person moved it from In review to Done and then back to Development a few minutes ago. Your instruction is to deliver it to In review, so I'll do that from the current revision.\n\nmcp__ultra-kanban__flowly_update_status\n\nThe card is back in In review (task revision 5). The note says no source files were edited and no workpad checks were defined. The only next move is \"Move to Done\", which I did not select.\n\nBetween my two deliveries, someone moved the card from In review to Done and then back to Development. I re-delivered because you asked for it again, but that human move may have been deliberate, so check whether the card should be in review.\n\nI did not propose any ideas. The system reminder flagged that none are on the card, but I did not review any code, so I had no follow-ups to suggest.\n\nSuggested next steps\nWrap up this card?\nArchives this card's sessions and its own workspace. The card stays on the board.\nNot now\nOpen in Flowly\nWrap up\nProgress\nBack in In review; a person moved it to Done and back\nTarget\nDeliver fixture card to in review without editing source files.\n- No source file edits in owned temporary workspace\n- Deliver card to in review with a short note\n- Leave the move to Done to the person\nRecap\n- Delivered to In review twice; current task revision is 5\n- No file edits; no workpad items open\n- Person moved card to Done, then back to Development\n- No ideas proposed; no code reviewed\nNext\nReviewer to confirm whether card should stay in review; Move to Done left to person.\nShow more\nUpdated 1m ago · Haiku 5.5\nOpen card\nWorked for 26s\nWorked for 26s\nDefer\nTask · [test] native session round …\n⌘L to focus\nHaiku 5.5\nMedium\nBypass\nDrop files here\nMoved to Done",
+        "questionShown": true
+      },
+      "offered": [
+        {
+          "label": "Not now",
+          "text": "Not now"
+        },
+        {
+          "label": "Open in Flowly",
+          "text": "Open in Flowly"
+        },
+        {
+          "label": "Wrap up",
+          "text": "Wrap up"
+        }
+      ],
+      "wrapUpChosen": true,
+      "after": {
+        "task": {
+          "id": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "status": "done",
+          "revision": 6,
+          "archivedAt": null
+        },
+        "session": {
+          "status": "closed",
+          "archivedAt": "2026-10-20T15:27:52.102Z"
+        },
+        "workspacePresent": false,
+        "wrapupCheck": {
+          "taskId": "6bd565b0-4f53-4027-ab6d-7e047935abe3",
+          "revision": 6,
+          "workspace": null,
+          "archiveWorkspace": false,
+          "sessions": 0,
+          "git": null,
+          "blockers": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "step": "set-auto-wrapup-true",
+      "at": "2026-10-20T15:28:05.988Z",
+      "before": {
+        "label": "Auto wrap up",
+        "on": false,
+        "trackColor": "rgb(244, 244, 245)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 0, 0)"
+      },
+      "desired": true,
+      "after": {
+        "label": "Auto wrap up",
+        "on": false,
+        "trackColor": "rgb(32, 116, 74)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 1.02397, 0)"
+      },
+      "rpcValue": true
+    },
+    {
+      "step": "settings-final-restored",
+      "at": "2026-10-20T15:28:18.989Z",
+      "autoWrapup": {
+        "label": "Auto wrap up",
+        "on": true,
+        "trackColor": "rgb(32, 116, 74)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 14, 0)"
+      },
+      "autoArchiveOnDelete": {
+        "label": "Auto archive on delete",
+        "on": true,
+        "trackColor": "rgb(32, 116, 74)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 14, 0)"
+      },
+      "nextMoveTap": "fill",
+      "expected": {
+        "autoWrapup": true,
+        "autoArchiveOnDelete": true,
+        "nextMoveTap": "fill"
+      }
+    },
+    {
+      "step": "error-b-auto",
+      "at": "2026-10-20T15:29:13.330Z",
+      "error": "DaemonRpcError: Request failed: Plugin is not available: flowly requestType=plugin.rpc.invoke.request code=handler_error\n    at Object.waitForWithCancel [as predicate] (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client.js:950:28)\n    at DaemonClient.resolveWaiters (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client.js:4755:39)\n    at DaemonClient.deliverSessionMessage (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client.js:4749:14)\n    at DaemonClient.handleSessionMessage (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client.js:4694:14)\n    at DaemonClient.handleJsonPayload (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client.js:4437:14)\n    at DaemonClient.handleTransportMessage (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client.js:4374:18)\n    at file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client.js:589:30\n    at WebSocket.listener (file:///Users/bofan.wang/.paseo/worktrees/270gs08k/kanban-summary-next-move-ideas-session-9c13bf/node_modules/@getpaseo/client/dist/daemon-client-websocket-transport.js:63:9)\n    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:872:20)\n    at WebSocket.dispatchEvent (node:internal/event_target:813:26)"
+    },
+    {
+      "step": "settings-final-restored",
+      "at": "2026-10-20T15:32:19.007Z",
+      "autoWrapup": {
+        "label": "Auto wrap up",
+        "on": true,
+        "trackColor": "rgb(32, 116, 74)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 14, 0)"
+      },
+      "autoArchiveOnDelete": {
+        "label": "Auto archive on delete",
+        "on": true,
+        "trackColor": "rgb(32, 116, 74)",
+        "thumbTransform": "matrix(1, 0, 0, 1, 14, 0)"
+      },
+      "nextMoveTap": "fill",
+      "expected": {
+        "autoWrapup": true,
+        "autoArchiveOnDelete": true,
+        "nextMoveTap": "fill"
+      }
+    }
+  ],
+  "pageErrors": []
+}

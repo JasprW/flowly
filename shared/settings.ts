@@ -86,6 +86,24 @@ export function statusSettingsValues(values: unknown): StatusSettings {
   return parsed.success ? parsed.data : statusSettings.schema.parse({});
 }
 
+/**
+ * Paseo's own session view (NATIVE-SESSION-SPEC §6.4): what tapping a suggested next step on the timeline card does.
+ * `fill` puts it in that session's message box where the app allows it (web and desktop), else copies it.
+ */
+export const nativeSessionSettings = defineSettings({
+  id: "native-session",
+  scope: "host",
+  version: 1,
+  schema: z.object({
+    nextMoveTap: z.enum(["fill", "copy"]).default("fill"),
+  }),
+});
+export type NativeSessionSettings = z.infer<typeof nativeSessionSettings.schema>;
+export function nativeSessionSettingsValues(values: unknown): NativeSessionSettings {
+  const parsed = nativeSessionSettings.schema.safeParse(values ?? {});
+  return parsed.success ? parsed.data : nativeSessionSettings.schema.parse({});
+}
+
 /** The Ideas feature (IDEAS-INBOX-SPEC §10): off hides every Ideas entry and refuses new proposals. */
 export const ideasSettings = defineSettings({
   id: "ideas",

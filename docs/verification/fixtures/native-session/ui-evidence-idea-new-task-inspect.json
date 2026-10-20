@@ -1,0 +1,64 @@
+{
+  "mode": "idea-new-task-inspect",
+  "startedAt": "2026-10-20T14:22:07.980Z",
+  "pageErrors": [],
+  "checks": {
+    "newTaskFormOpened": true,
+    "newTaskFormText": "kspace\nU\nuser_search\nAdd instant mart debug logging\nAug 28\n266\n·\npassed\n35%\n99%\n81%\n100%\n888K\n8.8M\nFlowly\nFlowly\nSearch System\nAgent SMITH\nTinylink\nAttention\n1\nRecent activity\nFilter\nNew task\n7\ntasks\n· 1 done\nIdle\nIn review 2\nIdeas 4\nInsights\n1\nBacklog\nTodo\n1\nFeature\nCustom aliases for short links\nDesign\n1\nUrgent\nBug fix\nExpired links crash the server instead of returning an error\nBug reproduced; waiting for user to choose 410 or 404\n1d ago\nNeeds you\nDismissed\nDevelopment\n0\nNo tasks\nTest\n1\n[test] native session bc0d52e9\nVerification done; card in Test, awaiting your next step\n1m ago\n2\n1\nIn review\n2\nHigh\nFeature\nAdd rate limiting to POST /shorten\nDelivered to In review; 13/13 tests passing\n1d ago\n1\nChecks 3/3\n2\nFeature\nAdd click counter and GET /stats/:code\nDone and delivered to In review; 13/13 tests pass on HEAD\n1d ago\n1\n1\nBlocked\n0\nNo tasks\nDone\n1\nChore\nScaffold project and short code generator\nWrapped up\nCancelled\n0\nNo tasks\nCreate task from idea\nFrom Jira\nTitle\nDescription\nStatus\nBacklog\nTodo\nDesign\nDevelopment\nTest\nIn review\nBlocked\nPriority\nLow\nNormal\nHigh\nUrgent\nType\nNone\nFeature\nBug fix\nResearch\nRefactor\nDocs\nChore\nTags\nAdd tag\nProject root · /Users/bofan.wang/Developer/personal/flowly-test/tinylink\nWorkspace\nNew in directory\nNew isolated worktree\nLink existing\nStart an agent now\nCreate the task, then start its first session with Kanban tools. Turn off to add the task only and start later.\nAgent\nProvider\nClaude\nModel\nHaiku 5.5\nReasoning\nModel default (Medium)\nPermissions\nBypass\nInstruction\nThe title and description are included automatically.\nCancel\nCreate and start",
+    "formFields": [
+      {
+        "placeholder": "Message the agent, tag @files, or use /commands and /skills",
+        "value": "",
+        "aria": "Message agent..."
+      },
+      {
+        "placeholder": "What needs doing?",
+        "value": "Document session summary troubleshooting",
+        "aria": "Title"
+      },
+      {
+        "placeholder": "",
+        "value": "Write a short troubleshooting guide for missing Progress cards in native Paseo sessions, including the managed-session requirement and the daemon restart limitation.\n\nWhy: Operators need to know whether a missing card indicates an unsupported session or a timeline rebuild.\n\nContext:\nDocs only; no source edits.\n\nFrom card: [test] native session bc0d52e9 (40e346c9-b0ac-43b4-b003-82bd6b0e2903)\n\nSource progress:\nVerify the native progress card flow end to end on this disposable fixture.\n- Stage changes, progress report, and next moves display correctly\n- No source edits; Flowly card updates only\n- Idea 'Verify native progress card' accepted into this task\n- Idea 'Verify native progress card' proposed, then accepted into task\n- Stage moved Development to Test (revision 3)\n- Progress and result reported with Verify and Commit next moves\n- Extra idea 'Document session summary troubleshooting' proposed for a new task",
+        "aria": "Description"
+      },
+      {
+        "placeholder": "What should the agent do first?",
+        "value": "",
+        "aria": "Instruction"
+      },
+      {
+        "placeholder": null,
+        "value": "",
+        "aria": null
+      },
+      {
+        "placeholder": null,
+        "value": "",
+        "aria": null
+      }
+    ],
+    "formButtons": [
+      {
+        "text": "",
+        "label": "Collapse Cancelled"
+      },
+      {
+        "text": "",
+        "label": "Add task to Cancelled"
+      },
+      {
+        "text": "Cancel",
+        "label": "Cancel"
+      },
+      {
+        "text": "Create and start",
+        "label": "Create and start"
+      },
+      {
+        "text": "Cancel",
+        "label": null
+      }
+    ]
+  },
+  "endedAt": "2026-10-20T14:22:20.003Z"
+}

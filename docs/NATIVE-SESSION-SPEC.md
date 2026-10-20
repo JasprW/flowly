@@ -1,0 +1,202 @@
+# 原生 session pane 上的 Summary、Next moves、Ideas
+
+状态：设计待评审，未实现。2026-10-20 与用户确认范围与两项取舍（§3）。卡片任务 `731e66bf`。
+
+## 1. 目的
+
+用户在 Flowly 里打开 session，能看到 Progress summary、输入框上方的下一步建议和本卡 Ideas；同一个 session 在 Paseo 原生 session pane 里打开时，这些都看不到，只有一个 **Task · 标题** chip（SESSION-CHIP-SPEC）。
+
+目标是**体验一致**：同一个 project 下的 session，在 Flowly 内和原生 pane 里都能看到并使用这三项特色功能。
+
+## 2. 范围与分期
+
+本 spec 只做 **P1**（用户 2026-10-20 决定）。后续各期只作评估记录，不在本次实现。
+
+| 期 | 覆盖的 session | 需要做的 | 难度 |
+| --- | --- | --- | --- |
+| **P1（本 spec）** | Flowly 管理的 session：从卡片启动，或通过 “Send Kanban work instructions” 加入（有工具凭据，`sessions.managed` 列出） | 数据都已存在，只缺原生 pane 上的展示与操作 | 中；客户端为主，服务端加一处 timeline 追加 |
+| P2 | 卡片 workspace 里、未加入卡片的原生 session | 原生 pane 上一键“加入此卡”（复用 `tools.prepare-existing`），之后同 P1 | 低–中 |
+| P3 | Flowly project 内、不属于任何卡片的 session（如项目主 workspace） | 无卡可挂：summary/ideas/next moves 改为按 session 存；agent 需要会话级凭据与说明 | 中–高 |
+| P4 | 不在任何 Flowly project 的 session | 同 P3，且 ideas 没有项目收件箱可落 | 高 |
+
+P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工具，而是让每轮结束后的 summarizer 在同一次调用里顺带抽取 next moves 与 ideas，与 provider 无关、无需注入工具；代价是每个 session 每轮多一次模型调用，必须有开关。
+
+不做：
+
+- 改变 summary / next moves / ideas 的产生方式、数据格式或 agent 工具。
+- Flowly 内现有展示（侧栏 Progress、Ideas 区块、Ideas 页、输入框上方建议行）不删除、不改行为。
+- 给 P1 之外的 session 显示新 chip（Task chip 维持现状，仍对卡片 workspace 内所有 session 显示）。
+
+## 3. 用户决定
+
+- Next moves 与 Ideas 在原生 pane 上分成**两个独立的 composer chip**。
+- Summary 通过**原生 timeline** 展示。
+- 只覆盖 P1。
+- Flowly 内 session 视图不加 Progress 卡片，只在原生 timeline 显示（§5.4，2026-10-20 实现后追加）。
+- **本功能完全不影响 Flowly 内部的行为与样式，只针对原生 session**（2026-10-20 实现后追加）。因此：Flowly 内建议行的 × 不与原生 chip 共享（§6.3）；不加 Flowly 内的一次性提示，欢迎页文案不变（§9）；summary 的写入与 Flowly 内展示不受原生行追加影响（§5.1）。唯一新增的 Flowly 入口是原生 Ideas chip 的 “Start a new task” 打开的 `ideaId` 看板链接（§7.3），不带该参数时看板行为不变。
+- Summary 的原生 timeline 行是**尽力显示**：daemon 重启后旧行消失可以接受，不做补回（§5.2）。
+- ~~原生 pane 上点 next move：弹层内显示可编辑文字，按 Send 才发送~~（2026-10-20 修订：点建议默认预填 Paseo 输入框，可在设置中改为复制，§6.4）。
+
+## 4. 平台能力与限制（SDK 0.11.2；0.12.0 客户端契约相同）
+
+| 能力 | 用途 |
+| --- | --- |
+| `client.addComposerPill({id, workspaceId, agentId, button})`，`behavior.kind: "popover"` | Ideas chip（弹层宽屏锚定在 chip 上，紧凑布局由 host 决定呈现方式） |
+| `paseo.agents.ref(id).timeline.append({type:"plugin", kind, version, data})`（daemon 侧） | 把 summary 作为插件条目追加到该 session 的原生 timeline |
+| `client.addTimelineRenderer({kind, version, schema, Component})` | 渲染 Progress 行与 Next moves 卡片 |
+
+限制：
+
+- **SDK 没有往原生输入框预填文字的接口。** 预填只能像 prompt-suggestions 那样在 web/桌面通过 DOM 找到输入框（`textarea[data-composer-input]`，经 React fiber 的 `agentId` 属性确定所属 session）后设置值；这依赖 Paseo 的内部结构，不是插件 API，因此必须做特性检测并在失败时退回复制（§6.4）。
+- Paseo 要求 timeline kind 与行 id 匹配 `^[a-z][a-z0-9-]*$`，否则注册时抛错并使整个客户端插件加载失败。
+
+## 5. Summary：原生 timeline 条目
+
+### 5.1 何时追加（daemon，`server/summaries.ts`）
+
+- summarizer 写入**新版本**（`update=true` 且解析成功）后，向**触发这次运行的看板管理 session**（单飞合并时取最后一个回合的 session）追加一个插件条目。
+- `update=false`、失败、超时、出错：不追加。
+- 手动 Refresh 产生新版本时，追加到 Refresh 所选的 session（TASK-SUMMARY-SPEC §6）。
+- 追加前检查：该 session 未归档；且从触发回合结束到现在没有该 session 新的 `agent.turn_started`。若已开始新一轮，**跳过追加**（否则条目会出现在用户新消息之后，读起来像是对新消息的总结）；新版本仍正常写入 `summaries.json`，侧栏照常显示。（本条为设计者的决定。）
+- 追加在后台进行（每步 10 s 超时），从不阻塞该卡后续的 summary 运行；失败只记日志（不打印内容），不影响 summary 写入，不重试。
+- 卡片有多个 session 时，只追加到产生这次进展的那个 session；其它 session 的 timeline 不重复出现。
+
+### 5.2 数据契约
+
+`id: "flowly-summary-<entryId>"`（每个版本一行；同 id 再次追加会替换该行），`kind: "flowly-summary"`，`version: 1`，`data`：
+
+```
+{ taskId, workspaceId,        // 用于 “Open card” 的链接校验
+  entryId,                    // summaries.json 中该版本的 id
+  state, target, recap, next, // 与该版本完全相同，不截断
+  model, at }                 // 生成模型与时间（ISO）
+```
+
+条目自带全部内容，渲染不需要 RPC。`data` 上限 64 KiB（Paseo 拒绝更大的），四个字段各 ≤4000 字符（TASK-SUMMARY-SPEC §3），远低于上限。
+
+**生命周期（Paseo 文档，已确认）：** 追加的行存在 daemon 内存中的 timeline，滚动、refetch、重连后仍在，**daemon 重启后丢失**（实测：session 进程重载后同样丢失，§5.5）；插件缺失时显示 “unavailable” 占位。`summaries.json` 仍是 summary 的唯一持久来源，侧栏 Progress 与 History 不受影响。
+
+### 5.3 渲染（`addTimelineRenderer`）
+
+- 外观与侧栏 Progress 一致（共用 `ContentCard` 样式与 `AiMark` 星标）：标题行 “Progress” + `state`（强调），下面 Target / Recap / Next，脚注 “Updated 5m ago · Haiku 5.5”。
+- 超过约 5 行时收起，Show more / Show less，规则同 TASK-SUMMARY-SPEC §7（动画、Reduce Motion、首次测量不播放）。
+  - Paseo 在 Flowly 的组件树之外渲染 timeline 行，没有 `MotionProvider` 时动画钩子默认按“减少动态效果”处理、直接跳变（2026-10-20 用户反馈）。原生 timeline 行、Next moves 卡片与 Ideas 弹层都包在 `SharedMotionProvider` 里：所有行共用一个系统 Reduce Motion 查询与监听（`client/reduce-motion.ts`），系统回答前按减少动态效果处理。
+- 尾部一个小链接 “Open card”，打开 Flowly 并定位到该卡概览（复用 Task chip 的 `openScreen("board", …)` 路径与校验）。
+- schema 校验不通过时由 host 处理（不渲染）；渲染器不抛错。
+
+### 5.4 Flowly 内 session 视图不显示（2026-10-20 用户决定）
+
+最初设计让 Flowly 自己的 session 视图在相同位置显示同一条目。用户 2026-10-20 决定：**Flowly 内 session 下不加 Progress 卡片**。Flowly 内已有侧栏 Progress 区块（卡片级、含 History），session 对话里不再重复。因此：
+
+- `shared/session-tail.ts` 的 `slimTimeline` 维持原样，把所有插件条目（包括 `flowly-summary`）精简为只剩 `{type:"plugin"}`，Flowly 的对话视图不显示它们。
+- Summary 行只在 Paseo 原生 timeline 显示；侧栏 Progress 区块不变。
+
+### 5.5 风险实测结果（2026-10-20）
+
+用临时插件 `flowly-probe` 在 Tinylink 卡片 workspace 中各建一个 `claude/claude-haiku-5-5` 与 `codex/gpt-6-luna` session 实测；测试后两个 session 已硬删除、插件已移除、临时目录已删除。
+
+| # | 风险 | 结果 |
+| --- | --- | --- |
+| 1 | 插件行是否进入 agent 上下文 | **不会**。行内暗号（PINEAPPLE-42 / MANGO-77）两个 agent 在下一轮都完全没看到。 |
+| 2 | 追加是否触发 attention / 未读 | **不会**。先清除 attention 再追加，`requiresAttention` 仍为 false，`attentionReason` 为 null；只有 `updatedAt` 更新。推送通知无法直接观测，但它依赖 attention，判断不会触发。 |
+| 3 | 插件 daemon 侧 SDK 能否读到插件行 | **能**。`timeline.refetch` 的 `projected` 与 `canonical` 都返回该行（含 `id`、`kind`、`pluginId`、`data`），所以 `sessions.tail` 本可以带出它（§5.4 后来决定不在 Flowly 内显示）。 |
+| 4 | Claude / Codex 是否都接受追加 | **都接受**，返回 `{seq, epoch}`。 |
+| 5 | session 进程重载后是否保留 | **不保留**。`paseo agent reload` 之后，timeline 从 provider 历史重建，之前追加的行消失，之后追加的行正常。即除 daemon 重启外，session 重载（以及任何从 provider 历史重建 timeline 的情况）也会丢掉旧的 summary 行；仍按用户“尽力显示”的决定处理，不补回。 |
+| 6 | summarizer 是否会把自己的输出再总结 | `agent.turn_ended` 钩子的 `timeline` **会包含**插件行（实测出现 `plugin:probe`）。`turnText` 只取 user/assistant/tool/error，忽略 `plugin`，所以不会；加单元测试锁定。 |
+
+## 6. Next moves：原生 timeline 卡片（2026-10-20 修订）
+
+最初设计是 composer 上的 **Next** chip + 弹层。用户参考 [prompt-suggestions](https://github.com/961853266hyt/paseo-plugins/tree/HEAD/plugins%2Fprompt-suggestions) 插件后决定（2026-10-20）：Next moves 改为原生 timeline 里、agent 最后一条回复下方的卡片；**移除 Next chip**；点建议的行为可配置，默认**预填 Paseo 输入框**，可改为**复制**；Ideas 保留为 chip（§7）。
+
+### 6.1 何时写入与撤下（daemon，`server/next-move-rows.ts`）
+
+- **回合结束**（看板管理 session 的 `agent.turn_ended`，`outcome=completed`）：该 session 有当前建议（`openNextMoves`，去掉卡片已 Done/Cancelled 时的动作建议后非空）时，追加一行 `kind: "flowly-next-moves"`、`version: 1`、`id: "flowly-next-moves-<eventId>"`，`data = { status: "ready", taskId, workspaceId, eventId, moves }`。在回合结束而不是在 agent 记录建议时写入，是为了让卡片排在 agent 最后一条回复之后。显式“没有下一步”（空列表）不写。
+- **下一轮开始**（该 session 的 `agent.turn_started`）：把该 session 上一张卡片以同一 id 改写为 `{ status: "dismissed" }`（Paseo 按 id 原位替换，渲染为空），历史里不堆积旧卡片。
+- 写入在后台进行（10 s 超时），失败只记日志，不影响 Flowly 的事件与状态。与 Progress 行相同：行只在 daemon 内存，daemon 重启或 session 重载后消失（§5.5）。插件 reload 后不记得上一张卡片的 id，旧卡片由客户端的当前性检查隐藏（§6.2）。
+
+### 6.2 显示条件（客户端）
+
+卡片只在以下都成立时显示，否则渲染为空：行 `status: "ready"`；该行的 `eventId` 等于 chip 刷新为该 session 算出的当前建议（`chipMoves`：session 空闲、没有待答问题、用户之后没有发过消息、本机没有关闭这一组）。非看板管理 session 没有卡片。Flowly 自己的 session 视图不显示插件行（§5.4），Flowly 内建议行不变。
+
+### 6.3 外观
+
+```
+  Agent: …typecheck 与测试都通过了。
+ ┌──────────────────────────────────────────────────────┐
+ │ ✦ Suggested next steps                            ×  │
+ │ [ Verify with Luna ] [ Commit and push ] [✓ Move to Done] │
+ └──────────────────────────────────────────────────────┘
+```
+
+胶囊样式与 Flowly 内建议行一致（第一条强调；动作建议带 `Check` 与成功色边框）；手机上换行而不是横向滚动。
+
+### 6.4 交互
+
+- **消息型建议**，按设置 `nextMoveTap`（host 设置 `native-session`，默认 `fill`）：
+  - `fill`（默认）：把 `prompt` 填进**这个 session 的** Paseo 输入框；输入框已有文字时在其后空一行追加（与 Flowly 的 `nextMoveDraft` 相同），光标移到末尾并聚焦。**不发送**，由用户在 Paseo 里发送。仅 web 与桌面可用（`client/web-composer.ts`，见 AGENTS.md 例外）；找不到该 session 的输入框（iOS/Android app、Paseo 改了输入框结构）时退回 `copy`。（退回复制是设计者的决定。）
+  - `copy`：复制 `prompt`，toast “Copied. Paste it into the message box.”。
+  - 卡片保留到下一轮开始或用户关闭。
+- **Move to Done**：同前（重新校验建议仍当前、卡片未完成 → 移到 Done；未开 *Auto wrap up* 且有东西可收尾时在卡片内询问 Wrap up / Open in Flowly / Not now，有阻塞或警告时只给 Open in Flowly）。
+- **×**：本机隐藏这一组（`client/hidden-moves.ts`），不影响 Flowly 内建议行。
+- 设置位置：Flowly 设置 → AI features → “Paseo's session view”，选项 “Fill the message box”/“Copy”。这是 Flowly 内唯一新增的界面（用户要求可配置）。
+
+## 7. Ideas chip
+
+### 7.1 显示条件
+
+在看板管理的 session 上，当本卡有 `open` idea（IDEAS-SPEC §2.1）时显示；为 0 时移除。同一卡的多个管理 session 各自显示，数量相同。
+
+### 7.2 外观
+
+图标 `Lightbulb`，标签 “Ideas · 3”，title “Ideas for this card”，id `flowly-ideas`。
+
+### 7.3 弹层
+
+- 列出本卡 open ideas（新→旧），每条：标题、`AiMark`、scope 提示（“Continue here” / “New card”，按 agent 建议），点开看 detail 与 rationale。
+- 每条三个操作：
+  - **Continue here**：发往**当前这个 session**，原样复用 `ideas.adopt`（IDEAS-SPEC §6.2：daemon 生成指令文字、走发送队列、记录 `idea_adopted`、发送失败回滚）。与 Flowly 内一致，**不提供编辑**；按钮旁说明“Sends this idea to this session.”，点后需在弹层内再确认一次。（设计者的决定：保持 RPC 契约不变。）
+  - **New card**：打开 Flowly，进入该 idea 预填的新建卡表单（与侧栏 Create task 同一表单）。新增 board screen 参数 `{ ideaId, requestId }`，按 SESSION-CHIP-SPEC 的方式一次性消费、严格校验，idea 不存在或不再 open 时报错，不替换成别的卡。
+  - **Dismiss**：`ideas.update` 置为 dismissed（可在 Flowly 内 Restore）。
+- 卡片在 Done/Cancelled 或已归档时，与 IDEAS-INBOX-SPEC 一致只提供 New card 与 Dismiss。
+
+## 8. 注册、数据与性能
+
+- Ideas chip 与 Next moves 卡片的当前性由 `client/session-link.ts` 现有的客户端级刷新统一计算（同一 5 s etag 轮询，不新增轮询或订阅）：看板 `board.read-changed` 已含 `events` 与 `ideas`；管理 session 名单、Ideas 开关、Auto wrap up 与 `nextMoveTap` 取 `sessions.native-chips`，看板变化时或至多每分钟重读。卡片在回合结束后至多一个刷新周期内出现。
+- session 运行状态、待答问题用刷新中已有的 live agent 列表判断。
+- chip 只在标签、可见性或内容签名变化时 `update`，避免在用户打字时重渲染 host 输入区。
+- 弹层与卡片用最新一次刷新的数据渲染；执行操作前重新读取并校验（建议仍有效、idea 仍 open、session 仍属于该卡），失效时提示并刷新，不执行。
+- 回调不得捕获 `for` 循环变量（Hermes），chip 按钮在独立函数中构造（同 `chipButton`）。
+- 清理：插件卸载或 session 不再满足条件时移除全部自有 chip；卸载后迟到的读取或操作结果不注册、不导航。
+- timeline 渲染器 bundle 小、无网络；不引入新依赖。
+
+## 9. 文案、引导与文档
+
+- 所有界面文字 `t()`/`tn()`，新文案加入全部语言目录。
+- 不加 Flowly 内的一次性提示，欢迎页文案不变（用户决定本功能不改 Flowly 内部的行为与样式；AGENTS.md “Onboarding upkeep” 允许在交付说明中说明不加）。最初设计的 `native-session` 提示已移除。
+- README Highlights 补一句（文档，不是 Flowly 界面）。
+- SPEC-OUTLINE 与 PROGRESS 记录本功能。
+
+## 10. 验收
+
+单元（focused）：
+
+- summary 追加：新版本追加、`update=false`/失败不追加、新一轮已开始时跳过、归档 session 跳过、追加失败不影响写入；data 与版本字段一致。
+- Next moves 卡片：回合结束写 ready 行（空列表、非 completed、卡片已完成只剩动作建议时不写）、下一轮开始改写为 dismissed、插件内存中的行 id 按 session 记录；当前性规则（`chipMoves`）；预填拼接与退回复制。
+- Ideas chip：计数、Ideas 开关、只对管理 session 注册、绑定变化时移除重建、卸载后不再注册；不再注册 Next chip。
+- 新 board 参数 `ideaId` 的校验与一次性消费。
+
+人工 / Luna（全权限 `codex/gpt-6-luna` 测试 session，按 AGENTS.md 规则在 Tinylink 或临时 fixture 上进行并清理）：
+
+- 管理 session 结束一轮后，原生 timeline 出现 Progress 条目，展开收起正常；Flowly 内同一 session 的对话里**不**出现（§5.4）。
+- 回合结束后原生 timeline 在最后一条回复下出现 Next moves 卡片；默认点建议把文字填进该 session 的 Paseo 输入框（已有文字时追加）、不发送；设置改为 Copy 后点建议复制；下一轮开始后卡片消失；× 只隐藏卡片，Flowly 内建议行不受影响；composer 上没有 Next chip。
+- Move to Done 建议：移动、收尾询问、各分支行为。
+- Ideas chip：Continue here、New card（打开预填表单）、Dismiss，Flowly 内状态同步。
+- 非管理 session 不出现两个新 chip，Task chip 照旧。
+- 桌面宽屏与手机紧凑布局都可用（含弹层中的输入框与键盘）。
+- 在真实实现上复核 §5.5 的 #1、#2（summary 行不进入 agent 上下文、不触发 attention）。
+
+## 11. 留给实现者的选择
+
+- 渲染组件、弹层组件的拆分与文件名。
+- chip 标签在不同语言下的具体缩写。
+- 若 host 的 popover 在手机上放不下输入框，可改为弹层内“Edit”跳到一个 Flowly 屏幕完成编辑；需在本 spec 记录。

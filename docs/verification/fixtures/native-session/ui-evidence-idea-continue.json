@@ -1,0 +1,15 @@
+{
+  "mode": "idea-continue",
+  "startedAt": "2026-10-20T14:07:31.090Z",
+  "endedAt": "2026-10-20T14:07:43.976Z",
+  "checks": {
+    "confirmedSessionDestinationShown": true,
+    "ideasPopoverClosedAfterSend": true,
+    "nextTurnStartedOrFinished": true,
+    "boardIdeaStatus": "accepted",
+    "acceptedAgentId": "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d"
+  },
+  "pageErrors": [],
+  "screenshot": "docs/verification/native-session/native-idea-continued.png",
+  "source": "Live Playwright result plus board.read result for the same idea and managed session."
+}

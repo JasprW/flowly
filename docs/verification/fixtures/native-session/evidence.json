@@ -1,0 +1,697 @@
+{
+  "model": "claude/claude-haiku-5-5",
+  "startedAt": "2026-10-20T13:42:56.480Z",
+  "steps": [
+    {
+      "at": "2026-10-20T13:42:56.776Z",
+      "step": "card-created",
+      "cardId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+      "workspaceId": "wks_cce8ddd1737269a0",
+      "cardTitle": "[test] native session bc0d52e9",
+      "createdAt": "2026-10-20T13:42:56.776Z"
+    },
+    {
+      "at": "2026-10-20T13:42:56.880Z",
+      "step": "managed-session-created",
+      "agentId": "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d"
+    },
+    {
+      "at": "2026-10-20T13:42:56.933Z",
+      "step": "unmanaged-session-created",
+      "agentId": "ff983e19-2f4f-4cf5-b72b-944db6826bad"
+    },
+    {
+      "at": "2026-10-20T13:46:55.941Z",
+      "step": "fixture-observed",
+      "cardPresent": true,
+      "managedStatus": "idle",
+      "unmanagedStatus": "idle",
+      "summary": null,
+      "managedRow": {
+        "type": "plugin",
+        "id": "flowly.summary:b66588be-0975-4175-980e-d0de7a3340b4",
+        "kind": "flowly.summary",
+        "version": 1,
+        "data": {
+          "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+          "workspaceId": "wks_cce8ddd1737269a0",
+          "entryId": "b66588be-0975-4175-980e-d0de7a3340b4",
+          "state": "All Flowly calls done; card in Development, result reported",
+          "target": "Verify the native progress card flow on this disposable fixture, with no file edits.\n- Set card stage to in_progress\n- Propose idea 'Verify native progress card', scope here\n- Report result with Verify and Commit next moves\n- No moveTo, no source edits",
+          "recap": "- Card stage set; in_progress maps to Development alias\n- Idea 'Verify native progress card' proposed, scope here\n- Result reported with Verify and Commit moves, no moveTo\n- First report got UNAUTHORIZED; retry with fresh request succeeded",
+          "next": "Nothing left to do; await the person's confirmation or next instruction.",
+          "model": "claude/claude-haiku-5-5",
+          "at": "2026-10-20T13:43:34.604Z"
+        },
+        "pluginId": "flowly"
+      },
+      "unmanagedRow": null,
+      "managedRowMatchesSummary": false,
+      "managedAttentionAfterAppend": {
+        "requiresAttention": true,
+        "attentionReason": "finished"
+      },
+      "nativeChipMembership": {
+        "managed": true,
+        "unmanaged": false,
+        "ideasEnabled": true,
+        "autoWrapup": true
+      },
+      "ideaCount": 1,
+      "nextMoveEvents": []
+    },
+    {
+      "at": "2026-10-20T13:47:20.444Z",
+      "step": "fixture-observed",
+      "cardPresent": true,
+      "managedStatus": "idle",
+      "unmanagedStatus": "idle",
+      "summary": {
+        "state": "All Flowly calls done; card in Development, result reported",
+        "target": "Verify the native progress card flow on this disposable fixture, with no file edits.\n- Set card stage to in_progress\n- Propose idea 'Verify native progress card', scope here\n- Report result with Verify and Commit next moves\n- No moveTo, no source edits",
+        "recap": "- Card stage set; in_progress maps to Development alias\n- Idea 'Verify native progress card' proposed, scope here\n- Result reported with Verify and Commit moves, no moveTo\n- First report got UNAUTHORIZED; retry with fresh request succeeded",
+        "next": "Nothing left to do; await the person's confirmation or next instruction.",
+        "id": "b66588be-0975-4175-980e-d0de7a3340b4",
+        "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+        "at": "2026-10-20T13:43:34.604Z",
+        "model": "claude/claude-haiku-5-5",
+        "agentIds": [
+          "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d"
+        ]
+      },
+      "managedRow": {
+        "type": "plugin",
+        "id": "flowly.summary:b66588be-0975-4175-980e-d0de7a3340b4",
+        "kind": "flowly.summary",
+        "version": 1,
+        "data": {
+          "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+          "workspaceId": "wks_cce8ddd1737269a0",
+          "entryId": "b66588be-0975-4175-980e-d0de7a3340b4",
+          "state": "All Flowly calls done; card in Development, result reported",
+          "target": "Verify the native progress card flow on this disposable fixture, with no file edits.\n- Set card stage to in_progress\n- Propose idea 'Verify native progress card', scope here\n- Report result with Verify and Commit next moves\n- No moveTo, no source edits",
+          "recap": "- Card stage set; in_progress maps to Development alias\n- Idea 'Verify native progress card' proposed, scope here\n- Result reported with Verify and Commit moves, no moveTo\n- First report got UNAUTHORIZED; retry with fresh request succeeded",
+          "next": "Nothing left to do; await the person's confirmation or next instruction.",
+          "model": "claude/claude-haiku-5-5",
+          "at": "2026-10-20T13:43:34.604Z"
+        },
+        "pluginId": "flowly"
+      },
+      "unmanagedRow": null,
+      "managedRowMatchesSummary": true,
+      "managedAttentionAfterAppend": {
+        "requiresAttention": true,
+        "attentionReason": "finished"
+      },
+      "nativeChipMembership": {
+        "managed": true,
+        "unmanaged": false,
+        "ideasEnabled": true,
+        "autoWrapup": true
+      },
+      "ideaCount": 1,
+      "nextMoveEvents": []
+    },
+    {
+      "at": "2026-10-20T13:52:35.702Z",
+      "step": "regeneration-turn-returned",
+      "status": "idle",
+      "previousSummaryId": "b66588be-0975-4175-980e-d0de7a3340b4"
+    },
+    {
+      "at": "2026-10-20T13:52:45.803Z",
+      "step": "new-kind-summary-row",
+      "status": "idle",
+      "summary": {
+        "state": "Result re-reported with Verify and Commit moves; card stays in Development",
+        "target": "Verify the native progress card flow on this disposable fixture, with no file edits.\n- Set card stage to in_progress\n- Propose idea 'Verify native progress card', scope here\n- Report result with Verify and Commit next moves\n- No moveTo, no source edits",
+        "recap": "- Card stage set; in_progress maps to Development alias\n- Idea 'Verify native progress card' proposed, scope here\n- Result reported with Verify and Commit moves, no moveTo, twice\n- First report got UNAUTHORIZED; fresh request succeeded",
+        "next": "Nothing left to do; await the person's confirmation or next instruction.",
+        "id": "f8db7b4b-ea65-43eb-b05d-cd833c3dcaaf",
+        "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+        "at": "2026-10-20T13:52:44.781Z",
+        "model": "claude/claude-haiku-5-5",
+        "agentIds": [
+          "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d"
+        ]
+      },
+      "row": {
+        "type": "plugin",
+        "id": "flowly-summary-f8db7b4b-ea65-43eb-b05d-cd833c3dcaaf",
+        "kind": "flowly-summary",
+        "version": 1,
+        "data": {
+          "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+          "workspaceId": "wks_cce8ddd1737269a0",
+          "entryId": "f8db7b4b-ea65-43eb-b05d-cd833c3dcaaf",
+          "state": "Result re-reported with Verify and Commit moves; card stays in Development",
+          "target": "Verify the native progress card flow on this disposable fixture, with no file edits.\n- Set card stage to in_progress\n- Propose idea 'Verify native progress card', scope here\n- Report result with Verify and Commit next moves\n- No moveTo, no source edits",
+          "recap": "- Card stage set; in_progress maps to Development alias\n- Idea 'Verify native progress card' proposed, scope here\n- Result reported with Verify and Commit moves, no moveTo, twice\n- First report got UNAUTHORIZED; fresh request succeeded",
+          "next": "Nothing left to do; await the person's confirmation or next instruction.",
+          "model": "claude/claude-haiku-5-5",
+          "at": "2026-10-20T13:52:44.781Z"
+        },
+        "pluginId": "flowly"
+      },
+      "beforeRowAttention": {
+        "requiresAttention": true,
+        "attentionReason": "finished",
+        "at": "2026-10-20T13:52:36.712Z"
+      },
+      "afterRowAttention": {
+        "requiresAttention": true,
+        "attentionReason": "finished",
+        "at": "2026-10-20T13:52:45.803Z"
+      },
+      "attentionUnchangedAcrossAppend": true
+    },
+    {
+      "at": "2026-10-20T14:08:28.982Z",
+      "step": "fixture-observed",
+      "cardPresent": true,
+      "managedStatus": "idle",
+      "unmanagedStatus": "idle",
+      "summary": {
+        "state": "Verification done; card moved to Test, awaiting your next step",
+        "target": "Verify the native progress card flow end to end on this disposable fixture.\n- Stage changes, progress report, and next moves display correctly\n- No source edits; Flowly card updates only\n- Idea 'Verify native progress card' accepted into this task",
+        "recap": "- Idea 'Verify native progress card' proposed, then accepted into task\n- Stage set to in_progress (Development alias), then moved to Test\n- Result reported with Verify and Commit next moves, no moveTo\n- First report hit UNAUTHORIZED; retry with fresh request succeeded",
+        "next": "Await your confirmation or next instruction; the card stays in Test.",
+        "id": "b4b0578d-440a-4932-b686-7400fcec04b7",
+        "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+        "at": "2026-10-20T14:08:11.782Z",
+        "model": "claude/claude-haiku-5-5",
+        "agentIds": [
+          "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d"
+        ]
+      },
+      "managedRow": {
+        "type": "plugin",
+        "id": "flowly-summary-f8db7b4b-ea65-43eb-b05d-cd833c3dcaaf",
+        "kind": "flowly-summary",
+        "version": 1,
+        "data": {
+          "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+          "workspaceId": "wks_cce8ddd1737269a0",
+          "entryId": "f8db7b4b-ea65-43eb-b05d-cd833c3dcaaf",
+          "state": "Result re-reported with Verify and Commit moves; card stays in Development",
+          "target": "Verify the native progress card flow on this disposable fixture, with no file edits.\n- Set card stage to in_progress\n- Propose idea 'Verify native progress card', scope here\n- Report result with Verify and Commit next moves\n- No moveTo, no source edits",
+          "recap": "- Card stage set; in_progress maps to Development alias\n- Idea 'Verify native progress card' proposed, scope here\n- Result reported with Verify and Commit moves, no moveTo, twice\n- First report got UNAUTHORIZED; fresh request succeeded",
+          "next": "Nothing left to do; await the person's confirmation or next instruction.",
+          "model": "claude/claude-haiku-5-5",
+          "at": "2026-10-20T13:52:44.781Z"
+        },
+        "pluginId": "flowly"
+      },
+      "unmanagedRow": null,
+      "legacyManagedRows": [
+        "flowly.summary:b66588be-0975-4175-980e-d0de7a3340b4"
+      ],
+      "managedRowMatchesSummary": false,
+      "managedAttentionAfterAppend": {
+        "requiresAttention": false,
+        "attentionReason": null
+      },
+      "nativeChipMembership": {
+        "managed": true,
+        "unmanaged": false,
+        "ideasEnabled": true,
+        "autoWrapup": true
+      },
+      "ideaCount": 0,
+      "taskEvents": [
+        {
+          "id": "5d4088b5-eb96-4529-9236-f04f26c8617f",
+          "action": "created"
+        },
+        {
+          "id": "7605779d-7d24-4c16-9b17-8640a8965b61",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "38eda1a1-b34f-4737-8350-c505677ba6ce",
+          "action": "status_changed",
+          "reportKind": "progress",
+          "note": "Starting native session fixture work (no source edits)."
+        },
+        {
+          "id": "0dcc9de2-736a-4490-9bde-43dd0374633b",
+          "action": "idea_proposed",
+          "note": "Verify native progress card"
+        },
+        {
+          "id": "129b33cd-90f4-42c3-ab30-db93e03ab6a1",
+          "action": "progress_reported",
+          "reportKind": "result",
+          "note": "Native session fixture acceptance run complete. Card stage set to development (in_progress alias), one idea proposed (\"Verify native progress card\", scope here). No source files edited."
+        },
+        {
+          "id": "a43e449d-38cb-42b8-a7d6-1c73b741121d",
+          "action": "next_moves_suggested",
+          "note": "Verify · Commit"
+        },
+        {
+          "id": "9a3c9fbd-c1e4-4cbb-8157-4e4c17dd496c",
+          "action": "agent.turn_ended"
+        },
+        {
+          "id": "ce1b1dab-08c7-4cf0-b1eb-26421f31877f",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "f6e61092-5e53-427c-9ee2-f72df35d1e1c",
+          "action": "progress_reported",
+          "reportKind": "result",
+          "note": "Native session fixture result re-reported. Card stage remains Development; one idea (\"Verify native progress card\", scope here) already proposed. No source files edited."
+        },
+        {
+          "id": "b1598923-2320-4596-8afc-0db2d693f909",
+          "action": "next_moves_suggested",
+          "note": "Verify · Commit"
+        },
+        {
+          "id": "2c4d81b6-1083-454b-af0a-ebf2e9042736",
+          "action": "agent.turn_ended"
+        },
+        {
+          "id": "607a1b19-1da9-4b7c-a9b9-bbfdd66f4a8c",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "44f1ef0c-447f-4364-abad-707a9cc7085a",
+          "action": "agent.turn_ended"
+        },
+        {
+          "id": "faa8d2c3-e987-441e-a6be-1ed1eba0d4a1",
+          "action": "idea_adopted",
+          "note": "Verify native progress card"
+        },
+        {
+          "id": "83a49894-78fb-41e8-8f26-105ea925c35d",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "148ce8a4-6923-4b58-b59d-dfbc9147742a",
+          "action": "status_changed",
+          "reportKind": "progress",
+          "note": "Starting verification of the native progress card flow: moving stage to test to verify the card's progress and next-move rendering. No file edits."
+        },
+        {
+          "id": "3f608528-fdc1-4c16-ab0c-342236297113",
+          "action": "progress_reported",
+          "reportKind": "progress",
+          "note": "Checkpoint: stage moved to test (Idea \"Verify native progress card\" accepted). Verification in progress: stage change recorded; progress report next; then result with next moves. No file edits."
+        },
+        {
+          "id": "33b20316-1eb2-4c39-98c3-dea2ce2ccf35",
+          "action": "progress_reported",
+          "reportKind": "result",
+          "note": "End-to-end check of the native progress card flow passed on the card state: stage moved development → test and recorded; checkpoint progress report recorded; this result carries next moves, which are stored on the card. No file edits, no delivery to In review."
+        },
+        {
+          "id": "4dbc326c-538b-4974-8f3c-d201f373b2d9",
+          "action": "next_moves_suggested",
+          "note": "Verify · Commit"
+        },
+        {
+          "id": "9746915a-ee2e-46d6-ba47-338222f64327",
+          "action": "agent.turn_ended"
+        }
+      ]
+    },
+    {
+      "at": "2026-10-20T14:19:24.979Z",
+      "step": "fixture-observed",
+      "cardPresent": true,
+      "managedStatus": "idle",
+      "unmanagedStatus": "idle",
+      "summary": {
+        "state": "Verification done; card moved to Test, awaiting your next step",
+        "target": "Verify the native progress card flow end to end on this disposable fixture.\n- Stage changes, progress report, and next moves display correctly\n- No source edits; Flowly card updates only\n- Idea 'Verify native progress card' accepted into this task",
+        "recap": "- Idea 'Verify native progress card' proposed, then accepted into task\n- Stage set to in_progress (Development alias), then moved to Test\n- Result reported with Verify and Commit next moves, no moveTo\n- First report hit UNAUTHORIZED; retry with fresh request succeeded",
+        "next": "Await your confirmation or next instruction; the card stays in Test.",
+        "id": "b4b0578d-440a-4932-b686-7400fcec04b7",
+        "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+        "at": "2026-10-20T14:08:11.782Z",
+        "model": "claude/claude-haiku-5-5",
+        "agentIds": [
+          "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d"
+        ]
+      },
+      "managedRow": {
+        "type": "plugin",
+        "id": "flowly-summary-b4b0578d-440a-4932-b686-7400fcec04b7",
+        "kind": "flowly-summary",
+        "version": 1,
+        "data": {
+          "taskId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+          "workspaceId": "wks_cce8ddd1737269a0",
+          "entryId": "b4b0578d-440a-4932-b686-7400fcec04b7",
+          "state": "Verification done; card moved to Test, awaiting your next step",
+          "target": "Verify the native progress card flow end to end on this disposable fixture.\n- Stage changes, progress report, and next moves display correctly\n- No source edits; Flowly card updates only\n- Idea 'Verify native progress card' accepted into this task",
+          "recap": "- Idea 'Verify native progress card' proposed, then accepted into task\n- Stage set to in_progress (Development alias), then moved to Test\n- Result reported with Verify and Commit next moves, no moveTo\n- First report hit UNAUTHORIZED; retry with fresh request succeeded",
+          "next": "Await your confirmation or next instruction; the card stays in Test.",
+          "model": "claude/claude-haiku-5-5",
+          "at": "2026-10-20T14:08:11.782Z"
+        },
+        "pluginId": "flowly"
+      },
+      "unmanagedRow": null,
+      "legacyManagedRows": [
+        "flowly.summary:b66588be-0975-4175-980e-d0de7a3340b4"
+      ],
+      "managedRowMatchesSummary": true,
+      "managedAttentionAfterAppend": {
+        "requiresAttention": false,
+        "attentionReason": null
+      },
+      "nativeChipMembership": {
+        "managed": true,
+        "unmanaged": false,
+        "ideasEnabled": true,
+        "autoWrapup": true
+      },
+      "ideaCount": 0,
+      "taskEvents": [
+        {
+          "id": "5d4088b5-eb96-4529-9236-f04f26c8617f",
+          "action": "created"
+        },
+        {
+          "id": "7605779d-7d24-4c16-9b17-8640a8965b61",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "38eda1a1-b34f-4737-8350-c505677ba6ce",
+          "action": "status_changed",
+          "reportKind": "progress",
+          "note": "Starting native session fixture work (no source edits)."
+        },
+        {
+          "id": "0dcc9de2-736a-4490-9bde-43dd0374633b",
+          "action": "idea_proposed",
+          "note": "Verify native progress card"
+        },
+        {
+          "id": "129b33cd-90f4-42c3-ab30-db93e03ab6a1",
+          "action": "progress_reported",
+          "reportKind": "result",
+          "note": "Native session fixture acceptance run complete. Card stage set to development (in_progress alias), one idea proposed (\"Verify native progress card\", scope here). No source files edited."
+        },
+        {
+          "id": "a43e449d-38cb-42b8-a7d6-1c73b741121d",
+          "action": "next_moves_suggested",
+          "note": "Verify · Commit"
+        },
+        {
+          "id": "9a3c9fbd-c1e4-4cbb-8157-4e4c17dd496c",
+          "action": "agent.turn_ended"
+        },
+        {
+          "id": "ce1b1dab-08c7-4cf0-b1eb-26421f31877f",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "f6e61092-5e53-427c-9ee2-f72df35d1e1c",
+          "action": "progress_reported",
+          "reportKind": "result",
+          "note": "Native session fixture result re-reported. Card stage remains Development; one idea (\"Verify native progress card\", scope here) already proposed. No source files edited."
+        },
+        {
+          "id": "b1598923-2320-4596-8afc-0db2d693f909",
+          "action": "next_moves_suggested",
+          "note": "Verify · Commit"
+        },
+        {
+          "id": "2c4d81b6-1083-454b-af0a-ebf2e9042736",
+          "action": "agent.turn_ended"
+        },
+        {
+          "id": "607a1b19-1da9-4b7c-a9b9-bbfdd66f4a8c",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "44f1ef0c-447f-4364-abad-707a9cc7085a",
+          "action": "agent.turn_ended"
+        },
+        {
+          "id": "faa8d2c3-e987-441e-a6be-1ed1eba0d4a1",
+          "action": "idea_adopted",
+          "note": "Verify native progress card"
+        },
+        {
+          "id": "83a49894-78fb-41e8-8f26-105ea925c35d",
+          "action": "agent.turn_started"
+        },
+        {
+          "id": "148ce8a4-6923-4b58-b59d-dfbc9147742a",
+          "action": "status_changed",
+          "reportKind": "progress",
+          "note": "Starting verification of the native progress card flow: moving stage to test to verify the card's progress and next-move rendering. No file edits."
+        },
+        {
+          "id": "3f608528-fdc1-4c16-ab0c-342236297113",
+          "action": "progress_reported",
+          "reportKind": "progress",
+          "note": "Checkpoint: stage moved to test (Idea \"Verify native progress card\" accepted). Verification in progress: stage change recorded; progress report next; then result with next moves. No file edits."
+        },
+        {
+          "id": "33b20316-1eb2-4c39-98c3-dea2ce2ccf35",
+          "action": "progress_reported",
+          "reportKind": "result",
+          "note": "End-to-end check of the native progress card flow passed on the card state: stage moved development → test and recorded; checkpoint progress report recorded; this result carries next moves, which are stored on the card. No file edits, no delivery to In review."
+        },
+        {
+          "id": "4dbc326c-538b-4974-8f3c-d201f373b2d9",
+          "action": "next_moves_suggested",
+          "note": "Verify · Commit"
+        },
+        {
+          "id": "9746915a-ee2e-46d6-ba47-338222f64327",
+          "action": "agent.turn_ended"
+        }
+      ]
+    },
+    {
+      "at": "2026-10-20T14:19:33.385Z",
+      "step": "context-echo-check",
+      "runStatus": "idle",
+      "preAttention": {
+        "requiresAttention": false,
+        "attentionReason": null
+      },
+      "postAttention": {
+        "requiresAttention": true,
+        "attentionReason": "finished"
+      },
+      "summaryStateText": "Verification done; card moved to Test, awaiting your next step",
+      "lastAssistantText": "From the previous request, I remember these items:\n\n- **Opening:** \"Good idea — go ahead with it in this task: Verify native progress card\"\n- **Detail:** \"Verify the native progress card flow end to end: stage changes, progress report, and next moves display on the Flowly card for this fixture.\"\n- **Why:** \"Acceptance fixture check requested by the user; confirms progress reporting and next moves render on a native session card.\"",
+      "toolCallsAfterPrompt": [
+        "mcp__ultra-kanban__flowly_report_progress",
+        "mcp__ultra-kanban__flowly_get_task",
+        "mcp__ultra-kanban__flowly_report_progress",
+        "mcp__ultra-kanban__flowly_report_progress",
+        "mcp__ultra-kanban__flowly_get_task",
+        "mcp__ultra-kanban__flowly_update_status",
+        "mcp__ultra-kanban__flowly_report_progress",
+        "mcp__ultra-kanban__flowly_report_progress"
+      ],
+      "quotedSummaryInReply": false,
+      "note": "Attention before/after append was checked during regenerate mode."
+    },
+    {
+      "at": "2026-10-20T14:20:02.154Z",
+      "step": "context-echo-check",
+      "runStatus": "idle",
+      "preAttention": {
+        "requiresAttention": true,
+        "attentionReason": "finished"
+      },
+      "postAttention": {
+        "requiresAttention": true,
+        "attentionReason": "finished"
+      },
+      "summaryStateText": "Verification done; card moved to Test, awaiting your next step",
+      "lastAssistantText": "From the request before this one, I remember these items:\n\n- **Opening:** \"Good idea — go ahead with it in this task: Verify native progress card\"\n- **Detail:** \"Verify the native progress card flow end to end: stage changes, progress report, and next moves display on the Flowly card for this fixture.\"\n- **Why:** \"Acceptance fixture check requested by the user; confirms progress reporting and next moves render on a native session card.\"",
+      "toolCallsAfterPrompt": [],
+      "quotedSummaryInReply": false,
+      "note": "Attention before/after append was checked during regenerate mode."
+    },
+    {
+      "at": "2026-10-20T14:20:44.353Z",
+      "step": "second-idea-proposed",
+      "turnStatus": "idle",
+      "openIdeas": [
+        {
+          "id": "b9d53380-016b-4a2a-a740-3ebe39ea8afa",
+          "title": "Document session summary troubleshooting",
+          "scope": "here"
+        }
+      ],
+      "secondIdeaId": "b9d53380-016b-4a2a-a740-3ebe39ea8afa"
+    },
+    {
+      "at": "2026-10-20T14:25:34.954Z",
+      "step": "move-to-done-suggestion-ready",
+      "turnStatus": "idle",
+      "taskStatus": "in_review",
+      "taskRevision": 4,
+      "latestMovesEvent": {
+        "id": "67cdffa9-b16f-4ccd-8a1b-4d0a2673a22f",
+        "moves": [
+          {
+            "label": "Move to Done",
+            "moveTo": "done"
+          }
+        ]
+      },
+      "autoWrapup": true
+    },
+    {
+      "at": "2026-10-20T14:27:41.779Z",
+      "step": "cleanup-delete",
+      "id": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+      "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-40e346c9-b0ac-43b4-b003-82bd6b0e2903-2026-10-20T14-27-41-762Z.json",
+      "archived": {
+        "sessions": 0,
+        "workspace": false
+      }
+    },
+    {
+      "at": "2026-10-20T14:27:44.627Z",
+      "step": "cleanup-verify",
+      "cardOnBoard": false,
+      "sessions": {
+        "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d": {
+          "archivedAt": "2026-10-20T14:27:12.603Z"
+        },
+        "ff983e19-2f4f-4cf5-b72b-944db6826bad": {
+          "archivedAt": "2026-10-20T14:27:12.603Z"
+        }
+      },
+      "workspaceListed": false,
+      "workspaceId": "wks_cce8ddd1737269a0",
+      "verifiedAt": "2026-10-20T14:27:44.627Z"
+    },
+    {
+      "at": "2026-10-20T14:29:49.698Z",
+      "step": "post-cleanup-readback",
+      "taskAbsentFromBoard": true,
+      "exactNextMoveMessageInNativeTimeline": true,
+      "exactNextMoveMessage": "Edited in Paseo: verify the native summary card exactly.",
+      "newKindSummaryRows": [],
+      "unmanagedSummaryRows": [],
+      "managedArchivedAt": "2026-10-20T14:27:12.603Z",
+      "unmanagedArchivedAt": "2026-10-20T14:27:12.603Z",
+      "managedChipListedAfterCleanup": true,
+      "unmanagedChipListedAfterCleanup": false,
+      "workspaceStillRegistered": false
+    },
+    {
+      "at": "2026-10-20T14:31:25.520Z",
+      "step": "final-board-check",
+      "cancelledIdeaTaskCreated": false,
+      "fixtureCardPresent": false,
+      "fixtureWorkspaceRegistered": false,
+      "matchingProjectTaskCount": 6
+    },
+    {
+      "at": "2026-10-20T14:35:37.063Z",
+      "step": "removed-backup-readback",
+      "backupPath": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-40e346c9-b0ac-43b4-b003-82bd6b0e2903-2026-10-20T14-27-41-762Z.json",
+      "task": {
+        "id": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+        "status": "done",
+        "revision": 5
+      },
+      "ideas": [
+        {
+          "title": "Verify native progress card",
+          "status": "accepted",
+          "id": "630e724b-adcd-47c8-881f-610eba30bc6f"
+        },
+        {
+          "title": "Document session summary troubleshooting",
+          "status": "dismissed",
+          "id": "b9d53380-016b-4a2a-a740-3ebe39ea8afa"
+        }
+      ],
+      "lastActions": [
+        "idea_dismissed",
+        "agent.turn_started",
+        "status_changed",
+        "next_moves_suggested",
+        "agent.turn_ended",
+        "status_changed",
+        "workspace_auto_archived",
+        "wrapped_up"
+      ]
+    }
+  ],
+  "created": {
+    "cardId": "40e346c9-b0ac-43b4-b003-82bd6b0e2903",
+    "workspaceId": "wks_cce8ddd1737269a0",
+    "cardTitle": "[test] native session bc0d52e9",
+    "createdAt": "2026-10-20T13:42:56.776Z",
+    "managedAgentId": "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d",
+    "unmanagedAgentId": "ff983e19-2f4f-4cf5-b72b-944db6826bad",
+    "summaryEntryId": "b4b0578d-440a-4932-b686-7400fcec04b7",
+    "previousSummaryId": "b66588be-0975-4175-980e-d0de7a3340b4",
+    "beforeRowAttention": {
+      "requiresAttention": true,
+      "attentionReason": "finished",
+      "at": "2026-10-20T13:52:36.712Z"
+    },
+    "afterRowAttention": {
+      "requiresAttention": true,
+      "attentionReason": "finished",
+      "at": "2026-10-20T13:52:45.803Z"
+    },
+    "secondIdeaId": "b9d53380-016b-4a2a-a740-3ebe39ea8afa"
+  },
+  "testSessionId": "e63b5616-a0db-47cd-9b11-4c3691dcde10",
+  "endedAt": "2026-10-20T14:31:25.522Z",
+  "cleanup": {
+    "cardOnBoard": false,
+    "sessions": {
+      "4c4fb4a4-633f-4a9c-a12e-b9d7aaa4b10d": {
+        "archivedAt": "2026-10-20T14:27:12.603Z"
+      },
+      "ff983e19-2f4f-4cf5-b72b-944db6826bad": {
+        "archivedAt": "2026-10-20T14:27:12.603Z"
+      }
+    },
+    "workspaceListed": false,
+    "workspaceId": "wks_cce8ddd1737269a0",
+    "verifiedAt": "2026-10-20T14:27:44.627Z"
+  },
+  "results": {
+    "checks": {
+      "A1": "PASS",
+      "A2": "PASS",
+      "A3": "PASS",
+      "B1_desktop": "PASS",
+      "B1_open_card_action": "UNRUN",
+      "B1_compact": "UNRUN",
+      "B2_edit_and_exact_send": "PASS",
+      "B2_immediate_chip_hide": "FAIL",
+      "B3_next_dismiss_and_flowly_isolation": "PASS",
+      "B4_continue_here": "PASS",
+      "B4_new_task_prefill_cancel": "PASS",
+      "B4_idea_dismiss_state": "PASS",
+      "B4_immediate_ideas_chip_hide": "FAIL",
+      "B5_unmanaged_session": "PASS",
+      "B6_flowly_transcript_scope": "PASS",
+      "B7_move_to_done": "PASS",
+      "C1_existing_flowly_behavior": "PASS",
+      "welcome_tour_copy": "UNRUN",
+      "page_errors": "PASS"
+    },
+    "pageErrors": [],
+    "overall": {
+      "dataPass": 3,
+      "uiPass": 10,
+      "uiFail": 2,
+      "uiUnrun": 3
+    }
+  }
+}

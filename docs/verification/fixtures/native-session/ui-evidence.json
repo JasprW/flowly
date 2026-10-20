@@ -1,0 +1,12 @@
+{
+  "mode": "dismiss-next",
+  "startedAt": "2026-10-20T14:11:17.779Z",
+  "pageErrors": [],
+  "checks": {
+    "nextChipBeforeDismiss": true,
+    "nextChipHiddenAfterDismiss": true,
+    "flowlySuggestionRowRemains": true,
+    "flowlyTranscriptHasNoProgress": true
+  },
+  "endedAt": "2026-10-20T14:11:31.729Z"
+}
