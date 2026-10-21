@@ -47,7 +47,7 @@ The page title has the detail line "Anything marked with the sparkle was written
 - *Automatic status*: cards follow the agent's work through the lanes. Done stays yours.
 - *Needs-you reminders*: questions, approvals and errors light the card, the Attention menu and the sidebar badge; questions and approvals are answered right on the card or in the session.
 - *Run summaries*: after every turn a cheap model keeps state / target / recap / next on the card.
-- *Workpad*: agents keep acceptance criteria, checks (passed, failed or not run on a named commit) and confusions on each card ([WORKPAD-SPEC](WORKPAD-SPEC.md)).
+- *Workpad*: agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks (passed, failed or not run on a named commit) and confusions; delivering without them needs a note ([WORKPAD-SPEC](WORKPAD-SPEC.md), [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md) §4). No new tip: the change is agent behavior with no new screen moment.
 - *Follow-up ideas*: work an agent finds on the way lands in the Ideas inbox; Good idea or Dismiss.
 - *Inputs and outputs*: each card lists the files and links it worked from and delivered, added by agents or by you ([CARD-ARTIFACTS-SPEC](CARD-ARTIFACTS-SPEC.md)).
 - *Project insights*: today's cards, turns, agent time, commits, tokens and what is waiting on you.

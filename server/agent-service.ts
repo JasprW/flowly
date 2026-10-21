@@ -21,6 +21,7 @@ import { projectScripts } from "./workflow-insights";
 import { mergeWorkpad, openItemLines, openItems, plansOf, validationFreshness, workpadEnabled, workpadNote, workpadOf, workpadUpdatedAction } from "../shared/workpad";
 import { defaultGit, readHead, resolveCommit, type Git } from "./workpad";
 import { deliveryReminders, type DeliveryCall } from "./reminders";
+import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
   agentStatuses,
   ideaInputSchema,
@@ -260,7 +261,8 @@ export class AgentService {
     // The project's paseo.json scripts, so agents run them instead of retyping (WORKFLOW-INSIGHTS-SPEC §5.4).
     const scripts = await projectScripts(r.project).catch(() => []);
     let externals = new Map<string, { changed: boolean; fingerprint: string; external: ExternalContext }>();
-    const value: ToolContext = {
+    let setup: ToolContext["setup"];
+    const built: ToolContext = {
       identity,
       task: r.task,
       project: r.project,
@@ -287,60 +289,66 @@ export class AgentService {
         repoPaths: r.context.workspaceRepoPaths,
       },
       sessions: { entries: entries.slice(0, 20), partial, unavailableReason },
-      ...(await this.store.read().then(async (board) => ({
-        activity: board.events.filter((e) => e.taskId === r.task.id).slice(-20),
-        projectTags: projectTagStats(board.tasks, r.project.id).map(({ tag, count }) => ({ tag, count })),
-        ideas: board.ideas
-          .filter((i) => i.taskId === r.task.id)
-          .map((i) => ({
-            id: i.id,
-            title: i.title,
-            status: i.status,
-            ...(i.scope ? { scope: i.scope } : {}),
-            ...(i.acceptedTaskId ? { acceptedTaskId: i.acceptedTaskId } : {}),
-            ...(i.acceptedAgentId ? { acceptedAgentId: i.acceptedAgentId } : {}),
-          })),
-        artifacts: await (async () => {
-          const list = artifactsOf(board.artifacts, r.task.id).slice(0, 100);
-          const where = artifactRoots(r.task, r.project, r.workspace.workspaceDirectory);
-          const missing = await missingArtifacts(list, where);
-          externals = await this.externalInfo(identity.agentId, list);
-          return list.map((a) => ({
-            id: a.id,
-            role: a.role,
-            kind: a.kind,
-            target: a.target,
-            ...(a.kind === "file" ? { absolutePath: absoluteTarget(a.target, where.workspace) } : {}),
-            title: a.title,
-            note: a.note,
-            createdBy: a.createdBy,
-            missing: missing.has(a.id),
-            // Added or edited since this session last read the card; its own additions never count.
-            unread:
-              (!(a.createdBy === "agent" && a.agentId === identity.agentId) && (!lastRead || a.updatedAt > lastRead)) ||
-              !!externals.get(a.id)?.changed,
-            ...(externals.has(a.id) ? { external: externals.get(a.id)!.external } : {}),
-            // Sessions started with the older skill look for `ticket` (CONNECTORS-SPEC §3.3).
-            ...(externals.has(a.id) && familyOf(a.external!.provider) === "jira" ? { ticket: externals.get(a.id)!.external } : {}),
-          }));
-        })(),
-        ...(workpadEnabled(r.project)
-          ? { workpadEnabled: true, ...workpadContext(board.workpads, board.plans, r.task.id, identity.agentId) }
-          : { workpadEnabled: false, workpad: null, plan: [] }),
-        ...(scripts.length ? { projectScripts: scripts } : {}),
-        links: linksOf(board, r.task.id)
-          .filter((v) => v.other)
-          .map(({ relation, other }) => ({
-            relation,
-            taskId: other!.id,
-            title: other!.title,
-            status: other!.status,
-            laneName: laneName(r.project, other!.status),
-            archived: !!other!.archivedAt,
-            ...(relation === "blocked_by" ? { resolved: isResolved(other) } : {}),
-          })),
-      }))),
+      ...(await this.store.read().then(async (board) => {
+        setup = setupContext(setupMissing(r.task, workpadOf(board.workpads, r.task.id), workpadEnabled(r.project)), r.task.status);
+        return {
+          activity: board.events.filter((e) => e.taskId === r.task.id).slice(-20),
+          projectTags: projectTagStats(board.tasks, r.project.id).map(({ tag, count }) => ({ tag, count })),
+          ideas: board.ideas
+            .filter((i) => i.taskId === r.task.id)
+            .map((i) => ({
+              id: i.id,
+              title: i.title,
+              status: i.status,
+              ...(i.scope ? { scope: i.scope } : {}),
+              ...(i.acceptedTaskId ? { acceptedTaskId: i.acceptedTaskId } : {}),
+              ...(i.acceptedAgentId ? { acceptedAgentId: i.acceptedAgentId } : {}),
+            })),
+          artifacts: await (async () => {
+            const list = artifactsOf(board.artifacts, r.task.id).slice(0, 100);
+            const where = artifactRoots(r.task, r.project, r.workspace.workspaceDirectory);
+            const missing = await missingArtifacts(list, where);
+            externals = await this.externalInfo(identity.agentId, list);
+            return list.map((a) => ({
+              id: a.id,
+              role: a.role,
+              kind: a.kind,
+              target: a.target,
+              ...(a.kind === "file" ? { absolutePath: absoluteTarget(a.target, where.workspace) } : {}),
+              title: a.title,
+              note: a.note,
+              createdBy: a.createdBy,
+              missing: missing.has(a.id),
+              // Added or edited since this session last read the card; its own additions never count.
+              unread:
+                (!(a.createdBy === "agent" && a.agentId === identity.agentId) && (!lastRead || a.updatedAt > lastRead)) ||
+                !!externals.get(a.id)?.changed,
+              ...(externals.has(a.id) ? { external: externals.get(a.id)!.external } : {}),
+              // Sessions started with the older skill look for `ticket` (CONNECTORS-SPEC §3.3).
+              ...(externals.has(a.id) && familyOf(a.external!.provider) === "jira" ? { ticket: externals.get(a.id)!.external } : {}),
+            }));
+          })(),
+          ...(workpadEnabled(r.project)
+            ? { workpadEnabled: true, ...workpadContext(board.workpads, board.plans, r.task.id, identity.agentId) }
+            : { workpadEnabled: false, workpad: null, plan: [] }),
+          ...(scripts.length ? { projectScripts: scripts } : {}),
+          links: linksOf(board, r.task.id)
+            .filter((v) => v.other)
+            .map(({ relation, other }) => ({
+              relation,
+              taskId: other!.id,
+              title: other!.title,
+              status: other!.status,
+              laneName: laneName(r.project, other!.status),
+              archived: !!other!.archivedAt,
+              ...(relation === "blocked_by" ? { resolved: isResolved(other) } : {}),
+            })),
+        };
+      })),
     };
+    // `setup` right after identity, so it is the first thing the agent reads (CARD-SETUP-SPEC §3.1).
+    const { identity: _identity, ...rest } = built;
+    const value: ToolContext = { identity, setup, ...rest };
     if (recordAccess)
       this.accesses.set(identity.agentId, {
         at: new Date(this.clock()).toISOString(),
@@ -443,11 +451,16 @@ export class AgentService {
         : action === "progress"
           ? { action, kind: (input as ProgressInput).kind }
           : undefined;
+    // Missing card setup rides on every write (CARD-SETUP-SPEC §3.3), after the delivery reminders.
     const reminders = (board: Board): string[] => {
       const task = board.tasks.find((t) => t.id === identity.taskId);
-      if (!call || !task || task.archivedAt || ["done", "cancelled"].includes(task.status)) return [];
-      if (board.projects.find((p) => p.id === task.projectId)?.archivedAt) return [];
-      return deliveryReminders(board, { taskId: task.id, agentId: identity.agentId }, call, ideasOn);
+      if (!task || task.archivedAt || ["done", "cancelled"].includes(task.status)) return [];
+      const project = board.projects.find((p) => p.id === task.projectId);
+      if (project?.archivedAt) return [];
+      const out = call ? deliveryReminders(board, { taskId: task.id, agentId: identity.agentId }, call, ideasOn) : [];
+      const missing = setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project));
+      if (missing.length) out.push(setupReminder(missing));
+      return out;
     };
     const result = await this.store.transaction((board) => {
       const existing = board.agentReceipts.find((r) => r.key === key);
@@ -534,11 +547,16 @@ export class AgentService {
         next === "in_review" && next !== previous && workpadEnabled(project) ? board.workpads.find((w) => w.taskId === task.id) : undefined;
       if (deliveryPad && head !== undefined) deliveryPad.head = head;
       const delivered = deliveryPad ? openItems(deliveryPad) : undefined;
-      if (deliveryPad && delivered!.total > 0 && !(input as StatusInput).acknowledgeOpen)
+      // Missing card setup is part of the same soft gate (CARD-SETUP-SPEC §3.4): one refusal lists everything.
+      const setupGap: SetupItem[] =
+        next === "in_review" && next !== previous ? setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project)) : [];
+      const acknowledged = !!(input as StatusInput).acknowledgeOpen;
+      if (deliveryPad && delivered!.total > 0 && !acknowledged)
         throw new ToolError(
           "WORKPAD_OPEN",
-          `${delivered!.total} workpad item${delivered!.total === 1 ? " is" : "s are"} still open:\n${openItemLines(deliveryPad).join("\n")}\nRerun out-of-date checks and finish what you can. Deliver anyway only with acknowledgeOpen=true and a note that explains every open item (failed, not run, out of date or not met).`,
+          `${setupGap.length ? `${setupIncompleteMessage(setupGap)}\n` : ""}${delivered!.total} workpad item${delivered!.total === 1 ? " is" : "s are"} still open:\n${openItemLines(deliveryPad).join("\n")}\nRerun out-of-date checks and finish what you can. Deliver anyway only with acknowledgeOpen=true and a note that explains every open item (failed, not run, out of date or not met).`,
         );
+      if (setupGap.length && !acknowledged) throw new ToolError("SETUP_INCOMPLETE", setupIncompleteMessage(setupGap));
       if (next !== previous) {
         task.status = next;
         task.revision++;
@@ -715,6 +733,7 @@ export class AgentService {
                 action === "progress" ? (input as ProgressInput).kind : "progress",
               ...(next !== previous ? { from: previous, to: next } : {}),
               ...(deliveryPad ? { workpad: { ...delivered!, revision: deliveryPad.revision } } : {}),
+              ...(setupGap.length ? { setup: { missing: setupGap } } : {}),
             }));
       if (deliveryPad) deliveryPad.delivery = { ...delivered!, revision: deliveryPad.revision, eventId: event.id, at: event.at };
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).

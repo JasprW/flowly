@@ -115,6 +115,14 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
   expect(described("flowly_update_status")).toMatch(/reminders/);
   expect(described("flowly_report_progress")).toMatch(/reminders/);
   expect(skillText).toContain("flowly_suggest_next_moves");
+  // Card setup (CARD-SETUP-SPEC §3.5-3.6): the checklist leads the skill, the tool texts name the gate and the timing.
+  expect(skillText.split("\n## Start of every turn\n")[0]).not.toContain("\n- ");
+  expect(skillText).toContain("Fix setup.missing before anything else, small cards included");
+  expect(skillText).toContain("SETUP_INCOMPLETE");
+  expect(described("flowly_update_status")).toContain("SETUP_INCOMPLETE");
+  expect(described("flowly_get_task")).toContain("setup.missing");
+  for (const name of ["flowly_set_type", "flowly_set_tags", "flowly_update_workpad"])
+    expect(described(name), name).toContain("at the start of the work, before you change code");
   expect(Object.keys(listed.find((t) => t.name === "flowly_update_workpad")!.inputSchema.properties)).toEqual(
     expect.arrayContaining(["workpadRevision", "acceptance", "validation", "confusions"]),
   );
@@ -353,10 +361,10 @@ test("CLI runs a complete scoped flow; replay, wrong env, snapshots and flags", 
   expect(finished.reminders).toEqual([movesReminder, ideasReminder]);
   await cli("current", "--save-request", snapshot);
   const tagged = await cli("tags", "--request-file", snapshot, "--add", "Drawer, perf");
-  expect(tagged.current.task.tags.map((t: { tag: string }) => t.tag)).toEqual(["drawer", "perf"]);
+  expect(tagged.current.task.tags.map((t: { tag: string }) => t.tag)).toEqual(["fixture", "drawer", "perf"]);
   await cli("current", "--save-request", snapshot);
   const untagged = await cli("tags", "--request-file", snapshot, "--remove", "perf");
-  expect(untagged.current.task.tags.map((t: { tag: string }) => t.tag)).toEqual(["drawer"]);
+  expect(untagged.current.task.tags.map((t: { tag: string }) => t.tag)).toEqual(["fixture", "drawer"]);
   await cli("current", "--save-request", snapshot);
   const suggested = await cli("next-moves", "--request-file", snapshot, "--moves", JSON.stringify([{ label: "Commit", prompt: "Commit and push." }]));
   expect(suggested.receipt.action).toBe("next_moves");

@@ -1,0 +1,81 @@
+{
+  "capturedAt": "2026-10-21T05:33:20.503Z",
+  "tinylinkWorkspaces": [
+    {
+      "workspaceId": "wks_35118905f34253ec",
+      "project": "tinylink",
+      "name": "Custom aliases for short links",
+      "isolation": "local",
+      "cwd": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+      "background": false
+    },
+    {
+      "workspaceId": "wks_37d6bd4cab89da78",
+      "project": "tinylink",
+      "name": "Add Dockerfile and GitHub Actions workflow",
+      "isolation": "local",
+      "cwd": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+      "background": false
+    },
+    {
+      "workspaceId": "wks_6fd42afc21d656dc",
+      "project": "tinylink",
+      "name": "Add click counter and GET /stats/:code",
+      "isolation": "local",
+      "cwd": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+      "background": false
+    },
+    {
+      "workspaceId": "wks_7d81d4dbcaf9dd67",
+      "project": "tinylink",
+      "name": "Expired links crash the server instead of returning an error",
+      "isolation": "local",
+      "cwd": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+      "background": false
+    },
+    {
+      "workspaceId": "wks_ba6ff18c509f409e",
+      "project": "tinylink",
+      "name": "Add rate limiting to POST /shorten",
+      "isolation": "local",
+      "cwd": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+      "background": false
+    },
+    {
+      "workspaceId": "wks_dfd1efd98cdc7fbd",
+      "project": "tinylink",
+      "name": "Handle expired links without crashing",
+      "isolation": "worktree",
+      "cwd": "/Users/bofan.wang/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing",
+      "background": false
+    },
+    {
+      "workspaceId": "wks_f463c880d0393e62",
+      "project": "tinylink",
+      "name": "Handle expired links without crashing",
+      "isolation": "worktree",
+      "cwd": "/Users/bofan.wang/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing-1",
+      "background": false
+    }
+  ],
+  "permanentSessions": [
+    {
+      "id": "5272e754-f462-47d8-a152-24cb9fe8ee92",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "idle",
+      "cwd": "~/Developer/personal/flowly-test/tinylink"
+    },
+    {
+      "id": "86170ea8-80af-422f-8bf5-a72df91a860e",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "idle",
+      "cwd": "~/Developer/personal/flowly-test/tinylink"
+    },
+    {
+      "id": "402bf42e-3ec3-4ec8-ab0a-c1e987ebfda1",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "closed",
+      "cwd": "~/Developer/personal/flowly-test/tinylink"
+    }
+  ]
+}

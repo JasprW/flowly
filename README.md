@@ -58,7 +58,7 @@ After every completed turn a cheap model (Haiku 5.5 by default, configurable) up
 
 ![Card summary: state, target, recap and next step](docs/promo/screenshots/03-card-summary.png)
 
-Agents also keep a **Workpad** on the card: acceptance criteria, the checks they run (passed, failed or not run, each on a named commit, with the exact command) and what in the card confused them. Their plan comes from their own todo list. The card shows **Checks 3/5**; a check that ran on an older commit than the workspace's HEAD reads *out of date*. You can tick criteria and set a check's state yourself. An agent delivering to In review with open items has to acknowledge them, and the card then says **Delivered with N open items**. Turn it off per project with *Card workpad* in the project settings.
+Agents also keep a **Workpad** on the card: acceptance criteria, the checks they run (passed, failed or not run, each on a named commit, with the exact command) and what in the card confused them. Their plan comes from their own todo list. The card shows **Checks 3/5**; a check that ran on an older commit than the workspace's HEAD reads *out of date*. You can tick criteria and set a check's state yourself. Before they start, agents set the card's type and tags and write the workpad; until they do, every Flowly tool result reminds them. An agent delivering to In review with open items, or without a type, tags or workpad, has to acknowledge that with a note, and with open items the card then says **Delivered with N open items**. Turn it off per project with *Card workpad* in the project settings.
 
 ### 4. Follow-up ideas
 

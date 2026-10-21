@@ -947,7 +947,7 @@ const catalog: Catalog = {
   "Checks {done}/{total}": "チェック {done}/{total}",
   "Acceptance {done}/{total}": "受け入れ {done}/{total}",
   "Workpad": "Workpad",
-  "Agents keep a workpad on each card: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them.": "エージェントは各カードに Workpad を残します。受け入れ基準、どのコミットで合格・失敗・未実行かを記したチェック、そして迷った点です。",
+  "Agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them. Delivering without them needs a note.": "エージェントは作業を始める前にカードの種類とタグを設定し、Workpad を書きます。受け入れ基準、どのコミットで合格・失敗・未実行かを記したチェック、そして迷った点です。これらなしで納品するには説明が必要です。",
   "Updated {time} by you": "{time}にあなたが更新",
   "Updated {time} by {session}": "{time}に {session} が更新",
   "an agent": "エージェント",

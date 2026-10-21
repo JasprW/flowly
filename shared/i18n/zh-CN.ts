@@ -947,7 +947,7 @@ const catalog: Catalog = {
   "Checks {done}/{total}": "验证 {done}/{total}",
   "Acceptance {done}/{total}": "验收 {done}/{total}",
   "Workpad": "Workpad",
-  "Agents keep a workpad on each card: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them.": "Agent 在每张卡片上维护一份 Workpad：验收标准、在哪个 commit 上通过/失败/未运行的验证项，以及让它困惑的地方。",
+  "Agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them. Delivering without them needs a note.": "Agent 开工前会设好卡片的类型和标签，并写一份 Workpad：验收标准、在哪个 commit 上通过/失败/未运行的验证项，以及让它困惑的地方。缺了这些交付时必须附上说明。",
   "Updated {time} by you": "{time}由你更新",
   "Updated {time} by {session}": "{time}由 {session} 更新",
   "an agent": "agent",

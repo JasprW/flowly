@@ -1,5 +1,6 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-10-21 卡片开工设置（已实现）：近期违规集中在无描述小卡 + Sonnet medium/auto，原因是 skill 里 type/tags/workpad 靠后且时机含糊、缺项静默、反馈只在收尾、无 workpad 反而不被拦。现在 `flowly_get_task` 带 `setup`，首条任务上下文写明缺项，所有写入结果带设置提醒，交付缺项返回 `SETUP_INCOMPLETE`（含无 workpad，推翻 WORKPAD-SPEC §5.3 旧决定，`acknowledgeOpen` 放行），skill 以“Start of every turn”清单开头。[CARD-SETUP-SPEC](CARD-SETUP-SPEC.md)。
 2026-10-20 侧栏 session 区优化（已实现，待手机验证；用户决定 1、2 按推荐，3 直接上 FlatList）：① 历史只显示 35 条 tail 中的最后 18 条，长 turn 被工具调用挤满——改为打开即加载当前 turn（上限 300 条，daemon 用 SDK 的 `before` 游标一次分页完成）并提供 Load earlier；② 手机键盘弹起时 transcript 只在动画结束后加 padding、且只有贴底时才滚动——改为在键盘开始事件时按位移量原生滚动（底部锚定）；③ 手机滚动卡顿——增量刷新（`after` 游标）、transcript 独立组件、手机改用与 Paseo 原生一致的倒置虚拟化 FlatList（web 仍为普通滚动）；倒置列表与输入框用同一个原生驱动位移，键盘弹起时内容同步上移。[设计 spec](SESSION-PANE-SPEC.md)。
 
 2026-10-21 原生 session pane P2–P4（已实现，待 Luna 验证）：不受 Flowly 管理的 session（卡片 workspace 里未加入的、项目里无卡的、Flowly 之外的）也能获得 Progress 行、Next moves 卡片与 Ideas chip，不纳入任何 project。每完成一轮用一个随即归档的子 session 生成（同卡片 summary 机制），按 session 存在 `session-insights.json`；Ideas 可在当前 session 继续、开新 session 或从当前仓库 branch-off 新 worktree workspace，不进入任何项目 Ideas 页。默认关闭，设置 → AI features → Paseo's session view 有总开关与 Progress / Next steps / Ideas 三个开关。[spec §12](NATIVE-SESSION-SPEC.md)。

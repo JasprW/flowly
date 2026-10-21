@@ -1,0 +1,137 @@
+{
+  "capturedAt": "2026-10-21T05:38:48.407Z",
+  "board": {
+    "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+    "cardCount": 6,
+    "expectedCardCount": 6,
+    "originalCardsMatch": true,
+    "cards": [
+      {
+        "id": "0e9cf956-03cc-4549-8dfe-f9175ad6268f",
+        "status": "todo",
+        "revision": 1
+      },
+      {
+        "id": "918e5a87-c6b8-45b5-a11c-326bd5c2957c",
+        "status": "in_review",
+        "revision": 8
+      },
+      {
+        "id": "af077ae5-9a44-47da-9ede-80dd7964669e",
+        "status": "in_review",
+        "revision": 5
+      },
+      {
+        "id": "eabc3d51-508e-4c1d-b10f-37b0d95c1d79",
+        "status": "done",
+        "revision": 4
+      },
+      {
+        "id": "ed8b1a84-40a9-47a3-9fcb-efc9d5c98d54",
+        "status": "backlog",
+        "revision": 1
+      },
+      {
+        "id": "f0e55983-8064-4c1c-9319-a9de794ffe4d",
+        "status": "design",
+        "revision": 2
+      }
+    ]
+  },
+  "native": {
+    "tinylinkWorkspaceCount": 5,
+    "expectedTinylinkWorkspaces": [
+      "wks_35118905f34253ec",
+      "wks_37d6bd4cab89da78",
+      "wks_6fd42afc21d656dc",
+      "wks_7d81d4dbcaf9dd67",
+      "wks_ba6ff18c509f409e"
+    ],
+    "currentTinylinkWorkspaces": [
+      "wks_35118905f34253ec",
+      "wks_37d6bd4cab89da78",
+      "wks_6fd42afc21d656dc",
+      "wks_7d81d4dbcaf9dd67",
+      "wks_ba6ff18c509f409e"
+    ],
+    "originalWorkspacesMatch": true,
+    "tempWorkspaceIdsAbsent": true
+  },
+  "permanentSessionStatusesMatch": true,
+  "agents": [
+    {
+      "id": "5272e754-f462-47d8-a152-24cb9fe8ee92",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "idle",
+      "cwd": "~/Developer/personal/flowly-test/tinylink"
+    },
+    {
+      "id": "86170ea8-80af-422f-8bf5-a72df91a860e",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "idle",
+      "cwd": "~/Developer/personal/flowly-test/tinylink"
+    },
+    {
+      "id": "dbbdd026-3b96-4437-b55c-69a6ff1951ca",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "closed",
+      "cwd": "~/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing-1"
+    },
+    {
+      "id": "895c8dd4-8932-4177-b005-9a7e35f4dd57",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "closed",
+      "cwd": "~/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing"
+    },
+    {
+      "id": "b8070701-e025-47c1-bcb7-272393000297",
+      "provider": "codex/gpt-6-luna",
+      "status": "closed",
+      "cwd": "~/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing-1"
+    },
+    {
+      "id": "13a87fc6-eb96-41ef-b42e-9e04f264c265",
+      "provider": "claude/claude-sonnet-5-5",
+      "status": "closed",
+      "cwd": "~/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing"
+    },
+    {
+      "id": "402bf42e-3ec3-4ec8-ab0a-c1e987ebfda1",
+      "provider": "claude/claude-haiku-5-5",
+      "status": "closed",
+      "cwd": "~/Developer/personal/flowly-test/tinylink"
+    }
+  ],
+  "worktrees": [
+    {
+      "subject": "S1",
+      "workspaceId": "wks_dfd1efd98cdc7fbd",
+      "cwd": "~/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing",
+      "exists": false
+    },
+    {
+      "subject": "S2",
+      "workspaceId": "wks_f463c880d0393e62",
+      "cwd": "~/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing-1",
+      "exists": false
+    }
+  ],
+  "branches": [
+    {
+      "name": "kanban/handle-expired-links-without-crashing-585af8",
+      "sha": null
+    },
+    {
+      "name": "kanban/handle-expired-links-without-crashing-1bb57f",
+      "sha": null
+    }
+  ],
+  "repo": {
+    "path": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+    "head": "47899f7286df26700d4235800825b2ecbcee12bb",
+    "expectedHead": "47899f7286df26700d4235800825b2ecbcee12bb",
+    "headMatches": true,
+    "status": "",
+    "statusMatches": true
+  }
+}

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { relations } from "./links";
+import { setupItems } from "./card-setup";
 import { connectorProviderSchema, itemTypeSchema } from "./connectors";
 import {
   taskSchema,
@@ -96,7 +97,7 @@ export const statusInputSchema = z.strictObject({
     .boolean()
     .optional()
     .describe(
-      "Deliver to in_review although workpad items are still open (WORKPAD_OPEN). Only with a note that explains every open item.",
+      "Deliver to in_review although workpad items are still open or the card setup is missing (WORKPAD_OPEN, SETUP_INCOMPLETE). Only with a note that explains every open item and why each setup item is missing.",
     ),
   nextMoves: deliveryMoves,
 });
@@ -278,6 +279,16 @@ export const identitySchema = z.strictObject({
 export type ToolIdentity = z.infer<typeof identitySchema>;
 export const toolContextSchema = z.object({
   identity: identitySchema,
+  /** What the card still needs before work starts (CARD-SETUP-SPEC §3.1); fix `missing` first. */
+  setup: z
+    .object({
+      typeMissing: z.boolean(),
+      tagsMissing: z.boolean(),
+      workpadMissing: z.boolean(),
+      stage: statusSchema,
+      missing: z.array(z.enum(setupItems)),
+    })
+    .optional(),
   task: taskSchema,
   project: projectSchema,
   revision: revisionSchema,
@@ -390,8 +401,8 @@ export const toolResultSchema = z.object({
   }),
   replayed: z.boolean(),
   /**
-   * Calls the agent left out of this delivery, ask or result (NEXT-MOVES-SPEC §9): plain text, the write already
-   * succeeded. Absent when there is nothing to remind.
+   * Calls the agent left out of this delivery, ask or result (NEXT-MOVES-SPEC §9), and missing card setup on any write
+   * (CARD-SETUP-SPEC §3.3): plain text, the write already succeeded. Absent when there is nothing to remind.
    */
   reminders: z.array(z.string()).optional(),
   /** The proposed idea, for flowly_propose_idea. */

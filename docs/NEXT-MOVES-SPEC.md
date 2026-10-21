@@ -252,6 +252,8 @@ skill 里“有明确下一步时调用一次”是**可选的第二次调用**�
 | `flowly_report_progress` `kind=result` | 是 | 否 |
 | 其它：切换到 design/development/test、`kind=progress`/`blocker`、其它工具 | 否 | 否 |
 
+2026-10-21：卡片缺 type、tags 或 workpad 时，**所有**写工具的结果还会带一条设置提醒（排在本表两种提醒之后），见 [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md) §3.3。
+
 `in_review` 不要求状态真的发生变化：卡片已在 In review 时再次调用同样会判断（仍是一次交付调用）。写入失败（含 `WORKPAD_OPEN`、`REVISION_CONFLICT`）不带提醒，因为什么都没写入。
 
 ### 9.3 条件

@@ -9,7 +9,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 async function setup(withPad = true) {
-  const f = await agentFixture();
+  const f = await agentFixture({ workpad: false });
   roots.push(f.root);
   const repo = { head: "aaaaaaaaaaaa", dirty: false, calls: 0 };
   const git = async (_cwd: string, args: string[]) => {

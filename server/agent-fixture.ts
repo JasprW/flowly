@@ -7,7 +7,12 @@ import { ToolSecrets } from "./tool-context";
 import { AgentService } from "./agent-service";
 
 // Test fixture only; runtime entries never import this module.
-export async function agentFixture() {
+/**
+ * `seed` chooses which card setup the card starts with (CARD-SETUP-SPEC §3): all of it by default, so a test only
+ * meets setup reminders and SETUP_INCOMPLETE when it leaves something out on purpose.
+ */
+export async function agentFixture(seed: { type?: boolean; tags?: boolean; workpad?: boolean } = {}) {
+  const { type = true, tags = true, workpad = true } = seed;
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "flowly-agent-test-")),
   );
@@ -46,7 +51,22 @@ export async function agentFixture() {
       createdAt: stamp,
       updatedAt: stamp,
       archivedAt: null,
+      ...(type ? { type: "feature" as const } : {}),
+      ...(tags ? { tags: [{ tag: "fixture", by: "human" as const, at: stamp }] } : {}),
     });
+    if (workpad)
+      board.workpads.push({
+        taskId: "t",
+        projectId: "p",
+        revision: 1,
+        acceptance: [{ id: "seeded", text: "Seeded criterion", done: true, by: "human", at: stamp }],
+        validation: [],
+        confusions: [],
+        env: null,
+        head: null,
+        updatedAt: stamp,
+        updatedBy: "human",
+      });
   });
   let now = Date.now();
   const secrets = new ToolSecrets(store.directory, () => now);

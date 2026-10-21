@@ -1,0 +1,81 @@
+{
+  "capturedAt": "2026-10-21",
+  "S1": {
+    "sessionId": "13a87fc6-eb96-41ef-b42e-9e04f264c265",
+    "cardId": "5763b446-622c-4f9f-adc7-a6bf18cde9ef",
+    "model": "claude/claude-sonnet-5-5",
+    "modeId": "bypassPermissions",
+    "thinkingOptionId": "medium",
+    "preparedInstructionsUsedAsSystemPrompt": true,
+    "setupLine": "Card setup missing: type, tags, workpad. Before you change anything, set them (flowly_set_type, flowly_set_tags, flowly_update_workpad with acceptance criteria and the checks you will run); see \"Start of every turn\" in the Flowly skill.",
+    "initialGetTask": {
+      "at": "2026-10-21T05:24:01.416Z",
+      "topLevelKeys": [
+        "identity",
+        "setup",
+        "task"
+      ],
+      "setupMissing": [
+        "type",
+        "tags",
+        "workpad"
+      ]
+    },
+    "events": {
+      "typeSet": "2026-10-21T05:24:06.172Z",
+      "tagsChanged": "2026-10-21T05:24:11.257Z",
+      "firstWorkpad": "2026-10-21T05:24:17.761Z",
+      "firstFileChange": {
+        "at": "2026-10-21T05:24:22.269Z",
+        "path": "test/expired.test.js",
+        "source": "Claude session transcript Bash invocation captured before archive"
+      },
+      "workpadComplete": "2026-10-21T05:24:33.736Z",
+      "firstStatusMove": {
+        "at": "2026-10-21T05:24:41.218Z",
+        "from": "todo",
+        "to": "in_review"
+      }
+    },
+    "changedFiles": [
+      "src/server.js",
+      "test/expired.test.js"
+    ],
+    "testReported": "npm test: 14 passed",
+    "developmentStageSet": false,
+    "setupDeliveryErrors": []
+  },
+  "S2": {
+    "sessionId": "b8070701-e025-47c1-bcb7-272393000297",
+    "cardId": "87a05c32-b3f9-42f1-83f3-52d84863e68d",
+    "model": "codex/gpt-6-luna",
+    "modeId": "full-access",
+    "thinkingOptionId": "medium",
+    "preparedInstructionsUsedAsSystemPrompt": true,
+    "setupLine": "Card setup missing: type, tags, workpad. Before you change anything, set them (flowly_set_type, flowly_set_tags, flowly_update_workpad with acceptance criteria and the checks you will run); see \"Start of every turn\" in the Flowly skill.",
+    "events": {
+      "typeSet": "2026-10-21T05:24:18.869Z",
+      "tagsChanged": "2026-10-21T05:24:22.562Z",
+      "firstWorkpad": "2026-10-21T05:24:31.609Z",
+      "design": "2026-10-21T05:24:46.638Z",
+      "development": "2026-10-21T05:25:21.996Z",
+      "firstFileEditOrder": "after development; first logged edit was README.md",
+      "test": "2026-10-21T05:26:04.560Z",
+      "workpadComplete": "2026-10-21T05:26:25.636Z",
+      "finished": "2026-10-21T05:26:59.493Z"
+    },
+    "changedFiles": [
+      "README.md",
+      "src/server.js",
+      "test/stats.test.js"
+    ],
+    "testReported": "npm test: 14 passed; git diff --check passed",
+    "finalStatus": "test",
+    "setupDeliveryErrors": []
+  },
+  "coverage": {
+    "followUpRequired": false,
+    "liveSetupIncompleteDeliveryGate": "not exercised because both subjects completed setup before any delivery; S2 did not deliver",
+    "uiChecks": "not run; outside requested real-agent workflow"
+  }
+}

@@ -1,0 +1,46 @@
+[
+  {
+    "subject": "S1",
+    "id": "5763b446-622c-4f9f-adc7-a6bf18cde9ef",
+    "taskId": "5763b446-622c-4f9f-adc7-a6bf18cde9ef",
+    "revision": 3,
+    "workspace": {
+      "id": "wks_dfd1efd98cdc7fbd",
+      "kind": "worktree",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing"
+    },
+    "archiveWorkspace": true,
+    "sessions": 1,
+    "git": {
+      "branch": "kanban/handle-expired-links-without-crashing-585af8",
+      "uncommitted": 2,
+      "unpushed": 0
+    },
+    "blockers": [],
+    "warnings": [
+      "2 uncommitted changes in the worktree will be lost if Paseo removes it."
+    ]
+  },
+  {
+    "subject": "S2",
+    "id": "87a05c32-b3f9-42f1-83f3-52d84863e68d",
+    "taskId": "87a05c32-b3f9-42f1-83f3-52d84863e68d",
+    "revision": 5,
+    "workspace": {
+      "id": "wks_f463c880d0393e62",
+      "kind": "worktree",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/kanban-handle-expired-links-without-crashing-1"
+    },
+    "archiveWorkspace": true,
+    "sessions": 1,
+    "git": {
+      "branch": "kanban/handle-expired-links-without-crashing-1bb57f",
+      "uncommitted": 3,
+      "unpushed": 0
+    },
+    "blockers": [],
+    "warnings": [
+      "3 uncommitted changes in the worktree will be lost if Paseo removes it."
+    ]
+  }
+]

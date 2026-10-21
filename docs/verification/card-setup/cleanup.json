@@ -1,0 +1,52 @@
+{
+  "at": "2026-10-21T05:33:41.252Z",
+  "results": [
+    {
+      "subject": "S1",
+      "id": "5763b446-622c-4f9f-adc7-a6bf18cde9ef",
+      "archived": {
+        "sessions": 1,
+        "workspace": true
+      },
+      "deleted": true,
+      "acknowledgedWarnings": true
+    },
+    {
+      "subject": "S2",
+      "id": "87a05c32-b3f9-42f1-83f3-52d84863e68d",
+      "archived": {
+        "sessions": 1,
+        "workspace": true
+      },
+      "deleted": true,
+      "acknowledgedWarnings": true
+    }
+  ],
+  "sessionArchives": [
+    {
+      "id": "13a87fc6-eb96-41ef-b42e-9e04f264c265",
+      "result": "archived by tasks.delete with archive:true",
+      "status": "closed",
+      "activeTurn": null
+    },
+    {
+      "id": "b8070701-e025-47c1-bcb7-272393000297",
+      "result": "explicitly archived after tasks.delete; delete had left it idle",
+      "status": "closed",
+      "activeTurn": null
+    }
+  ],
+  "automaticSummarySessions": [
+    {
+      "id": "895c8dd4-8932-4177-b005-9a7e35f4dd57",
+      "status": "closed",
+      "modeId": "default"
+    },
+    {
+      "id": "dbbdd026-3b96-4437-b55c-69a6ff1951ca",
+      "status": "closed",
+      "modeId": "default"
+    }
+  ],
+  "note": "Both owned worktrees and branches removed. Product removed/ backups from tasks.delete are retained as safety copies."
+}

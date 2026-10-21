@@ -385,6 +385,8 @@ export const eventSchema = z.object({
   pick: z.number().int().min(-1).max(nextMoveLimits.count - 1).optional(),
   /** status_changed into In review by an agent: the workpad's open items then (WORKPAD-SPEC §5.3). */
   workpad: deliverySchema.optional(),
+  /** status_changed into In review by an agent that acknowledged missing card setup (CARD-SETUP-SPEC §3.4). */
+  setup: z.object({ missing: z.array(z.enum(["type", "tags", "workpad"])) }).optional(),
   at: timestamp,
 });
 export const boardSchema = z.object({

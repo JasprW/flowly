@@ -7,10 +7,11 @@ import { toolFailure } from "./tool-error";
 import { agentFixture } from "./agent-fixture";
 import { openNextMoves } from "../shared/next-moves";
 import { answersReminder, ideasReminder, movesReminder } from "./reminders";
+import { setupReminder } from "../shared/card-setup";
 
 const roots: string[] = [];
-async function setup() {
-  const f = await agentFixture();
+async function setup(seed?: Parameters<typeof agentFixture>[0]) {
+  const f = await agentFixture(seed);
   roots.push(f.root);
   return f;
 }
@@ -353,7 +354,7 @@ test("the retired in_progress status is an alias: keeps the work stage, else Dev
   expect((await x.store.read()).tasks[0].status).toBe("test");
 });
 test("an agent sets a missing type once; an existing type is kept", async () => {
-  const x = await setup();
+  const x = await setup({ type: false });
   expect((await x.store.read()).tasks[0].type).toBeUndefined();
   let ctx = await x.service.get(x.identity);
   const call = { expectedRevision: ctx.revision, request: ctx.request, type: "bugfix" };
@@ -456,7 +457,7 @@ const workpadInput = (
 ) => ({ expectedRevision: ctx.revision, request: ctx.request, workpadRevision, acceptance: [], validation: [], confusions: [], ...body });
 
 test("workpad: replace with its own revision; task revision and status untouched; replay returns the receipt", async () => {
-  const x = await setup();
+  const x = await setup({ workpad: false });
   x.service.git = fakeGit({ head: "aaaaaaaaaaaa" });
   const ctx = await x.service.get(x.identity);
   expect(ctx.workpad).toBeNull();
@@ -481,7 +482,7 @@ test("workpad: replace with its own revision; task revision and status untouched
 });
 
 test("workpad: a person's tick bumps the workpad revision only; the agent's stale copy conflicts, other tools do not", async () => {
-  const x = await setup();
+  const x = await setup({ workpad: false });
   x.service.git = fakeGit({ head: "aaaaaaaaaaaa" });
   const ctx = await x.service.get(x.identity);
   await x.service.write(x.identity, "workpad", workpadInput(ctx, { acceptance: [{ id: "a", text: "A", done: false }] }));
@@ -528,7 +529,7 @@ test("workpad: commits are verified; no sha outside git; limits are WORKPAD_INVA
 });
 
 test("workpad: delivering with open items needs acknowledgeOpen; the snapshot marks the delivery", async () => {
-  const x = await setup();
+  const x = await setup({ workpad: false });
   const repo = { head: "aaaaaaaaaaaa" };
   x.service.git = fakeGit(repo);
   let ctx = await x.service.get(x.identity);
@@ -552,7 +553,7 @@ test("workpad: delivering with open items needs acknowledgeOpen; the snapshot ma
   expect(board.workpads[0]!.head?.sha).toBe("cccccccccccc");
 });
 
-test("workpad: no workpad or nothing open delivers without acknowledgement", async () => {
+test("workpad: nothing open delivers without acknowledgement", async () => {
   const x = await setup();
   x.service.git = fakeGit({ head: "aaaaaaaaaaaa" });
   let ctx = await x.service.get(x.identity);
@@ -567,7 +568,7 @@ test("workpad: no workpad or nothing open delivers without acknowledgement", asy
 });
 
 test("workpad: off for the project — tool refused, no gate, get_task hides it; data kept and back when on", async () => {
-  const x = await setup();
+  const x = await setup({ workpad: false });
   x.service.git = fakeGit({ head: "aaaaaaaaaaaa" });
   let ctx = await x.service.get(x.identity);
   expect(ctx.workpadEnabled).toBe(true);
@@ -869,4 +870,109 @@ test("a refused call or a finished card carries no reminders", async () => {
   const replay = await x.service.write(x.identity, "status", call);
   expect(replay).toMatchObject({ replayed: true, receipt: first.receipt });
   expect(replay).not.toHaveProperty("reminders");
+});
+
+// Card setup (CARD-SETUP-SPEC §3): get_task names what is missing, every write reminds, delivery is a soft gate.
+const bare = () => setup({ type: false, tags: false, workpad: false });
+const setType = async (x: Rig, type = "bugfix") => {
+  const ctx = await x.service.get(x.identity);
+  return x.service.write(x.identity, "type", { expectedRevision: ctx.revision, request: ctx.request, type });
+};
+const tag = async (x: Rig) => {
+  const ctx = await x.service.get(x.identity);
+  return x.service.write(x.identity, "tags", { expectedRevision: ctx.revision, request: ctx.request, add: ["drawer"] });
+};
+const pad = async (x: Rig, body: Parameters<typeof workpadInput>[1] = { acceptance: [{ text: "Works", done: false }] }) =>
+  x.service.write(x.identity, "workpad", workpadInput(await x.service.get(x.identity), body));
+
+test("setup: get_task names the missing items first; each clears once set, by anyone", async () => {
+  const x = await bare();
+  x.service.git = fakeGit({ head: "aaaaaaaaaaaa" });
+  let ctx = await x.service.get(x.identity);
+  expect(Object.keys(ctx).slice(0, 2)).toEqual(["identity", "setup"]);
+  expect(ctx.setup).toEqual({ typeMissing: true, tagsMissing: true, workpadMissing: true, stage: "todo", missing: ["type", "tags", "workpad"] });
+  // An empty workpad is still missing.
+  await pad(x, {});
+  expect((await x.service.get(x.identity)).setup?.missing).toEqual(["type", "tags", "workpad"]);
+  await setType(x);
+  await pad(x);
+  ctx = await x.service.get(x.identity);
+  expect(ctx.setup).toMatchObject({ typeMissing: false, workpadMissing: false, missing: ["tags"] });
+  // A tag the person added counts.
+  await x.store.mutate((board) => {
+    board.tasks[0]!.tags = [{ tag: "mine", by: "human", at: new Date().toISOString() }];
+  });
+  expect((await x.service.get(x.identity)).setup?.missing).toEqual([]);
+  // The workpad turned off for the project is never missing.
+  const y = await setup({ workpad: false });
+  await y.store.updateProject({ id: "p", revision: 1, workpad: false });
+  expect((await y.service.get(y.identity)).setup?.missing).toEqual([]);
+});
+
+test("setup: every write succeeds and reminds of what is still missing; a set type is not mentioned again", async () => {
+  const x = await bare();
+  x.service.git = fakeGit({ head: "aaaaaaaaaaaa" });
+  const all = setupReminder(["type", "tags", "workpad"]);
+  const moved = await x.service.write(x.identity, "status", { ...input(await x.service.get(x.identity)), status: "development" });
+  expect(moved.receipt.status).toBe("development");
+  expect(moved.reminders).toEqual([all]);
+  expect((await reportKind(x, "progress")).reminders).toEqual([all]);
+  // Computed after the write: set_type's own result no longer names the type.
+  expect((await setType(x)).reminders).toEqual([setupReminder(["tags", "workpad"])]);
+  expect((await pad(x)).reminders).toEqual([setupReminder(["tags"])]);
+  expect((await suggest(x, [])).reminders).toEqual([setupReminder(["tags"])]);
+  const tagged = await tag(x);
+  expect(tagged).not.toHaveProperty("reminders");
+  expect(await reportKind(x, "progress")).not.toHaveProperty("reminders");
+  expect(setupReminder(["type"])).toContain("no type (flowly_set_type");
+});
+
+test("setup: the reminder follows the delivery reminders, also on a replay, and never on a finished card", async () => {
+  const x = await setup({ tags: false });
+  const call = { ...input(await x.service.get(x.identity), "Result"), kind: "result" };
+  const first = await x.service.write(x.identity, "progress", call);
+  expect(first.reminders).toEqual([movesReminder, setupReminder(["tags"])]);
+  expect(await x.service.write(x.identity, "progress", call)).toMatchObject({ replayed: true, reminders: [movesReminder, setupReminder(["tags"])] });
+  const task = (await x.store.read()).tasks[0]!;
+  await x.store.editTask({ id: "t", revision: task.revision, status: "done", actor: "human" });
+  expect(await x.service.write(x.identity, "progress", call)).not.toHaveProperty("reminders");
+});
+
+test("setup: delivering with missing setup is SETUP_INCOMPLETE until acknowledged; the snapshot records it", async () => {
+  const x = await setup({ tags: false });
+  await x.service.write(x.identity, "status", { ...input(await x.service.get(x.identity)), status: "development" });
+  const ctx = await x.service.get(x.identity);
+  const refused = await x.service.write(x.identity, "status", { ...input(ctx, "Delivered"), status: "in_review" }).catch((e) => e);
+  expect(refused).toMatchObject({ code: "SETUP_INCOMPLETE" });
+  expect(String(refused.message)).toContain("no tags (flowly_set_tags");
+  expect(String(refused.message)).not.toContain("no type");
+  expect((await x.store.read()).tasks[0]!.status).toBe("development");
+  // Same request, acknowledged: nothing was committed before, so it is not a reuse.
+  const ok = await x.service.write(x.identity, "status", { ...input(ctx, "Delivered; no tags: the card spans no module"), status: "in_review", acknowledgeOpen: true });
+  expect(ok.receipt.status).toBe("in_review");
+  const event = (await x.store.read()).events.find((e) => e.id === ok.receipt.eventId)!;
+  expect(event.setup).toEqual({ missing: ["tags"] });
+  // A delivery with everything set has no snapshot.
+  const y = await setup();
+  const done = await deliver(y);
+  expect((await y.store.read()).events.find((e) => e.id === done.receipt.eventId)?.setup).toBeUndefined();
+});
+
+test("setup: no workpad blocks delivery while the project has it on; off, type and tags alone are enough", async () => {
+  const x = await setup({ workpad: false });
+  await expect(deliver(x)).rejects.toMatchObject({ code: "SETUP_INCOMPLETE", message: expect.stringContaining("no workpad") });
+  await x.store.updateProject({ id: "p", revision: 1, workpad: false });
+  expect((await deliver(x)).receipt.status).toBe("in_review");
+});
+
+test("setup: open workpad items and missing setup come back in one WORKPAD_OPEN that names both", async () => {
+  const x = await setup({ type: false, workpad: false });
+  x.service.git = fakeGit({ head: "aaaaaaaaaaaa" });
+  await pad(x, { validation: [{ id: "e2e", text: "E2E", state: "unrun" }] });
+  const refused = await deliver(x).catch((e) => e);
+  expect(refused).toMatchObject({ code: "WORKPAD_OPEN" });
+  expect(String(refused.message)).toMatch(/no type \(flowly_set_type[\s\S]*check not run: E2E/);
+  const ok = await deliver(x, { acknowledgeOpen: true, note: "Delivered; E2E not run; type left to the user" });
+  const event = (await x.store.read()).events.find((e) => e.id === ok.receipt.eventId)!;
+  expect(event).toMatchObject({ setup: { missing: ["type"] }, workpad: { unrun: 1 } });
 });

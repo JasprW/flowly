@@ -1,5 +1,20 @@
 # Implementation progress
 
+## Card setup reminders and soft gate (card "Flowly 流程约束强化") — 2026-10-21
+
+Spec: [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md). Analysis of the board showed the misses concentrated on title-only cards run by Sonnet 5.5 at medium/auto thinking; the causes were the skill's late, vague wording, silent gaps, feedback only at wrap-up, and a workpad gate that only fired when a workpad existed.
+
+- [x] `flowly_get_task` returns `setup` (`typeMissing`, `tagsMissing`, `workpadMissing`, `stage`, `missing`) right after `identity` (`shared/card-setup.ts`).
+- [x] The first task context names missing setup (`Card setup missing: …`), for sessions that never call a Flowly tool.
+- [x] Every agent write carries one setup reminder while something is missing, after the delivery reminders; also on replays, never on finished cards.
+- [x] Delivery to In review with missing type, tags or workpad (project workpad on) returns `SETUP_INCOMPLETE`; `acknowledgeOpen` delivers and the event records `setup.missing`. With open workpad items too, one `WORKPAD_OPEN` names both. Supersedes WORKPAD-SPEC §5.3 "no workpad delivers" (user decision 2026-10-21).
+- [x] Skill starts with "Start of every turn"; tool descriptions name the timing and `SETUP_INCOMPLETE`; CLI usage updated.
+- [x] Onboarding: welcome-tour Workpad line and README highlights revised in all catalogs; no new tip (agent behavior, no new screen moment).
+- [x] `npm run typecheck`, `npm test` (106 files, 804 tests on the committed tree).
+- [x] Luna 6 (`2574a944`, full access) on Tinylink, two title-only cards: Sonnet 5.5 medium (`13a87fc6`) and Luna (`b8070701`) both saw the first-context line, followed the reminders and set type, tags and workpad before their first file change. [Report](verification/card-setup-2026-10-21.md). Fixtures cleaned up and verified.
+- [ ] UNRUN live: a `SETUP_INCOMPLETE` refusal from a real session (no subject delivered with setup missing; unit tests only). UI and phone not checked (no UI change).
+- Observed: Sonnet went Todo → In review without a Development stage (setup itself was done first).
+
 ## Flowly logo and brand assets (card "plugin logo设计") — 2026-10-21
 
 - [x] Design, with the user choosing at each step: line-art drafts (`docs/brand/logo-drafts/v1-filled`, `v2-line`), direction H "status path", refined from the original (`v4-h-refined`, R1; an obvious f shape `v3-h-as-f` was rejected), check one step lighter (`v10-check`, K2: 3 units, 12% larger); wordmark "Flowly" in Inter Medium (SIL OFL 1.1) outlined to paths with l and y cut at 52° and a dot in the o (`v5-wordmark`, `v6-wordmark-details`, `v8-y-slant`, `v9-y-angle`); monochrome only, ink `#1E2120` on light and paper `#F3F1EC` on dark (`v7-colors`).

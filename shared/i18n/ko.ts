@@ -947,7 +947,7 @@ const catalog: Catalog = {
   "Checks {done}/{total}": "검증 {done}/{total}",
   "Acceptance {done}/{total}": "인수 {done}/{total}",
   "Workpad": "Workpad",
-  "Agents keep a workpad on each card: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them.": "에이전트가 카드마다 Workpad를 관리합니다: 인수 기준, 어느 커밋에서 통과·실패·미실행인지 표시한 검증 항목, 그리고 헷갈렸던 점입니다.",
+  "Agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them. Delivering without them needs a note.": "에이전트는 작업을 시작하기 전에 카드의 유형과 태그를 정하고 Workpad를 작성합니다: 인수 기준, 어느 커밋에서 통과·실패·미실행인지 표시한 검증 항목, 그리고 헷갈렸던 점입니다. 이것 없이 전달하려면 설명이 필요합니다.",
   "Updated {time} by you": "{time} 내가 업데이트",
   "Updated {time} by {session}": "{time} {session}이(가) 업데이트",
   "an agent": "에이전트",

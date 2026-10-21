@@ -1,0 +1,92 @@
+{
+  "capturedAt": "2026-10-21T05:30:41.060Z",
+  "subjects": {
+    "S1": {
+      "source": "Claude transcript",
+      "path": "/Users/bofan.wang/.claude/projects/-Users-bofan-wang--paseo-worktrees-246o38bv-kanban-handle-expired-links-without-crashing/acaeac8a-0aec-40ac-86c3-6e5ccf0cc0a7.jsonl",
+      "reminderResults": [
+        {
+          "at": "2026-10-21T05:24:06.481Z",
+          "tool": "flowly_set_type",
+          "reminders": [
+            "This card's setup is incomplete: no tags (flowly_set_tags: 1-4 module or direction tags, reuse projectTags); no workpad (flowly_update_workpad: the acceptance criteria and the checks you will run, before you implement). Make these calls now, before more work; they take seconds. This write already succeeded."
+          ]
+        },
+        {
+          "at": "2026-10-21T05:24:11.565Z",
+          "tool": "flowly_set_tags",
+          "reminders": [
+            "This card's setup is incomplete: no workpad (flowly_update_workpad: the acceptance criteria and the checks you will run, before you implement). Make these calls now, before more work; they take seconds. This write already succeeded."
+          ]
+        },
+        {
+          "at": "2026-10-21T05:24:41.544Z",
+          "tool": "flowly_update_status",
+          "reminders": [
+            "You have proposed no ideas on this card. Consider 0-3 ideas (flowly_propose_idea) for worthwhile follow-ups you noticed: bugs, refactors, next features. Zero is fine; decide on purpose."
+          ]
+        }
+      ],
+      "setupDeliveryErrors": [],
+      "counts": {
+        "toolResultsWithReminders": 3,
+        "setupDeliveryErrors": 0
+      },
+      "preparedInstructionEvidence": {
+        "usedAsSystemPrompt": true,
+        "setupLine": "Card setup missing: type, tags, workpad. Before you change anything, set them (flowly_set_type, flowly_set_tags, flowly_update_workpad with acceptance criteria and the checks you will run); see \"Start of every turn\" in the Flowly skill.",
+        "provider": "claude/claude-sonnet-5-5",
+        "modeId": "bypassPermissions",
+        "thinkingOptionId": "medium",
+        "cardId": "5763b446-622c-4f9f-adc7-a6bf18cde9ef",
+        "sessionId": "13a87fc6-eb96-41ef-b42e-9e04f264c265"
+      },
+      "getTaskSetupShape": {
+        "observedAt": "2026-10-21T05:24:01.416Z",
+        "verified": true,
+        "topLevelKeys": [
+          "identity",
+          "setup",
+          "task"
+        ],
+        "setupMissing": [
+          "type",
+          "tags",
+          "workpad"
+        ]
+      }
+    },
+    "S2": {
+      "source": "Codex rollout",
+      "path": "/Users/bofan.wang/.codex/sessions/2026/10/21/rollout-2026-10-21T13-23-55-01a15cea-8213-7563-a39a-08c84c974055.jsonl",
+      "reminderResults": [
+        {
+          "at": "2026-10-21T05:24:19.050Z",
+          "ordinal": 32,
+          "tool": "set_type",
+          "reminder": "This card's setup is incomplete: no tags (flowly_set_tags: 1-4 module or direction tags, reuse projectTags); no workpad (flowly_update_workpad: the acceptance criteria and the checks you will run, before you implement). Make these calls now, before more work; they take seconds. This write already succeeded."
+        },
+        {
+          "at": "2026-10-21T05:24:22.776Z",
+          "ordinal": 40,
+          "tool": "set_tags",
+          "reminder": "This card's setup is incomplete: no workpad (flowly_update_workpad: the acceptance criteria and the checks you will run, before you implement). Make these calls now, before more work; they take seconds. This write already succeeded."
+        }
+      ],
+      "setupDeliveryErrors": [],
+      "counts": {
+        "toolResultsWithReminders": 2,
+        "setupDeliveryErrors": 0
+      },
+      "preparedInstructionEvidence": {
+        "usedAsSystemPrompt": true,
+        "setupLine": "Card setup missing: type, tags, workpad. Before you change anything, set them (flowly_set_type, flowly_set_tags, flowly_update_workpad with acceptance criteria and the checks you will run); see \"Start of every turn\" in the Flowly skill.",
+        "provider": "codex/gpt-6-luna",
+        "modeId": "full-access",
+        "thinkingOptionId": "medium",
+        "cardId": "87a05c32-b3f9-42f1-83f3-52d84863e68d",
+        "sessionId": "b8070701-e025-47c1-bcb7-272393000297"
+      }
+    }
+  }
+}

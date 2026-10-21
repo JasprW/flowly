@@ -167,7 +167,7 @@ export class ToolServer {
           "flowly_get_task",
           {
             description:
-              "Read this session's current Kanban card, effective repo/worktree directories, both revisions and signed request. Read before work or any write, and at the start of every turn: artifacts with unread=true were added or edited since your last read.",
+              "Read this session's current Kanban card, effective repo/worktree directories, both revisions and signed request. Read before work or any write, and at the start of every turn: artifacts with unread=true were added or edited since your last read. Then check setup.missing and fix it (flowly_set_type, flowly_set_tags, flowly_update_workpad) before other work.",
             inputSchema: z.strictObject({}),
             outputSchema: toolContextSchema,
             annotations: { readOnlyHint: true, openWorldHint: false },
@@ -178,7 +178,7 @@ export class ToolServer {
           "flowly_update_status",
           {
             description:
-              "Move this card to one of allowedStatuses from get_task (design, development, test, blocked or in_review when they are lanes of this project; lanes lists the names the user sees). Use the work stage that matches what you are doing now: design for plans/specs/research, development for implementation, test for verification; you decide where to start and may skip or go back. Keep it current: switch when the work changes, and at the start of each turn correct the stage the card was automatically resumed in if it does not match the work. Copy revisions and request from get_task, include a note. Done/cancelled are human decisions. Delivering to in_review with open workpad items returns WORKPAD_OPEN and changes nothing; deliver anyway only with acknowledgeOpen=true and a note that explains every open item. When you deliver (in_review), pass nextMoves: the 1-3 messages the user is most likely to send you next (same items as flowly_suggest_next_moves, recommended first; a moveTo=\"done\" move is only accepted together with in_review), or [] when nothing needs the user. Leave it out on mid-work stage changes. A delivery (in_review or blocked) that leaves this turn without next moves, or without any idea on the card, gets a reminders list in its result: text only, the write succeeded. A refused call records nothing: resend it with the same nextMoves. Retry identical uncertain requests only.",
+              "Move this card to one of allowedStatuses from get_task (design, development, test, blocked or in_review when they are lanes of this project; lanes lists the names the user sees). Use the work stage that matches what you are doing now: design for plans/specs/research, development for implementation, test for verification; you decide where to start and may skip or go back. Keep it current: switch when the work changes, and at the start of each turn correct the stage the card was automatically resumed in if it does not match the work. Copy revisions and request from get_task, include a note. Done/cancelled are human decisions. Delivering to in_review with open workpad items returns WORKPAD_OPEN, and with missing card setup (no type, no tags or no workpad) SETUP_INCOMPLETE; both change nothing. Deliver anyway only with acknowledgeOpen=true and a note that explains every open item and why each setup item is missing. When you deliver (in_review), pass nextMoves: the 1-3 messages the user is most likely to send you next (same items as flowly_suggest_next_moves, recommended first; a moveTo=\"done\" move is only accepted together with in_review), or [] when nothing needs the user. Leave it out on mid-work stage changes. A delivery (in_review or blocked) that leaves this turn without next moves, or without any idea on the card, gets a reminders list in its result, and so does any write while the card setup is missing: text only, the write succeeded. A refused call records nothing: resend it with the same nextMoves. Retry identical uncertain requests only.",
             inputSchema: statusInputSchema,
             outputSchema: toolResultSchema,
             annotations: {
@@ -262,7 +262,7 @@ export class ToolServer {
           "flowly_set_tags",
           {
             description:
-              'Tag this card with the functional areas it touches and the improvement directions it serves (for example a module like "drawer" or "session-composer", or a direction like "performance", "a11y", "mobile"), so the user can filter and search cards later. Tags are not the task type, status or priority; do not repeat those. Reuse a tag from projectTags in get_task when one fits instead of inventing a synonym. Use 1-4 short lowercase tags, add them once you understand the scope, and adjust them if the scope changes. You can only remove tags an agent added. Does not change card status or task revision. Copy revisions/request from get_task.',
+              'Tag this card with the functional areas it touches and the improvement directions it serves (for example a module like "drawer" or "session-composer", or a direction like "performance", "a11y", "mobile"), so the user can filter and search cards later. Tags are not the task type, status or priority; do not repeat those. Reuse a tag from projectTags in get_task when one fits instead of inventing a synonym. Do this at the start of the work, before you change code (get_task setup.tagsMissing). Use 1-4 short lowercase tags and adjust them if the scope changes. You can only remove tags an agent added. Does not change card status or task revision. Copy revisions/request from get_task.',
             inputSchema: tagsInputSchema,
             outputSchema: toolResultSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -273,7 +273,7 @@ export class ToolServer {
           "flowly_set_type",
           {
             description:
-              "Set this card's type (feature, bugfix, research, refactor, docs, chore) when it has none: task.type is missing in get_task. Choose it once you understand the work. A type the user or an agent already set is kept: the call returns TYPE_ALREADY_SET and changes nothing, so do not retry with another type. Increments the task revision. Copy revisions/request from get_task.",
+              "Set this card's type (feature, bugfix, research, refactor, docs, chore) when it has none (get_task setup.typeMissing). Do this at the start of the work, before you change code. A type the user or an agent already set is kept: the call returns TYPE_ALREADY_SET and changes nothing, so do not retry with another type. Increments the task revision. Copy revisions/request from get_task.",
             inputSchema: typeInputSchema,
             outputSchema: toolResultSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -295,7 +295,7 @@ export class ToolServer {
           "flowly_update_workpad",
           {
             description:
-              "Replace this card's workpad: acceptance criteria (done or not), validation checks (pass, fail or unrun, with the command and the commit they ran on) and confusions (what in the card was unclear). The plan comes from your own todo list; do not repeat it here. Send all three lists every time; items you leave out are removed. Copy workpad.revision from get_task as workpadRevision (0 when there is none). On WORKPAD_CONFLICT the user changed it: re-read, keep their checks, retry. WORKPAD_DISABLED (workpadEnabled=false in get_task): the user turned it off for this project; report criteria and checks in your notes instead and do not retry. Does not change card status or task revision. Copy revisions/request from get_task.",
+              "Do this at the start of the work, before you change code (get_task setup.workpadMissing), and after each milestone. Replace this card's workpad: acceptance criteria (done or not), validation checks (pass, fail or unrun, with the command and the commit they ran on) and confusions (what in the card was unclear). The plan comes from your own todo list; do not repeat it here. Send all three lists every time; items you leave out are removed. Copy workpad.revision from get_task as workpadRevision (0 when there is none). On WORKPAD_CONFLICT the user changed it: re-read, keep their checks, retry. WORKPAD_DISABLED (workpadEnabled=false in get_task): the user turned it off for this project; report criteria and checks in your notes instead and do not retry. Does not change card status or task revision. Copy revisions/request from get_task.",
             inputSchema: workpadInputSchema,
             outputSchema: toolResultSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },

@@ -8,7 +8,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 async function setup() {
-  const f = await agentFixture();
+  const f = await agentFixture({ tags: false });
   roots.push(f.root);
   return f;
 }
