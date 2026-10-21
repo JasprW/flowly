@@ -11,6 +11,15 @@
 - [x] Images in first messages (user request 2026-10-21): New task's agent instruction and New session take images on web (paste, drop, Add images). Phones: declined by the user (no plugin picker; host internals not used). Spec §6.
 - [ ] UNRUN: phone verification (iPhone + Android: keyboard lift with reader at end and scrolled up, Load earlier position, scroll FPS before/after with RN perf monitor); AndroMeld Android Use was off.
 
+## Native session pane: faster Next moves card, one card style — 2026-10-21
+
+- [x] Requests: (1) on phones the Progress card is quick but the Next moves card is slow; (2) the two timeline cards look different. Spec: NATIVE-SESSION-SPEC §8.1, §5.3, §6.3; SESSION-CHIP-SPEC 2026-10-21 amendment.
+- [x] Cause measured on this host (1251 agents, 386 summarizer leftovers): a chip refresh round listed all live agents (233 KB), then every agent including archived (3.1 MB) after any board change, before it computed the Next moves state; rounds ran every 5 s; the daemon wrote the card behind the model lookup (up to 2 s) and a board write. Luna's partial baseline (round 5, CPU rate 4 and 1, raw data in `docs/verification/fixtures/native-session/perf/`, not committed or reported): Progress card visible 13-64 ms after its row, Next moves card 0.4-5.9 s after its row.
+- [x] Fix (commit "Next moves card no longer waits for the archived scan"): state first, archived scan after and not on board changes; live sessions from the agent stream; pushed status / user-message / permission changes trigger a round within ~150 ms; a row that arrives first asks for a round; managed card written first in the hook; unchanged chip state wakes no subscriber; timing log entries `chips.round`, `chips.archived`. Unit tests: `client/live-agents.test.ts`, `client/session-chips.test.ts`.
+- [x] Style (commit "Progress and Next steps cards share one frame and header"): `client/native-card.tsx` header + frame, `ContentCard` optional `header`; Open card moved into the header so the phone footer no longer wraps. Screenshots: `docs/verification/native-session/style/`.
+- [x] PASS: `npm run typecheck`; `npm test` 786 passed / 65 skipped (branch), 821 passed on the combined main tree; plugin reloaded, headless load has no page errors; Progress card checked on desktop and a 430 px phone layout.
+- [ ] UNRUN (user cancelled the Luna measurement, 2026-10-21: "if there is a performance problem I will come back"): the after-fix Next moves latency, live on a phone or CPU-throttled; the Next moves card with the new style was not screenshotted (no ready card existed at deploy time).
+
 ## Native session pane P2–P4: sessions outside Flowly — 2026-10-21
 
 - [x] Request: give every session Flowly does not manage the same Progress / Next moves / Ideas without joining a project; ideas may continue in the session, a new session or a new workspace. User decisions: Paseo child sessions (like card summaries), off by default, three switches. [Spec §12](NATIVE-SESSION-SPEC.md).
