@@ -11,7 +11,7 @@ Spec: [AI-LANGUAGE-SPEC](AI-LANGUAGE-SPEC.md). A Workflow insights Run now wrote
 - [x] `flowly_get_task` returns `outputLanguage`; tool descriptions, `server/skill-source.ts` and `skills/flowly/SKILL.md` use it for next moves and ideas.
 - [x] Onboarding: tip `ai-language` (fact `hasSummary`); README Languages sentence; no welcome-tour change (no change to the Project/Card/Session map or a headline capability).
 - [x] `shared/ai-language.test.ts` (resolution, settings, one test per prompt builder), `server/agent-service.test.ts` (outputLanguage), `client/onboarding-logic.test.ts` (tip).
-- [ ] Live: Workflow insights Run now in the configured language ([verification/ai-language.md](verification/ai-language.md)).
+- [x] Live: Workflow insights Run now on Flowly in English and in Simplified Chinese, both as configured; device-language report seen from the real window ([verification/ai-language.md](verification/ai-language.md)). Settings page screenshot not taken.
 
 ## Card setup reminders and soft gate (card "Flowly 流程约束强化") — 2026-10-21
 
