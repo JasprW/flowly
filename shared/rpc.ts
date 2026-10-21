@@ -42,7 +42,7 @@ import {
 } from "./session-attention";
 import { summaryEntrySchema, summaryOverviewSchema } from "./summary";
 import { taskUsageSchema } from "./usage";
-import { tailEntrySchema } from "./session-tail";
+import { TURN_MAX_ENTRIES, tailPageSchema, timelineCursorSchema } from "./session-tail";
 import { tokenInsightsSchema } from "./insights";
 import { digestViewSchema } from "./digest";
 import { perfReportSchema } from "./perf";
@@ -601,8 +601,16 @@ export const sessionTail = defineRpc({
     taskId: z.string().min(1).max(200),
     agentId: z.string().min(1).max(200),
     limit: z.number().int().min(1).max(100),
+    /**
+     * tail (default): the newest `limit` entries. turn: from the latest user
+     * message on, at most `maxEntries`. before/after: one page next to `cursor`
+     * (SESSION-PANE-SPEC §1.4).
+     */
+    mode: z.enum(["tail", "turn", "before", "after"]).optional(),
+    cursor: timelineCursorSchema.optional(),
+    maxEntries: z.number().int().min(1).max(TURN_MAX_ENTRIES).optional(),
   }),
-  output: z.object({ entries: z.array(tailEntrySchema) }),
+  output: tailPageSchema,
 });
 export const archivedSessions = defineRpc({
   name: "sessions.archived",

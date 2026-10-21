@@ -69,7 +69,7 @@ test("native opening targets the exact session and host, and tolerates absent na
   expect(openAgent).toHaveBeenCalledWith({ agentId: "a", serverId: "host" });
   expect(openNativeSession(undefined, "a", "host")).toBe(false);
 });
-test("preview extracts only recent text with reader-facing author labels", () => {
+test("preview extracts readable text with reader-facing author labels, without a display cap", () => {
   const output = recentSessionOutput([
     { item: { type: "tool_call" } },
     { item: { type: "assistant_message", text: "Done" } },
@@ -85,7 +85,7 @@ test("preview extracts only recent text with reader-facing author labels", () =>
         item: { type: "assistant_message", text: String(n) },
       })),
     ),
-  ).toHaveLength(18);
+  ).toHaveLength(30);
 });
 
 test("consecutive thinking and tool calls merge into one activity block", () => {

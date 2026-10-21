@@ -43,7 +43,7 @@ async function setup(agentWorkspace: string | null, refreshed = "w") {
 test("returns the slim projected tail of a card session", async () => {
   const x = await setup("w");
   const result = await x.service.tail({ taskId: "t", agentId: "a", limit: 35 }, x.paseo);
-  expect(result).toEqual({ entries: [{ seqStart: 3, item: { type: "tool_call", name: "edit", status: "completed" } }] });
+  expect(result.entries).toEqual([{ seqStart: 3, item: { type: "tool_call", name: "edit", status: "completed" } }]);
   expect(x.calls).toEqual([{ direction: "tail", limit: 35, projection: "projected" }]);
 });
 
@@ -56,4 +56,95 @@ test("refuses sessions of another workspace and unknown cards", async () => {
   const z = await setup(null, "w");
   await expect(z.service.tail({ taskId: "t", agentId: "a", limit: 5 }, z.paseo)).resolves.toBeTruthy();
   await expect(z.service.tail({ taskId: "missing", agentId: "a", limit: 5 }, z.paseo)).rejects.toThrow(/Task not found/);
+});
+
+/** A fake projected timeline of `count` one-seq entries; `users` are the seqs of user messages. */
+function timeline(count: number, users: number[], epoch = "e1") {
+  const all = Array.from({ length: count }, (_, i) => {
+    const seq = i + 1;
+    return { seqStart: seq, seqEnd: seq, item: users.includes(seq) ? { type: "user_message", text: `u${seq}` } : { type: "tool_call", name: "run", status: "completed", detail: { output: "x".repeat(50) } } };
+  });
+  const window = (entries: typeof all, hasOlder: boolean, hasNewer: boolean) => ({
+    agent: { id: "a", workspaceId: "w" },
+    epoch,
+    entries,
+    startCursor: entries.length ? { epoch, seq: entries[0].seqStart } : null,
+    endCursor: entries.length ? { epoch, seq: entries.at(-1)!.seqEnd } : null,
+    hasOlder,
+    hasNewer,
+    reset: false,
+    staleCursor: false,
+  });
+  return async (options: { direction: string; limit: number; cursor?: { seq: number } }) => {
+    if (options.direction === "tail") {
+      const entries = all.slice(-options.limit);
+      return window(entries, all.length > entries.length, false);
+    }
+    if (options.direction === "before") {
+      const older = all.filter((e) => e.seqStart < options.cursor!.seq);
+      const entries = older.slice(-options.limit);
+      return window(entries, older.length > entries.length, true);
+    }
+    const newer = all.filter((e) => e.seqEnd > options.cursor!.seq);
+    const entries = newer.slice(0, options.limit);
+    return window(entries, true, newer.length > entries.length);
+  };
+}
+
+async function pagingSetup(read: (options: never) => Promise<unknown>) {
+  const x = await setup("w");
+  const calls: unknown[] = [];
+  const paseo = {
+    agents: {
+      ref: () => ({
+        refresh: async () => ({ agent: { id: "a", workspaceId: "w" } }),
+        timeline: {
+          refetch: async (options: never) => {
+            calls.push(options);
+            return read(options);
+          },
+        },
+      }),
+    },
+  } as unknown as PaseoApi;
+  return { service: x.service, paseo, calls };
+}
+
+test("turn mode pages back to the latest user message and stops there", async () => {
+  const x = await pagingSetup(timeline(450, [40, 200]) as never);
+  const result = await x.service.tail({ taskId: "t", agentId: "a", limit: 100, mode: "turn" }, x.paseo);
+  expect(result.entries[0]).toMatchObject({ seqStart: 200, item: { type: "user_message" } });
+  expect(result.entries).toHaveLength(251);
+  expect(result.entries[1].item).toEqual({ type: "tool_call", name: "run", status: "completed" });
+  expect(result).toMatchObject({ epoch: "e1", hasOlder: true, startCursor: { epoch: "e1", seq: 200 } });
+  expect(x.calls).toEqual([
+    { direction: "tail", limit: 100, projection: "projected" },
+    { direction: "before", cursor: { epoch: "e1", seq: 351 }, limit: 100, projection: "projected" },
+    { direction: "before", cursor: { epoch: "e1", seq: 251 }, limit: 100, projection: "projected" },
+  ]);
+});
+
+test("turn mode is capped when no user message is near", async () => {
+  const x = await pagingSetup(timeline(1000, [5]) as never);
+  const result = await x.service.tail({ taskId: "t", agentId: "a", limit: 100, mode: "turn", maxEntries: 250 }, x.paseo);
+  expect(result.entries).toHaveLength(250);
+  expect(result.entries[0].seqStart).toBe(751);
+  expect(result).toMatchObject({ hasOlder: true, startCursor: { seq: 751 } });
+  // A short session: everything, nothing older.
+  const y = await pagingSetup(timeline(30, []) as never);
+  const short = await y.service.tail({ taskId: "t", agentId: "a", limit: 100, mode: "turn" }, y.paseo);
+  expect(short.entries).toHaveLength(30);
+  expect(short.hasOlder).toBe(false);
+});
+
+test("before and after read one page next to the cursor; a stale cursor asks for a reload", async () => {
+  const x = await pagingSetup(timeline(300, []) as never);
+  const older = await x.service.tail({ taskId: "t", agentId: "a", limit: 100, mode: "before", cursor: { epoch: "e1", seq: 201 } }, x.paseo);
+  expect(older.entries.map((e) => e.seqStart)).toEqual(Array.from({ length: 100 }, (_, i) => 101 + i));
+  expect(older.hasOlder).toBe(true);
+  const newer = await x.service.tail({ taskId: "t", agentId: "a", limit: 100, mode: "after", cursor: { epoch: "e1", seq: 295 } }, x.paseo);
+  expect(newer.entries.map((e) => e.seqStart)).toEqual([296, 297, 298, 299, 300]);
+  await expect(x.service.tail({ taskId: "t", agentId: "a", limit: 5, mode: "after" }, x.paseo)).rejects.toThrow(/cursor is required/);
+  const stale = await pagingSetup((async () => ({ agent: { id: "a", workspaceId: "w" }, epoch: "e2", entries: [], staleCursor: true })) as never);
+  await expect(stale.service.tail({ taskId: "t", agentId: "a", limit: 5, mode: "after", cursor: { epoch: "e1", seq: 3 } }, stale.paseo)).resolves.toEqual({ entries: [], epoch: "e2", reset: true });
 });

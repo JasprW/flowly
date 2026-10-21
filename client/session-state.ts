@@ -66,6 +66,7 @@ export function openNativeSession(
   return true;
 }
 
+/** Readable entries of a loaded timeline window (SESSION-PANE-SPEC §1: no display cap). */
 export function recentSessionOutput(
   entries: readonly {
     /** Projected entries carry a sequence range; its start identifies the entry as the window slides. */
@@ -116,8 +117,7 @@ export function recentSessionOutput(
           messageId,
         },
       ];
-    })
-    .slice(-18);
+    });
 }
 
 type OutputEntry = ReturnType<typeof recentSessionOutput>[number];

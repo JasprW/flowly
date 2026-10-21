@@ -166,7 +166,8 @@ export const onboardingSettings = defineSettings({
   version: 1,
   schema: z.object({
     welcomeSeen: z.boolean().default(false),
-    tipsSeen: z.array(z.string().max(40)).max(20).default([]),
+    // Matches TIPS_SEEN_MAX (client/onboarding-logic.ts).
+    tipsSeen: z.array(z.string().max(40)).max(100).default([]),
   }),
 });
 export type OnboardingSettings = z.infer<typeof onboardingSettings.schema>;

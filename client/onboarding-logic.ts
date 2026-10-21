@@ -28,7 +28,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "attention-dismiss", "sidebar-order", "connectors"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "attention-dismiss", "sidebar-order", "connectors", "session-history"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -68,6 +68,8 @@ export interface TipFacts {
   crowdedAttention: boolean;
   /** A card's sidebar is open and shows at least one artifact or idea, so it has several sections (DRAWER-SPEC, Section order). */
   fullSidebar: boolean;
+  /** A card's sidebar is open and the card has a session, so its session output is one tap away (SESSION-PANE-SPEC §1). */
+  cardWithSession: boolean;
 }
 
 const tipFact: Record<TipId, keyof TipFacts> = {
@@ -89,17 +91,24 @@ const tipFact: Record<TipId, keyof TipFacts> = {
   "attention-dismiss": "crowdedAttention",
   "sidebar-order": "fullSidebar",
   connectors: "cardOpen",
+  "session-history": "cardWithSession",
 };
 
 /** The one tip to show now: first in priority order whose fact holds and that was not shown before. */
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: TipId[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "sidebar-order", "project-menu", "jira-connect"];
+  const order: TipId[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 
+/**
+ * The setting's bound. Far above the number of tips: when the list was capped
+ * at 20 with 20 tips, each new tip pushed out the oldest, which then showed again.
+ */
+export const TIPS_SEEN_MAX = 100;
+
 /** Stored tips with `id` added once (bounded like the setting). */
 export function withTipSeen(tipsSeen: readonly string[], id: string): string[] {
-  return tipsSeen.includes(id) ? [...tipsSeen] : [...tipsSeen, id].slice(-20);
+  return tipsSeen.includes(id) ? [...tipsSeen] : [...tipsSeen, id].slice(-TIPS_SEEN_MAX);
 }

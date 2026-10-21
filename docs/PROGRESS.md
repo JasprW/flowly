@@ -1,5 +1,16 @@
 # Implementation progress
 
+## Session pane: history, keyboard, scroll performance (card "sidebar session 优化") — 2026-10-20
+
+- [x] Design and feasibility: [SESSION-PANE-SPEC](SESSION-PANE-SPEC.md). Read-only SDK spike on the local daemon: `before`/`after` cursors page cleanly (tail 15 + before 15 = tail 30), whole turns of 1000 entries are ~69 KB slim.
+- [x] Decisions (user): open on the current turn (≤ 300), Load earlier row, FlatList directly (phones: inverted, as Paseo's own view; web: plain scroll view).
+- [x] Implemented: `sessions.tail` modes turn/before/after; `client/session-timeline.ts` (incremental refresh, Load earlier ≤ 1000); `client/session-transcript.tsx` (own component, inverted virtualized list on phones, lifted with the composer by the keyboard's native-driver value); follower never scrolls during a drag; display cap removed; tip `session-history`; strings in all catalogs.
+- [x] PASS: `npm run typecheck`; `npm test`; new tests for daemon paging (turn stop at user message, cap, before/after, stale cursor), window merges, follower (normal and inverted), tip order.
+- [x] PASS (Luna 6 `0870a92e`, web desktop 1700×1000 + compact 430×900): current turn on open, Load earlier keeps position (Δ < 1 px), follow tail / Latest, no console or plugin errors. [Report](verification/session-pane-history.md). The tip did not show because it was already recorded as seen.
+- [x] Fixed: `tipsSeen` was capped at 20 with 20 tips, so the next tip would have pushed out `first-card`; cap now 100 (`TIPS_SEEN_MAX`).
+- [x] Images in first messages (user request 2026-10-21): New task's agent instruction and New session take images on web (paste, drop, Add images). Phones: declined by the user (no plugin picker; host internals not used). Spec §6.
+- [ ] UNRUN: phone verification (iPhone + Android: keyboard lift with reader at end and scrolled up, Load earlier position, scroll FPS before/after with RN perf monitor); AndroMeld Android Use was off.
+
 ## Native session pane P2–P4: sessions outside Flowly — 2026-10-21
 
 - [x] Request: give every session Flowly does not manage the same Progress / Next moves / Ideas without joining a project; ideas may continue in the session, a new session or a new workspace. User decisions: Paseo child sessions (like card summaries), off by default, three switches. [Spec §12](NATIVE-SESSION-SPEC.md).

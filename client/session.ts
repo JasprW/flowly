@@ -104,7 +104,18 @@ export async function launchKanbanSession(
     }>;
   },
   task: { id: string; title: string; workspaceId: string },
-  choice: { provider: string; model: string; mode: string; thinking?: string; title?: string; prompt?: string; operationId: string },
+  choice: {
+    provider: string;
+    model: string;
+    mode: string;
+    thinking?: string;
+    title?: string;
+    prompt?: string;
+    /** Images with the first message (web); `clientMessageId` lets the transcript show them. */
+    images?: OutgoingImage[];
+    clientMessageId?: string;
+    operationId: string;
+  },
 ) {
   const scope = await deps.contextRead({ id: task.id });
   if (!scope.available) throw new Error(scope.reason);
@@ -127,5 +138,7 @@ export async function launchKanbanSession(
     title: choice.title?.trim() || task.title,
     labels: { "flowly-task": task.id },
     prompt: choice.prompt?.trim() || undefined,
+    ...(choice.images?.length ? { images: choice.images } : {}),
+    ...(choice.clientMessageId ? { clientMessageId: choice.clientMessageId } : {}),
   });
 }

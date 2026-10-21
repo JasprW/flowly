@@ -3,14 +3,12 @@ import type { PaseoAgent } from "@getpaseo/client";
 import {
   ActivityIndicator,
   Animated,
-  Image,
   Platform,
   Pressable,
   Text as NativeText,
   View,
 } from "react-native";
 import {
-  ScrollView,
   Icon,
   TextInput,
   useToast,
@@ -42,44 +40,37 @@ import {
   Row,
   message,
   tint,
-  verticalScroll,
-  verticalContent, noFocusRing } from "./ui";
+  noFocusRing } from "./ui";
 import { sessionTone } from "./status";
 import { resolveSend, sendBehaviorText, sendBehaviors, type SendBehavior } from "./send-queue";
 import { useComposer } from "./composer";
 import { useLiveAgents } from "./queries";
-import { extractImages } from "../shared/images";
-import { SessionImage } from "./session-image";
 import { imageInputSupported, listenForImages, pickImageFiles, readImages, type Attachment } from "./web-images";
+import { AttachmentThumb } from "./image-attach";
 import { maxImages } from "../shared/composer";
-import { newMessageId, rememberSentImages, sentImages } from "./sent-images";
+import { newMessageId, rememberSentImages } from "./sent-images";
 import { eventPoint, menuHandlers, useMenuOpener, type MenuEntry } from "./context-menu";
 import { useBoardView } from "./board-view";
 import { ComposerChips, useSessionConfig, type ChipMenuId } from "./session-settings";
 import { SubagentsChip } from "./subagents";
 import { RenameSession } from "./session-rename";
 import {
-  activitySummary,
-  groupTranscript,
   openNativeSession,
-  recentSessionOutput,
   samePreviewTask,
   sessionState,
   turnEventKey,
-  type TranscriptBlock,
 } from "./session-state";
 import { sendCardInstruction, workspaceSession } from "./session";
 import { useStableCallback } from "./stable";
-import { SessionMarkdown } from "./session-content";
 import { PendingRequests } from "./session-question";
 import { NextMoves } from "./next-moves";
 import { nextMoveDraft, openNextMoves, shownMoves } from "../shared/next-moves";
 import type { NextMove } from "../shared/model";
 import { pendingRequests, type PendingRequest, type PermissionReply } from "../shared/permission-question";
-import { coalescedRefresh, useSessionFollowTail } from "./session-follow";
+import { SessionTranscript, type TranscriptHandle, type TranscriptNotice } from "./session-transcript";
 import { useSessionReads } from "./session-reads";
 import { sessionAttention } from "../shared/session-attention";
-import { Enter, MotionReveal, PulseDot, motionDuration, useMotionPresence, useMotionValue, useReducedMotion, useSettled, lerp } from "./motion";
+import { Enter, MotionReveal, PulseDot, motionDuration, useMotionValue, useReducedMotion, useSettled, lerp } from "./motion";
 import { useKeyboardInset } from "./keyboard";
 import { composerEnterAction, createDraftBuffer, createDraftReporter, restoredDraft, type ComposerKey } from "./session-input";
 import { t, tn } from "../shared/i18n";
@@ -170,8 +161,7 @@ function SessionPreviewView({
     contextRead = useRpc(rpc.taskContext),
     healthRead = useRpc(rpc.toolsHealth),
     prepareExisting = useRpc(rpc.prepareExisting),
-    accessRead = useRpc(rpc.accessState),
-    tailRead = useRpc(rpc.sessionTail);
+    accessRead = useRpc(rpc.accessState);
   const reads = useSessionReads();
   const toast = useToast();
   const [draftBuffer] = useState(() => createDraftBuffer(draft));
@@ -231,7 +221,7 @@ function SessionPreviewView({
   focusedRef.current = focused;
   const keyboard = useKeyboardInset(visible, useReducedMotion());
   const lock = useRef(false);
-  const tail = useSessionFollowTail();
+  const transcript = useRef<TranscriptHandle | null>(null);
   const mounted = useRef(visible);
   mounted.current = visible;
   useEffect(() => {
@@ -260,18 +250,9 @@ function SessionPreviewView({
   const actor = streamed && (!polled || streamed.updatedAt >= polled.updatedAt) ? streamed : polled;
   const belongs = !!actor && actor.workspaceId === task.workspaceId;
   const active = belongs ? actor : undefined;
-  const [streamReady, setStreamReady] = useState(false);
   // The transcript (markdown, images) and the slower reads wait for the open
   // transition to finish (PERFORMANCE-SPEC §3).
   const settled = useSettled(sessionId);
-  // Slim tail from the daemon (no tool payloads); it checks membership itself,
-  // so it loads in parallel with the agent.
-  const timeline = useQuery({
-    queryKey: ["flowly", "timeline", task.id, sessionId],
-    queryFn: () => tailRead({ taskId: task.id, agentId: sessionId, limit: 35 }),
-    enabled: visible && settled && !current.isError,
-    refetchInterval: streamReady ? 15000 : 3000,
-  });
   // Only the Kanban tools section shows these.
   const tools = useQuery({
     queryKey: ["flowly", "tools"],
@@ -285,27 +266,6 @@ function SessionPreviewView({
     enabled: visible && belongs && !current.isError && showTools,
     refetchInterval: 3000,
   });
-  useEffect(() => {
-    if (!visible || !belongs || current.isError) return;
-    let alive = true;
-    // Status comes from the agent stream; stream events only refresh the transcript.
-    const updates = coalescedRefresh(() => void timeline.refetch(), 400);
-    const subscription = agent.timeline.subscribe(() => {
-      if (alive) updates.trigger();
-    });
-    void subscription.ready.then(
-      () => alive && setStreamReady(true),
-      (e) => {
-        if (alive) setError(message(e));
-      },
-    );
-    return () => {
-      alive = false;
-      setStreamReady(false);
-      updates.dispose();
-      subscription();
-    };
-  }, [agent, belongs, current.isError, visible]);
   const state = active ? sessionState(active, events) : null;
   const attention = active
     ? sessionAttention(active, task.id, reads.receipts, events)
@@ -332,13 +292,6 @@ function SessionPreviewView({
       .markRead({ taskId: task.id, agentId: sessionId, ...(attention.token ? { token: attention.token } : {}) })
       .catch(() => undefined);
   }, [visible, active?.id, active?.archivedAt, task.archivedAt, attention?.unread, attention?.token, readsReady, readIntent]);
-  const output = useMemo(
-    () => recentSessionOutput(timeline.data?.entries || []),
-    [timeline.data?.entries],
-  );
-  const blocks = useMemo(() => groupTranscript(output), [output]);
-  // Following the tail happens on the transcript's own layout/size changes
-  // (after layout, so it lands on the new end in one step).
   const busy = sending || pending;
   const canWrite =
     visible &&
@@ -354,7 +307,6 @@ function SessionPreviewView({
   };
   const composer = useComposer(visible && settled);
   const openMenu = useMenuOpener();
-  const latest = useMotionPresence(!tail.following ? true : undefined, !tail.following ? "latest" : "");
   const config = useSessionConfig(task.id, active, visible && settled, () => void current.refetch());
   const queueEntry = composer.entry(sessionId);
   const queued = queueEntry?.queue || [];
@@ -514,9 +466,9 @@ function SessionPreviewView({
         if (mounted.current) setAttachments([...attached, ...attachmentsRef.current].slice(0, maxImages));
         throw e;
       }
-      if (mounted.current) tail.jumpToLatest();
+      if (mounted.current) transcript.current?.jumpToLatest();
       void current.refetch();
-      void timeline.refetch();
+      transcript.current?.refresh();
     });
   }
   // Open agent questions and approvals, answered here instead of in Paseo (SESSION-QUESTION-SPEC).
@@ -530,9 +482,9 @@ function SessionPreviewView({
         throw new Error(t("This request was already answered or withdrawn."));
       await agent.respondToPermission({ requestId: request.id, response: reply });
       toast.show(reply.behavior === "allow" && request.kind === "question" ? t("Answer sent") : t("Response sent"), { variant: "success" });
-      if (mounted.current) tail.jumpToLatest();
+      if (mounted.current) transcript.current?.jumpToLatest();
       await current.refetch();
-      void timeline.refetch();
+      transcript.current?.refresh();
     });
   });
   // This turn's suggested next messages (NEXT-MOVES-SPEC §3-4); × hides one set until the next.
@@ -858,6 +810,24 @@ function SessionPreviewView({
     );
   };
 
+  // Shown above the transcript, scrolling with it (the transcript compares them by content).
+  const notices: TranscriptNotice[] = [];
+  if (current.error) notices.push({ key: "session", text: message(current.error) });
+  if (!current.isPending && !current.error && !belongs)
+    notices.push({ key: "foreign", tone: "warning", text: t("Session is unavailable or belongs to a different workspace. Return to the task to choose another session.") });
+  if (active) {
+    if (unavailable)
+      notices.push({ key: "unavailable", tone: "warning", text: unavailableReason || t("Task or workspace is unavailable. Return to task details for more information.") });
+    if (active.lastError) notices.push({ key: "last-error", text: active.lastError });
+    if (active.providerUnavailable)
+      notices.push({ key: "provider", tone: "warning", text: t("This session's provider is unavailable. Open in Paseo to inspect its configuration.") });
+    if (active.archivedAt)
+      notices.push({ key: "archived", tone: "info", text: t("This session is archived. Sending a message restores it and continues the conversation.") });
+    if (reads.query.error) notices.push({ key: "reads", text: message(reads.query.error) });
+    if (attention?.unread && !attention.token)
+      notices.push({ key: "attention", tone: "info", text: t("This host did not provide a readable attention timestamp. Open in Paseo to acknowledge this session.") });
+  } else if (error) notices.push({ key: "error", text: error });
+
   return (
     <View
       ref={keyboard.ref}
@@ -1003,100 +973,22 @@ function SessionPreviewView({
           </View>
         </MotionReveal>
       )}
-      <ScrollView
-        testID="session-output"
-        {...verticalScroll}
-        ref={tail.scrollRef}
-        style={{ flex: 1, minHeight: 0, minWidth: 0 }}
-        nestedScrollEnabled
-        keyboardShouldPersistTaps="handled"
-        // Web: react-native-web's "on-drag" blurs the focused input on every
-        // scroll event, including the follow-tail scroll when output arrives,
-        // which kicked the user out of the composer while a session ran.
-        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : Platform.OS === "web" ? "none" : "on-drag"}
-        // The follower only needs to know where the tail is; a frame-rate callback crosses into JS 60 times a second while scrolling.
-        scrollEventThrottle={100}
-        onScroll={tail.onScroll}
-        onScrollBeginDrag={tail.onScrollBeginDrag}
-        onScrollEndDrag={tail.onScrollEndDrag}
-        onMomentumScrollEnd={tail.onMomentumScrollEnd}
-        onContentSizeChange={tail.scrollToTail}
-        onLayout={tail.scrollToTail}
-        contentContainerStyle={{ ...verticalContent, padding: space[4], paddingBottom: space[5] + keyboard.inset, gap: space[4] }}
-      >
-        {current.isPending && <Label muted>{t("Loading session…")}</Label>}
-        {current.error && <Notice>{message(current.error)}</Notice>}
-        {!current.isPending && !current.error && !belongs && (
-          <Notice tone="warning">
-            {t("Session is unavailable or belongs to a different workspace. Return to the task to choose another session.")}</Notice>
-        )}
-        {active && (
-          <>
-            {unavailable && (
-              <Notice tone="warning">
-                {unavailableReason ||
-                  t("Task or workspace is unavailable. Return to task details for more information.")}
-              </Notice>
-            )}
-            {!!active.lastError && <Notice>{active.lastError}</Notice>}
-            {active.providerUnavailable && (
-              <Notice tone="warning">
-                {t("This session's provider is unavailable. Open in Paseo to inspect its configuration.")}</Notice>
-            )}
-            {!!active.archivedAt && (
-              <Notice tone="info">
-                {t("This session is archived. Sending a message restores it and continues the conversation.")}</Notice>
-            )}
-            {reads.query.error && <Notice>{message(reads.query.error)}</Notice>}
-            {attention?.unread && !attention.token && (
-              <Notice tone="info">
-                {t("This host did not provide a readable attention timestamp. Open in Paseo to acknowledge this session.")}</Notice>
-            )}
-            <View style={{ alignItems: "center" }}>
-              <Label muted size={font.xs} selectable={false}>
-                {t("Recent output · open in Paseo for the full conversation")}</Label>
-            </View>
-            {timeline.error && (
-              <Notice>
-                {message(timeline.error)}
-                {output.length ? ` ${t("Showing the last known output.")}` : ""}
-              </Notice>
-            )}
-            {!settled ? null : timeline.isPending ? (
-              <Label muted>{t("Loading output…")}</Label>
-            ) : !output.length ? (
-              timeline.error ? null : (
-                <View style={{ alignItems: "center", paddingVertical: space[6] }}>
-                  <Label muted>{t("No output yet.")}</Label>
-                </View>
-              )
-            ) : (
-              <Enter distance={0} style={{ gap: space[4] }}>
-                <TranscriptBlocks blocks={blocks} live={!!state?.active} taskId={task.id} agentId={sessionId} />
-              </Enter>
-            )}
-            {state?.active && blocks.at(-1)?.kind !== "activity" && (
-              <View
-                testID="session-running-tail"
-                style={{
-                  flexDirection: "row",
-                  gap: space[2],
-                  alignItems: "center",
-                  minHeight: 24,
-                }}
-              >
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Label muted size={font.md}>
-                  {active.status === "initializing"
-                    ? t("Starting session…")
-                    : t("Agent is working…")}
-                </Label>
-              </View>
-            )}
-          </>
-        )}
-        {!active && !!error && <Notice>{error}</Notice>}
-      </ScrollView>
+      <SessionTranscript
+        handle={transcript}
+        taskId={task.id}
+        agentId={sessionId}
+        enabled={visible && settled && !current.isError}
+        subscribe={visible && belongs && !current.isError}
+        settled={settled}
+        showOutput={!!active}
+        live={!!state?.active}
+        starting={active?.status === "initializing"}
+        loadingSession={current.isPending}
+        notices={notices}
+        lift={keyboard.translate}
+        inset={keyboard.inset}
+        onStreamError={setError}
+      />
       {!!chipMenu && (
         <Pressable
           accessibilityLabel={t("Close menu")}
@@ -1123,44 +1015,6 @@ function SessionPreviewView({
         >
           {!!error && (
             <Notice>{error}</Notice>
-          )}
-          {latest.item && (
-            // Floats above the composer so it never pushes the input around.
-            <Animated.View
-              pointerEvents={latest.active ? "box-none" : "none"}
-              style={{
-                position: "absolute",
-                top: -40,
-                right: space[3],
-                zIndex: 2,
-                opacity: latest.progress,
-                transform: [{ translateY: lerp(latest.progress, [6, 0]) }],
-              }}
-            >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t("Jump to latest")}
-                onPress={tail.jumpToLatest}
-                style={{ ...noFocusRing,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                  height: 30,
-                  paddingHorizontal: space[2] + 2,
-                  borderRadius: 15,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.surface0,
-                  shadowColor: "#000",
-                  shadowOpacity: 0.08,
-                  shadowRadius: 6,
-                  shadowOffset: { width: 0, height: 2 },
-                }}
-              >
-                <Icon name="ArrowDown" size={13} color={colors.foreground} />
-                <Label size={font.sm} medium selectable={false}>{t("Latest")}</Label>
-              </Pressable>
-            </Animated.View>
           )}
           <PendingRequests requests={requests} disabled={!canWrite || busy} compact={compact} onRespond={respond} />
           {showMoves && (
@@ -1258,217 +1112,6 @@ function SessionPreviewView({
     </View>
   );
 }
-
-type OutputEntry = ReturnType<typeof recentSessionOutput>[number];
-const sameEntry = (a: OutputEntry, b: OutputEntry) =>
-  a === b || (a.key === b.key && a.text === b.text && a.author === b.author && a.messageId === b.messageId);
-
-/**
- * The transcript, memoized: composer state (focus, keyboard, drafts) and polls
- * that return the same output do not re-render it, and each block re-renders
- * only when its own content changes (PERFORMANCE-SPEC §3).
- */
-const TranscriptBlocks = memo(function TranscriptBlocks({
-  blocks,
-  live,
-  taskId,
-  agentId,
-}: {
-  blocks: TranscriptBlock[];
-  live: boolean;
-  taskId: string;
-  agentId: string;
-}) {
-  return (
-    <>
-      {blocks.map((block, index) =>
-        block.kind === "activity" ? (
-          <ActivityBlock key={block.key} block={block} live={live && index === blocks.length - 1} />
-        ) : (
-          <TranscriptEntry key={block.key} entry={block.entry} taskId={taskId} agentId={agentId} />
-        ),
-      )}
-    </>
-  );
-});
-
-const TranscriptEntry = memo(function TranscriptEntry({
-  entry,
-  taskId,
-  agentId,
-}: {
-  entry: OutputEntry;
-  taskId: string;
-  agentId: string;
-}) {
-  const { colors } = useTheme();
-  const { text, images } = useMemo(
-    () => (entry.author === "You" || entry.author === "Agent" ? extractImages(entry.text) : { text: entry.text, images: [] }),
-    [entry.author, entry.text],
-  );
-  const sent = entry.author === "You" ? sentImages(entry.messageId) : [];
-  const pictures = [...images, ...sent.map((src, i) => ({ src, alt: t("Image {n}", { n: i + 1 }) }))].map((image) => (
-    // Your own images stay compact beside your message.
-    <SessionImage key={image.src} taskId={taskId} agentId={agentId} image={image} maxWidth={entry.author === "You" ? 200 : 360} />
-  ));
-  if (entry.author === "You" && !text && !pictures.length) return null;
-  if (entry.author === "You")
-    return (
-      <View style={{ alignItems: "flex-end", paddingLeft: space[6] + space[2], gap: space[1.5] }}>
-        {!!text && (
-          <View
-            accessibilityLabel={t("You")}
-            style={{
-              maxWidth: "100%",
-              paddingHorizontal: space[3],
-              paddingVertical: space[2],
-              borderRadius: radius.xl,
-              backgroundColor: colors.surface2,
-            }}
-          >
-            <Label size={font.base}>{text}</Label>
-          </View>
-        )}
-        {pictures.length > 0 && <View style={{ width: "100%", alignItems: "flex-end", gap: space[1.5] }}>{pictures}</View>}
-      </View>
-    );
-  if (entry.author === "Agent")
-    return (
-      <View accessibilityLabel={t("Agent")} style={{ minWidth: 0, gap: space[2] }}>
-        {!!text && <SessionMarkdown text={text} />}
-        {pictures}
-      </View>
-    );
-  return (
-    <View style={{ gap: 2, minWidth: 0 }}>
-      <Label muted size={font.xs}>{t(entry.author)}</Label>
-      <Label muted size={font.md}>{entry.text}</Label>
-    </View>
-  );
-}, (a, b) => a.taskId === b.taskId && a.agentId === b.agentId && sameEntry(a.entry, b.entry));
-
-/** An image waiting to be sent: thumbnail with a remove button. */
-function AttachmentThumb({ attachment, onRemove }: { attachment: Attachment; onRemove(): void }) {
-  const { colors } = useTheme();
-  return (
-    <Enter distance={4}>
-      <View style={{ width: 52, height: 52 }}>
-        <Image
-          source={{ uri: attachment.uri }}
-          accessibilityLabel={attachment.name}
-          resizeMode="cover"
-          style={{ width: 52, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface2 }}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("Remove {name}", { name: attachment.name })}
-          onPress={onRemove}
-          hitSlop={6}
-          style={{
-            ...noFocusRing,
-            position: "absolute",
-            top: -5,
-            right: -5,
-            width: 18,
-            height: 18,
-            borderRadius: 9,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: colors.foreground,
-            borderWidth: 1.5,
-            borderColor: colors.surface0,
-          }}
-        >
-          <Icon name="X" size={10} color={colors.surface0} />
-        </Pressable>
-      </View>
-    </Enter>
-  );
-}
-
-/**
- * Consecutive thinking and tool calls, collapsed by default to one summary
- * line. Expanded, each step shows a short preview (thinking is clipped; the
- * full transcript lives in Paseo).
- */
-const ActivityBlock = memo(function ActivityBlock({ block, live }: { block: Extract<TranscriptBlock, { kind: "activity" }>; live: boolean }) {
-  const { colors } = useTheme();
-  const [open, setOpen] = useState(false);
-  const turn = useMotionValue(open ? 1 : 0, motionDuration.feedback);
-  const latest = block.items.at(-1);
-  return (
-    <View accessibilityLabel={t("Agent activity")} style={{ minWidth: 0, marginVertical: -space[1] }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${activitySummary(block)}. ${open ? t("Collapse") : t("Expand")}`}
-        accessibilityState={{ expanded: open }}
-        onPress={() => setOpen(!open)}
-        style={(state) => {
-          const { hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-          return {
-            ...noFocusRing,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: space[1.5],
-            alignSelf: "flex-start",
-            maxWidth: "100%",
-            minHeight: touch ? 32 : 24,
-            paddingHorizontal: space[1.5],
-            marginHorizontal: -space[1.5],
-            borderRadius: radius.md,
-            backgroundColor: hover || focused ? colors.surface2 : "transparent",
-          };
-        }}
-      >
-        {live ? (
-          <PulseDot color={colors.accent} size={7} />
-        ) : (
-          <Icon name={block.tools ? "Wrench" : "Brain"} size={12} color={colors.foregroundMuted} />
-        )}
-        <Label muted size={font.sm} medium selectable={false}>
-          {live ? t("Working") : activitySummary(block)}
-        </Label>
-        {live && latest && (
-          <View style={{ flexShrink: 1, minWidth: 0 }}>
-            <Label muted size={font.sm} lines={1} mono={latest.author === "Tool"} selectable={false}>
-              {latest.author === "Tool" ? latest.text : t("Thinking…")}
-            </Label>
-          </View>
-        )}
-        <Animated.View style={{ transform: [{ rotate: lerp(turn, ["0deg", "90deg"]) }] }}>
-          <Icon name="ChevronRight" size={12} color={colors.foregroundMuted} />
-        </Animated.View>
-      </Pressable>
-      {open && (
-        <Enter distance={4} style={{ marginTop: space[1], marginLeft: 5, paddingLeft: space[3], borderLeftWidth: 1, borderColor: colors.border, gap: space[1.5] }}>
-          {block.items.map((item) =>
-            item.author === "Tool" ? (
-              <View key={item.key} accessibilityLabel={t("Tool")} style={{ flexDirection: "row", alignItems: "center", gap: space[2], minWidth: 0 }}>
-                <Icon name="Wrench" size={12} color={colors.foregroundMuted} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Label muted mono size={font.sm} lines={1}>{item.text}</Label>
-                </View>
-              </View>
-            ) : (
-              <View key={item.key} accessibilityLabel={t("Thinking")} style={{ flexDirection: "row", gap: space[2], minWidth: 0 }}>
-                <View style={{ paddingTop: 2 }}>
-                  <Icon name="Brain" size={12} color={colors.foregroundMuted} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0, opacity: 0.8 }}>
-                  <Label muted italic size={font.sm} lines={2}>{item.text}</Label>
-                </View>
-              </View>
-            ),
-          )}
-        </Enter>
-      )}
-    </View>
-  );
-}, (a, b) =>
-  a.live === b.live &&
-  a.block.key === b.block.key &&
-  a.block.items.length === b.block.items.length &&
-  a.block.items.every((item, i) => sameEntry(item, b.block.items[i])));
 
 /** A queued message row: enters with a short rise, supports a context menu. */
 function QueuedRow({ menu, style, children }: { menu: object; style: object; children: ReactNode }) {

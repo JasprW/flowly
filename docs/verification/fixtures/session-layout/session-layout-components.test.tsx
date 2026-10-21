@@ -35,7 +35,8 @@ vi.mock("@getpaseo/plugin/client/react-native", async () => {
     const { children, ...rest } = props;
     return React.createElement("ScrollView", rest, children);
   });
-  return { Icon: "Icon", ScrollView, TextInput: "TextInput" };
+  // No FlatList: the transcript uses its ScrollView path (SESSION-PANE-SPEC §3).
+  return { Icon: "Icon", ScrollView, FlatList: undefined, TextInput: "TextInput" };
 });
 vi.mock("@getpaseo/plugin/client", () => ({
   usePaseo: () => state.paseo,

@@ -11,6 +11,8 @@ import { Theme, useTheme, Button, Label, Field, Choices, Notice, Actions, messag
 import { AgentPicker, useAgentChoice } from "./agent-choice";
 import { Pressable } from "react-native";
 import { t } from "../shared/i18n";
+import { ImageAttachments, useImageAttachments } from "./image-attach";
+import { newMessageId, rememberSentImages } from "./sent-images";
 
 export function SessionCreate({
   task,
@@ -47,6 +49,8 @@ export function SessionCreate({
     [sending, setSending] = useState(false),
     [error, setError] = useState(""),
     [creationPending, setCreationPending] = useState(false);
+  // Images with the first message (web: paste, drop or Add images).
+  const attachments = useImageAttachments();
   // Reset each time the form opens. The instruction starts empty: the task's
   // title and description already reach the session as its work instructions.
   const wasOpen = useRef(false);
@@ -55,12 +59,13 @@ export function SessionCreate({
       choice.reset(defaults);
       setPrompt(seed?.prompt || "");
       setTitle(seed?.title || "");
+      attachments.clear();
       setError("");
     }
     wasOpen.current = open;
   }, [open]);
   const attempt = useRef<
-    | { operationId: string; fingerprint: string; prepared?: ToolPreparation }
+    | { operationId: string; messageId: string; fingerprint: string; prepared?: ToolPreparation }
     | undefined
   >(undefined);
   const lock = useRef(false);
@@ -131,8 +136,12 @@ export function SessionCreate({
       if (!attempt.current || attempt.current.fingerprint !== fingerprint)
         attempt.current = {
           operationId: `session-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          messageId: newMessageId(),
           fingerprint,
         };
+      const images = attachments.images();
+      const imageUris = attachments.uris();
+      const messageId = attempt.current.messageId;
       const preparation = ordinary
         ? undefined
         : await prepare({
@@ -167,6 +176,7 @@ export function SessionCreate({
         title: newTitle.trim() || task.title,
         labels: { "flowly-task": task.id },
         prompt: newPrompt.trim(),
+        ...(images.length ? { images, clientMessageId: messageId } : {}),
       };
       const created = preparation
         ? await createPreparedSession(paseo, task.workspaceId, {
@@ -174,6 +184,8 @@ export function SessionCreate({
             agentId: preparation.agentId,
           })
         : await paseo.workspaces.ref(task.workspaceId).agents.create(options);
+      if (images.length) rememberSentImages(messageId, imageUris);
+      attachments.clear();
       onCreated(
         created.id,
         "recovered" in created && created.recovered
@@ -210,15 +222,17 @@ export function SessionCreate({
           editable={!sending}
           onSubmit={submit}
         />
-        <Field
-          title={t("Instruction")}
-          value={newPrompt}
-          onChange={setPrompt}
-          multiline
-          placeholder={t("What should this session do first?")}
-          editable={!sending}
-          onSubmit={submit}
-        />
+        <ImageAttachments state={attachments} disabled={sending}>
+          <Field
+            title={t("Instruction")}
+            value={newPrompt}
+            onChange={setPrompt}
+            multiline
+            placeholder={t("What should this session do first?")}
+            editable={!sending}
+            onSubmit={submit}
+          />
+        </ImageAttachments>
         <AgentPicker choice={choice} disabled={sending} />
         <Label muted size={font.sm}>
           {t("The task's title and description are included automatically, along with Kanban tools.")}</Label>

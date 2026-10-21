@@ -26,6 +26,8 @@ import { ModelDefaultGroup } from "./model-default";
 import { agentModelFromValues, type AgentModel } from "../shared/agent-defaults";
 import { modelSettings, modelSettingsValues } from "../shared/settings";
 import { launchKanbanSession } from "./session";
+import { ImageAttachments, useImageAttachments } from "./image-attach";
+import { newMessageId, rememberSentImages } from "./sent-images";
 import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
 import { projectTagStats, tagValues } from "../shared/tags";
@@ -482,6 +484,9 @@ export function TaskForm({
     : lanes.filter((s) => (s !== "done" && s !== "cancelled") || s === defaultStatus);
   // The agent's first message; required, never prefilled (title and description already reach it as context).
   const [prompt, setPrompt] = useState("");
+  // Images with the agent's first message (web: paste, drop or Add images).
+  const attachments = useImageAttachments();
+  const [firstMessageId] = useState(newMessageId);
   const contextRead = useRpc(rpc.taskContext),
     prepare = useRpc(rpc.prepareSession),
     paseo = usePaseo();
@@ -541,8 +546,10 @@ export function TaskForm({
           mode: choice.chosenMode,
           thinking: choice.chosenThinking,
           prompt: prompt.trim(),
+          ...(attachments.attachments.length ? { images: attachments.images(), clientMessageId: firstMessageId } : {}),
           operationId: `first-session-${operationId}`,
         });
+        if (attachments.attachments.length) rememberSentImages(firstMessageId, attachments.uris());
         onSaved(result.id, { sessionId: session.id });
       } catch (e) {
         // The card exists; report and let the user start the agent from the drawer.
@@ -752,15 +759,17 @@ export function TaskForm({
               {startChosen && (
                 <>
                   <AgentPicker choice={choice} disabled={pending} />
-                  <Field
-                    title={t("Instruction")}
-                    value={prompt}
-                    onChange={setPrompt}
-                    multiline
-                    placeholder={t("What should the agent do first?")}
-                    onSubmit={submit}
-                    hint={t("The title and description are included automatically.")}
-                  />
+                  <ImageAttachments state={attachments} disabled={pending}>
+                    <Field
+                      title={t("Instruction")}
+                      value={prompt}
+                      onChange={setPrompt}
+                      multiline
+                      placeholder={t("What should the agent do first?")}
+                      onSubmit={submit}
+                      hint={t("The title and description are included automatically.")}
+                    />
+                  </ImageAttachments>
                 </>
               )}
             </View>

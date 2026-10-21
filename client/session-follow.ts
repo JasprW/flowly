@@ -1,8 +1,20 @@
 import { useRef, useState } from "react";
-import type { NativeScrollEvent, ScrollView } from "react-native";
+import type { NativeScrollEvent } from "react-native";
 
-/** Preserve reading position when content grows, but yield to upward user scrolling. */
-export function createTailFollower() {
+/** How close to the newest output still counts as following it. */
+export const FOLLOW_SLACK = 64;
+
+type ScrollMetrics = Pick<NativeScrollEvent, "contentOffset" | "contentSize" | "layoutMeasurement">;
+
+/**
+ * Preserve reading position when content grows, but yield to upward user scrolling.
+ *
+ * `inverted`: the phone transcript is an inverted list (SESSION-PANE-SPEC §3),
+ * whose offset counts from the newest output, so the list itself stays at the
+ * end as output arrives and when its viewport shrinks (keyboard, composer).
+ * Following is then only "the offset is near 0".
+ */
+export function createTailFollower(inverted = false) {
   let following = true;
   let dragging = false;
   let previous = { y: 0, height: 0, viewport: 0 };
@@ -19,18 +31,21 @@ export function createTailFollower() {
     endDrag() {
       dragging = false;
     },
-    scroll(
-      event: Pick<
-        NativeScrollEvent,
-        "contentOffset" | "contentSize" | "layoutMeasurement"
-      >,
-    ) {
+    get dragging() {
+      return dragging;
+    },
+    scroll(event: ScrollMetrics) {
       const next = {
         y: event.contentOffset.y,
         height: event.contentSize.height,
         viewport: event.layoutMeasurement.height,
       };
-      const nearEnd = next.height - next.viewport - next.y <= 64;
+      if (inverted) {
+        following = next.y <= FOLLOW_SLACK;
+        previous = next;
+        return following;
+      }
+      const nearEnd = next.height - next.viewport - next.y <= FOLLOW_SLACK;
       const movedUp =
         next.y < previous.y - 1 &&
         next.height >= previous.height &&
@@ -43,38 +58,62 @@ export function createTailFollower() {
   };
 }
 
-export function useSessionFollowTail() {
-  const scrollRef = useRef<ScrollView>(null);
-  const follower = useRef(createTailFollower());
+/** A FlatList (scrollToOffset) or a ScrollView (scrollTo). */
+type Scrollable = {
+  scrollToEnd(options?: { animated?: boolean }): void;
+  scrollToOffset?(options: { offset: number; animated?: boolean }): void;
+  scrollTo?(options: { y: number; animated?: boolean }): void;
+};
+
+export function useSessionFollowTail(inverted = false) {
+  const scrollRef = useRef<Scrollable | null>(null);
+  const follower = useRef<ReturnType<typeof createTailFollower> | null>(null);
+  if (!follower.current) follower.current = createTailFollower(inverted);
   const [following, setFollowing] = useState(true);
-  const scrollToTail = () => {
-    if (follower.current.following)
-      scrollRef.current?.scrollToEnd({ animated: false });
+  const offset = useRef(0);
+  const scrollToY = (y: number, animated: boolean) => {
+    const target = scrollRef.current;
+    if (target?.scrollToOffset) target.scrollToOffset({ offset: y, animated });
+    else target?.scrollTo?.({ y, animated });
+  };
+  const toTail = (animated: boolean) => {
+    if (inverted) scrollToY(0, animated);
+    else scrollRef.current?.scrollToEnd({ animated });
+  };
+  const track = (event?: { nativeEvent?: NativeScrollEvent }) => {
+    if (!event?.nativeEvent?.contentSize) return;
+    offset.current = event.nativeEvent.contentOffset.y;
+    setFollowing(follower.current!.scroll(event.nativeEvent));
   };
   return {
     scrollRef,
     following,
-    scrollToTail,
+    /** The last known scroll offset (for keeping the reading position when older output is added above). */
+    offset,
+    /** Scroll to an offset without animation (keeping the reading position). */
+    scrollToY(y: number) {
+      scrollToY(y, false);
+    },
+    /** Normal list: content grew or the viewport changed. An inverted list stays at its end by itself. */
+    scrollToTail() {
+      if (!inverted && follower.current!.following && !follower.current!.dragging) toTail(false);
+    },
     jumpToLatest() {
-      follower.current.resume();
+      follower.current!.resume();
       setFollowing(true);
-      scrollToTail();
+      toTail(false);
     },
-    onScroll(event: { nativeEvent: NativeScrollEvent }) {
-      setFollowing(follower.current.scroll(event.nativeEvent));
-    },
+    onScroll: track,
     onScrollBeginDrag() {
-      follower.current.beginDrag();
+      follower.current!.beginDrag();
     },
     // The last throttled onScroll can come before the list stops, so re-check where it came to rest:
     // otherwise a fling to the end could leave "Jump to latest" showing (phones).
-    onScrollEndDrag(event?: { nativeEvent: NativeScrollEvent }) {
-      follower.current.endDrag();
-      if (event?.nativeEvent?.contentSize) setFollowing(follower.current.scroll(event.nativeEvent));
+    onScrollEndDrag(event?: { nativeEvent?: NativeScrollEvent }) {
+      follower.current!.endDrag();
+      track(event);
     },
-    onMomentumScrollEnd(event: { nativeEvent: NativeScrollEvent }) {
-      if (event?.nativeEvent?.contentSize) setFollowing(follower.current.scroll(event.nativeEvent));
-    },
+    onMomentumScrollEnd: track,
   };
 }
 

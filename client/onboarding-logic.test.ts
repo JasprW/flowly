@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { nextTip, stepPage, welcomeDecision, welcomePageCount, withTipSeen, type TipFacts } from "./onboarding-logic";
+import { TIPS_SEEN_MAX, nextTip, stepPage, tipIds, welcomeDecision, welcomePageCount, withTipSeen, type TipFacts } from "./onboarding-logic";
 import { onboardingSettingsValues } from "../shared/settings";
 
 const base = { settingsStatus: "ready", welcomeSeen: false, boardLoaded: true, projectCount: 0, blocked: false };
@@ -32,12 +32,12 @@ test("tour paging stays inside the pages", () => {
 });
 
 describe("tips", () => {
-  const none: TipFacts = { hasCard: false, needsYou: false, openIdea: false, movedToFinished: false, hasArtifact: false, hasAgentTag: false, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, cardOpen: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false };
+  const none: TipFacts = { hasCard: false, needsYou: false, openIdea: false, movedToFinished: false, hasArtifact: false, hasAgentTag: false, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, cardOpen: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false, cardWithSession: false };
   test("nothing to show without a fact", () => {
     expect(nextTip({ tipsSeen: [], facts: none, blocked: false })).toBeNull();
   });
   test("one tip at a time, waiting-for-you first", () => {
-    const facts = { hasCard: true, needsYou: true, openIdea: true, movedToFinished: false, hasArtifact: true, hasAgentTag: true, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, cardOpen: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false };
+    const facts = { hasCard: true, needsYou: true, openIdea: true, movedToFinished: false, hasArtifact: true, hasAgentTag: true, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, cardOpen: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false, cardWithSession: false };
     expect(nextTip({ tipsSeen: [], facts, blocked: false })).toBe("needs-you");
     expect(nextTip({ tipsSeen: ["needs-you"], facts, blocked: false })).toBe("first-idea");
     expect(nextTip({ tipsSeen: ["needs-you", "first-idea"], facts, blocked: false })).toBe("first-artifact");
@@ -72,6 +72,13 @@ describe("tips", () => {
     expect(nextTip({ tipsSeen: ["next-move"], facts, blocked: false })).toBe("first-workpad");
     expect(nextTip({ tipsSeen: ["next-move", "first-workpad"], facts, blocked: false })).toBe("first-idea");
     expect(nextTip({ tipsSeen: ["first-workpad"], facts: { ...none, hasWorkpad: true }, blocked: false })).toBeNull();
+  });
+  test("session history is announced in an open card with a session, after the connectors tip, before section order", () => {
+    const facts = { ...none, cardOpen: true, cardWithSession: true, fullSidebar: true };
+    expect(nextTip({ tipsSeen: [], facts, blocked: false })).toBe("connectors");
+    expect(nextTip({ tipsSeen: ["connectors"], facts, blocked: false })).toBe("session-history");
+    expect(nextTip({ tipsSeen: ["connectors", "session-history"], facts, blocked: false })).toBe("sidebar-order");
+    expect(nextTip({ tipsSeen: ["connectors"], facts: { ...none, cardOpen: true }, blocked: false })).toBeNull();
   });
   test("subagents are announced after the workpad tip, before ideas", () => {
     const facts = { ...none, hasWorkpad: true, hasSubagent: true, openIdea: true };
@@ -127,8 +134,12 @@ describe("tips", () => {
   test("recording a tip is idempotent and bounded", () => {
     expect(withTipSeen(["a"], "a")).toEqual(["a"]);
     expect(withTipSeen(["a"], "b")).toEqual(["a", "b"]);
-    const many = Array.from({ length: 20 }, (_, i) => `t${i}`);
-    expect(withTipSeen(many, "new")).toHaveLength(20);
+    const many = Array.from({ length: TIPS_SEEN_MAX }, (_, i) => `t${i}`);
+    expect(withTipSeen(many, "new")).toHaveLength(TIPS_SEEN_MAX);
+    // Every tip id fits with room to spare, so recording a new one never evicts a known one.
+    const all = tipIds.reduce<string[]>((seen, id) => withTipSeen(seen, id), []);
+    expect(all).toEqual([...tipIds]);
+    expect(tipIds.length * 2).toBeLessThan(TIPS_SEEN_MAX);
   });
 });
 
