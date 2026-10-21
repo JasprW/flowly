@@ -10,8 +10,8 @@ import { moveToDone, wrapupNeed } from "./native-actions";
 import { fillComposer } from "./web-composer";
 import { WrapupQuestion } from "./native-popovers";
 import { SharedMotionProvider } from "./motion";
+import { NativeCardFrame } from "./native-card";
 import {
-  AiMark,
   IconButton,
   Label,
   Notice,
@@ -19,7 +19,6 @@ import {
   font,
   message,
   noFocusRing,
-  radius,
   space,
   tint,
   touch,
@@ -231,38 +230,10 @@ function MoveChip(p: {
   );
 }
 
-function Frame({
-  header,
-  children,
-}: {
-  header?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const { colors } = useTheme();
+function Frame({ header, children }: { header?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <View
-      testID="session-next-moves-card"
-      style={{
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface1,
-        padding: space[2] + 2,
-        gap: space[2],
-      }}
-    >
-      <View
-        style={{ flexDirection: "row", alignItems: "center", gap: space[1.5] }}
-      >
-        <AiMark />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Label muted medium size={font.sm} selectable={false}>
-            {t("Suggested next steps")}
-          </Label>
-        </View>
-        {header}
-      </View>
+    <NativeCardFrame testID="session-next-moves-card" title={t("Suggested next steps")} trailing={header}>
       {children}
-    </View>
+    </NativeCardFrame>
   );
 }
