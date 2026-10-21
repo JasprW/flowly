@@ -208,6 +208,7 @@ export default function contribute(server: PluginServerContext) {
   const tails = new SessionTailService(store);
   const archived = new ArchivedSessionsService(store);
   server.handle(rpc.archivedSessions, (input, { paseo }) => archived.list(input.taskId, paseo));
+  server.handle(rpc.archivedSessionRefs, (_, { paseo }) => archived.refs(paseo));
   server.handle(rpc.sessionTail, (input, { paseo }) => tails.tail(input, paseo));
   const wrapups = new WrapupService(store, undefined, (taskId) => summaries.settled(taskId));
   const restores = new WorkspaceRestoreService(store);
@@ -241,7 +242,12 @@ export default function contribute(server: PluginServerContext) {
     tools.attach(paseo);
     return store.view();
   });
-  const boardDeltas = new BoardDeltas();
+  const boardDeltas = new BoardDeltas(32, (reason, info) => {
+    // Developer timing log (PERFORMANCE-SPEC): say why a read sent the whole board.
+    void perfPrefs.read().then((state) => {
+      if (state?.status === "ready" && performanceLogOn(state.values)) console.log(`[perf] board.read.full reason=${reason} events=${info.events} remembered=${info.remembered}${info.heldEvents === undefined ? "" : ` held=${info.heldEvents} heldLastAt=${info.heldLastAt}`}`);
+    }).catch(() => undefined);
+  });
   server.handle(rpc.i18nCatalog, ({ locale }) => (catalogs[locale as LocaleCode] ?? {}) as Record<string, string | Record<string, string>>);
   server.handle(rpc.perfReport, async (input) => {
     const state = await perfPrefs.read().catch(() => null);

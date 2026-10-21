@@ -26,14 +26,17 @@ export function createChangedReader() {
   return async function readChanged<T>(
     client: Pick<QueryClient, "getQueryData" | "getQueryState">,
     key: QueryKey,
-    fetch: (etag: string | undefined) => Promise<Etagged<T>>,
+    fetch: (etag: string | undefined, why?: string) => Promise<Etagged<T>>,
   ): Promise<T> {
     const id = JSON.stringify(key);
     const state: QueryState = client.getQueryState(key);
     const current = client.getQueryData<T>(key);
     const mine = held.get(id);
     const valid = current !== undefined && !!mine && !!state && state.dataUpdateCount === mine.count;
-    const response = await fetch(valid ? mine!.etag : undefined);
+    const response = await fetch(
+      valid ? mine!.etag : undefined,
+      valid ? undefined : current === undefined || !mine ? "first-read" : "cache-replaced",
+    );
     // This result becomes the next data update of the key.
     const count = (client.getQueryState(key)?.dataUpdateCount ?? 0) + 1;
     if (response.value !== undefined) {
@@ -44,7 +47,7 @@ export function createChangedReader() {
     if (latest === undefined || client.getQueryState(key)?.dataUpdateCount !== state?.dataUpdateCount) {
       // The cache changed while the request was in flight: read it in full.
       held.delete(id);
-      const full = await fetch(undefined);
+      const full = await fetch(undefined, "cache-changed-in-flight");
       held.set(id, { etag: full.etag, count: (client.getQueryState(key)?.dataUpdateCount ?? 0) + 1 });
       if (full.value === undefined) throw new Error("Missing value in a full read.");
       return full.value;
@@ -68,7 +71,7 @@ export function useBoardQuery(options: { refetchInterval?: number; retry?: numbe
   const client = useQueryClient();
   return useQuery({
     queryKey: boardKey,
-    queryFn: () => readChanged(client, boardKey, (etag) => readBoardDelta(read, client.getQueryData<Board>(boardKey), etag)),
+    queryFn: () => readChanged(client, boardKey, (etag, why) => readBoardDelta(read, client.getQueryData<Board>(boardKey), etag, why)),
     ...options,
   });
 }

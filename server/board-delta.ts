@@ -28,6 +28,8 @@ export const keyedNames = Object.keys(keys) as KeyedName[];
 export type View = { revision: number; events: readonly { id: string }[]; plans: readonly unknown[] } & Record<KeyedName, readonly object[]>;
 type Fingerprint = {
   events: { count: number; lastId: string };
+  /** Event ids: events are matched by id, not position, because a card's oldest events are dropped from the middle of the list. */
+  eventIds: Set<string>;
   plans: string;
   collections: Record<KeyedName, { ids: string[]; hashes: Map<string, string> }>;
 };
@@ -47,17 +49,26 @@ export function fingerprint(view: View): Fingerprint {
     collections[name] = { ids, hashes };
   }
   const last = view.events[view.events.length - 1];
-  return { events: { count: view.events.length, lastId: last?.id ?? "" }, plans: short(view.plans), collections };
+  return { events: { count: view.events.length, lastId: last?.id ?? "" }, eventIds: new Set(view.events.map((e) => e.id)), plans: short(view.plans), collections };
 }
 
 export type CollectionPatch = { set: object[]; remove: string[]; order?: string[] };
-export type BoardPatch = { revision: number; events: object[]; plans?: unknown[] } & { [K in KeyedName]?: CollectionPatch };
+export type BoardPatch = { revision: number; events: object[]; removeEvents?: string[]; plans?: unknown[] } & { [K in KeyedName]?: CollectionPatch };
 
-/** What differs between the board behind `base` and `view`; null when the events do not continue. */
+/**
+ * What differs between the board behind `base` and `view`; null when the new
+ * events are not all at the end (the caller could not append them). Events are
+ * matched by id: appending an event to a card that holds its maximum drops that
+ * card's oldest one from the middle of the list (`store.event`), which shifts
+ * every position after it but is a plain removal here.
+ */
 export function diffBoard(base: Fingerprint, now: Fingerprint, view: View): BoardPatch | null {
-  const { count, lastId } = base.events;
-  if (count > view.events.length || (count > 0 && view.events[count - 1].id !== lastId)) return null;
-  const patch: Record<string, unknown> = { revision: view.revision, events: view.events.slice(count) };
+  const added = view.events.filter((e) => !base.eventIds.has((e as { id: string }).id));
+  const kept = view.events.length - added.length;
+  for (let i = 0; i < kept; i++) if (!base.eventIds.has(view.events[i].id)) return null;
+  const patch: Record<string, unknown> = { revision: view.revision, events: added };
+  const removeEvents = [...base.eventIds].filter((id) => !now.eventIds.has(id));
+  if (removeEvents.length) patch.removeEvents = removeEvents;
   if (base.plans !== now.plans) patch.plans = view.plans;
   for (const name of keyedNames) {
     const before = base.collections[name],
@@ -83,21 +94,32 @@ export function diffBoard(base: Fingerprint, now: Fingerprint, view: View): Boar
   return patch as BoardPatch;
 }
 
+/** Why a board read had to send the whole board (diagnostic only; see PERFORMANCE-SPEC, "Why a read is full"). */
+export type FullReadReason = "no-etag" | "etag-unknown" | "events-discontinuous" | "since-mismatch" | "no-since";
+
 export class BoardDeltas {
   private readonly seen = new Map<string, Fingerprint>();
-  constructor(private readonly capacity = 32) {}
+  constructor(
+    private readonly capacity = 32,
+    /** Called when a read answers with the whole board. */
+    private readonly onFull?: (reason: FullReadReason, info: { events: number; remembered: number; heldEvents?: number; heldLastAt?: number }) => void,
+  ) {}
 
   read<B extends View>(view: B, input: { etag?: string; since?: { count: number; lastId: string } }) {
     const tag = etagOf(view);
     if (tag === input.etag) return { etag: tag };
     const now = fingerprint(view);
+    // Find the caller's board before remembering this one: remembering may forget the oldest, which can be that very board.
+    const base = input.etag ? this.seen.get(input.etag) : undefined;
     this.seen.delete(tag);
     this.seen.set(tag, now);
     while (this.seen.size > this.capacity) this.seen.delete(this.seen.keys().next().value as string);
-    const base = input.etag ? this.seen.get(input.etag) : undefined;
     const patch = base ? diffBoard(base, now, view) : null;
     // The RPC output schema checks the shape; the patch only carries items of the view.
     if (patch) return { etag: tag, patch: patch as never };
-    return boardIfChanged(view, { since: input.since });
+    const answer = boardIfChanged(view, { since: input.since });
+    if (answer.value && !answer.delta)
+      this.onFull?.(!input.etag ? "no-etag" : !base ? "etag-unknown" : patch === null ? "events-discontinuous" : !input.since ? "no-since" : "since-mismatch", { events: view.events.length, remembered: this.seen.size, ...(base ? { heldEvents: base.events.count, heldLastAt: view.events.findIndex((e) => e.id === base.events.lastId) } : {}) });
+    return answer;
   }
 }

@@ -38,7 +38,9 @@ function patchItems<T>(items: readonly T[], patch: { set: T[]; remove: string[];
 
 /** The board a patch leads to, from the board it was computed against. */
 export function applyBoardPatch(board: Board, patch: BoardPatch): Board {
-  const next = { ...board, revision: patch.revision, events: patch.events.length ? [...board.events, ...patch.events] : board.events, plans: patch.plans ?? board.plans } as Record<string, unknown>;
+  const dropped = patch.removeEvents?.length ? new Set(patch.removeEvents) : null;
+  const held = dropped ? board.events.filter((e) => !dropped.has(e.id)) : board.events;
+  const next = { ...board, revision: patch.revision, events: patch.events.length ? [...held, ...patch.events] : held, plans: patch.plans ?? board.plans } as Record<string, unknown>;
   for (const name of Object.keys(patchKeys) as (keyof typeof patchKeys)[])
     next[name] = patchItems(board[name] as never[], patch[name] as never, patchKeys[name] as never);
   return next as Board;
@@ -50,15 +52,21 @@ export function applyBoardPatch(board: Board, patch: BoardPatch): Board {
  * read replaces, only the events after the cached ones are requested and
  * appended. Anything else is the full board (PERFORMANCE-SPEC §3).
  */
-export async function readBoardDelta(read: BoardRead, cached: Board | undefined, etag: string | undefined) {
+export async function readBoardDelta(read: BoardRead, cached: Board | undefined, etag: string | undefined, why?: string) {
   const last = etag ? cached?.events?.at(-1) : undefined;
   const since = cached && last ? { count: cached.events.length, lastId: last.id } : undefined;
   const asked = perfStart();
   const response = await read({ ...(etag ? { etag } : {}), ...(since ? { since } : {}) });
   // The round trip as the phone sees it: network, decryption and parsing included.
-  perfEnd(`board.read.${response.patch ? "patch" : response.delta ? "events" : response.value ? "full" : "same"}`, asked);
+  // A full read is named by why no etag was sent (`why`), or "server" when the daemon chose to send everything.
+  const kind = response.patch ? "patch" : response.delta ? "events" : response.value ? "full" : "same";
+  perfEnd(`board.read.${kind}`, asked);
+  if (kind === "full") perfEnd(`board.read.full.${etag ? "server" : why ?? "unknown"}`, asked);
   if (response.patch) {
-    if (!cached) return read({});
+    if (!cached) {
+      perfEnd("board.read.full.patch-without-cache", asked);
+      return read({});
+    }
     const applying = perfStart();
     const value = applyBoardPatch(cached, response.patch);
     perfEnd("board.apply", applying);

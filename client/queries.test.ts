@@ -21,9 +21,9 @@ test("an unchanged read keeps the cached object and sends the etag", async () =>
   const board = { tasks: [1, 2] };
   const fetch = vi.fn(async (etag?: string) => (etag === "e1" ? { etag: "e1" } : { etag: "e1", value: board }));
   expect(await poll(client, read, fetch)).toBe(board);
-  expect(fetch).toHaveBeenLastCalledWith(undefined);
+  expect(fetch).toHaveBeenLastCalledWith(undefined, "first-read");
   expect(await poll(client, read, fetch)).toBe(board);
-  expect(fetch).toHaveBeenLastCalledWith("e1");
+  expect(fetch).toHaveBeenLastCalledWith("e1", undefined);
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
@@ -35,7 +35,7 @@ test("a foreign write to the key forces a full read", async () => {
   // e.g. an optimistic update that the server never accepted
   client.setQueryData(key, { v: "optimistic" });
   expect(await poll(client, read, fetch)).toEqual({ v: "server" });
-  expect(fetch).toHaveBeenLastCalledWith(undefined);
+  expect(fetch).toHaveBeenLastCalledWith(undefined, "cache-replaced");
 });
 
 test("a write while an etag read is in flight is not kept", async () => {
@@ -126,7 +126,7 @@ test("applying the daemon's patch gives back the board it was computed from", ()
     ({
       version: 5,
       revision: n,
-      events: [{ id: "e1" }],
+      events: [{ id: "e0" }, { id: "e1" }],
       plans: [],
       projects: [item("p")],
       tasks: [item("a"), item("b"), item("c")],
@@ -142,7 +142,9 @@ test("applying the daemon's patch gives back the board it was computed from", ()
     make(2, { tasks: [item("a"), item("b", 5), item("c")] }),
     make(2, { tasks: [item("c"), item("a"), item("d"), item("b")] }),
     make(2, { tasks: [item("b")], artifacts: [], ideas: [item("i", 1), item("j")] }),
-    make(2, { events: [{ id: "e1" }, { id: "e2" }], workpads: [{ taskId: "z", v: 1 }, { taskId: "a", v: 2 }], plans: [{ taskId: "a" }] }),
+    // a card at its event cap loses its oldest event from the middle while a new one is appended
+    make(2, { events: [{ id: "e1" }, { id: "e2" }] }),
+    make(2, { events: [{ id: "e0" }, { id: "e1" }, { id: "e2" }], workpads: [{ taskId: "z", v: 1 }, { taskId: "a", v: 2 }], plans: [{ taskId: "a" }] }),
   ];
   for (const after of cases) {
     const deltas = new BoardDeltas();

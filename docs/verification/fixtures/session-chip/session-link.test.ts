@@ -147,7 +147,8 @@ describe("session chip links", () => {
     const list = vi.fn().mockResolvedValue(page([actor]));
     const client: any = {
       paseo: { agents: { list, ref: vi.fn() } },
-      rpc: boardRead,
+      // The archived scan is its own RPC now; only board reads are counted here.
+      rpc: (def: { name?: string }, ...args: unknown[]) => (def.name === "sessions.archived-refs" ? Promise.resolve([]) : (boardRead as any)(def, ...args)),
       openScreen: vi.fn(),
       addComposerPill: vi.fn(() => ({ update: vi.fn(), remove: vi.fn() })),
     };

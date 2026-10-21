@@ -24,4 +24,19 @@ export class ArchivedSessionsService {
     } while (cursor);
     return found;
   }
+
+  /** Ids of the archived, non-summarizer sessions in any card's workspace (the Task chip's scan). */
+  async refs(paseo: PaseoApi): Promise<{ id: string; workspaceId: string }[]> {
+    const board = await this.store.read();
+    const workspaces = new Set(board.tasks.map((t) => t.workspaceId));
+    const found: { id: string; workspaceId: string }[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await paseo.agents.list({ filter: { includeArchived: true }, page: { limit: 200, cursor } });
+      for (const { agent } of page.entries)
+        if (agent.archivedAt && agent.workspaceId && workspaces.has(agent.workspaceId) && !isSummarizer(agent)) found.push({ id: agent.id, workspaceId: agent.workspaceId });
+      cursor = page.pageInfo.nextCursor ?? undefined;
+    } while (cursor);
+    return found;
+  }
 }

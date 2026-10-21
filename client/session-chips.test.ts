@@ -10,7 +10,11 @@ function fakeClient() {
   const state = { boardEtag: "e1", title: "Card", live: [agent("a1")], all: [agent("a1"), agent("old", "2026-10-01T00:00:00.000Z")] };
   const calls = { board: [] as unknown[], archivedScans: 0, updates: 0, pills: 0 };
   const client = {
-    rpc: vi.fn(async (_def: unknown, input: { etag?: string }) => {
+    rpc: vi.fn(async (def: { name?: string }, input: { etag?: string }) => {
+      if (def.name === "sessions.archived-refs") {
+        calls.archivedScans++;
+        return state.all.filter((a) => a.archivedAt).map((a) => ({ id: a.id, workspaceId: a.workspaceId }));
+      }
       calls.board.push(input);
       if (input.etag === state.boardEtag) return { etag: state.boardEtag };
       return { etag: state.boardEtag, value: { projects: [project], tasks: [task(state.title)] } };
@@ -18,7 +22,6 @@ function fakeClient() {
     paseo: {
       agents: {
         list: vi.fn(async ({ filter }: { filter: { includeArchived: boolean } }) => {
-          if (filter.includeArchived) calls.archivedScans++;
           const list = filter.includeArchived ? state.all : state.live;
           return { entries: list.map((a) => ({ agent: a })), pageInfo: { nextCursor: null } };
         }),
@@ -73,7 +76,8 @@ test("archived sessions are rescanned at most once a minute without board change
 test("a board change that arrives as a patch updates the chips (the daemon answers a known etag with a patch)", async () => {
   const { client, state, calls } = fakeClient();
   const full = (title: string) => ({ revision: 1, events: [], plans: [], projects: [project], tasks: [task(title)], ideas: [], links: [], artifacts: [], workpads: [], attentionDismissals: [] });
-  client.rpc.mockImplementation(async (_def: unknown, input: { etag?: string }) => {
+  client.rpc.mockImplementation(async (def: { name?: string }, input: { etag?: string }) => {
+    if (def.name === "sessions.archived-refs") return state.all.filter((a) => a.archivedAt).map((a) => ({ id: a.id, workspaceId: a.workspaceId }));
     calls.board.push(input);
     if (input.etag === state.boardEtag) return { etag: state.boardEtag };
     // A caller that holds the previous etag gets only the changed task.
@@ -129,6 +133,7 @@ describe("Next and Ideas pills (NATIVE-SESSION-SPEC §6-8)", () => {
     let gate: Promise<void> | null = null;
     const client = {
       rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+        if (def.name === "sessions.archived-refs") return [];
         if (def.name === "sessions.native-chips") {
           await gate;
           return { managed: state.managed.map((agentId) => ({ agentId, taskId: "t1", workspaceId: "w1" })), ideas: state.ideasOn, autoWrapup: false, nextMoveTap: "fill" };
@@ -257,6 +262,7 @@ test("an action asks for a refresh now: the Ideas pill goes without waiting for 
   const pills: { id: string; removed: boolean }[] = [];
   const client = {
     rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+        if (def.name === "sessions.archived-refs") return [];
       if (def.name === "sessions.native-chips") return { managed: [{ agentId: "a1", taskId: "t1", workspaceId: "w1" }], ideas: true, autoWrapup: false, nextMoveTap: "fill" };
       inFlight++;
       maxInFlight = Math.max(maxInFlight, inFlight);
@@ -322,6 +328,7 @@ describe("sessions Flowly does not manage (NATIVE-SESSION-SPEC §12)", () => {
     ];
     const client = {
       rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+        if (def.name === "sessions.archived-refs") return [];
         calls.push(def.name);
         if (def.name === "sessions.native-chips")
           return { managed: [{ agentId: "m1", taskId: "t1", workspaceId: "w1" }], ideas: true, autoWrapup: false, nextMoveTap: "copy", outside: { enabled, progress: true, nextMoves: true, ideas: true } };
@@ -429,6 +436,11 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     let released = 0;
     const client = {
       rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+        if (def.name === "sessions.archived-refs") {
+          calls.archived++;
+          await options.scanGate;
+          return [{ id: "old", workspaceId: "w1" }];
+        }
         if (def.name === "sessions.native-chips") {
           calls.native++;
           return { managed: [{ agentId: "a1", taskId: "t1", workspaceId: "w1" }], ideas: true, autoWrapup: false, nextMoveTap: "fill", outside: { enabled: false, progress: false, nextMoves: false, ideas: false } };
@@ -441,11 +453,6 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
         agents: {
           list: vi.fn(async (o: { filter: { includeArchived: boolean }; subscribe?: object }) => {
             if (o.subscribe) return { subscription: { release: async () => void released++ } };
-            if (o.filter.includeArchived) {
-              calls.archived++;
-              await options.scanGate;
-              return { entries: [...state.agents, live("old", { archivedAt: "2026-10-01T00:00:00Z" })].map((agent) => ({ agent })), pageInfo: { nextCursor: null } };
-            }
             calls.live++;
             return { entries: state.agents.map((agent) => ({ agent })), pageInfo: { nextCursor: null } };
           }),

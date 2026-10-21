@@ -95,6 +95,8 @@ const collectionPatch = <T extends z.ZodType>(item: T) =>
 export const boardPatchSchema = z.object({
   revision: z.number().int().nonnegative(),
   events: z.array(eventSchema),
+  /** Events that left the board (a card keeps at most 100): drop them before appending `events`. */
+  removeEvents: z.array(z.string()).optional(),
   plans: z.array(planSnapshotSchema).optional(),
   projects: collectionPatch(projectSchema),
   tasks: collectionPatch(taskSchema),
@@ -618,6 +620,16 @@ export const archivedSessions = defineRpc({
   input: z.strictObject({ taskId: z.string().min(1).max(200) }),
   // Paseo agent snapshots, passed through as the daemon returns them.
   output: z.array(z.looseObject({ id: z.string(), archivedAt: z.string().nullish() })),
+});
+/**
+ * The archived sessions that sit in a card's workspace, as bare ids: what the
+ * Task chip needs (PERFORMANCE-SPEC, chip scan). Paging every agent on the host
+ * took 7-13 s to decode on a phone; the daemon does it locally.
+ */
+export const archivedSessionRefs = defineRpc({
+  name: "sessions.archived-refs",
+  input: z.strictObject({}),
+  output: z.array(z.object({ id: z.string(), workspaceId: z.string() })),
 });
 export const summaryHistory = defineRpc({
   name: "summaries.history",

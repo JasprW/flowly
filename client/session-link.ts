@@ -8,7 +8,7 @@ import type {
   PluginScreenParams,
 } from "@getpaseo/plugin/client";
 import type { RpcOutput } from "@getpaseo/plugin";
-import { nativeChips, readBoard, readBoardChanged, sessionInsights } from "../shared/rpc";
+import { archivedSessionRefs, nativeChips, readBoard, readBoardChanged, sessionInsights } from "../shared/rpc";
 import type { SessionInsightView } from "../shared/session-insights";
 import { parentOf } from "../shared/subagents";
 import { isSummarizer } from "../shared/summary";
@@ -420,9 +420,10 @@ export function registerSessionChips(
   async function scanArchived() {
     const start = perfStart();
     try {
-      const all = await listAgents(client.paseo, undefined, true);
+      // The daemon pages every agent locally and sends back bare ids (a phone took 7-13 s to decode the full list).
+      const refs = await client.rpc(archivedSessionRefs, {});
       if (disposed) return;
-      archived = all.filter((a) => !!a.archivedAt).map((a) => ({ id: a.id, workspaceId: a.workspaceId ?? null }));
+      archived = refs;
       archivedAt = Date.now();
       perfEnd("chips.archived", start);
       // New archived sessions of a card get their chip now; the cards themselves were synced by the round.
@@ -444,7 +445,7 @@ export function registerSessionChips(
       if (needLive && streamReady) relist = false;
       const [boardResult, liveResult] = await Promise.allSettled([
         // The daemon may answer an etag with a patch of what changed, which readBoardDelta applies to the board held here.
-        readBoardDelta((input) => client.rpc(readBoardChanged, input), board ?? undefined, etag && board ? etag : undefined),
+        readBoardDelta((input) => client.rpc(readBoardChanged, input), board ?? undefined, etag && board ? etag : undefined, "chips-first-read"),
         needLive ? listAgents(client.paseo, undefined, false) : Promise.resolve(null),
       ]);
       if (disposed) return;
