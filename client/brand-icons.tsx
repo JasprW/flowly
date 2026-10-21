@@ -1,0 +1,35 @@
+import { memo } from "react";
+import { Image } from "react-native";
+import type { ConnectorFamily } from "../shared/connectors";
+import { useTheme } from "./ui";
+
+/**
+ * Service logos for connectors (CONNECTORS-SPEC §8.3): the Simple Icons marks
+ * (CC0, simpleicons.org), rendered once to 48 px PNGs. The host's Icon only
+ * knows Lucide names and there is no SVG module, so they ship as data URIs
+ * (about 4 KB in total). GitHub's mark is monochrome: a dark and a light
+ * variant follow the theme. Confluence uses Atlassian's current blue
+ * (#1868DB) because its listed navy disappears on dark surfaces.
+ */
+const png = (data: string) => ({ uri: `data:image/png;base64,${data}` });
+const logos = {
+  jira: png("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAB1UlEQVR4nNSZb3KCMBDFN4xH0s/FK9DeR7xP6xVKP8OZTNmk1Mr/DfsS+ptxHJ1ReOwj+7IcCEnRWEJhqCJjrwf6r1jKWUVGSPgqIWlFgAXYK4ExhAZ5H7RgK+DAVgFfAea1+fQ3nT5xBDAgEREs9MPH8YywU7wK/KWoy/bQF1IgjYCOtzqn+4itjHlZazdZJ546YCj33ufbqXTvvkI5rUAmwJ28TulHKZoLZfY8EDaD7CbOwNGAEVZYJuD9VFEMBBdKvoyaCFUQECAAH9AkyAU4G4FFCKwa1ol5uUNbaeX/h0cJUDT4ZaVVt2Uh13hAIlZadXuYYxG3o/EHa1+a1lph1R3G6fYidJGiYyb8HdBbvtETksK/L2oaE5HhG5NSdpqwapy5EKdYrTr3qpntrbNKydxytbN8I8EvozGqYO0XAfACYuQb0F7i0ciQXZUBWfW5E6NFAKw6jBJP660yAKtO9wG/3pbzk4iAJjXTVUNYbmR+c1ENvvfCwk5CUUS80WIfJaumE9DRCeF5EIsRLrf7eUY2ZdUF0ldgI+ECYg25FthWgR2EwG0CQAFNgsJUIi0KN3HaDZHOWCWhCJ1lNKEIvT6QSARmsOUGUfR4WMcxAdQ3vgEAAP//SSinTgAAAAZJREFUAwBDpLPrGYKvigAAAABJRU5ErkJggg=="),
+  confluence: png("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAACKUlEQVR4nNSai3HDIAyGZZ+H6AKdI3SbbhG8RbcpnqMLdIsUEuQSwksgEvPdJdjxQ/oRtoWcGQ7G2+ePoOw/ZU4mcfn3611CZ7S9b90Iu7qW2JwSJ5O6OXs/r72EROxlbc5A46wNXdzIMHKGuE0ZOygYgURv+LBEpMUeNQI+zREhOI/2pHuhxyJwgTpIESE6H7Q1MZ90P7n5SolhsqNCAmp7P8bqrZ9sK4CBxV158t2Fg/UuAh16vyt6iE57BDr1fk+uQ3OBMdnvdvsQGmj4KO38B664D7IVBsB13jA7G6S5KODYQh58o2ajryT4lJ9yRx1ESDRFyQpAXigkmV8VC0CeLCSbHJIFIM6Dr4cYBTfnVW7HagEujFFRUOg4wiIAsRMN8zlBebapbEtyHGEV4OPMnIS3SeFCjdMuzQK8Oo7wNivz1epkiioB1mkc86LwMKU/G9xyGQVMkAQ4jgtoh6WiUSSA2XGf7Pw5xdFSCXJUSmqjh0sfXI6ejdalEqOk0oZeha1ePAh5RmGrB7uQu+KufcEwAvsI8etCAsZA4cJVwMHHfYgNF67XwIglRVxeRi0pIhNj7yvbbt7vrEPT7X3DYg0LaCP1xJSM8+dwYYvjVU/pzi22/N43zHaD1I2pOVLLiuTssaGEGdzfrY0q60zpiZsmJFy12OpsNBTOFjL2lF+VRqLviTPRaOq1mL1ERLbYcaVTSgn/vRPtDU5K/2hCntT3LJHU8AcAAP///fYUzwAAAAZJREFUAwDXRheF4afoBQAAAABJRU5ErkJggg=="),
+  gitlab: png("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAACCklEQVR4nNSa4XXCIBCA73hxFdstGvepXUFdoe0+0i3arqIv1CNFEwIICAl8v9JEL9zdRwLPMqicxnXx9PrcInZHOhaCbVaf3xxm4PS23qOAnc99mSsQotiZjnODAl9872tNgKp/yb+9nRFtf24O/O9r7wDrWlgA0kc/5+qCNQHloG+gVAz1uTHsyBhjAqYqqED5NTIP1nZf5ySeG3vh7N03JmDS516g/Ji7P0nAVQUVCDLhKpzE8GBhwUHA7uMj3C+ceYKz0CAyUEEaRU7i9Br5dF5+TiseiwlCpNTIt/M94+KxuCBLajQu3nU12k8QAf6ke6mh6IKK8V88Lo/VyfN2HTL6xVHLbKlQqD4loBSWCoVM3nLoJzMOd121QRqxpdb9SbiMvYGKoSdnU6f/N6ruAE3ky2MUOVQL8qJ2ZDEwgeILKoXGzqBjHCpGroXO26djzq1iDgTCYfX+u5dzQAg8QKUMVqP1dEFVn45xeKGOJJA3Hz+b61/65bKTGA+emLwH6APUIiiO6eAJ44uM/CopCRqLafAEur64/F4BOT0hXb/QIHgw/MlnPszK6HitheZWyqWMjlcHFPmVuq/M5BsQQR6l/JTRiVpOp1YqRBmdqA4oHlcqXJlJBEhAnFJxyugk2ZGFKvWIMjpJOqDw6UTqf1lImoDCnEgaZXSybOp1pVIqo5OlA3PyBwAA//9etSDiAAAABklEQVQDAN5cCufRzu1BAAAAAElFTkSuQmCC"),
+  githubDark: png("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAC3klEQVR4nNRaSXbbMAyF1Cyddbz0TcrcJD1JnJO0PUmQm3Tp7J21SpCSSlGk+KmBUv97tugnDpgIAqAfaAOcz2fl/JQ2S+N2uzGtjIoWoie2aV7JEgusWr3JQzN0pYWYzYAhPIfoOFgz9DGXmWwGViQ8QE31lssIzMCmhLvINK9vSCdN/FUT/1M3L7Q9lHxOj4/V/X7nVOckAy3xr1QeEBOTDJyfnt7144X2Q5KJ6B7YUfIh8O3z8zn0IqiBgxEvuMQ0MWIgQbz47N/dpLQu7Nz6TKCwpwua08iEtN03FIFW46D/KpqybpO7MKN11+8T/Z/dkCSLIJ+BfkGRmB3H7SIffdtC9a2m+U5dfGQPLh7NOSFE8vZDNXfglmi9n4p2cLRQ94NE+v8LHCsxDDhhwlGgUu+7KLgGB6B9SkLJl2XAbqxptEFWIXCyR0tzjgaYSgETljGjGtq8EXe3Fdq1GOlbEwam0gC1UCP2X1L6WWtq2h8oDaYDQ0xI0XHBifcK3QOHBWJCe0KlOogGeOkkO4IhE/JKhUWABpfoHlB0ROi8o4YODCRWWhtgdAxroGS+kLEWm4wskYn9g5ePboGcPFtS3E4DjAyQZHtLTWQlVq3p1+4PCHqBtZkQwk0ePFWNGIPlq0/qA4m0SeK9qsMQCy4qZl2MeLQZEgYT+hJw6vWQbQJ7JFn3QeDQ1VfmdMXrz+l0UjSsuPXVMPkE3vuT/qIEIuvg8C5Bav/laIC1eSXNVm1MS2ELX3PB7o9BbdRIR0ucxjZ5uX99mZqoPAN9xCZ/EAitAXm8UC4CWg6W14OVsRXPgFn7IHJ/Fr8fiHglWgnw4ZlYOx5KjPeD+OpmhxLkpOCSt5QThVZzv9sFernaATWQ1Dp0zYqcAaHS++ScKQbAO2MoGjUTlSwtWodxRbrCSb1MaKS8JSMidb1Gjrdb8l+JgVktMCHubnTmuOnZDPSEdKf0jMVl7NKz5S8AAAD//9JTbSYAAAAGSURBVAMArWCPzG99a4kAAAAASUVORK5CYII="),
+  githubLight: png("iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAC0klEQVR4nMxaTVrDIBAFvrpQN3oi68nUk1lPpBt1oV+QmUAlBMKDQJq3sVoS5p83gwfRAe/fP8fzL4M4CiVO9PH++uokGkOKlXDCSiGfhBZH5Bmt9Qv9vL+9ehYrUa0ACV4i9IIEJz3ot1plihVoJngE5JlSRWAFegruozS8IAXeP3+epTTCbwjUG1kFLiG8A6LEogIf37+vvUMmh5wSSQUuafkZTKW6uz48xr5SsT/uSniCiQKSKfbVzAOLwtuaLZV8aB5a9t38MbF/LJxmCnx8/WqRwN3NYbK+hae4bBqq4WgGl2stX5PrpX70KUmRQKECbkPiO/ycHDkPW9LyH8bw762z98jiwlg0wo+WjBjmg6x9sCdy1c/3wjmJU0myRzAjsGAFOO52VnVy3zsWPHpgACrKhQ+0GazMrAAnVgaOZG0C6RWA1BIr8+gBxLoq/9JWoOoELOIwUkjy8gHSoR1MgfeSmMEUsmhL6ztAXqDzB2GcsQNsCyyeSwTjpYPIQW5v/RKo3ZVHHznjGdmxHNgx8iF0SQDRoRA3ib3CyA6F0GRUuBFQconlwLBPL1DfoZADA+FKrYGyY8wDC011D8B7GYbAJ2z2xLMI+9EeKOmziSGMHgBPW2q2e3qipLFy9J4VgIiTBW3QWgkSnDjZ0jRiBkswzyRtRupsEz+ZOgRYc1FRczESyjZ+9F4YWsAfJCGxieRIbu6DwJdrOlaJUGt/8RL1LrmcWDM0DveZlNFYLnDMW3ez2xrQazdCrELQXE0UIPfHmnd/DkNKzNYYpYryoLLDi7W20U4rGkoNz4CaPEiFaLJVTFUl0Qjo4ZnbO0klZvlglKFNNx9BZgyXbdaTFcO/KxA2wQsAeQDwerNbytLJRU4BtCxDLSW9yCghthoAc8G4wQoG3NSTEmTlnjNSejftUVLt6v9XIgir6hByd2PeNVMJmv23Ss3m9Ozas+UPAAD//+GThUAAAAAGSURBVAMAwZXq9wQD5M8AAAAASUVORK5CYII="),
+} as const;
+
+/** Whether a theme color is dark (relative luminance below the midpoint); non-hex colors count as light. */
+export function isDarkColor(color: string) {
+  const hex = /^#([0-9a-f]{6})/i.exec(color.trim())?.[1];
+  if (!hex) return false;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! < 0.5;
+}
+
+export const BrandIcon = memo(function BrandIcon({ family, size = 16 }: { family: ConnectorFamily; size?: number }) {
+  const { colors } = useTheme();
+  const source = family === "github" ? (isDarkColor(colors.surface0) ? logos.githubLight : logos.githubDark) : logos[family];
+  return <Image source={source} accessibilityIgnoresInvertColors style={{ width: size, height: size }} resizeMode="contain" />;
+});

@@ -32,12 +32,12 @@ test("tour paging stays inside the pages", () => {
 });
 
 describe("tips", () => {
-  const none: TipFacts = { hasCard: false, needsYou: false, openIdea: false, movedToFinished: false, hasArtifact: false, hasAgentTag: false, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false };
+  const none: TipFacts = { hasCard: false, needsYou: false, openIdea: false, movedToFinished: false, hasArtifact: false, hasAgentTag: false, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, cardOpen: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false };
   test("nothing to show without a fact", () => {
     expect(nextTip({ tipsSeen: [], facts: none, blocked: false })).toBeNull();
   });
   test("one tip at a time, waiting-for-you first", () => {
-    const facts = { hasCard: true, needsYou: true, openIdea: true, movedToFinished: false, hasArtifact: true, hasAgentTag: true, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false };
+    const facts = { hasCard: true, needsYou: true, openIdea: true, movedToFinished: false, hasArtifact: true, hasAgentTag: true, agentQuestion: false, olderHidden: false, nextMove: false, hasTicket: false, noConnection: false, cardOpen: false, projectTabs: false, hasWorkpad: false, hasSubagent: false, busyBoard: false, crowdedAttention: false, fullSidebar: false };
     expect(nextTip({ tipsSeen: [], facts, blocked: false })).toBe("needs-you");
     expect(nextTip({ tipsSeen: ["needs-you"], facts, blocked: false })).toBe("first-idea");
     expect(nextTip({ tipsSeen: ["needs-you", "first-idea"], facts, blocked: false })).toBe("first-artifact");
@@ -97,6 +97,14 @@ describe("tips", () => {
     expect(nextTip({ tipsSeen: ["first-artifact", "first-ticket", "first-card"], facts, blocked: false })).toBe("jira-connect");
     // With a connection configured there is nothing to announce.
     expect(nextTip({ tipsSeen: ["first-card"], facts: { ...none, hasCard: true }, blocked: false })).toBeNull();
+  });
+  test("connectors: the Artifacts + is announced once a card is open, before the section order (CONNECTORS-SPEC §8.5)", () => {
+    expect(nextTip({ tipsSeen: [], facts: { ...none, cardOpen: true }, blocked: false })).toBe("connectors");
+    expect(nextTip({ tipsSeen: [], facts: { ...none, cardOpen: true, fullSidebar: true }, blocked: false })).toBe("connectors");
+    expect(nextTip({ tipsSeen: ["connectors"], facts: { ...none, cardOpen: true, fullSidebar: true }, blocked: false })).toBe("sidebar-order");
+    // Users who saw the older Jira tips still get it once: it is a new id.
+    expect(nextTip({ tipsSeen: ["first-ticket", "jira-connect"], facts: { ...none, cardOpen: true }, blocked: false })).toBe("connectors");
+    expect(nextTip({ tipsSeen: [], facts: none, blocked: false })).toBeNull();
   });
   test("the project tab menu is announced after the first-card tip, before connecting Jira", () => {
     const facts = { ...none, hasCard: true, noConnection: true, projectTabs: true };

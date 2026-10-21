@@ -1,7 +1,7 @@
 /** What a board card shows (CARD-DISPLAY-SPEC). Pure; the values live in the host-scoped board-view settings. */
 
 /** Fields the user can hide. Signals that ask the user to act are not in this list: they always show. */
-export const cardFields = ["priority", "type", "ticket", "tags", "sessions", "workpad", "ideas"] as const;
+export const cardFields = ["priority", "type", "external", "tags", "sessions", "workpad", "ideas"] as const;
 export type CardField = (typeof cardFields)[number];
 
 /** The activity line: `auto` shows the progress summary, else the latest output. */
@@ -14,7 +14,7 @@ export const defaultCardDisplay: CardDisplay = {
   activity: "auto",
   priority: true,
   type: true,
-  ticket: true,
+  external: true,
   tags: true,
   sessions: true,
   workpad: true,
@@ -23,7 +23,8 @@ export const defaultCardDisplay: CardDisplay = {
 
 /** Visibility per field from the stored values; unknown hidden ids are ignored. */
 export function cardDisplay(view: { cardActivity?: string; cardHidden?: readonly string[] } | null | undefined): CardDisplay {
-  const hidden = new Set(view?.cardHidden || []);
+  // `ticket` was the field's id before CONNECTORS-SPEC §3.3.
+  const hidden = new Set((view?.cardHidden || []).map((id) => (id === "ticket" ? "external" : id)));
   const activity = (cardActivityModes as readonly string[]).includes(view?.cardActivity || "") ? (view!.cardActivity as CardActivity) : "auto";
   const display = { ...defaultCardDisplay, activity };
   for (const field of cardFields) display[field] = !hidden.has(field);
@@ -32,7 +33,7 @@ export function cardDisplay(view: { cardActivity?: string; cardHidden?: readonly
 
 /** `cardHidden` after showing or hiding one field; unknown ids from newer clients are kept. */
 export function withCardField(hidden: readonly string[], field: CardField, shown: boolean): string[] {
-  const rest = hidden.filter((id) => id !== field);
+  const rest = hidden.filter((id) => id !== field && !(field === "external" && id === "ticket"));
   return shown ? rest : [...rest, field];
 }
 

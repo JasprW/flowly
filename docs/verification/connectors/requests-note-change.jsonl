@@ -1,0 +1,6 @@
+{"provider":"github","method":"GET","path":"/api/v3/repos/acme/web/issues/12","query":{},"authPresent":true,"authAccepted":true}
+{"provider":"gitlab","method":"GET","path":"/api/v4/projects/group%2Fapp/merge_requests/8","query":{},"authPresent":true,"authAccepted":true}
+{"provider":"confluence","method":"GET","path":"/rest/api/content/search","query":{"cql":"id in (123456)","limit":"50","expand":"space,version"},"authPresent":true,"authAccepted":true}
+{"provider":"gitlab","method":"GET","path":"/api/v4/projects/group%2Fapp/merge_requests/8","query":{},"authPresent":true,"authAccepted":true}
+{"provider":"gitlab","method":"GET","path":"/api/v4/projects/group%2Fapp/merge_requests/8/notes","query":{"sort":"desc","order_by":"created_at","per_page":"50"},"authPresent":true,"authAccepted":true}
+{"provider":"gitlab","method":"GET","path":"/api/v4/projects/group%2Fapp/merge_requests/8/diffs","query":{"per_page":"100"},"authPresent":true,"authAccepted":true}

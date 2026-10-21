@@ -72,7 +72,7 @@ describe("Phase 2 v3 board migration evidence", () => {
 
     const store = new BoardStore(evidenceDir);
     const loaded = await store.read();
-    expect(loaded.version).toBe(4);
+    expect(loaded.version).toBe(5);
     expect(loaded.projects[0].id).toBe("phase1-migration-project-id");
     expect(loaded.tasks[0]).toMatchObject({
       id: "phase1-migration-card-id",
@@ -86,7 +86,7 @@ describe("Phase 2 v3 board migration evidence", () => {
     await store.mutate(() => "first-v3-write");
     const persisted = JSON.parse(readFileSync(evidenceFile, "utf8"));
     const backupBytes = readFileSync(backupFile, "utf8");
-    expect(persisted.version).toBe(4);
+    expect(persisted.version).toBe(5);
     expect(persisted.tasks[0]).toMatchObject({
       id: "phase1-migration-card-id",
       workspaceId: "phase1-migration-workspace-id",

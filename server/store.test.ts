@@ -81,7 +81,7 @@ describe("board durability and business invariants", () => {
       title: "Migrated",
       actor: "human",
     });
-    expect((await new BoardStore(s.directory).read()).version).toBe(4);
+    expect((await new BoardStore(s.directory).read()).version).toBe(5);
     expect(await readFile(s.path + ".bak", "utf8")).toBe(source);
     expect((await s.read()).agentReceipts).toEqual([]);
   });
@@ -102,7 +102,7 @@ describe("board durability and business invariants", () => {
     const source = JSON.stringify(old);
     await writeFile(s.path, source);
     const read = await s.read();
-    expect(read.version).toBe(4);
+    expect(read.version).toBe(5);
     expect(read.tasks[0]).toMatchObject({ status: "development", revision: 1 });
     expect(read.projects[0].lanes).toEqual([
       { status: "backlog", enabled: false },
@@ -119,8 +119,26 @@ describe("board durability and business invariants", () => {
     expect(await readFile(s.path, "utf8")).toBe(source);
     expect(await readFile(join(s.directory, "board.pre-v4.json"), "utf8")).toBe(source);
     await s.editTask({ id: "t1", revision: 1, title: "Migrated", actor: "human" });
-    expect(JSON.parse(await readFile(s.path, "utf8"))).toMatchObject({ version: 4, tasks: [{ status: "development" }] });
+    expect(JSON.parse(await readFile(s.path, "utf8"))).toMatchObject({ version: 5, tasks: [{ status: "development" }] });
     expect(await readFile(join(s.directory, "board.pre-v4.json"), "utf8")).toBe(source);
+  });
+  test("v4 → v5 renames the artifact field ticket to external, keeps everything else, pre-v5 copy once (CONNECTORS-SPEC §3.1)", async () => {
+    const s = await setup();
+    const ticket = { connectionId: "c", provider: "jira-dc", key: "AB-1", remoteId: "10001" };
+    const artifact = { id: "a1", taskId: "t1", projectId: fixture().projects[0]!.id, role: "input", kind: "url", target: "https://jira.example.com/browse/AB-1", title: "AB-1 Bug", note: "", createdBy: "human", createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ticket };
+    const source = JSON.stringify({ ...fixture(), version: 4, agentReceipts: [], artifacts: [artifact] });
+    await writeFile(s.path, source);
+    const read = await s.read();
+    expect(read.version).toBe(5);
+    expect(read.artifacts[0]).toMatchObject({ id: "a1", external: ticket });
+    expect(read.artifacts[0]).not.toHaveProperty("ticket");
+    // Reading alone rewrites nothing; the first write persists v5 after keeping the v4 copy.
+    expect(await readFile(s.path, "utf8")).toBe(source);
+    await s.editTask({ id: "t1", revision: 1, title: "Migrated", actor: "human" });
+    const saved = JSON.parse(await readFile(s.path, "utf8"));
+    expect(saved).toMatchObject({ version: 5, artifacts: [{ id: "a1", external: ticket }] });
+    expect(saved.artifacts[0].ticket).toBeUndefined();
+    expect(await readFile(join(s.directory, "board.pre-v5.json"), "utf8")).toBe(source);
   });
   test("a retired in_progress card status is rejected on v4 data", async () => {
     const s = await setup();
@@ -221,7 +239,7 @@ describe("board durability and business invariants", () => {
       actor: "human",
     });
     const saved = await new BoardStore(s.directory).read();
-    expect(saved.version).toBe(4);
+    expect(saved.version).toBe(5);
     expect(saved.tasks[0]).toMatchObject({
       repoPaths: [],
       workspaceId: "w1",

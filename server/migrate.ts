@@ -4,6 +4,7 @@ import {
   previousBoardSchema,
   storageSchema,
   v3BoardSchema,
+  v4BoardSchema,
   type Board,
 } from "../shared/model";
 import { originLinks } from "../shared/links";
@@ -39,7 +40,21 @@ export function splitInProgress(raw: Loose): Loose {
   return { ...raw, tasks, projects };
 }
 
-/** Parses stored board data of any known version into the current (v4) shape. */
+/**
+ * Board v5 renamed the artifact field `ticket` to `external` (CONNECTORS-SPEC §3.1):
+ * the value moves unchanged; an artifact that somehow has both keeps `external`.
+ */
+export function renameTicketField(raw: Loose): Loose {
+  if (!Array.isArray(raw.artifacts)) return raw;
+  const artifacts = raw.artifacts.map((a) => {
+    if (!isObject(a) || !("ticket" in a)) return a;
+    const { ticket, ...rest } = a;
+    return "external" in rest ? rest : { ...rest, external: ticket };
+  });
+  return { ...raw, artifacts };
+}
+
+/** Parses stored board data of any known version into the current (v5) shape. */
 export function upgradeBoard(raw: unknown): Board {
   const board = parseBoard(raw);
   // Files written before card links: the idea origins become derived links, once (CARD-LINKS-SPEC §2.2).
@@ -48,15 +63,18 @@ export function upgradeBoard(raw: unknown): Board {
 }
 
 function parseBoard(raw: unknown): Board {
-  if (!isObject(raw) || raw.version === 4) return storageSchema.parse(raw);
-  const split = splitInProgress(raw);
+  if (!isObject(raw) || raw.version === 5) return storageSchema.parse(raw);
+  const renamed = renameTicketField(raw);
+  if (raw.version === 4)
+    return storageSchema.parse({ ...v4BoardSchema.extend({ agentReceipts: storageSchema.shape.agentReceipts }).parse(renamed), version: 5 });
+  const split = splitInProgress(renamed);
   if (raw.version === 1) {
     const old = legacyBoardSchema.parse(split);
-    return storageSchema.parse({ ...old, version: 4, agentReceipts: [], tasks: old.tasks.map((t) => ({ ...t, repoPaths: [] })) });
+    return storageSchema.parse({ ...old, version: 5, agentReceipts: [], tasks: old.tasks.map((t) => ({ ...t, repoPaths: [] })) });
   }
   if (raw.version === 2)
-    return storageSchema.parse({ ...previousBoardSchema.parse(split), version: 4, agentReceipts: [] });
+    return storageSchema.parse({ ...previousBoardSchema.parse(split), version: 5, agentReceipts: [] });
   if (raw.version === 3)
-    return storageSchema.parse({ ...v3BoardSchema.extend({ agentReceipts: storageSchema.shape.agentReceipts }).parse(split), version: 4 });
+    return storageSchema.parse({ ...v3BoardSchema.extend({ agentReceipts: storageSchema.shape.agentReceipts }).parse(split), version: 5 });
   return storageSchema.parse(raw);
 }

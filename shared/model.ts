@@ -1,6 +1,6 @@
 import { localizedLabels, msg, t } from "./i18n";
 import { agentModelSchema } from "./agent-defaults";
-import { ticketLimits, ticketRefSchema } from "./tickets";
+import { connectorLimits, externalRefSchema, itemTypeSchema } from "./connectors";
 import { z } from "zod";
 import { attentionDismissLimits, attentionDismissalSchema } from "./attention-dismiss";
 
@@ -207,8 +207,8 @@ export const artifactSchema = z.object({
   agentId: z.string().optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
-  /** A link to a ticket of a configured connection: a read-only input (EXTERNAL-TRACKER-SPEC §3.2). */
-  ticket: ticketRefSchema.optional(),
+  /** A link to an item of a configured connection: a read-only input (CONNECTORS-SPEC §3.1). */
+  external: externalRefSchema.optional(),
 });
 export type Artifact = z.infer<typeof artifactSchema>;
 export type ArtifactRole = Artifact["role"];
@@ -220,6 +220,8 @@ export const artifactInput = z.strictObject({
   target: z.string().trim().min(1).max(artifactLimits.target),
   title: artifactTitle.optional(),
   note: artifactNote.optional(),
+  /** The item a picker chose: resolved through this connection instead of re-recognizing `target` (CONNECTORS-SPEC §8.1). */
+  external: z.strictObject({ connectionId: z.string().min(1), key: z.string().min(1).max(300), itemType: itemTypeSchema.optional() }).optional(),
 });
 export type ArtifactInput = z.infer<typeof artifactInput>;
 export const artifactEdit = z.strictObject({
@@ -384,7 +386,7 @@ export const eventSchema = z.object({
   at: timestamp,
 });
 export const boardSchema = z.object({
-  version: z.literal(4),
+  version: z.literal(5),
   revision: z.number().int().nonnegative(),
   projects: z.array(projectSchema),
   tasks: z.array(taskSchema),
@@ -407,6 +409,10 @@ export const previousBoardSchema = boardSchema.extend({
 /** v3 differs from v4 only by the retired in_progress status, rewritten before parsing. */
 export const v3BoardSchema = boardSchema.extend({
   version: z.literal(3),
+});
+/** v4 differs from v5 only by the artifact field `ticket`, renamed to `external` before parsing (CONNECTORS-SPEC §3.1). */
+export const v4BoardSchema = boardSchema.extend({
+  version: z.literal(4),
 });
 export const receiptSchema = z.object({
   key: z.string(),
@@ -439,7 +445,7 @@ export type Project = z.infer<typeof projectSchema>;
 export type Task = z.infer<typeof taskSchema>;
 export type BoardEvent = z.infer<typeof eventSchema>;
 export const emptyBoard = (): Board => ({
-  version: 4,
+  version: 5,
   revision: 0,
   projects: [],
   tasks: [],
@@ -518,10 +524,10 @@ export const taskInput = z.strictObject({
   ideaId: z.string().min(1).optional(),
   /** Create as a follow-up of this card (CARD-LINKS-SPEC §3); not together with ideaId. */
   followUpOf: z.string().min(1).optional(),
-  /** Tickets added as inputs in the same write (EXTERNAL-TRACKER-SPEC §5.4). */
-  tickets: z
-    .array(z.strictObject({ connectionId: z.string().min(1), key: z.string().min(1).max(64) }))
-    .max(ticketLimits.perCreate)
+  /** External items added as inputs in the same write (EXTERNAL-TRACKER-SPEC §5.4, CONNECTORS-SPEC §8.2). */
+  externals: z
+    .array(z.strictObject({ connectionId: z.string().min(1), key: z.string().min(1).max(300), itemType: itemTypeSchema.optional() }))
+    .max(connectorLimits.perCreate)
     .optional(),
 });
 export const taskEdit = z.strictObject({

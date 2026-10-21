@@ -22,7 +22,8 @@ import { adoptIdea } from "./server/ideas";
 import { createLink, deleteLink } from "./server/links";
 import { ArtifactService } from "./server/artifacts";
 import { WorkpadService } from "./server/workpad";
-import { TicketService } from "./server/tickets";
+import { ConnectorService, migrateTicketDirectory, refKey } from "./server/connectors/service";
+import { projectRepos } from "./server/connectors/repos";
 import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
 import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./server/progress-rules";
@@ -81,9 +82,18 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.taskUsage, (input, { paseo }) => usage.task(input.taskId, paseo));
   server.handle(rpc.summaryHistory, (input) => summaries.store.history(input.taskId));
   const service = new BoardService(store);
-  // Read-only ticket inputs (EXTERNAL-TRACKER-SPEC): credentials and requests stay in the daemon.
-  const tickets = new TicketService(join(store.directory, "tickets"));
-  service.tickets = tickets;
+  // Read-only external inputs (CONNECTORS-SPEC): credentials and requests stay in the daemon.
+  try {
+    migrateTicketDirectory(store.directory);
+  } catch (e) {
+    console.error("Flowly connector data not moved:", e instanceof Error ? e.message : String(e));
+  }
+  const connectors = new ConnectorService(join(store.directory, "connectors"));
+  connectors.projectRepos = async (projectId, connection) => {
+    const project = (await store.read()).projects.find((p) => p.id === projectId);
+    return project ? projectRepos(project.primaryPath, connection.baseUrl) : [];
+  };
+  service.connectors = connectors;
   // Each project's board copy in `<root>/.flowly/` (PROJECT-FOLDER-SPEC).
   const folders = new ProjectFolders(() => store.read(), async () => (await summaries.store.read()).entries);
   store.onCommit = () => folders.schedule();
@@ -148,7 +158,7 @@ export default function contribute(server: PluginServerContext) {
   );
   server.handle(rpc.wrapup, (input, { paseo }) => wrapups.run(input, paseo));
   const tools = new ToolServer(store);
-  tools.agents.tickets = tickets;
+  tools.agents.connectors = connectors;
   // Unreadable settings keep the default (on).
   tools.agents.ideasOn = async () => {
     const state = await ideasPrefs.read().catch(() => null);
@@ -278,33 +288,33 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.adoptIdea, (input, { paseo }) => adoptIdea(store, (message, api) => composer.push(message, api), input, paseo));
   server.handle(rpc.createLink, (input) => createLink(store, input));
   server.handle(rpc.deleteLink, (input) => deleteLink(store, input));
-  const artifacts = new ArtifactService(store, tickets);
+  const artifacts = new ArtifactService(store, connectors);
   const workpads = new WorkpadService(store);
-  server.handle(rpc.listConnections, async () => ({ connections: await tickets.list() }));
-  server.handle(rpc.saveConnection, (input) => tickets.save(input));
-  server.handle(rpc.testConnection, (input) => tickets.test(input));
-  server.handle(rpc.deleteConnection, (input) => tickets.remove(input.id));
-  server.handle(rpc.searchTickets, (input) => tickets.search(input));
-  server.handle(rpc.cardTickets, async (input) => {
-    const list = (await store.read()).artifacts.filter((a) => a.taskId === input.taskId && a.ticket);
-    const located = await tickets.locate(list);
+  server.handle(rpc.listConnections, async () => ({ connections: await connectors.list() }));
+  server.handle(rpc.saveConnection, (input) => connectors.save(input));
+  server.handle(rpc.testConnection, (input) => connectors.test(input));
+  server.handle(rpc.deleteConnection, (input) => connectors.remove(input.id));
+  server.handle(rpc.searchExternal, (input) => connectors.search(input));
+  server.handle(rpc.cardExternals, async (input) => {
+    const list = (await store.read()).artifacts.filter((a) => a.taskId === input.taskId && a.external);
+    const located = await connectors.locate(list);
     const refs = [...located.values()].filter((r): r is NonNullable<typeof r> => !!r);
-    const found = refs.length ? await tickets.badges(refs, input.refresh) : new Map();
+    const found = refs.length ? await connectors.badges(refs, input.refresh) : new Map();
     return {
-      tickets: list.flatMap((a) => {
+      items: list.flatMap((a) => {
         const ref = located.get(a.id);
-        const hit = ref && found.get(`${ref.connectionId}:${ref.key}`);
+        const hit = ref && found.get(refKey(ref));
         return hit ? [{ artifactId: a.id, summary: hit.summary, stale: hit.stale }] : [];
       }),
       removed: list.filter((a) => !located.get(a.id)).map((a) => a.id),
     };
   });
-  server.handle(rpc.readTicket, async (input) => {
+  server.handle(rpc.readExternal, async (input) => {
     const artifact = (await store.read()).artifacts.find((a) => a.id === input.artifactId);
-    if (!artifact?.ticket) throw new Error("This ticket input no longer exists.");
-    const ref = (await tickets.locate([artifact])).get(artifact.id);
-    if (!ref) throw new Error("This Jira connection was removed. Add it again in Settings → Connections to read the ticket here; Open in Jira still works.");
-    const { summary, markdown, truncated, stale, fetchedAt } = await tickets.detail(ref, input.refresh);
+    if (!artifact?.external) throw new Error("This external input no longer exists.");
+    const ref = (await connectors.locate([artifact])).get(artifact.id);
+    if (!ref) throw new Error("This connection was removed. Add it again in Settings → Connections to read the item here; Open in the browser still works.");
+    const { summary, markdown, truncated, stale, fetchedAt } = await connectors.detail(ref, input.refresh);
     return { summary, markdown, truncated, stale, fetchedAt };
   });
   server.handle(rpc.createArtifact, (input, { paseo }) => artifacts.create(input, paseo));

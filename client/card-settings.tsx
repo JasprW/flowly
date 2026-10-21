@@ -34,7 +34,7 @@ const activityText: Record<CardActivity, { label: string; detail: string }> = {
 const fieldText: Record<CardField, { title: string; detail: string }> = {
   priority: { title: msg("Priority"), detail: msg("Urgent, High and Low, and the coloured edge of Urgent and High cards.") },
   type: { title: msg("Type"), detail: msg("Feature, Bug fix, Research and the other card types.") },
-  ticket: { title: msg("Jira ticket"), detail: msg("The key of the ticket the card works from.") },
+  external: { title: msg("Ticket or issue"), detail: msg("The key of the ticket, issue or pull request the card works from.") },
   tags: { title: msg("Tags"), detail: msg("The first two tags, then how many more.") },
   sessions: { title: msg("Session activity"), detail: msg("Running and unread sessions. Approvals and errors always show.") },
   workpad: { title: msg("Workpad checks"), detail: msg("How many of the agent's checks passed.") },
@@ -251,7 +251,7 @@ function CardPreview({ display }: { display: ReturnType<typeof cardDisplay> }) {
           output={sample.output}
           progress={sample.progress}
           ideas={1}
-          ticketKey="SHOP-142"
+          externalKey="SHOP-142"
           workpad={{ kind: "checks", done: 2, total: 3, count: 0 }}
           display={display}
           onOpen={noop}

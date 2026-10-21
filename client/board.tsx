@@ -69,11 +69,13 @@ import { LaneList } from "./lane-list";
 import { perfConfigure, perfMark, usePerfRender } from "./perf";
 import { laneRows, sameRows } from "./lane-rows";
 import { LiveTaskCard, type CardDrag, type LiveTaskCardProps } from "./card";
-import { useConnections } from "./tickets";
+import { useConnections } from "./connectors";
+import { faceKey, familyOf } from "../shared/connectors";
 import { cardProgress, useSummaries } from "./task-progress";
 import { LocaleRoot } from "./i18n";
 import { agentModelFromValues, effectiveAgentModel, startingAgent } from "../shared/agent-defaults";
-import { SettingsFab, SettingsModal } from "./summary-settings";
+import { SettingsFab, SettingsModal, type SettingsSection } from "./summary-settings";
+import { SettingsOpenerContext } from "./settings-opener";
 import { WrapupModal } from "./wrapup";
 import { performanceLogOn, performanceSettings, ideasSettings, ideasSettingsValues, modelSettings, modelSettingsValues, wrapupSettings, wrapupSettingsValues } from "../shared/settings";
 import { pickOutputSession } from "./card-output";
@@ -137,8 +139,9 @@ const tipText: Record<TipId, () => string> = {
   "first-tag": () => t("Agents tag their cards by module and direction. Open a card and tap a tag to filter the board by it, or search #tag."),
   "next-move": () => t("When an agent finishes a turn, its suggested next steps sit above the message box. Tap one to fill it in; nothing is sent until you press Send. Some steps act on the card, like Move to Done."),
   "older-finished": () => t("Cards that finished a while ago fold under “Show older” at the bottom of Done and Cancelled. Settings → Workflow sets how long they stay."),
-  "first-ticket": () => t("A card has a Jira ticket as an input. Agents read it every turn and see when it changes. Flowly never changes the ticket, and its status doesn't move the card."),
-  "jira-connect": () => t("Work from Jira tickets: connect Jira in Settings → Connections, then start a card with From Jira. Flowly only reads tickets."),
+  "first-ticket": () => t("A card has an item from a connected service as an input. Agents read it every turn and see when it changes. Flowly never changes it there, and its status doesn't move the card."),
+  "jira-connect": () => t("Work from Jira, Confluence, GitHub or GitLab: connect them in Settings → Connections, then start a card with From… or add items with the Artifacts +. Flowly only reads them."),
+  connectors: () => t("The Artifacts + now adds Confluence pages and GitHub or GitLab issues and pull requests too, besides files, links and Jira tickets. Connect services in Settings → Connections."),
   "project-menu": () => t("Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove."),
   subagents: () => t("When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo."),
   "card-display": () => t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
@@ -449,7 +452,7 @@ function BoardContent(
   // What cards show (CARD-DISPLAY-SPEC); one object for all cards so memoized cards stay put.
   const cardActivity = view.values?.cardActivity, cardHiddenKey = (view.values?.cardHidden || []).join(",");
   const display = useMemo(() => cardDisplay({ cardActivity, cardHidden: cardHiddenKey.split(",") }), [cardActivity, cardHiddenKey]);
-  const [settingsSection, setSettingsSection] = useState<"cards" | undefined>(undefined);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
   const collapsedColumns = view.values?.collapsedColumns || [];
   const toggleCollapse = (status: Status) => {
     if (!view.values) return;
@@ -823,11 +826,14 @@ function BoardContent(
     if (ideasOn) for (const i of board?.ideas || []) if (i.status === "open") counts.set(i.taskId, (counts.get(i.taskId) || 0) + 1);
     return counts;
   }, [board?.ideas, ideasOn]);
-  // Jira ticket keys per card for the card face (EXTERNAL-TRACKER-SPEC §6): the oldest first, then "+n".
-  const ticketKeys = useMemo(() => {
-    const keys = new Map<string, string[]>();
-    for (const a of board?.artifacts || []) if (a.ticket) keys.set(a.taskId, [...(keys.get(a.taskId) || []), a.ticket.key]);
-    return new Map([...keys].map(([id, list]) => [id, list.length > 1 ? `${list[0]} +${list.length - 1}` : list[0]!]));
+  // Ticket, issue and PR keys per card for the card face (CONNECTORS-SPEC §2): the oldest first, then "+n"; pages are left out.
+  const externalKeys = useMemo(() => {
+    const keys = new Map<string, { key: string; family: ReturnType<typeof familyOf> }[]>();
+    for (const a of board?.artifacts || []) {
+      const key = a.external ? faceKey(a.external) : null;
+      if (key) keys.set(a.taskId, [...(keys.get(a.taskId) || []), { key, family: familyOf(a.external!.provider) }]);
+    }
+    return new Map([...keys].map(([id, list]) => [id, { text: list.length > 1 ? `${list[0]!.key} +${list.length - 1}` : list[0]!.key, family: list[0]!.family }]));
   }, [board?.artifacts]);
   // Each card's workpad, for its checks signal (WORKPAD-SPEC §6.1).
   const workpadIndex = useMemo(() => new Map((board?.workpads || []).map((w) => [w.taskId, w])), [board?.workpads]);
@@ -901,6 +907,10 @@ function BoardContent(
     setProject(card.projectId);
     createFromIdea(idea);
   }, [ideaInput, board]);
+  const openSettingsAt = useStableCallback((section: SettingsSection) => {
+    setSettingsSection(section);
+    setMenu("settings");
+  });
   // CARD-LINKS-SPEC §5.5: the new-task form, linked as a follow-up of `source`.
   const followUp = useStableCallback((source: Task) =>
     setTaskForm({
@@ -941,7 +951,7 @@ function BoardContent(
     const sessions = new Set(list.filter((a) => !!a.workspaceId && workspaces.has(a.workspaceId)).map((a) => a.id));
     return list.some((a) => { const parent = parentOf(a); return !!parent && sessions.has(parent); });
   }, [projectTasks, agents.data]);
-  // Only to announce Jira tickets to users without a connection (tip "jira-connect").
+  // Only to announce connectors to users without a connection (tip "jira-connect").
   const connections = useConnections();
   const projectAttention = useMemo(() => attention.filter((i) => i.project.id === project?.id), [attention, project?.id]);
   // First-run guidance (ONBOARDING-SPEC): the welcome tour, empty-board hint and one-time tips.
@@ -987,7 +997,8 @@ function BoardContent(
           hasAgentTag: !task && projectTasks.some((x) => !x.archivedAt && !!x.tags?.some((tag) => tag.by === "agent")),
           nextMove: projectTasks.some((x) => !x.archivedAt && hasOpenNextMoves(cardIndex.eventsByTask.get(x.id) || noEvents)),
           olderHidden: older.size > 0 && !(olderShown.includes("done") && olderShown.includes("cancelled")),
-          hasTicket: !task && board.artifacts.some((a) => a.projectId === project.id && !!a.ticket),
+          hasTicket: !task && board.artifacts.some((a) => a.projectId === project.id && !!a.external),
+          cardOpen: !!task,
           noConnection: !task && projectTasks.some((x) => !x.archivedAt) && connections.data?.connections.length === 0,
           projectTabs: !task && !compact && projects.length > 1,
           hasWorkpad: !task && workpadEnabled(project) && board.workpads.some((w) => w.projectId === project.id),
@@ -1037,7 +1048,7 @@ function BoardContent(
   // card of the lane in the same frame as its animation.
   const cardDerived = useMemo(
     () => new WeakMap<Task, Omit<LiveTaskCardProps, "selected" | "flash" | "drag" | "dragging" | "disabled" | "display" | "onOpen" | "onActions" | "menuFor">>(),
-    [cardIndex, receipts, summaryState, attentionByTask, managedIds, summaries.data, !!board, openIdeaCount, ticketKeys, project, workpadIndex, waitingIndex],
+    [cardIndex, receipts, summaryState, attentionByTask, managedIds, summaries.data, !!board, openIdeaCount, externalKeys, project, workpadIndex, waitingIndex],
   );
   const derivedFor = (t: Task) => {
     let derived = cardDerived.get(t);
@@ -1058,7 +1069,8 @@ function BoardContent(
       progress: cardProgress(summaries.data, t.id),
       questions: board ? cardQuestions(t, events).length : 0,
       ideas: openIdeaCount.get(t.id) || 0,
-      ticketKey: ticketKeys.get(t.id),
+      externalKey: externalKeys.get(t.id)?.text,
+      externalFamily: externalKeys.get(t.id)?.family,
       workpad: project && workpadEnabled(project) ? workpadSignal(t, workpadIndex.get(t.id), events) : null,
       waiting: waitingIndex.get(t.id)?.count || 0,
       waitingTitles: waitingIndex.get(t.id)?.titles || "",
@@ -1368,6 +1380,7 @@ function BoardContent(
     </Animated.View>
   );
   return (
+    <SettingsOpenerContext.Provider value={openSettingsAt}>
     <Theme.Provider value={props.theme}>
       <View
         ref={rootRef}
@@ -2203,6 +2216,7 @@ function BoardContent(
         </Popover>
       </View>
     </Theme.Provider>
+    </SettingsOpenerContext.Provider>
   );
 }
 

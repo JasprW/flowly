@@ -1,6 +1,8 @@
 # 外部工单接入（Jira / Linear）：只读输入
 
-状态：用户 2026-10-19 确认（§10），P1 实现中。2026-10-19 · 卡片“jira工单接入”。
+状态：用户 2026-10-19 确认（§10），P1 已实现。2026-10-19 · 卡片“jira工单接入”。
+
+> 2026-10-20 起由 [CONNECTORS-SPEC](CONNECTORS-SPEC.md) 推广到 Confluence、GitHub、GitLab，并按用户决定改用通用名：artifact 字段 `ticket` → `external`（看板 v5），工具 `flowly_read_ticket` → `flowly_read_external`（旧名为别名），CLI `ticket` → `external`，RPC `tickets.*` → `connectors.*`，错误码 `TICKET_*` → `EXTERNAL_*`，数据目录 `tickets/` → `connectors/`。下文保留 Jira 当时的命名；行为规则仍然有效。
 
 ## 0. 用户决定与结论
 

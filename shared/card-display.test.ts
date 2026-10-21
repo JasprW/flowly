@@ -2,9 +2,14 @@ import { expect, test } from "vitest";
 import { activityLines, cardDisplay, withCardField } from "./card-display";
 
 test("everything shows by default; hidden ids hide their field and unknown ids are ignored", () => {
-  expect(cardDisplay(null)).toMatchObject({ activity: "auto", priority: true, type: true, ticket: true, tags: true, sessions: true, workpad: true, ideas: true });
+  expect(cardDisplay(null)).toMatchObject({ activity: "auto", priority: true, type: true, external: true, tags: true, sessions: true, workpad: true, ideas: true });
   expect(cardDisplay({ cardHidden: ["tags", "ideas", "later"], cardActivity: "none" })).toMatchObject({ activity: "none", tags: false, ideas: false, type: true });
   expect(cardDisplay({ cardActivity: "bogus" }).activity).toBe("auto");
+});
+
+test("the ticket field's old id still hides the external key (CONNECTORS-SPEC §3.3)", () => {
+  expect(cardDisplay({ cardHidden: ["ticket"] }).external).toBe(false);
+  expect(withCardField(["ticket", "later"], "external", true)).toEqual(["later"]);
 });
 
 test("toggling a field keeps ids from newer clients", () => {

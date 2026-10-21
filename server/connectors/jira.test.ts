@@ -3,21 +3,23 @@ import type { PaseoApi } from "@getpaseo/client";
 import { mkdtemp, mkdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { JiraClient, TicketError, TicketService, contentFingerprint, ticketMarkdown } from "./tickets";
-import { BoardStore } from "./store";
-import { BoardService } from "./service";
-import { ArtifactService } from "./artifacts";
-import { artifactContextLines } from "../shared/artifacts";
-import { agentFixture } from "./agent-fixture";
+import { JiraClient, contentFingerprint, ticketMarkdown, wikiToMarkdown } from "./jira";
+import { ExternalError } from "./http";
+import { ConnectorService } from "./service";
+import { BoardStore } from "../store";
+import { BoardService } from "../service";
+import { ArtifactService } from "../artifacts";
+import { artifactContextLines } from "../../shared/artifacts";
+import { agentFixture } from "../agent-fixture";
 
 const roots: string[] = [];
-const services: TicketService[] = [];
+const services: ConnectorService[] = [];
 afterEach(async () => {
   await Promise.all(services.splice(0).map((s) => s.flush()));
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 /** A service whose background cache writes finish before the test's directory is removed. */
-function tracked(service: TicketService) {
+function tracked(service: ConnectorService) {
   services.push(service);
   return service;
 }
@@ -75,7 +77,7 @@ function fakeJira(issues: Issue[], options: { status?: number; headers?: Record<
 async function connected(issues: Issue[], options: Parameters<typeof fakeJira>[1] = {}, provider: "jira-dc" | "jira-cloud" = "jira-dc") {
   const dir = await temp();
   const jira = fakeJira(issues, options);
-  const service = tracked(new TicketService(join(dir, "tickets"), jira.fetchImpl));
+  const service = tracked(new ConnectorService(join(dir, "connectors"), jira.fetchImpl));
   const connection = await service.save({
     provider,
     baseUrl: "https://jira.example.com/",
@@ -92,7 +94,7 @@ describe("connections (EXTERNAL-TRACKER-SPEC §2)", () => {
     expect(JSON.stringify(x.connection)).not.toContain("secret-token");
     expect(JSON.stringify(await x.service.list())).not.toContain("secret-token");
     expect(x.calls[0]!.auth).toBe("Bearer secret-token");
-    const file = join(x.dir, "tickets", "connections.json");
+    const file = join(x.dir, "connectors", "connections.json");
     expect((await stat(file)).mode & 0o777).toBe(0o600);
     expect(await readFile(file, "utf8")).toContain("secret-token");
   });
@@ -101,7 +103,7 @@ describe("connections (EXTERNAL-TRACKER-SPEC §2)", () => {
     const cloud = await connected([], {}, "jira-cloud");
     expect(cloud.calls[0]!.auth).toBe(`Basic ${Buffer.from("ada@example.com:secret-token").toString("base64")}`);
     const dir = await temp();
-    const refused = tracked(new TicketService(join(dir, "tickets"), fakeJira([], { status: 401 }).fetchImpl));
+    const refused = tracked(new ConnectorService(join(dir, "connectors"), fakeJira([], { status: 401 }).fetchImpl));
     await expect(refused.save({ provider: "jira-dc", baseUrl: "https://jira.example.com", secret: "bad" })).rejects.toThrow(/refused the token/);
     expect(await refused.list()).toEqual([]);
   });
@@ -109,7 +111,7 @@ describe("connections (EXTERNAL-TRACKER-SPEC §2)", () => {
   test("Test connection checks with Jira without saving; editing tests with the stored token", async () => {
     const dir = await temp();
     const jira = fakeJira([]);
-    const service = tracked(new TicketService(join(dir, "tickets"), jira.fetchImpl));
+    const service = tracked(new ConnectorService(join(dir, "connectors"), jira.fetchImpl));
     expect(await service.test({ provider: "jira-dc", baseUrl: "https://jira.example.com/", secret: "t1" })).toEqual({ account: "Ada Lovelace", baseUrl: "https://jira.example.com" });
     expect(jira.calls.at(-1)).toMatchObject({ method: "GET", auth: "Bearer t1" });
     expect(await service.list()).toEqual([]);
@@ -117,7 +119,7 @@ describe("connections (EXTERNAL-TRACKER-SPEC §2)", () => {
     await service.test({ id: saved.id, provider: "jira-dc", baseUrl: "https://jira.example.com" });
     expect(jira.calls.at(-1)!.auth).toBe("Bearer t1");
     await expect(service.test({ provider: "jira-dc", baseUrl: "not a url", secret: "t" })).rejects.toThrow(/Jira address/);
-    const refused = tracked(new TicketService(join(dir, "other"), fakeJira([], { status: 401 }).fetchImpl));
+    const refused = tracked(new ConnectorService(join(dir, "other"), fakeJira([], { status: 401 }).fetchImpl));
     await expect(refused.test({ provider: "jira-dc", baseUrl: "https://jira.example.com", secret: "bad" })).rejects.toThrow(/refused the token/);
   });
 
@@ -137,11 +139,11 @@ describe("read-only client", () => {
     await x.service.search({ connectionId: x.connection.id, query: "1" });
     await x.service.search({ connectionId: x.connection.id, query: "empty result" });
     await x.service.detail({ connectionId: x.connection.id, key: "AB-1" });
-    await x.service.summaries([{ connectionId: x.connection.id, provider: "jira-dc", key: "AB-2", remoteId: "" }], 0);
+    await x.service.summaries([{ connectionId: x.connection.id, provider: "jira-dc", itemType: "issue", key: "AB-2", remoteId: "" }], 0);
     expect(new Set(x.calls.map((c) => c.method))).toEqual(new Set(["GET"]));
     expect(x.calls.every((c) => /^\/rest\/api\/(2\/(myself|search|issue\/picker|issue\/[A-Z]+-\d+)|3\/search\/jql)$/.test(c.url.pathname))).toBe(true);
     const client = new JiraClient(
-      { id: "c", provider: "jira-dc", name: "", baseUrl: "https://jira.example.com", email: "", secret: "s", account: "", verifiedAt: "", authFailed: false },
+      { id: "c", provider: "jira-dc", name: "", baseUrl: "https://jira.example.com", email: "", secret: "s", account: "", login: "", verifiedAt: "", authFailed: false },
       x.fetchImpl,
     );
     const before = x.calls.length;
@@ -182,14 +184,14 @@ describe("failures", () => {
     const jira = fakeJira([issue("AB-1", "A")]);
     const fetchImpl = (async (input: URL | RequestInfo, init?: RequestInit) =>
       status ? new Response("{}", { status, headers: { "content-type": "application/json" } }) : jira.fetchImpl(input, init)) as typeof fetch;
-    const service = tracked(new TicketService(join(dir, "tickets"), fetchImpl));
+    const service = tracked(new ConnectorService(join(dir, "connectors"), fetchImpl));
     const c = await service.save({ provider: "jira-dc", baseUrl: "https://jira.example.com", secret: "s" });
     status = 401;
-    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toMatchObject({ code: "TICKET_AUTH" });
+    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toMatchObject({ code: "EXTERNAL_AUTH" });
     expect((await service.list())[0]!.authFailed).toBe(true);
     status = 0;
     const before = jira.calls.length;
-    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toMatchObject({ code: "TICKET_AUTH" });
+    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toMatchObject({ code: "EXTERNAL_AUTH" });
     expect(jira.calls.length).toBe(before);
     // Saving a new token clears it.
     await service.save({ id: c.id, provider: "jira-dc", baseUrl: "https://jira.example.com", secret: "new" });
@@ -207,16 +209,16 @@ describe("failures", () => {
         : mode === "html"
           ? new Response("<html>login</html>", { status: 200, headers: { "content-type": "text/html" } })
           : jira.fetchImpl(input, init)) as typeof fetch;
-    const service = tracked(new TicketService(join(dir, "tickets"), fetchImpl, () => now));
+    const service = tracked(new ConnectorService(join(dir, "connectors"), fetchImpl, () => now));
     const c = await service.save({ provider: "jira-dc", baseUrl: "https://jira.example.com", secret: "s" });
     mode = "busy";
-    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toMatchObject({ code: "TICKET_UNAVAILABLE" });
+    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toMatchObject({ code: "EXTERNAL_UNAVAILABLE" });
     mode = "ok";
     await expect(service.search({ connectionId: c.id, query: "" })).rejects.toThrow(/wait/);
     now += 31_000;
     expect((await service.search({ connectionId: c.id, query: "" })).results).toHaveLength(1);
     mode = "html";
-    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toBeInstanceOf(TicketError);
+    await expect(service.search({ connectionId: c.id, query: "" })).rejects.toBeInstanceOf(ExternalError);
     expect((await service.list())[0]!.authFailed).toBe(true);
   });
 
@@ -229,9 +231,9 @@ describe("failures", () => {
       return jira.fetchImpl(input, init);
     }) as typeof fetch;
     let now = 0;
-    const service = tracked(new TicketService(join(dir, "tickets"), fetchImpl, () => now));
+    const service = tracked(new ConnectorService(join(dir, "connectors"), fetchImpl, () => now));
     const c = await service.save({ provider: "jira-dc", baseUrl: "https://jira.example.com", secret: "s" });
-    const ref = { connectionId: c.id, provider: "jira-dc" as const, key: "AB-1", remoteId: "" };
+    const ref = { connectionId: c.id, provider: "jira-dc" as const, itemType: "issue" as const, key: "AB-1", remoteId: "" };
     await service.detail(ref);
     down = true;
     now += 120_000;
@@ -239,7 +241,7 @@ describe("failures", () => {
     expect(detail.stale).toBe(true);
     expect(detail.markdown).toContain("# AB-1 A");
     const summaries = await service.summaries([ref]);
-    expect(summaries.get(`${c.id}:AB-1`)).toMatchObject({ stale: true, summary: { summary: "A" } });
+    expect(summaries.get(`${c.id}:issue:AB-1`)).toMatchObject({ stale: true, summary: { summary: "A" } });
   });
 });
 
@@ -260,7 +262,7 @@ describe("content for agents (EXTERNAL-TRACKER-SPEC §4)", () => {
       issuelinks: [{ type: { outward: "blocks" }, outwardIssue: { key: "CD-1", fields: { summary: "Other", status: { name: "Open" } } } }],
       attachment: [{ filename: "screen.png" }],
     });
-    const summary = { connectionId: "c", key: "AB-1", remoteId: "1", url: "https://jira.example.com/browse/AB-1", summary: "Empty result page", status: "In Progress", statusCategory: "indeterminate", type: "Bug", priority: "High", assignee: "Ada", updated: "u" };
+    const summary = { connectionId: "c", itemType: "issue" as const, key: "AB-1", remoteId: "1", url: "https://jira.example.com/browse/AB-1", summary: "Empty result page", status: "In Progress", statusCategory: "indeterminate", type: "Bug", priority: "High", assignee: "Ada", container: "AB", updated: "u" };
     const { markdown, truncated } = ticketMarkdown(summary, full);
     expect(truncated).toBe(false);
     for (const part of ["# AB-1 Empty result page", "- Status: In Progress", "### Repro", "- open **search**", "- AB-2 Sub (To Do)", "- blocks CD-1 Other (Open)", "- screen.png", "### Bob", "Seen on `prod`"])
@@ -272,7 +274,7 @@ describe("content for agents (EXTERNAL-TRACKER-SPEC §4)", () => {
   });
 });
 
-describe("cards and ticket inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
+describe("cards and external inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
   async function board(issues: Issue[]) {
     const x = await connected(issues);
     const root = join(x.dir, "project");
@@ -283,7 +285,7 @@ describe("cards and ticket inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
       b.projects.push({ id: "p", paseoProjectId: "native", title: "P", description: "", primaryPath: root, repos: [root], revision: 1, createdAt: now, updatedAt: now, archivedAt: null }),
     );
     const service = new BoardService(store);
-    service.tickets = x.service;
+    service.connectors = x.service;
     const create = vi.fn(async () => ({ id: "workspace" }));
     const refresh = vi.fn(async () => ({ id: "workspace", projectId: "native", workspaceDirectory: root, workspaceKind: "directory", status: "done" }));
     const paseo = { workspaces: { create, ref: () => ({ refresh }) } } as unknown as PaseoApi;
@@ -293,7 +295,7 @@ describe("cards and ticket inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
 
   test("a new card and its ticket inputs are written together, and the first session context lists them", async () => {
     const x = await board([issue("AB-1", "Empty result page")]);
-    const card = await x.service.createTask({ ...x.input, tickets: [{ connectionId: x.connection.id, key: "ab-1" }, { connectionId: x.connection.id, key: "AB-1" }] }, x.paseo);
+    const card = await x.service.createTask({ ...x.input, externals: [{ connectionId: x.connection.id, key: "ab-1" }, { connectionId: x.connection.id, key: "AB-1" }] }, x.paseo);
     const saved = await x.store.read();
     const inputs = saved.artifacts.filter((a) => a.taskId === card.id);
     expect(inputs).toHaveLength(1);
@@ -303,15 +305,15 @@ describe("cards and ticket inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
       target: "https://jira.example.com/browse/AB-1",
       title: "AB-1 Empty result page",
       createdBy: "human",
-      ticket: { connectionId: x.connection.id, provider: "jira-dc", key: "AB-1", remoteId: "10001" },
+      external: { connectionId: x.connection.id, provider: "jira-dc", itemType: "issue", key: "AB-1", remoteId: "10001" },
     });
     expect(saved.events.filter((e) => e.taskId === card.id).map((e) => e.action)).toEqual(["created", "artifact_added"]);
-    expect(artifactContextLines(inputs).join("\n")).toContain(`AB-1 Empty result page (Jira ticket; read it with flowly_read_ticket artifactId=${inputs[0]!.id})`);
+    expect(artifactContextLines(inputs).join("\n")).toContain(`AB-1 Empty result page (Jira ticket; read it with flowly_read_external artifactId=${inputs[0]!.id})`);
   });
 
   test("a ticket that can't be read refuses the card before any workspace exists", async () => {
     const x = await board([]);
-    await expect(x.service.createTask({ ...x.input, tickets: [{ connectionId: x.connection.id, key: "AB-404" }] }, x.paseo)).rejects.toThrow(/not found/i);
+    await expect(x.service.createTask({ ...x.input, externals: [{ connectionId: x.connection.id, key: "AB-404" }] }, x.paseo)).rejects.toThrow(/not found/i);
     expect(x.create).not.toHaveBeenCalled();
     expect((await x.store.read()).tasks).toHaveLength(0);
   });
@@ -321,9 +323,9 @@ describe("cards and ticket inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
     const card = await x.service.createTask(x.input, x.paseo);
     const artifacts = new ArtifactService(x.store, x.tickets);
     const byLink = await artifacts.create({ taskId: card.id, role: "output", target: "https://jira.example.com/browse/AB-1" }, x.paseo);
-    expect(byLink).toMatchObject({ role: "input", title: "AB-1 Empty result page", ticket: { key: "AB-1" } });
+    expect(byLink).toMatchObject({ role: "input", title: "AB-1 Empty result page", external: { key: "AB-1" } });
     const byKey = await artifacts.create({ taskId: card.id, role: "input", target: "ab-2" }, x.paseo);
-    expect(byKey).toMatchObject({ target: "https://jira.example.com/browse/AB-2", ticket: { key: "AB-2" } });
+    expect(byKey).toMatchObject({ target: "https://jira.example.com/browse/AB-2", external: { key: "AB-2" } });
     // The same ticket again updates nothing new.
     await artifacts.create({ taskId: card.id, role: "input", target: "AB-1" }, x.paseo);
     const saved = await x.store.read();
@@ -331,7 +333,7 @@ describe("cards and ticket inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
     expect(saved.tasks[0]).toMatchObject({ title: "Card", revision: 1 });
     // Other links stay ordinary links.
     const plain = await artifacts.create({ taskId: card.id, role: "input", target: "https://example.com/doc" }, x.paseo);
-    expect(plain.ticket).toBeUndefined();
+    expect(plain.external).toBeUndefined();
   });
 });
 
@@ -340,34 +342,34 @@ describe("agents (EXTERNAL-TRACKER-SPEC §4)", () => {
     const f = await agentFixture();
     roots.push(f.root);
     const jira = fakeJira(issues);
-    const tickets = tracked(new TicketService(join(f.root, "tickets"), jira.fetchImpl));
+    const tickets = tracked(new ConnectorService(join(f.root, "connectors"), jira.fetchImpl));
     const connection = await tickets.save({ provider: "jira-dc", baseUrl: "https://jira.example.com", secret: "secret-token" });
-    f.service.tickets = tickets;
+    f.service.connectors = tickets;
     const artifacts = new ArtifactService(f.store, tickets);
     return { ...f, jira, tickets, connection, artifacts };
   }
 
-  test("get_task shows ticket inputs; content changes are unread, status changes are not; read_ticket marks it read", async () => {
+  test("get_task shows external inputs; content changes are unread, status changes are not; read_external marks it read", async () => {
     const issues = [issue("AB-1", "Empty result page")];
     const x = await agent(issues);
     const linked = await x.artifacts.create({ taskId: "t", role: "input", target: "AB-1" }, x.paseo);
     let ctx = await x.service.get(x.identity);
     const row = ctx.artifacts.find((a) => a.id === linked.id)!;
-    expect(row).toMatchObject({ unread: true, ticket: { key: "AB-1", summary: "Empty result page", status: "In Progress", type: "Bug", stale: false } });
+    expect(row).toMatchObject({ unread: true, external: { provider: "jira-dc", itemType: "issue", key: "AB-1", summary: "Empty result page", status: "In Progress", type: "Bug", stale: false } });
     expect((await x.service.get(x.identity)).artifacts[0]!.unread).toBe(false);
     // Only the status moved: not unread.
     issues[0] = issue("AB-1", "Empty result page", { status: { name: "Done" }, updated: "2026-10-19T10:00:00.000+0800" });
-    await x.tickets.summaries([linked.ticket!], 0, false);
+    await x.tickets.summaries([linked.external!], 0, false);
     ctx = await x.service.get(x.identity);
-    expect(ctx.artifacts[0]).toMatchObject({ unread: false, ticket: { status: "Done" } });
+    expect(ctx.artifacts[0]).toMatchObject({ unread: false, external: { status: "Done" }, ticket: { status: "Done" } });
     // A new comment: unread until the session reads the ticket.
     issues[0] = issue("AB-1", "Empty result page", {
       updated: "2026-10-19T11:00:00.000+0800",
       comment: { comments: [{ id: "9", author: { displayName: "PM" }, body: "Also on mobile", created: "2026-10-19T11:00:00.000+0800" }], total: 1 },
     });
-    await x.tickets.summaries([linked.ticket!], 0, false);
+    await x.tickets.summaries([linked.external!], 0, false);
     expect((await x.service.get(x.identity, true, false)).artifacts[0]!.unread).toBe(true);
-    const read = await x.service.readTicket(x.identity, { artifactId: linked.id, refresh: true });
+    const read = await x.service.readExternal(x.identity, { artifactId: linked.id, refresh: true });
     expect(read).toMatchObject({ key: "AB-1", url: "https://jira.example.com/browse/AB-1", stale: false });
     expect(read.markdown).toContain("Also on mobile");
     expect((await x.service.get(x.identity)).artifacts[0]!.unread).toBe(false);
@@ -381,35 +383,76 @@ describe("agents (EXTERNAL-TRACKER-SPEC §4)", () => {
     await x.service.get(x.identity);
     await x.tickets.remove(x.connection.id);
     // The card keeps the input, its link and key.
-    expect((await x.store.read()).artifacts.find((a) => a.id === linked.id)).toMatchObject({ target: "https://jira.example.com/browse/AB-1", ticket: { key: "AB-1" } });
+    expect((await x.store.read()).artifacts.find((a) => a.id === linked.id)).toMatchObject({ target: "https://jira.example.com/browse/AB-1", external: { key: "AB-1" } });
     const ctx = await x.service.get(x.identity);
-    expect(ctx.artifacts[0]).toMatchObject({ unread: false, ticket: { key: "AB-1", summary: "AB-1 Empty result page", connection: "removed", stale: true } });
-    await expect(x.service.readTicket(x.identity, { artifactId: linked.id })).rejects.toMatchObject({ code: "TICKET_UNAVAILABLE", message: expect.stringMatching(/removed this Jira's connection/) });
+    expect(ctx.artifacts[0]).toMatchObject({ unread: false, external: { key: "AB-1", summary: "AB-1 Empty result page", connection: "removed", stale: true } });
+    await expect(x.service.readExternal(x.identity, { artifactId: linked.id })).rejects.toMatchObject({ code: "EXTERNAL_UNAVAILABLE", message: expect.stringMatching(/removed this Jira connection/) });
     const board = await x.store.read();
     const lines = artifactContextLines(board.artifacts, 10, (await x.tickets.locate(board.artifacts)).get(linked.id) ? new Set() : new Set([linked.id]));
     expect(lines.join("\n")).toContain("its connection was removed in Flowly, so it can't be read: ask the user");
-    expect(lines.join("\n")).not.toContain("flowly_read_ticket");
+    expect(lines.join("\n")).not.toContain("flowly_read_external");
     // A new connection to the same Jira (new id, address with a trailing slash) picks the ticket up again.
     const again = await x.tickets.save({ provider: "jira-dc", baseUrl: "https://jira.example.com/", secret: "new-token" });
     expect(again.id).not.toBe(x.connection.id);
-    expect((await x.service.get(x.identity)).artifacts[0]!.ticket).toMatchObject({ connection: "ok", status: "In Progress", stale: false });
-    const read = await x.service.readTicket(x.identity, { artifactId: linked.id });
+    expect((await x.service.get(x.identity)).artifacts[0]!.external).toMatchObject({ connection: "ok", status: "In Progress", stale: false });
+    const read = await x.service.readExternal(x.identity, { artifactId: linked.id });
     expect(read.markdown).toContain("# AB-1 Empty result page");
     expect(x.jira.calls.at(-1)!.auth).toBe("Bearer new-token");
   });
 
-  test("read_ticket only reads this card's ticket inputs", async () => {
+  test("read_external only reads this card's external inputs", async () => {
     const x = await agent([issue("AB-1", "A")]);
     const plain = await x.artifacts.create({ taskId: "t", role: "input", target: "https://example.com/doc" }, x.paseo);
-    await expect(x.service.readTicket(x.identity, { artifactId: plain.id })).rejects.toMatchObject({ code: "TICKET_NOT_FOUND" });
-    await expect(x.service.readTicket(x.identity, { artifactId: "other-card-artifact" })).rejects.toMatchObject({ code: "TICKET_NOT_FOUND" });
+    await expect(x.service.readExternal(x.identity, { artifactId: plain.id })).rejects.toMatchObject({ code: "EXTERNAL_NOT_FOUND" });
+    await expect(x.service.readExternal(x.identity, { artifactId: "other-card-artifact" })).rejects.toMatchObject({ code: "EXTERNAL_NOT_FOUND" });
   });
 
-  test("an agent adding a ticket link gets a ticket input", async () => {
+  test("an agent adding a ticket link gets an external input", async () => {
     const x = await agent([issue("AB-1", "A")]);
     const ctx = await x.service.get(x.identity);
     const result = await x.service.write(x.identity, "artifact", { expectedRevision: ctx.revision, request: ctx.request, role: "output", target: "https://jira.example.com/browse/AB-1" });
     const added = (await x.store.read()).artifacts.find((a) => a.id === result.artifactId)!;
-    expect(added).toMatchObject({ role: "input", createdBy: "agent", title: "AB-1 A", ticket: { key: "AB-1" } });
+    expect(added).toMatchObject({ role: "input", createdBy: "agent", title: "AB-1 A", external: { key: "AB-1" } });
+  });
+});
+
+describe("wiki markup to Markdown", () => {
+  test("headings, lists, code, links, marks and tables", () => {
+    const wiki = [
+      "h2. Steps",
+      "# open the page",
+      "## scroll",
+      "* *bold* and _italic_ and {{code}}",
+      "See [the doc|https://example.com/doc] or [~alice]",
+      "{code:java}",
+      "int a = 1;",
+      "{code}",
+      "||Name||Value||",
+      "|a|1|",
+      "----",
+      "bq. quoted",
+    ].join("\n");
+    expect(wikiToMarkdown(wiki)).toBe(
+      [
+        "## Steps",
+        "1. open the page",
+        "  1. scroll",
+        "- **bold** and *italic* and `code`",
+        "See [the doc](https://example.com/doc) or @alice",
+        "```java",
+        "int a = 1;",
+        "```",
+        "| Name | Value |",
+        "| --- | --- |",
+        "| a | 1 |",
+        "---",
+        "> quoted",
+      ].join("\n"),
+    );
+  });
+
+  test("single-line and unclosed code blocks, noformat", () => {
+    expect(wikiToMarkdown("{noformat}raw *text*{noformat}")).toBe("```\nraw *text*\n```");
+    expect(wikiToMarkdown("{code}\nunclosed")).toBe("```\nunclosed\n```");
   });
 });

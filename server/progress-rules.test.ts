@@ -6,7 +6,7 @@ import { cardQuestions, openQuestion, silentTurn } from "../shared/progress";
 const now = "2026-10-15T00:00:00.000Z";
 function board(status: Status, extra: { autoStatus?: boolean; archived?: boolean } = {}): Board {
   return {
-    version: 4,
+    version: 5,
     revision: 1,
     projects: [{
       id: "p", title: "P", description: "", paseoProjectId: "n", primaryPath: "/p", repos: ["/p"],

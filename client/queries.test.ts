@@ -124,7 +124,7 @@ test("applying the daemon's patch gives back the board it was computed from", ()
   const item = (id: string, v = 0) => ({ id, v });
   const make = (n: number, over: Record<string, unknown> = {}) =>
     ({
-      version: 4,
+      version: 5,
       revision: n,
       events: [{ id: "e1" }],
       plans: [],

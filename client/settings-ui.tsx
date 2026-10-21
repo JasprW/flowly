@@ -59,6 +59,7 @@ export function SettingsGroup({ title, description, children }: { title?: string
 export function SettingRow({
   title,
   detail,
+  leading,
   trailing,
   onPress,
   disabled = false,
@@ -67,6 +68,8 @@ export function SettingRow({
 }: {
   title: string;
   detail?: string;
+  /** An icon before the title, e.g. a service logo. */
+  leading?: ReactNode;
   trailing?: ReactNode;
   onPress?(): void;
   disabled?: boolean;
@@ -77,6 +80,7 @@ export function SettingRow({
   const [hovered, setHovered] = useState(false);
   const body = (
     <>
+      {leading}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Label size={font.base} selectable={false}>
           {title}

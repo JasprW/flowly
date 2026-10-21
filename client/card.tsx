@@ -13,6 +13,8 @@ import { shallowEqual } from "./stable";
 import { t, tn } from "../shared/i18n";
 import type { WorkpadSignal } from "../shared/workpad";
 import { activityLines, defaultCardDisplay, type CardDisplay } from "../shared/card-display";
+import { BrandIcon } from "./brand-icons";
+import type { ConnectorFamily } from "../shared/connectors";
 
 export type CardDrag = {
   start(task: Task, point: Point): void;
@@ -83,7 +85,8 @@ export function TaskCard({
   progress,
   questions = 0,
   ideas = 0,
-  ticketKey = "",
+  externalKey = "",
+  externalFamily,
   workpad = null,
   waiting = 0,
   waitingTitles = "",
@@ -114,8 +117,10 @@ export function TaskCard({
   questions?: number;
   /** Open ideas proposed on this card (IDEAS-SPEC §5.1). */
   ideas?: number;
-  /** Jira ticket inputs, e.g. "SHOPSR-123" or "SHOPSR-123 +2" (EXTERNAL-TRACKER-SPEC §6); key only, never the ticket status. */
-  ticketKey?: string;
+  /** Ticket, issue or PR inputs, e.g. "SHOPSR-123", "repo!34 +2" (CONNECTORS-SPEC §2); key only, never the status. */
+  externalKey?: string;
+  /** The first item's service, for its logo (CONNECTORS-SPEC §8.3). */
+  externalFamily?: ConnectorFamily;
   /** The workpad's checks or delivery state (WORKPAD-SPEC §6.1). */
   workpad?: WorkpadSignal | null;
   /** Unresolved cards this one is blocked by, and their titles (CARD-LINKS-SPEC §5.1). */
@@ -289,7 +294,7 @@ export function TaskCard({
           outlineStyle: "none",
         }) as never}
       >
-        <CardMeta task={task} ticketKey={ticketKey} display={display} />
+        <CardMeta task={task} externalKey={externalKey} externalFamily={externalFamily} display={display} />
         <Label medium size={font.base} lines={3} selectable={false}>
           {task.title}
         </Label>
@@ -516,12 +521,12 @@ function CardSignals({
  * What the card is: priority, type, ticket and tags as one quiet row above the
  * title (CARD-DISPLAY-SPEC §2). Plain text with icons; only Urgent/High keep colour.
  */
-function CardMeta({ task, ticketKey, display }: { task: Task; ticketKey: string; display: CardDisplay }) {
+function CardMeta({ task, externalKey, externalFamily, display }: { task: Task; externalKey: string; externalFamily?: ConnectorFamily; display: CardDisplay }) {
   const { colors } = useTheme();
   const priority = display.priority && task.priority !== "normal";
   const accent = priorityAccent(colors, task.priority);
   const type = display.type && !!task.type;
-  const ticket = display.ticket && !!ticketKey;
+  const ticket = display.external && !!externalKey;
   const tags = display.tags ? task.tags || [] : [];
   if (!priority && !type && !ticket && !tags.length) return null;
   return (
@@ -530,7 +535,7 @@ function CardMeta({ task, ticketKey, display }: { task: Task; ticketKey: string;
         <Meta label={t("{priority} priority", { priority: priorityLabels[task.priority] })} icon={<PriorityIcon priority={task.priority} size={12} />} text={priorityLabels[task.priority]} color={accent} />
       )}
       {type && <Meta label={t("Type: {type}", { type: taskTypeLabels[task.type!] })} icon={<TypeIcon type={task.type!} size={12} />} text={taskTypeLabels[task.type!]} />}
-      {ticket && <Meta label={ticketKey} icon={<Icon name="Ticket" size={12} color={colors.foregroundMuted} />} text={ticketKey} />}
+      {ticket && <Meta label={externalKey} icon={externalFamily ? <BrandIcon family={externalFamily} size={12} /> : <Icon name="Ticket" size={12} color={colors.foregroundMuted} />} text={externalKey} />}
       {!!tags.length && (
         // Custom tags (CARD-TAGS-SPEC §6.2): the first two, then a count.
         <View

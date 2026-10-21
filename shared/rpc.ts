@@ -31,7 +31,7 @@ import {
   planSnapshotSchema,
 } from "./model";
 import { healthSchema, preparationSchema } from "./tools";
-import { connectionInput, connectionSchema, ticketSummarySchema } from "./tickets";
+import { connectionInput, connectionSchema, externalSummarySchema } from "./connectors";
 import { composerStateSchema, composerTarget, maxImages, outgoingImageSchema, queuedMessageSchema } from "./composer";
 import {
   sessionReadStateSchema,
@@ -250,48 +250,51 @@ export const deleteLink = defineRpc({
   input: z.strictObject({ id: z.string().min(1) }),
   output: z.object({ id: z.string() }),
 });
-/** Ticket connections and read-only ticket inputs (EXTERNAL-TRACKER-SPEC). Credentials never leave the daemon. */
+/** Connections and read-only external inputs (CONNECTORS-SPEC, EXTERNAL-TRACKER-SPEC). Credentials never leave the daemon. */
 export const listConnections = defineRpc({
-  name: "tickets.connections",
+  name: "connectors.connections",
   input: z.object({}),
   output: z.object({ connections: z.array(connectionSchema) }),
 });
 export const saveConnection = defineRpc({
-  name: "tickets.connection-save",
+  name: "connectors.connection-save",
   input: connectionInput,
   output: connectionSchema,
 });
-/** Checks an address and token with Jira without saving them. */
+/** Checks an address and token with the service without saving them. */
 export const testConnection = defineRpc({
-  name: "tickets.connection-test",
+  name: "connectors.connection-test",
   input: connectionInput,
   output: z.object({ account: z.string(), baseUrl: z.string() }),
 });
 export const deleteConnection = defineRpc({
-  name: "tickets.connection-delete",
+  name: "connectors.connection-delete",
   input: z.strictObject({ id: z.string().min(1) }),
   output: z.object({ id: z.string() }),
 });
-/** Picker rows: my recent tickets for an empty query, else by key, link, number or text. */
-export const searchTickets = defineRpc({
-  name: "tickets.search",
-  input: z.strictObject({ connectionId: z.string().min(1), query: z.string().max(500) }),
-  output: z.object({ results: z.array(ticketSummarySchema) }),
+/**
+ * Picker rows: my recent items for an empty query, else by key, link, number or text.
+ * GitHub/GitLab search the project's repositories unless `all` (CONNECTORS-SPEC §4.3).
+ */
+export const searchExternal = defineRpc({
+  name: "connectors.search",
+  input: z.strictObject({ connectionId: z.string().min(1), query: z.string().max(500), projectId: z.string().min(1).optional(), all: z.boolean().optional() }),
+  output: z.object({ results: z.array(externalSummarySchema) }),
 });
-/** Current summaries of a card's ticket inputs (cached up to 30 minutes unless `refresh`). */
-export const cardTickets = defineRpc({
-  name: "tickets.card",
+/** Current summaries of a card's external inputs (cached up to 30 minutes unless `refresh`). */
+export const cardExternals = defineRpc({
+  name: "connectors.card",
   input: z.strictObject({ taskId: z.string().min(1), refresh: z.boolean().optional() }),
   output: z.object({
-    tickets: z.array(z.object({ artifactId: z.string(), summary: ticketSummarySchema, stale: z.boolean() })),
-    /** Ticket inputs whose Jira connection was removed: shown as plain links until it is added again. */
+    items: z.array(z.object({ artifactId: z.string(), summary: externalSummarySchema, stale: z.boolean() })),
+    /** External inputs whose connection was removed: shown as plain links until it is added again. */
     removed: z.array(z.string()).default([]),
   }),
 });
-export const readTicket = defineRpc({
-  name: "tickets.read",
+export const readExternal = defineRpc({
+  name: "connectors.read",
   input: z.strictObject({ artifactId: z.string().min(1), refresh: z.boolean().optional() }),
-  output: z.object({ summary: ticketSummarySchema, markdown: z.string(), truncated: z.boolean(), stale: z.boolean(), fetchedAt: z.string() }),
+  output: z.object({ summary: externalSummarySchema, markdown: z.string(), truncated: z.boolean(), stale: z.boolean(), fetchedAt: z.string() }),
 });
 /** Card artifacts: references to files and links (CARD-ARTIFACTS-SPEC §3). */
 export const createArtifact = defineRpc({

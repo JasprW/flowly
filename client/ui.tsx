@@ -117,6 +117,7 @@ export function Button({
   disabled = false,
   label,
   icon,
+  leading,
   quiet = false,
   danger = false,
   grow = false,
@@ -128,6 +129,8 @@ export function Button({
   disabled?: boolean;
   label?: string;
   icon?: string;
+  /** A custom icon (e.g. a service logo) in place of `icon`. */
+  leading?: ReactNode;
   quiet?: boolean;
   danger?: boolean;
   grow?: boolean;
@@ -180,7 +183,7 @@ export function Button({
         };
       }}
     >
-      {icon && <Icon name={icon} size={small ? 13 : 15} color={fg} />}
+      {leading ?? (icon && <Icon name={icon} size={small ? 13 : 15} color={fg} />)}
       {hasText && (
         <Text
           numberOfLines={1}

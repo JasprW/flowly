@@ -28,7 +28,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "attention-dismiss", "sidebar-order"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "attention-dismiss", "sidebar-order", "connectors"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -50,10 +50,12 @@ export interface TipFacts {
   olderHidden: boolean;
   /** A session of the current project suggested next steps for this turn (NEXT-MOVES-SPEC). */
   nextMove: boolean;
-  /** A card of the current project has a Jira ticket input (EXTERNAL-TRACKER-SPEC). */
+  /** A card of the current project has an external input (EXTERNAL-TRACKER-SPEC, CONNECTORS-SPEC). */
   hasTicket: boolean;
-  /** The current project has cards and no Jira connection is configured (known, not loading). */
+  /** The current project has cards and no connection is configured (known, not loading). */
   noConnection: boolean;
+  /** A card's sidebar is open, so its Artifacts + is in view (CONNECTORS-SPEC §8.5). */
+  cardOpen: boolean;
   /** Desktop project tabs show two or more projects and no card is open (PROJECT-TABS-SPEC). */
   projectTabs: boolean;
   /** A card of the current project has a workpad (WORKPAD-SPEC §8). */
@@ -86,13 +88,14 @@ const tipFact: Record<TipId, keyof TipFacts> = {
   "card-display": "busyBoard",
   "attention-dismiss": "crowdedAttention",
   "sidebar-order": "fullSidebar",
+  connectors: "cardOpen",
 };
 
 /** The one tip to show now: first in priority order whose fact holds and that was not shown before. */
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: TipId[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "sidebar-order", "project-menu", "jira-connect"];
+  const order: TipId[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 

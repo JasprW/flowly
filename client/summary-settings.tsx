@@ -6,7 +6,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { useShortcutBlock } from "./shortcuts";
 import { AiPage, GeneralPage, ModelsPage, WorkflowPage } from "./settings-pages";
 import { CardsPage } from "./card-settings";
-import { ConnectionsPage } from "./tickets";
+import { ConnectionsPage } from "./connectors";
 import { IconButton, Label, Theme, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
 import { msg, t } from "../shared/i18n";
 

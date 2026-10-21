@@ -13,7 +13,11 @@ import { SessionMarkdown } from "./session-content";
 import { PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
 import { AiMark, Actions, Button, Choices, Field, IconButton, Label, Notice, Theme, font, message, space, touch, useTheme, noFocusRing } from "./ui";
 import { t, tn } from "../shared/i18n";
-import { LinkTicket, TicketPreview, useConnections } from "./tickets";
+import { BrandIcon } from "./brand-icons";
+import { ExternalPreview, LinkExternal, connectionsByFamily, pickKey, itemKindLabel, linkTitles, useConnections } from "./connectors";
+import { connectorFamilies, familyOf, itemTypeOf, type ConnectorFamily } from "../shared/connectors";
+import { eventPoint, useMenuOpener, type MenuEntry } from "./context-menu";
+import { useSettingsOpener } from "./settings-opener";
 
 /** Rows shown per group at first, and added by each Show more (CARD-ARTIFACTS-SPEC §5.2). */
 const firstPage: Record<ArtifactRole, number> = { input: pageSize, output: pageSize };
@@ -32,10 +36,12 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
   const [removing, setRemoving] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<Artifact | "new" | null>(null);
   const [previewing, setPreviewing] = useState<Artifact | null>(null);
-  const [linking, setLinking] = useState(false);
+  const [linking, setLinking] = useState<ConnectorFamily | null>(null);
   const connections = useConnections();
-  const ticketConnections = connections.data?.connections || [];
-  const readTickets = useRpc(rpc.cardTickets);
+  const byFamily = useMemo(() => connectionsByFamily(connections.data?.connections || []), [connections.data]);
+  const readExternals = useRpc(rpc.cardExternals);
+  const openMenu = useMenuOpener();
+  const openSettings = useSettingsOpener();
   // Per opening of the sidebar: Show more only adds rows, closing and reopening starts over.
   const [limit, setLimit] = useState(firstPage);
   useEffect(() => {
@@ -55,22 +61,36 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     retry: false,
   });
   const missing = useMemo(() => new Set(status.data?.missing || []), [status.data]);
-  // Ticket statuses for the rows, cached by the daemon (EXTERNAL-TRACKER-SPEC §3.3).
-  const ticketKey = list.filter((a) => a.ticket).map((a) => a.id).join("|");
-  const ticketStatus = useQuery({
-    queryKey: ["flowly", "card-tickets", task.id, ticketKey],
-    queryFn: () => readTickets({ taskId: task.id }),
-    enabled: !!ticketKey,
+  // External statuses for the rows, cached by the daemon (EXTERNAL-TRACKER-SPEC §3.3).
+  const externalKey = list.filter((a) => a.external).map((a) => a.id).join("|");
+  const externalStatus = useQuery({
+    queryKey: ["flowly", "card-externals", task.id, externalKey],
+    queryFn: () => readExternals({ taskId: task.id }),
+    enabled: !!externalKey,
     staleTime: 60_000,
     retry: false,
   });
   const statuses = useMemo(() => {
-    const map = new Map((ticketStatus.data?.tickets || []).map((x) => [x.artifactId, x.summary.status]));
+    const map = new Map((externalStatus.data?.items || []).map((x) => [x.artifactId, x.summary.status || x.summary.container]));
     // A removed connection reads as such instead of a status (EXTERNAL-TRACKER-SPEC §2).
-    for (const id of ticketStatus.data?.removed || []) map.set(id, t("Connection removed"));
+    for (const id of externalStatus.data?.removed || []) map.set(id, t("Connection removed"));
     return map;
-  }, [ticketStatus.data]);
-  const linkedKeys = useMemo(() => new Set(list.flatMap((a) => (a.ticket ? [a.ticket.key] : []))), [list]);
+  }, [externalStatus.data]);
+  const linkedKeys = useMemo(() => new Set(list.flatMap((a) => (a.external ? [pickKey(familyOf(a.external.provider), a.external.key)] : []))), [list]);
+  // One + for every way to add an input (CONNECTORS-SPEC §8.1).
+  const addEntries = (): MenuEntry[] => {
+    const services: MenuEntry[] = connectorFamilies
+      .filter((family) => byFamily.has(family))
+      .map((family) => ({ id: family, label: `${t(linkTitles[family])}…`, leading: <BrandIcon family={family} size={16} />, onPress: () => setLinking(family) }));
+    const missing = connectorFamilies.some((family) => !byFamily.has(family));
+    return [
+      { id: "file", label: t("File or link…"), icon: "Link", onPress: () => setEditing("new") },
+      ...(services.length ? [{ kind: "separator" as const, id: "services" }, ...services] : []),
+      ...(missing && openSettings
+        ? [{ kind: "separator" as const, id: "more" }, { id: "connect", label: t("Connect another service…"), icon: "PlugZap", onPress: () => openSettings("connections") }]
+        : []),
+    ];
+  };
   const rows = useExitList(list);
   const remove = async (artifact: Artifact) => {
     setRemoving((current) => new Set(current).add(artifact.id));
@@ -89,7 +109,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     }
   };
   const openArtifact = (artifact: Artifact) => {
-    if (artifact.ticket) return setPreviewing(artifact);
+    if (artifact.external) return setPreviewing(artifact);
     if (artifact.kind === "url")
       return void Linking.openURL(artifact.target).catch(() => toast.show(t("Could not open the link."), { variant: "error" }));
     setPreviewing(artifact);
@@ -105,10 +125,17 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
       onToggle={section.onToggle}
       actions={
         <>
-          {ticketConnections.length > 0 && (
-            <IconButton icon="Ticket" label={t("Link Jira ticket")} disabled={disabled} onPress={() => setLinking(true)} />
-          )}
-          <IconButton icon="Plus" label={t("Add an artifact: a file or link")} disabled={disabled} onPress={() => setEditing("new")} />
+          <IconButton
+            icon="Plus"
+            label={t("Add an artifact: a file, link, or an item from a connected service")}
+            disabled={disabled}
+            onPress={(event) => {
+              const entries = addEntries();
+              // Nothing to choose between: straight to the file or link form.
+              if (!openMenu || entries.length === 1) return setEditing("new");
+              openMenu(eventPoint(event), t("Add artifact"), entries);
+            }}
+          />
         </>
       }
     >
@@ -124,7 +151,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
                 <ArtifactRow
                   artifact={row.item}
                   missing={missing.has(row.item.id)}
-                  ticketStatus={statuses.get(row.item.id)}
+                  externalStatus={statuses.get(row.item.id)}
                   disabled={disabled || row.leaving}
                   onOpen={openArtifact}
                   onEdit={setEditing}
@@ -144,12 +171,21 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     </Section>
       {editing && <ArtifactForm task={task} artifact={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
       {previewing &&
-        (previewing.ticket ? (
-          <TicketPreview artifact={previewing} onClose={() => setPreviewing(null)} />
+        (previewing.external ? (
+          <ExternalPreview artifact={previewing} onClose={() => setPreviewing(null)} />
         ) : (
           <ArtifactPreview artifact={previewing} onClose={() => setPreviewing(null)} />
         ))}
-      {linking && <LinkTicket taskId={task.id} linked={linkedKeys} connections={ticketConnections} onClose={() => setLinking(false)} />}
+      {linking && (
+        <LinkExternal
+          taskId={task.id}
+          projectId={task.projectId}
+          family={linking}
+          linked={linkedKeys}
+          connections={byFamily.get(linking) || []}
+          onClose={() => setLinking(null)}
+        />
+      )}
     </>
   );
 }
@@ -157,7 +193,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
 const ArtifactRow = memo(function ArtifactRow({
   artifact,
   missing,
-  ticketStatus,
+  externalStatus,
   disabled,
   onOpen,
   onEdit,
@@ -165,8 +201,8 @@ const ArtifactRow = memo(function ArtifactRow({
 }: {
   artifact: Artifact;
   missing: boolean;
-  /** The ticket's current status (reference only), for ticket inputs. */
-  ticketStatus?: string;
+  /** The item's current status (reference only) or its space, for external inputs. */
+  externalStatus?: string;
   disabled: boolean;
   onOpen(artifact: Artifact): void;
   onEdit(artifact: Artifact): void;
@@ -176,19 +212,20 @@ const ArtifactRow = memo(function ArtifactRow({
   const agent = artifact.createdBy === "agent";
   const source = agent ? t("Added by an agent") : t("Added by you");
   const role = artifact.role === "input" ? t("Input") : t("Output");
-  const detail = artifact.ticket
-    ? [t("Jira ticket"), ticketStatus, artifact.note].filter(Boolean).join(" · ")
+  const external = artifact.external;
+  const detail = external
+    ? [itemKindLabel(external.provider, itemTypeOf(external)), externalStatus, artifact.note].filter(Boolean).join(" · ")
     : artifact.note || (artifact.kind === "url" ? hostOf(artifact.target) : artifact.target);
-  const icon = artifact.ticket ? "Ticket" : artifact.kind === "url" ? "Link" : /\/$|^\.\/$/.test(artifact.target) || !/\.[^/]+$/.test(baseName(artifact.target)) ? "Folder" : "FileText";
+  const icon = artifact.kind === "url" ? "Link" : /\/$|^\.\/$/.test(artifact.target) || !/\.[^/]+$/.test(baseName(artifact.target)) ? "Folder" : "FileText";
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: touch ? 44 : 34 }}>
       <Pressable
-        accessibilityRole={artifact.kind === "url" && !artifact.ticket ? "link" : "button"}
+        accessibilityRole={artifact.kind === "url" && !artifact.external ? "link" : "button"}
         accessibilityLabel={`${role}: ${artifact.title}, ${source}${missing ? `, ${t("missing")}` : ""}`}
         onPress={() => onOpen(artifact)}
         style={({ pressed }) => ({ ...noFocusRing, flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1.5], opacity: pressed ? 0.7 : 1 })}
       >
-        <Icon name={icon} size={14} color={missing ? colors.foregroundMuted : colors.foreground} />
+        {external ? <BrandIcon family={familyOf(external.provider)} size={14} /> : <Icon name={icon} size={14} color={missing ? colors.foregroundMuted : colors.foreground} />}
         <View style={{ flex: 1, minWidth: 0 }}>
           <Label size={font.md} muted={missing} lines={1} selectable={false}>{artifact.title}</Label>
           <Label size={font.sm} muted lines={1} selectable={false}>{missing ? `${t("Missing")} · ${detail}` : detail}</Label>

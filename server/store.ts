@@ -68,7 +68,7 @@ export class BoardStore {
   private async load(): Promise<Board> {
     try {
       const raw = JSON.parse(await readFile(this.path, "utf8"));
-      if (raw?.version !== 4) await this.keepPreV4Copy();
+      if (raw?.version !== 5) await this.keepPreUpgradeCopy(raw?.version);
       const board = upgradeBoard(raw);
       this.assertInvariants(board);
       return board;
@@ -80,10 +80,13 @@ export class BoardStore {
       );
     }
   }
-  /** One-time copy of pre-v4 data before the status split is first persisted (WORKFLOW-STAGES-SPEC). */
-  private async keepPreV4Copy() {
+  /**
+   * One-time copy of older data before an upgrade is first persisted: pre-v4 before the
+   * status split (WORKFLOW-STAGES-SPEC), v4 before the `external` rename (CONNECTORS-SPEC §3.1).
+   */
+  private async keepPreUpgradeCopy(version: unknown) {
     try {
-      await copyFile(this.path, join(this.directory, "board.pre-v4.json"), constants.COPYFILE_EXCL);
+      await copyFile(this.path, join(this.directory, version === 4 ? "board.pre-v5.json" : "board.pre-v4.json"), constants.COPYFILE_EXCL);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }

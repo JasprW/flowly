@@ -31,8 +31,9 @@ import { t, tn } from "../shared/i18n";
 import { projectTagStats, tagValues } from "../shared/tags";
 import { TagEditor } from "./tag-input";
 import { useStableCallback } from "./stable";
-import { TicketChip, TicketPicker, useConnections } from "./tickets";
-import type { TicketSummary } from "../shared/tickets";
+import { ExternalChip, ExternalPicker, connectionsByFamily, familyNames, pickKey, useConnections } from "./connectors";
+import { BrandIcon } from "./brand-icons";
+import { connectorFamilies, connectorLimits, familyOf, type ConnectorFamily, type ConnectorProvider, type ExternalSummary } from "../shared/connectors";
 
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
@@ -436,27 +437,29 @@ export function TaskForm({
     [baseRef, setBase] = useState(""),
     [pending, setPending] = useState(false),
     [error, setError] = useState("");
-  // From Jira (EXTERNAL-TRACKER-SPEC §5): tickets added as inputs with the new card.
+  // From… (EXTERNAL-TRACKER-SPEC §5, CONNECTORS-SPEC §8.2): items added as inputs with the new card.
   const connections = useConnections();
-  const ticketConnections = connections.data?.connections || [];
-  const [tickets, setTickets] = useState<TicketSummary[]>([]),
-    [pickingTicket, setPickingTicket] = useState(false);
+  const byFamily = useMemo(() => connectionsByFamily(connections.data?.connections || []), [connections.data]);
+  const [externals, setExternals] = useState<{ item: ExternalSummary; provider: ConnectorProvider }[]>([]),
+    [picking, setPicking] = useState<ConnectorFamily | null>(null);
   // The title the last pick filled in: a later pick may replace it only while it is unchanged.
   const prefilled = useRef("");
-  const pickTicket = useStableCallback((ticket: TicketSummary) => {
-    setTickets((current) => (current.some((x) => x.key === ticket.key) ? current : [...current, ticket]));
-    setPickingTicket(false);
+  const pickExternal = useStableCallback((item: ExternalSummary, provider: ConnectorProvider) => {
+    const id = pickKey(familyOf(provider), item.key);
+    setExternals((current) => (current.some((x) => pickKey(familyOf(x.provider), x.item.key) === id) ? current : [...current, { item, provider }]));
+    setPicking(null);
     if (!title.trim() || title === prefilled.current) {
-      setTitle(ticket.summary);
-      prefilled.current = ticket.summary;
+      setTitle(item.summary);
+      prefilled.current = item.summary;
     }
   });
-  const ticketKeys = useMemo(() => new Set(tickets.map((x) => x.key)), [tickets]);
-  // Tickets other cards of this project already reference (shown, still choosable).
-  const ticketUse = useMemo(() => {
+  const externalKeys = useMemo(() => new Set(externals.map((x) => pickKey(familyOf(x.provider), x.item.key))), [externals]);
+  // Items other cards of this project already reference (shown, still choosable).
+  const externalUse = useMemo(() => {
     const used = new Map<string, string>();
     const titles = new Map((board.data?.tasks || []).filter((x) => x.projectId === project.id && !x.archivedAt).map((x) => [x.id, x.title]));
-    for (const a of board.data?.artifacts || []) if (a.ticket && titles.has(a.taskId)) used.set(a.ticket.key, titles.get(a.taskId)!);
+    for (const a of board.data?.artifacts || [])
+      if (a.external && titles.has(a.taskId)) used.set(pickKey(familyOf(a.external.provider), a.external.key), titles.get(a.taskId)!);
     return used;
   }, [board.data?.tasks, board.data?.artifacts, project.id]);
   const [operationId] = useState(
@@ -525,7 +528,9 @@ export function TaskForm({
             branchName,
             ...(seed?.ideaId ? { ideaId: seed.ideaId } : {}),
             ...(seed?.followUpOf ? { followUpOf: seed.followUpOf } : {}),
-            ...(tickets.length ? { tickets: tickets.map((x) => ({ connectionId: x.connectionId, key: x.key })) } : {}),
+            ...(externals.length
+              ? { externals: externals.map((x) => ({ connectionId: x.item.connectionId, key: x.item.key, itemType: x.item.itemType })) }
+              : {}),
           });
       if (task) return onSaved(result.id, undefined, result.status);
       if (!startChosen) return onSaved(result.id);
@@ -570,19 +575,36 @@ export function TaskForm({
           {!!seed?.followUpTitle && (
             <Label muted size={font.sm} lines={1}>{t("Follow-up of {title}", { title: seed.followUpTitle })}</Label>
           )}
-          {!task && ticketConnections.length > 0 && (
+          {!task && byFamily.size > 0 && (
             <View style={{ gap: space[2] }}>
-              {tickets.map((ticket) => (
-                <TicketChip key={ticket.key} ticket={ticket} onRemove={() => setTickets((current) => current.filter((x) => x.key !== ticket.key))} />
+              {externals.map((x) => (
+                <ExternalChip
+                  key={`${x.item.connectionId}:${x.item.key}`}
+                  item={x.item}
+                  provider={x.provider}
+                  onRemove={() => setExternals((current) => current.filter((y) => !(y.item.connectionId === x.item.connectionId && y.item.key === x.item.key)))}
+                />
               ))}
-              {pickingTicket ? (
-                <TicketPicker connections={ticketConnections} picked={ticketKeys} usedBy={ticketUse} onPick={pickTicket} onClose={() => setPickingTicket(false)} />
+              {picking ? (
+                <ExternalPicker
+                  family={picking}
+                  connections={byFamily.get(picking) || []}
+                  projectId={project.id}
+                  picked={externalKeys}
+                  usedBy={externalUse}
+                  onPick={pickExternal}
+                  onClose={() => setPicking(null)}
+                />
               ) : (
-                tickets.length < 5 && (
-                  <View style={{ flexDirection: "row" }}>
-                    <Button icon="Ticket" small onPress={() => setPickingTicket(true)}>
-                      {tickets.length ? t("Add another Jira ticket") : t("From Jira")}
-                    </Button>
+                externals.length < connectorLimits.perCreate && (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+                    {connectorFamilies
+                      .filter((family) => byFamily.has(family))
+                      .map((family) => (
+                        <Button key={family} leading={<BrandIcon family={family} size={14} />} small onPress={() => setPicking(family)}>
+                          {t("From {service}", { service: familyNames[family] })}
+                        </Button>
+                      ))}
                   </View>
                 )
               )}

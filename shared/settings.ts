@@ -29,8 +29,10 @@ export const boardViewSettings = defineSettings({
     showArchived: z.boolean().default(false),
     /** Done/Cancelled cards that finished more than this many days ago fold under "Show older"; 0 shows all. */
     hideFinishedAfterDays: z.number().int().min(0).max(365).default(14),
-    /** The ticket picker's connection, when there are several (EXTERNAL-TRACKER-SPEC §5.2). */
+    /** Before CONNECTORS-SPEC: the Jira picker's connection; read as `lastConnections.jira`. */
     lastTicketConnection: z.string().max(200).default(""),
+    /** Each family's picker connection, when there are several (CONNECTORS-SPEC §8.1). */
+    lastConnections: z.record(z.string().max(20), z.string().max(200)).catch({}).default({}),
     /** The card's activity line (CARD-DISPLAY-SPEC §3). */
     cardActivity: z.enum(cardActivityModes).catch("auto").default("auto"),
     /** Card fields the user hid; unknown ids are kept and ignored (CARD-DISPLAY-SPEC §4). */

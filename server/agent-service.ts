@@ -8,9 +8,11 @@ import { isResolved, linksOf } from "../shared/links";
 import { absoluteTarget, artifactsOf } from "../shared/artifacts";
 import { changeTags, normalizeTags, projectTagStats, tagChangeNote } from "../shared/tags";
 import { setTags } from "./store";
-import { artifactRoots, dropArtifact, missingArtifacts, normalizeTarget, putArtifact, ticketArtifact } from "./artifacts";
+import { artifactRoots, dropArtifact, externalArtifact, missingArtifacts, normalizeTarget, putArtifact } from "./artifacts";
 import { ArtifactReadStore } from "./artifact-reads";
-import { TicketError, TicketReadStore, type TicketService } from "./tickets";
+import { ExternalError } from "./connectors/http";
+import { ExternalReadStore, refKey, type ConnectorService } from "./connectors/service";
+import { familyOf, itemTypeOf } from "../shared/connectors";
 import { join } from "node:path";
 import { hostname } from "node:os";
 import type { Artifact, GitHead, NextMove, Workpad } from "../shared/model";
@@ -40,7 +42,8 @@ import {
   type TypeToolInput,
   type NextMovesInput,
   type WorkpadInput,
-  type ReadTicketInput,
+  type ExternalContext,
+  type ReadExternalInput,
 } from "../shared/tools";
 import { BoardStore } from "./store";
 import { BoardService } from "./service";
@@ -64,40 +67,43 @@ export class AgentService {
     readonly clock = () => Date.now(),
   ) {
     this.artifactReads = new ArtifactReadStore(store.directory);
-    this.ticketReads = new TicketReadStore(join(store.directory, "tickets"));
+    this.externalReads = new ExternalReadStore(join(store.directory, "connectors"));
   }
-  /** Reads ticket inputs (EXTERNAL-TRACKER-SPEC §4); set by the plugin entry. */
-  tickets?: TicketService;
-  /** Per-session ticket content last seen, for ticket `unread`. */
-  readonly ticketReads: TicketReadStore;
+  /** Reads external inputs (CONNECTORS-SPEC §9); set by the plugin entry. */
+  connectors?: ConnectorService;
+  /** Per-session external content last seen, for external `unread`. */
+  readonly externalReads: ExternalReadStore;
   /**
-   * Current summaries of the card's ticket inputs and whether their content
-   * changed since this session last saw it. Jira being unreachable never
+   * Current summaries of the card's external inputs and whether their content
+   * changed since this session last saw it. A service being unreachable never
    * fails get_task: the cached values come back marked stale.
    */
-  private async ticketInfo(agentId: string, list: readonly Artifact[]) {
-    const out = new Map<string, { ticket: NonNullable<ToolContext["artifacts"][number]["ticket"]>; changed: boolean; fingerprint: string }>();
-    if (!this.tickets || !list.some((a) => a.ticket)) return out;
-    const tickets = this.tickets;
-    const located = await tickets.locate(list).catch(() => new Map<string, null>());
+  private async externalInfo(agentId: string, list: readonly Artifact[]) {
+    const out = new Map<string, { external: ExternalContext; changed: boolean; fingerprint: string }>();
+    if (!this.connectors || !list.some((a) => a.external)) return out;
+    const connectors = this.connectors;
+    const located = await connectors.locate(list).catch(() => new Map<string, null>());
     const refs = [...located.values()].filter((r): r is NonNullable<typeof r> => !!r);
     const [summaries, seen] = await Promise.all([
-      refs.length ? tickets.summaries(refs).catch(() => new Map()) : new Map(),
-      this.ticketReads.seen(agentId).catch(() => ({}) as Record<string, string>),
+      refs.length ? connectors.summaries(refs).catch(() => new Map()) : new Map(),
+      this.externalReads.seen(agentId).catch(() => ({}) as Record<string, string>),
     ]);
     for (const a of list) {
-      if (!a.ticket) continue;
+      if (!a.external) continue;
       const ref = located.get(a.id);
-      const hit = ref ? summaries.get(`${ref.connectionId}:${ref.key}`) : undefined;
+      const hit = ref ? summaries.get(refKey(ref)) : undefined;
       const fingerprint = hit?.fingerprint || "";
       out.set(a.id, {
-        ticket: {
-          key: hit?.summary.key || a.ticket.key,
+        external: {
+          provider: a.external.provider,
+          itemType: hit?.summary.itemType || itemTypeOf(a.external),
+          key: hit?.summary.key || a.external.key,
           summary: hit?.summary.summary || a.title,
           status: hit?.summary.status || "",
           type: hit?.summary.type || "",
           priority: hit?.summary.priority || "",
           assignee: hit?.summary.assignee || "",
+          container: hit?.summary.container || "",
           updated: hit?.summary.updated || "",
           stale: !hit || hit.stale,
           connection: ref ? "ok" : "removed",
@@ -108,25 +114,27 @@ export class AgentService {
     }
     return out;
   }
-  /** flowly_read_ticket (EXTERNAL-TRACKER-SPEC §4.2): one of this card's ticket inputs, read-only. */
-  async readTicket(identity: ToolIdentity, input: ReadTicketInput) {
+  /** flowly_read_external, alias flowly_read_ticket (CONNECTORS-SPEC §9): one of this card's external inputs, read-only. */
+  async readExternal(identity: ToolIdentity, input: ReadExternalInput) {
     const r = await this.resources(identity);
     const board = await this.store.read();
     const artifact = board.artifacts.find((a) => a.id === input.artifactId && a.taskId === r.task.id);
-    if (!artifact) throw new ToolError("TICKET_NOT_FOUND", "No artifact with that id on this card. Use an id from get_task artifacts.");
-    if (!artifact.ticket) throw new ToolError("TICKET_NOT_FOUND", "This artifact is not a Jira ticket input. Read files through absolutePath and other links with your web tool.");
-    if (!this.tickets) throw new ToolError("TICKETS_DISABLED", "Tickets are unavailable in this Flowly build.");
-    const ref = (await this.tickets.locate([artifact])).get(artifact.id);
+    if (!artifact) throw new ToolError("EXTERNAL_NOT_FOUND", "No artifact with that id on this card. Use an id from get_task artifacts.");
+    if (!artifact.external)
+      throw new ToolError("EXTERNAL_NOT_FOUND", "This artifact is not an external input. Read files through absolutePath and other links with your web tool.");
+    if (!this.connectors) throw new ToolError("CONNECTORS_DISABLED", "Connectors are unavailable in this Flowly build.");
+    const service = serviceName(artifact.external.provider);
+    const ref = (await this.connectors.locate([artifact])).get(artifact.id);
     if (!ref)
       throw new ToolError(
-        "TICKET_UNAVAILABLE",
-        "The user removed this Jira's connection in Flowly settings, so the ticket can't be read. Tell the user and ask them to add the connection again (Settings → Connections) or paste what you need; don't guess the ticket content.",
+        "EXTERNAL_UNAVAILABLE",
+        `The user removed this ${service} connection in Flowly settings, so the item can't be read. Tell the user and ask them to add the connection again (Settings → Connections) or paste what you need; don't guess the content.`,
       );
     try {
-      const detail = await this.tickets.detail(ref, input.refresh ?? false);
+      const detail = await this.connectors.detail(ref, input.refresh ?? false);
       if (detail.fingerprint)
-        await this.ticketReads.mark(identity.agentId, { [artifact.id]: detail.fingerprint }).catch(() => undefined);
-      this.accesses.set(identity.agentId, { at: new Date(this.clock()).toISOString(), action: "ticket" });
+        await this.externalReads.mark(identity.agentId, { [artifact.id]: detail.fingerprint }).catch(() => undefined);
+      this.accesses.set(identity.agentId, { at: new Date(this.clock()).toISOString(), action: "external" });
       return {
         artifactId: artifact.id,
         key: detail.summary.key,
@@ -138,13 +146,13 @@ export class AgentService {
         fetchedAt: detail.fetchedAt,
       };
     } catch (error) {
-      if (error instanceof TicketError)
+      if (error instanceof ExternalError)
         throw new ToolError(
-          error.code === "TICKET_INVALID" ? "TICKET_UNAVAILABLE" : error.code,
-          error.code === "TICKET_AUTH"
-            ? "The Jira connection's token was refused. Ask the user to update it in Flowly settings → Connections; don't guess the ticket content."
+          error.code === "EXTERNAL_INVALID" ? "EXTERNAL_UNAVAILABLE" : error.code,
+          error.code === "EXTERNAL_AUTH"
+            ? `The ${service} connection's token was refused. Ask the user to update it in Flowly settings → Connections; don't guess the content.`
             : error.message,
-          error.code === "TICKET_UNAVAILABLE",
+          error.code === "EXTERNAL_UNAVAILABLE",
         );
       throw error;
     }
@@ -247,7 +255,7 @@ export class AgentService {
     }
     const revision = { task: r.task.revision, project: r.project.revision };
     const finished = ["done", "cancelled"].includes(r.task.status);
-    let tickets = new Map<string, { changed: boolean; fingerprint: string; ticket: NonNullable<ToolContext["artifacts"][number]["ticket"]> }>();
+    let externals = new Map<string, { changed: boolean; fingerprint: string; external: ExternalContext }>();
     const value: ToolContext = {
       identity,
       task: r.task,
@@ -292,7 +300,7 @@ export class AgentService {
           const list = artifactsOf(board.artifacts, r.task.id).slice(0, 100);
           const where = artifactRoots(r.task, r.project, r.workspace.workspaceDirectory);
           const missing = await missingArtifacts(list, where);
-          tickets = await this.ticketInfo(identity.agentId, list);
+          externals = await this.externalInfo(identity.agentId, list);
           return list.map((a) => ({
             id: a.id,
             role: a.role,
@@ -306,8 +314,10 @@ export class AgentService {
             // Added or edited since this session last read the card; its own additions never count.
             unread:
               (!(a.createdBy === "agent" && a.agentId === identity.agentId) && (!lastRead || a.updatedAt > lastRead)) ||
-              !!tickets.get(a.id)?.changed,
-            ...(tickets.has(a.id) ? { ticket: tickets.get(a.id)!.ticket } : {}),
+              !!externals.get(a.id)?.changed,
+            ...(externals.has(a.id) ? { external: externals.get(a.id)!.external } : {}),
+            // Sessions started with the older skill look for `ticket` (CONNECTORS-SPEC §3.3).
+            ...(externals.has(a.id) && familyOf(a.external!.provider) === "jira" ? { ticket: externals.get(a.id)!.external } : {}),
           }));
         })(),
         ...(workpadEnabled(r.project)
@@ -335,10 +345,10 @@ export class AgentService {
       await this.artifactReads.mark(identity.agentId, readAt).catch((e) =>
         console.error("Kanban artifact reads not saved:", e instanceof Error ? e.message : String(e)),
       );
-    const seenTickets = Object.fromEntries([...tickets].filter(([, v]) => v.fingerprint).map(([id, v]) => [id, v.fingerprint]));
-    if (markArtifacts && Object.keys(seenTickets).length)
-      await this.ticketReads.mark(identity.agentId, seenTickets).catch((e) =>
-        console.error("Kanban ticket reads not saved:", e instanceof Error ? e.message : String(e)),
+    const seenExternals = Object.fromEntries([...externals].filter(([, v]) => v.fingerprint).map(([id, v]) => [id, v.fingerprint]));
+    if (markArtifacts && Object.keys(seenExternals).length)
+      await this.externalReads.mark(identity.agentId, seenExternals).catch((e) =>
+        console.error("Kanban external reads not saved:", e instanceof Error ? e.message : String(e)),
       );
     return value;
   }
@@ -390,17 +400,17 @@ export class AgentService {
     const artifactWrite = action === "artifact" || action === "artifact_remove";
     const artifactsOn = artifactWrite ? await this.artifactsOn() : true;
     // Paths are checked before the write; the transaction only records the result.
-    // A ticket link or key of a configured connection becomes a ticket input (EXTERNAL-TRACKER-SPEC §3.1).
-    const ticketTarget =
+    // An item link or key of a configured connection becomes an external input (CONNECTORS-SPEC §3.1).
+    const externalTarget =
       action === "artifact" && artifactsOn
-        ? await ticketArtifact(this.tickets, (input as ArtifactToolInput).target).catch((e) => {
+        ? await externalArtifact(this.connectors, (input as ArtifactToolInput).target).catch((e) => {
             throw new ToolError("ARTIFACT_INVALID", e instanceof Error ? e.message : String(e));
           })
         : null;
     const artifactTarget =
       action === "artifact" && artifactsOn
-        ? ticketTarget
-          ? { kind: ticketTarget.kind, target: ticketTarget.target, ticket: ticketTarget.ticket, ticketTitle: ticketTarget.title }
+        ? externalTarget
+          ? { kind: externalTarget.kind, target: externalTarget.target, external: externalTarget.external, externalTitle: externalTarget.title }
           : await normalizeTarget(
               (input as ArtifactToolInput).target,
               artifactRoots(resources.task, resources.project, resources.workspace.workspaceDirectory),
@@ -543,11 +553,11 @@ export class AgentService {
                     role: a.role,
                     kind: artifactTarget!.kind,
                     target: artifactTarget!.target,
-                    title: a.title || ("ticketTitle" in artifactTarget! ? artifactTarget.ticketTitle : undefined),
+                    title: a.title || ("externalTitle" in artifactTarget! ? artifactTarget.externalTitle : undefined),
                     note: a.note,
                     createdBy: "agent",
                     agentId: identity.agentId,
-                    ...("ticket" in artifactTarget! ? { ticket: artifactTarget.ticket } : {}),
+                    ...("external" in artifactTarget! ? { external: artifactTarget.external } : {}),
                   },
                   new Date(this.clock()).toISOString(),
                 );
@@ -834,3 +844,6 @@ export function pruneIdeas(board: Board, taskId: string) {
   const drop = new Set<Idea>(own.filter((i) => i.status !== "open").slice(0, excess));
   board.ideas = board.ideas.filter((i) => !drop.has(i));
 }
+
+/** "GitLab", for agent-facing messages. */
+const serviceName = (provider: Parameters<typeof familyOf>[0]) => ({ jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab" })[familyOf(provider)];
