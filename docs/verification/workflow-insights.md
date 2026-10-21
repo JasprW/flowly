@@ -53,6 +53,47 @@ UNRUN:
 - The merge of the existing repeats on real data. It happens on the next model run after PR #8 is installed.
 - "Seen in N runs" and the per-project cost line in a real window.
 
+### 2026-10-21: after merging PR #8 (e9dd8f1)
+
+- PR #8 squash-merged as `e9dd8f1`; local main reset to it (mixed), with the PR diff 3-way merged into the shared working tree first. typecheck PASS; `npm test` 850 passed, 65 skipped (the working tree, including other sessions' uncommitted work). `paseo plugin reload flowly`: running, no errors. Before the reload the running plugin did not contribute `workflow-insights.*` at all, because another session had reloaded it from a tree without that code.
+- Run now on Flowly through `workflow-insights.run` (`claude/claude-sonnet-5-5`): status ok, about 50 s, **$0.49**, 129k context tokens, 4.3k output tokens. Window: 7812 calls, 7603 actions, 56 cards, 72 sessions.
+- Counts reported by the run: **2 added, 5 refreshed, 13 merged**. Open suggestions went from **22 to 11**.
+  - The 13 merged ones were all real repeats, folded into 5 kept ones:
+    - the patch/i18n CLI, now seen 5×, on 18 cards;
+    - the board.json inspector, 4×;
+    - the AGENTS.md rule, 3×;
+    - the feature-delivery checklist, 3×;
+    - the fixture checklist, 2×.
+  - The DaemonClient/Playwright harness (4×) and `verify` (3×) suggestions had already absorbed their earlier repeats.
+  - No merge joined two different things.
+  - The asar dump helper was refreshed (seen 2×, cards 3→5).
+- **Both new suggestions are repeats** that slipped through:
+  - "改完代码的收尾:check 与 reload 合并" repeats the open `verify` suggestion. Title similarity 0.00.
+  - "追加 docs/PROGRESS.md 和 SPEC-OUTLINE.md 条目的脚本" repeats the open "文档追加脚本" suggestion. Title similarity 0.40.
+  - The model did not mark either with `updates`, and both scores are below the fallback thresholds. The next run can merge them (`merges` between open ones), or they can be dismissed.
+- Overview: `cycleCostUsd` 0.95 over 2 projects (Flowly 0.49, Search System 0.46), i.e. about $28.5 per month at daily runs.
+- The temporary session `9619e547` ("Flowly workflow insights · Flowly") is archived.
+
+### 2026-10-21: new suggestions must state how they differ
+
+The fix for the 2 repeats above, on branch `fix/workflow-insights-nearest`:
+- When existing suggestions are listed, every finding without `updates` must give `nearest` (the closest listed suggestion) and `difference` (what it covers that `nearest` does not). The prompt says that a narrower, broader or combined version of a listed suggestion is an update, not a difference.
+- `nearest` without a `difference` refreshes `nearest`. A finding with neither is dropped. With no suggestions listed, nothing is required.
+- Spec §4.3, §4.4, §5.3 and §10 are updated.
+
+PASS:
+- `npm run typecheck`.
+- `npm test` (the branch tree): 853 passed, 65 skipped.
+- New tests in `shared/workflow-insights.test.ts`, built on the two missed pairs:
+  - both pairs stay below the similarity fallback;
+  - without a difference both are dropped;
+  - with only `nearest` both refresh the existing suggestion;
+  - a stated difference adds a new one;
+  - with no suggestions listed, or only one dismissed past its cooldown, no difference is needed.
+- Parsing reads `nearest` and `difference`.
+
+UNRUN: a live run with this change. The installed plugin runs the main tree, which does not have it until the PR is merged.
+
 ## UNRUN
 
 - The Insights section, settings group, project switch, Create card prefill and tip in a real desktop or compact window (no UI session was used).

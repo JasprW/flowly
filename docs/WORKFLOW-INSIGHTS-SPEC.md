@@ -164,10 +164,11 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
   - 可选的五类目标：`paseo_script`、`worktree_setup`、`repo_tool`、`agents_md`、`skill`；
   - 每条结论都要引用卡片短 ID 和次数；不推荐已存在的东西，除非组合起来能省事；git 写操作和一次性探索不做成脚本；重点解读内联脚本的用途；最多 8 条；如实标注置信度；
   - 与已有建议说的是同一件事（措辞或范围不同也算）时，不要写成新建议，而是用 `updates` 填那条的短 ID，并给出刷新后的依据、proposal 和卡片；dismissed 或 accepted 的不要再提；
+  - 列出了已有建议时，没填 `updates` 的每条建议都要填 `nearest`（最接近的已有建议的短 ID）和 `difference`（一句话说明它覆盖了哪些 nearest 没有的内容）。已有建议的收窄、扩大或组合版本（例如同一组命令再加一步）不算不同，应填 `updates`。说不出真正的不同时就填 `updates`；两者都没有的建议会被丢弃；
   - 已有的 open 建议中有两条或以上说的是同一件事时，在 `merges` 里列出 `{ keep, drop[] }`，保留措辞最好的那条；
   - 不使用工具；**只返回一个 JSON 对象**。
 - 输出 schema：
-  `{ findings: [{ updates?, target, title, evidence, proposal, benefit, confidence: "high"|"medium"|"low", cards: string[] }], merges: [{ keep, drop: string[] }], noise, verdict }`。
+  `{ findings: [{ updates?, nearest?, difference?, target, title, evidence, proposal, benefit, confidence: "high"|"medium"|"low", cards: string[] }], merges: [{ keep, drop: string[] }], noise, verdict }`。
   同时以 `outputSchema` 传入，但 **Claude 不强制执行它**：探针返回的是 markdown。
 - 解析：用 `firstObject` 取 JSON，兼容代码块和字符串数组。取不到时在同一 session 追加一条消息 “Reply again with only the JSON object described above.”，重试一次；仍失败则本次运行记为错误 “The workflow insights model returned no JSON.”。
 - 记录 `lastUsage`（输入、缓存、输出 token，以及 provider 给出的费用）。
@@ -177,12 +178,14 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 - `cards` 中的短 ID 必须能对应到本项目、本窗口内有记录的卡片，对不上的丢弃。有效卡片少于 2 张的建议丢弃；窗口里只有 1 张卡时，引用这 1 张即可。
 - 每条建议先判断是否在重复已有建议，判断顺序（§5.3）：
   1. `updates` 填的 ID（完整 ID 或短 ID）能唯一对应一条已有建议；
-  2. 指纹（target + 规范化标题）相同；
-  3. 标题相似：同一 target 且相似度 ≥ 0.6，或任意 target 且相似度 ≥ 0.7。相似度是标题的 Jaccard 系数，英文按词计，中日韩文字按相邻两字计。
+  2. 填了 `nearest` 但 `difference` 为空，且 `nearest` 能对应一条已有建议：视为它的更新；
+  3. 指纹（target + 规范化标题）相同；
+  4. 标题相似：同一 target 且相似度 ≥ 0.6，或任意 target 且相似度 ≥ 0.7。相似度是标题的 Jaccard 系数，英文按词计，中日韩文字按相邻两字计。
 - 判定为重复时：
   - 对应 open 建议：刷新它（§5.3），不新增；同一次运行里多条指向同一条建议时，只取第一条；
   - 对应 accepted 或 30 天内 dismissed 的建议：直接丢弃。
-- 不重复的建议，与本次已新增的建议之间也做同样的相似度比较，避免一次运行里出现两条相同的。
+- 不重复的建议：素材里列出了已有建议（§4.2 第 9 项不为空）而它没有 `difference` 时丢弃，因为模型没有说明它和已有建议有什么不同。`nearest` 对不上已有建议、但写了 `difference` 的，仍按新建议处理。
+- 新建议与本次已新增的建议之间也做同样的相似度比较，避免一次运行里出现两条相同的。
 - `merges`：`keep` 必须是已有的 open 或 accepted 建议，`drop` 里只保留其中 open 的、不等于 keep 的；无法对应的 ID 忽略。被合并掉的建议不再单独刷新。
 - 每个字段限长：title 120，evidence 1000，proposal 4000，benefit 500；超长的建议丢弃，不截断。
 - 新增与刷新合计最多 8 条。既没有新增、刷新，也没有合并时，本次运行记为 ok，结果为 “No suggestions this time”。
@@ -244,6 +247,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 2026-10-21 在真实数据上发现：每天运行时，25 条 open 建议里约一半是在重说之前的建议（verify、看板查看、Daemon 连接各 3 次）。原因是模型每次换个说法，而只比较指纹拦不住。改为：
 
 - **由模型标注**：已有建议带短 ID 写进素材（§4.2 第 9 项）。模型发现同一件事时填 `updates`，发现已有建议之间互相重复时填 `merges`。这是主要手段，因为改写后的重复往往换了语言或角度，靠字面比对认不出来（真实数据里同一个“看板查看脚本”的两个标题相似度只有 0.13）。
+- **新建议要说明不同**（2026-10-21 合并 PR #8 后的 Run now：13 条重复都合并对了，但新增的 2 条仍是 open 建议的重复，“check 与 reload 合并”之于 `verify`、“追加 PROGRESS/SPEC-OUTLINE 条目的脚本”之于“文档追加脚本”，标题相似度 0.00 和 0.40，兜底拦不住）：模型对每条新建议都必须指出最接近的已有建议并写出不同之处（§4.3），只写 `nearest` 不写不同视为更新，两者都没有就丢弃（§4.4）。这样模型必须逐条对照已有建议，而不是只在想起来时才填 `updates`。代价：模型漏填时，一条真正的新建议要等下一次运行才会出现。
 - **daemon 兜底**：指纹相同或标题明显相似（§4.4）也按重复处理。阈值取得保守：真实数据中的明显改写为 0.64 和 0.67；只共享通用词的标题（如 “alpha helper tool” 与 “bravo helper tool”）为 0.5，不算重复。
 - **刷新**：open 建议被再次发现时，更新 evidence、proposal、benefit、confidence；卡片取并集（最多 20 张）；`seen` 加 1，`lastSeenAt` 和 `runId` 改为本次。标题保持不变，用户认得出是同一条。
 - **合并**：keep 的 `seen` 加上被合并建议的 `seen`，卡片取并集，被合并的 open 建议删除。keep 是 accepted 时，同样删除它的 open 重复，因为这件事已经建了卡。
@@ -306,7 +310,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 - 安静期跳过；素材预算裁剪与按卡片轮流抽样。
 - 解析：纯 JSON、代码块、markdown 中夹带 JSON、无 JSON 时的重试、仍失败的错误。
 - 校验：无效卡片 ID、少于 2 张卡（窗口只有 1 张卡时除外）、超长字段、重复指纹、dismissed 冷却。
-- 重复（2026-10-21）：`updates` 刷新 open、不动 accepted/dismissed、未知 ID 视为新建议；跨语言的标题相似度兜底与不误判通用词；同一次运行内去重；`merges` 只合并 open；`applyReconciled` 的刷新、`seen` 累加与删除；以及两次运行之间的实际刷新与合并（daemon 测试）。
+- 重复（2026-10-21）：`updates` 刷新 open、不动 accepted/dismissed、未知 ID 加上 `difference` 视为新建议；2026-10-21 漏掉的两对（低于相似度兜底；不说明不同就丢弃；只给 `nearest` 就刷新它；写了不同才新增；没有列出已有建议时不要求）；跨语言的标题相似度兜底与不误判通用词；同一次运行内去重；`merges` 只合并 open；`applyReconciled` 的刷新、`seen` 累加与删除；以及两次运行之间的实际刷新与合并（daemon 测试）。
 - 一个周期的费用按项目求和；两张卡的忙碌项目在定时运行中会被分析。
 - 建卡时原子 accept 与错误回滚；设置缺字段时的默认值。
 - 提示规则（`client/onboarding-logic.test.ts`）；i18n 完整性。

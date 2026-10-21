@@ -223,6 +223,8 @@ describe("model output", () => {
     const body = JSON.stringify({ findings: [finding({ updates: " f1a2b3c4 " })], merges: [{ keep: "aaaa1111", drop: ["bbbb2222", 3] }, { keep: "cccc3333", drop: [] }], noise: "", verdict: "" });
     const out = parseWorkflowOutput(body)!;
     expect(out.findings[0].updates).toBe("f1a2b3c4");
+    const near = parseWorkflowOutput(JSON.stringify({ findings: [finding({ nearest: "f1a2b3c4", difference: " adds reload " })], merges: [], noise: "", verdict: "" }))!;
+    expect(near.findings[0]).toMatchObject({ nearest: "f1a2b3c4", difference: "adds reload" });
     expect(out.merges).toEqual([{ keep: "aaaa1111", drop: ["bbbb2222"] }]);
   });
   test("validation drops unknown cards, thin evidence, over-long fields and repeats", () => {
@@ -242,7 +244,7 @@ describe("model output", () => {
         finding({ target: "agents_md", title: "Old rule" }),
         finding({ target: "magic", title: "Bad target" }),
         finding({ title: "Odd confidence", confidence: "certain", cards: ["bbbbbbbb", "cccccccc"] }),
-      ],
+      ].map((f) => ({ ...f, difference: "a different routine" })),
       { cardIds, existing, now },
     );
     expect(out.added.map((f) => f.title)).toEqual(["i18n helper script", "Old rule", "Odd confidence"]);
@@ -289,12 +291,12 @@ describe("repeats (§5.3)", () => {
   test("the model's updates id refreshes an open suggestion instead of adding one", () => {
     const existing = [stored("1a2b3c4d-open", { title: "Board inspector" }), stored("2b3c4d5e-done", { title: "Edit CLI", status: "accepted" }), stored("3c4d5e6f-gone", { title: "Asar dump", status: "dismissed", updatedAt: "2026-10-20T00:00:00.000Z" })];
     const out = validateFindings(
-      [raw({ updates: "1a2b3c4d", title: "board.json query script" }), raw({ updates: "2b3c4d5e", title: "Assert edit tool" }), raw({ updates: "3c4d5e6f", title: "Dump the app bundle" }), raw({ updates: "ffffffff" })],
+      [raw({ updates: "1a2b3c4d", title: "board.json query script" }), raw({ updates: "2b3c4d5e", title: "Assert edit tool" }), raw({ updates: "3c4d5e6f", title: "Dump the app bundle" }), raw({ updates: "ffffffff", difference: "not about the board" })],
       { cardIds, existing, now },
     );
     expect(out.refreshed.map((r) => r.id)).toEqual(["1a2b3c4d-open"]);
     expect(out.refreshed[0].draft).toMatchObject({ evidence: "e2", proposal: "p2", cards: ["aaaaaaaa-1111", "cccccccc-3333"] });
-    // Accepted and recently dismissed ones are left alone; an unknown id is a new suggestion.
+    // Accepted and recently dismissed ones are left alone; an unknown id with a stated difference is a new suggestion.
     expect(out.added.map((f) => f.title)).toEqual(["Something new"]);
   });
   test("a reworded repeat is caught by title similarity, also across languages; different tools are not", () => {
@@ -307,7 +309,7 @@ describe("repeats (§5.3)", () => {
       [
         raw({ target: "skill", title: "“新增用户可见特性”交付 checklist skill" }),
         raw({ title: "board.json read-only inspector CLI (events, filters)" }),
-        raw({ title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本" }),
+        raw({ title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本", nearest: "3c4d5e6f", difference: "解包 app.asar，不是连 daemon" }),
       ],
       { cardIds, existing, now },
     );
@@ -317,6 +319,45 @@ describe("repeats (§5.3)", () => {
     // Sharing only generic words is not a repeat.
     expect(similarFinding({ target: "repo_tool", title: "alpha helper tool" }, { target: "repo_tool", title: "bravo helper tool" })).toBe(false);
     expect(similarFinding({ target: "repo_tool", title: "一次性探测daemon状态时反复重写DaemonClient连接样板" }, { target: "repo_tool", title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本" })).toBe(false);
+  });
+  // The two repeats the 2026-10-21 Run now added after PR #8: titles too different for the fallback.
+  const missed = [
+    { existing: "验证流水线 `verify`:typecheck、test、插件重载、检查日志", repeat: "改完代码的收尾:check 与 reload 合并", target: "paseo_script" },
+    { existing: "文档追加脚本:PROGRESS.md / SPEC-OUTLINE.md 条目的幂等插入", repeat: "追加 docs/PROGRESS.md 和 SPEC-OUTLINE.md 条目的脚本", target: "repo_tool" },
+  ] as const;
+  const missedExisting = () => [
+    stored("d7bbb584-verify", { title: missed[0].existing, target: "paseo_script" }),
+    stored("46aff43b-docs", { title: missed[1].existing }),
+  ];
+  test("the 2026-10-21 repeats are below the similarity fallback", () => {
+    for (const m of missed) expect(similarFinding({ target: m.target, title: m.repeat }, { target: m.target, title: m.existing })).toBe(false);
+  });
+  test("a new finding that gives no difference from the suggestions shown is dropped", () => {
+    const out = validateFindings(
+      missed.map((m) => raw({ target: m.target, title: m.repeat })),
+      { cardIds, existing: missedExisting(), now },
+    );
+    expect(out.added).toEqual([]);
+    expect(out.refreshed).toEqual([]);
+  });
+  test("naming the nearest suggestion without a difference refreshes it", () => {
+    const out = validateFindings(
+      [raw({ target: "paseo_script", title: missed[0].repeat, nearest: "d7bbb584" }), raw({ title: missed[1].repeat, nearest: "46aff43b", difference: "" })],
+      { cardIds, existing: missedExisting(), now },
+    );
+    expect(out.refreshed.map((r) => r.id)).toEqual(["d7bbb584-verify", "46aff43b-docs"]);
+    expect(out.added).toEqual([]);
+  });
+  test("a stated difference keeps a new finding; with no suggestions shown none is needed", () => {
+    const out = validateFindings(
+      [raw({ title: "asar 解包脚本", nearest: "46aff43b", difference: "解包 Paseo.app 的 app.asar，与文档无关" })],
+      { cardIds, existing: missedExisting(), now },
+    );
+    expect(out.added.map((f) => f.title)).toEqual(["asar 解包脚本"]);
+    expect(validateFindings([raw({ title: missed[1].repeat })], { cardIds, existing: [], now }).added).toHaveLength(1);
+    // Dismissed past its cooldown was not shown, so it does not count.
+    const old = [stored("46aff43b-docs", { title: missed[1].existing, status: "dismissed", updatedAt: "2026-08-01T00:00:00.000Z" })];
+    expect(validateFindings([raw({ title: missed[1].repeat })], { cardIds, existing: old, now }).added).toHaveLength(1);
   });
   test("two findings of one run about the same thing add one suggestion", () => {
     const out = validateFindings([raw({ title: "verify pipeline script" }), raw({ title: "verify pipeline script (typecheck)" })], { cardIds, existing: [], now });

@@ -165,6 +165,8 @@ Spec: [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md). Analysis of the board showed the mi
   - Insights shows "Seen in N runs".
   - The existing repeats are merged by the next model run. The data file is not edited directly.
 - [x] PASS: typecheck; `npm test` 839 passed / 65 skipped (the PR branch tree). UNRUN: the merge on real data (the next scheduled run or Run now after the PR is installed), the UI line in a real window.
+- [x] PR #8 merged (`e9dd8f1`), plugin reloaded. Run now on Flowly: $0.49, 2 added / 5 refreshed / 13 merged, open 22 → 11. The merges were all correct, but both new suggestions repeat open ones the model did not mark (title similarity 0.00 and 0.40, below the fallback). [Details](verification/workflow-insights.md).
+- [x] Fix (user request): when existing suggestions are listed, a new finding must give `nearest` and `difference`. `nearest` alone refreshes it; a finding with neither is dropped. Spec §4.3, §4.4 and §5.3 updated; the two missed pairs are in the tests. UNRUN: a live run with the change.
 
 ## Card display: calmer layout and user-chosen fields — 2026-10-19
 

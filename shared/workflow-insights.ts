@@ -478,10 +478,11 @@ Rules:
 - For inline scripts, infer their purpose and cluster them; this is where most of the value is expected.
 - At most ${MAX_FINDINGS} findings, the most valuable first. Mark confidence honestly.
 - Suggestions already made are listed with their 8-character ids. When a finding is about the same thing as one of them (even if you would word or scope it differently), do not write it as new: set "updates" to that id and give the refreshed evidence, proposal and cards. Never propose again something listed as dismissed or accepted.
+- When suggestions already made are listed, every finding without "updates" must set "nearest" to the id of the listed suggestion closest to it and "difference" to one sentence on what it covers that "nearest" does not. A narrower, broader or combined version of a listed suggestion (for example the same commands plus one more step) is not a difference: that is an update. If you cannot name a real difference, set "updates" instead. A finding with neither is discarded.
 - When two or more suggestions already made with status open say the same thing, list them under "merges" as {"keep": id, "drop": [ids]}, keeping the one that is best worded.
 - Write titles and texts in the language most card titles use.
 - Do not use any tools. Answer with only one JSON object and nothing else:
-{"findings":[{"updates":"8-char id of the suggestion it refreshes, or empty","target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"]}],"merges":[{"keep":"8-char id","drop":["8-char ids"]}],"noise":"what in the material was noise","verdict":"one or two sentences"}
+{"findings":[{"updates":"8-char id of the suggestion it refreshes, or empty","nearest":"8-char id of the closest suggestion already made, when not an update","difference":"what this covers that nearest does not, when not an update","target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"]}],"merges":[{"keep":"8-char id","drop":["8-char ids"]}],"noise":"what in the material was noise","verdict":"one or two sentences"}
 
 ${material}`;
 }
@@ -499,6 +500,8 @@ const finding = {
     confidence: { enum: [...confidences] },
     cards: { type: "array", items: { type: "string" } },
     updates: { type: "string" },
+    nearest: { type: "string" },
+    difference: { type: "string" },
   },
 };
 const merge = { type: "object", additionalProperties: false, required: ["keep", "drop"], properties: { keep: { type: "string" }, drop: { type: "array", items: { type: "string" } } } };
@@ -511,7 +514,7 @@ export const workflowJsonSchema = {
 } as const;
 export const RETRY_PROMPT = "Reply again with only the JSON object described above, and nothing else.";
 
-export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[]; updates?: string };
+export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[]; updates?: string; nearest?: string; difference?: string };
 export type RawMerge = { keep: string; drop: string[] };
 
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : Array.isArray(v) ? v.filter((x) => typeof x === "string").join("\n").trim() : "");
@@ -548,6 +551,8 @@ export function parseWorkflowOutput(reply: string | null | undefined): { finding
         confidence: text(f.confidence).toLowerCase(),
         cards: (Array.isArray(f.cards) ? f.cards : []).filter((c): c is string => typeof c === "string").map((c) => c.trim()),
         updates: text(f.updates),
+        nearest: text(f.nearest),
+        difference: text(f.difference),
       })),
   };
 }
@@ -637,9 +642,11 @@ function findById(list: readonly Finding[], ref: string | undefined): Finding | 
  * The daemon does not trust the model's ids or lengths (§4.4). Unknown cards are
  * dropped; a finding citing fewer than two known cards (one, when the window has
  * one card) or with over-long fields is dropped. A finding is an update of an
- * existing suggestion when the model says so (`updates`) or when its title is
- * similar enough: open ones are refreshed, accepted or recently dismissed ones
- * are left alone. Merges are kept only between existing open suggestions.
+ * existing suggestion when the model says so (`updates`, or `nearest` without a
+ * `difference`) or when its title is similar enough: open ones are refreshed,
+ * accepted or recently dismissed ones are left alone. When suggestions were
+ * listed, a new one must state its difference from the nearest; otherwise it is
+ * dropped. Merges are kept only between existing open suggestions.
  */
 export function validateFindings(
   raw: readonly RawFinding[],
@@ -684,6 +691,8 @@ export function validateFindings(
     };
     const match =
       findById(live, f.updates) ||
+      // Naming the closest suggestion without a difference is an update of it.
+      (f.difference ? null : findById(live, f.nearest)) ||
       live.find((e) => e.fingerprint === draft.fingerprint) ||
       live.find((e) => similarFinding(draft, e)) ||
       null;
@@ -695,6 +704,8 @@ export function validateFindings(
       }
       continue;
     }
+    // The model was shown these suggestions: a new one has to say how it differs (§5.3).
+    if (live.length && !f.difference) continue;
     if (prints.has(draft.fingerprint) || out.added.some((a) => similarFinding(draft, a))) continue;
     prints.add(draft.fingerprint);
     out.added.push(draft);
