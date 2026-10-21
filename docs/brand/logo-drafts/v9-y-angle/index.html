@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Flowly y tail angle</title>
+<style>
+  :root { --ink:#1E2120; --muted:#6B6A64; --paper:#F7F5F2; --line:#E4DFD8; --dark:#1E2120; --light:#F3F1EC; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 44px 48px; background:var(--paper); color:var(--ink); font:14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; width:1600px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 22px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .col { display:flex; flex-direction:column; gap:14px; }
+  .title { display:flex; align-items:baseline; gap:10px; }
+  .tag { font-weight:700; font-size:13px; color:#fff; background:var(--ink); border-radius:6px; padding:1px 7px; }
+  .name { font-weight:650; font-size:17px; }
+  .note { color:#3B3A36; font-size:13px; margin:0; }
+  .box { border-radius:14px; padding:22px 26px; display:flex; align-items:center; gap:24px; overflow:hidden; }
+  .l { background:#fff; border:1px solid var(--line); color:var(--ink); }
+  .d { background:var(--dark); color:var(--light); }
+  .zoom { position:relative; height:330px; padding:0; }
+  .zoom svg { position:absolute; }
+  .cap { font-size:12px; color:var(--muted); }
+  .d .cap { color:#A9A69E; }
+</style>
+</head>
+<body>
+<h1>Flowly · y 尾巴切角对比</h1>
+<p class="sub">字标其余细节相同（l 顶端斜切、o 中心点），只比较 y 尾巴的切口。第一行把 y 放大到约 7 倍，下面依次是整个字标、浅/深色横排组合、README 头部尺寸和小尺寸。logo 用单色。</p>
+<div class="cols" id="cols"></div>
+<script>
+const svgs = window.__SVGS || {};
+const draw = (file, h, style = "") => {
+  const src = svgs[file]; if (!src) return "";
+  const vb = /viewBox="([^"]+)"/.exec(src)[1].split(/\s+/).map(Number);
+  return src.replace("<svg ", `<svg height="${h}" width="${Math.round(h * vb[2] / vb[3])}" style="${style}" `);
+};
+// The y's tail, cut out of the wordmark by viewBox (font units: the y starts at x 5054, the tail sits below the baseline).
+const tail = (file) => (svgs[file] || "").replace(/viewBox="[^"]+"/, 'viewBox="4980 -260 1000 720"').replace("<svg ", '<svg width="100%" height="100%" style="inset:0" ');
+const cols = [
+  ["Y2", "斜切 52°（现在的正式稿）", "y2-slant-52", "切口和 l 顶端的斜角是同一种语言，尾巴只长了一点，整体稳、正式。"],
+  ["Y3", "斜切 40°", "y3-slant-40", "更斜、尾尖更长更锐，速度感更强，但尖角显得锋利，小尺寸下会变成一根细刺。"],
+];
+document.getElementById("cols").innerHTML = cols.map(([tag, name, f, note]) => `
+  <div class="col">
+    <div class="title"><span class="tag">${tag}</span><span class="name">${name}</span></div>
+    <p class="note">${note}</p>
+    <div class="box l zoom">${tail(f + ".svg")}<span class="cap" style="position:absolute;left:18px;bottom:12px">y 放大约 7 倍</span></div>
+    <div class="box l">${draw(f + ".svg", 120)}</div>
+    <div class="box l">${draw(f + "-lockup.svg", 96)}</div>
+    <div class="box d">${draw(f + "-lockup.svg", 96)}</div>
+    <div class="box l" style="gap:32px">${draw(f + "-lockup.svg", 48)}${draw(f + "-lockup.svg", 32)}${draw(f + "-lockup.svg", 20)}<span class="cap">48 / 32 / 20 px</span></div>
+  </div>`).join("");
+</script>
+</body>
+</html>

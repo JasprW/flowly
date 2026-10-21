@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Flowly logo drafts</title>
+<style>
+  :root { --ink:#1E2120; --muted:#6B6A64; --paper:#F7F5F2; --line:#E4DFD8; --dark:#1E2120; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 44px 48px; background:var(--paper); color:var(--ink); font:14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; width:1480px; }
+  h1 { font-size:24px; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--muted); margin:0 0 28px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:20px; }
+  .head { display:flex; align-items:baseline; gap:8px; margin-bottom:14px; }
+  .tag { font-weight:700; font-size:13px; color:#fff; background:#20744A; border-radius:6px; padding:1px 7px; }
+  .name { font-weight:650; font-size:16px; }
+  .en { color:var(--muted); font-size:13px; }
+  .stage { display:flex; gap:16px; align-items:center; }
+  .big { width:168px; height:168px; }
+  .sizes { display:flex; flex-direction:column; gap:12px; }
+  .row { display:flex; align-items:center; gap:12px; }
+  .row img { display:block; }
+  .darkrow { background:var(--dark); border-radius:10px; padding:10px 12px; }
+  .lock { display:flex; align-items:center; gap:10px; font-weight:650; font-size:22px; letter-spacing:-.01em; }
+  .lock.dark { color:#F3F1EC; }
+  p.idea { margin:14px 0 0; color:#3B3A36; }
+  .wide { grid-column:span 3; display:grid; grid-template-columns:1fr 1fr 1.1fr; gap:24px; align-items:center; }
+  .wm { height:92px; }
+  .wmdark { background:var(--dark); border-radius:12px; padding:20px 24px; }
+  .wmlight { padding:20px 24px; border:1px dashed var(--line); border-radius:12px; }
+</style>
+</head>
+<body>
+<h1>Flowly · logo 初稿</h1>
+<p class="sub">主色取自 Paseo 的强调绿 #20744A；薄荷绿 = 已流转的工作，琥珀色 = agent 或你（Needs you / 由你决定 Done）。每张卡：168 px 主图，64 / 32 / 16 px 小尺寸，深色背景，与字标的组合。</p>
+<div class="grid" id="grid"></div>
+<script>
+const concepts = [
+  ["A", "流动泳道", "Flow Lanes", "a-flow-lanes.svg", "三条泳道被一条上扬的流线切开，线下的部分变成薄荷绿，越往右越满：卡片自己流过各个阶段，看板自己往前推进。"],
+  ["B", "卡片 F", "Card F", "b-card-f.svg", "大写 F 由一条泳道（竖笔）和两张滑出的卡片（横笔）拼成，琥珀色火花代表 agent。字母识别度最高，16 px 也认得出。"],
+  ["C", "自己跳的卡", "Hopping Card", "c-hopping-card.svg", "卡片离开虚线旧位置，沿弧线落到下一列，没有手在拖它，火花表明是 agent 推的。最直接地讲出「cards that move by themselves」。"],
+  ["D", "流转闭环", "Flow Ring", "d-flow-ring.svg", "三段弧是 agent 走过的 Design → Development → Test，顺时针越走越亮；右上角的琥珀点既是 Needs you 角标，也是你：闭环只能由你合上（Done 由你决定）。"],
+  ["E", "卡片横笔 f", "Card-bar f", "e-card-bar-f.svg", "小写 f，横笔是一张正在向右滑的看板卡片（带状态点和尾迹）。字母和看板合在一个笔画里，友好、圆润，符合 -ly 的语气。"],
+];
+const grid = document.getElementById("grid");
+for (const [tag, name, en, file, idea] of concepts) {
+  grid.insertAdjacentHTML("beforeend", `
+  <div class="card">
+    <div class="head"><span class="tag">${tag}</span><span class="name">${name}</span><span class="en">${en}</span></div>
+    <div class="stage">
+      <img class="big" src="${file}">
+      <div class="sizes">
+        <div class="row"><img src="${file}" width="64"><img src="${file}" width="32"><img src="${file}" width="16"></div>
+        <div class="row darkrow"><img src="${file}" width="32"><img src="${file}" width="16"><div class="lock dark"><img src="${file}" width="28">Flowly</div></div>
+        <div class="row lock"><img src="${file}" width="34">Flowly</div>
+      </div>
+    </div>
+    <p class="idea">${idea}</p>
+  </div>`);
+}
+grid.insertAdjacentHTML("beforeend", `
+  <div class="card wide">
+    <div>
+      <div class="head"><span class="tag">F</span><span class="name">字标</span><span class="en">Wordmark</span></div>
+      <p class="idea" style="margin:0">手绘单线小写 flowly。o 是看板里的半满状态圈（进行中），w 是一道波浪（flow）。可单独用，也可和 A–E 任一图形组合。</p>
+    </div>
+    <div class="wmlight"><img class="wm" src="f-wordmark.svg"></div>
+    <div class="wmdark"><img class="wm" src="f-wordmark-dark.svg"></div>
+  </div>`);
+</script>
+</body>
+</html>

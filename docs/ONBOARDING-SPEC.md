@@ -19,7 +19,7 @@ Success: a new user can say what a project, a card and a session are, who decide
 
 ### 2. The tour: a modal sheet, four pages, skippable
 
-Uses the plugin `Modal` (host-owned open/close; content has the shared rise from `client/modal.tsx`). Same component on desktop and phone: single column, max width ~480, scrolls if the viewport is short. Footer: step dots, **Skip** (text button, all pages except the last), **Back** (from page 2), **Next** / final primary button. Page changes use `MotionReveal` (short, interruptible, Reduce Motion honoured, no delay before the action).
+Uses the plugin `Modal` (host-owned open/close; content has the shared rise from `client/modal.tsx`). Same component on desktop and phone: single column, max width ~480, scrolls if the viewport is short. Footer: step dots, **Skip** (text button, all pages except the last), **Back** (from page 2), **Next** / final primary button. Page changes use `MotionReveal` (short, interruptible, Reduce Motion honoured, no delay before the action). The modal title carries the Flowly mark as its icon (`FlowlyMark` in `client/brand-icons.tsx`): the small-size mark from `docs/brand/logo/` (a solid start dot and an open end ring joined by one S curve), inlined as 20, 40 and 60 px PNGs per theme (ink on light surfaces, paper on dark; about 3 KB of source together) that `docs/brand/export-logo.mjs` generates into `client/flowly-mark-data.ts`. The one matching the screen's pixel ratio is shown, so the 20 pt icon is never resampled. It is decorative: the title already reads "Welcome to Flowly". No tip announces it (a visual change, no new capability).
 
 **Page 1: Three things, one map** — "How Ultra Kanban maps to Paseo"
 

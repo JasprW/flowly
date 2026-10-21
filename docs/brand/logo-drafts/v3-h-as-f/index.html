@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Flowly logo · H as f</title>
+<style>
+  :root { --ink:#1E2120; --muted:#6B6A64; --paper:#F7F5F2; --line:#E4DFD8; --dark:#1E2120; --light:#EDEBE6; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 44px 48px; background:var(--paper); color:var(--ink); font:14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; width:1500px; }
+  h1 { font-size:24px; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--muted); margin:0 0 28px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px; color:var(--ink); }
+  .head { display:flex; align-items:baseline; gap:8px; margin-bottom:12px; }
+  .tag { font-weight:700; font-size:13px; color:#fff; background:var(--ink); border-radius:6px; padding:1px 7px; }
+  .new { font-size:11px; font-weight:600; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:0 6px; }
+  .name { font-weight:650; font-size:16px; }
+  .en { color:var(--muted); font-size:13px; }
+  .stage { display:flex; gap:16px; align-items:center; }
+  .big { width:120px; height:120px; flex:none; }
+  .sizes { display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .row { display:flex; align-items:center; gap:12px; }
+  .dark { background:var(--dark); color:var(--light); border-radius:10px; padding:9px 11px; }
+  .lock { display:flex; align-items:center; gap:8px; }
+  p.idea { margin:12px 0 0; color:#3B3A36; font-size:13px; }
+  .wm-big { width:260px; height:113px; }
+</style>
+</head>
+<body>
+<h1>Flowly · H 更像 f：四种画法</h1>
+<p class="sub">保留 H 的「起点圈 → 小路 → 对勾」，把小路拉成 f 的竖笔、横笔和弯钩。线宽、画布与 v2 相同。</p>
+<div class="grid" id="grid"></div>
+<script>
+// The render script injects every SVG's source as window.__SVGS so it can be drawn inline in either color;
+// opened straight from disk, the page falls back to <img> (dark strokes only).
+const svgs = window.__SVGS || {};
+const mark = (file, size, cls = "") => {
+  const src = svgs[file];
+  if (!src) return `<img class="${cls}" src="${file}" width="${size}" height="${size}">`;
+  return src.replace("<svg ", `<svg class="${cls}" width="${size}" height="${size}" `);
+};
+const wordmark = (height) => {
+  const src = svgs["f-wordmark.svg"];
+  const width = Math.round(height * 1060 / 460);
+  if (!src) return `<img src="f-wordmark.svg" height="${height}">`;
+  return src.replace("<svg ", `<svg width="${width}" height="${height}" `);
+};
+const concepts = [
+  ["H0", "原稿", "Status Path", "h0-original.svg", false, "v2 里的 H：起点圈、进行中、对勾，沿一条斜向小路排开。"],
+  ["H1", "横笔起点", "Crossbar start", "h1-crossbar-start.svg", true, "起点圈在横笔左端，路线并入竖笔向上，弯钩收在对勾圈上（f 的球形收笔）。"],
+  ["H2", "横笔进行中", "Crossbar ring", "h2-crossbar-ring.svg", true, "竖笔下端开放，横笔右端是进行中的小圈，弯钩收在对勾圈上。"],
+  ["H3", "花体 ƒ", "Florin f", "h3-florin.svg", true, "起点圈在左下，小路弯上来成为竖笔，穿过横笔，弯钩收在对勾圈：一个手写的 ƒ，走向和原稿 H 一样从左下到右上。"],
+  ["H4", "花体 ƒ 三站", "Florin, three stops", "h4-florin-three.svg", true, "H3 再加回进行中的小圈（横笔右端），三站都在，但右侧有两个圈。"],
+];
+const grid = document.getElementById("grid");
+for (const [tag, name, en, file, isNew, idea] of concepts) {
+  grid.insertAdjacentHTML("beforeend", `
+  <div class="card">
+    <div class="head"><span class="tag">${tag}</span><span class="name">${name}</span><span class="en">${en}</span>${isNew ? '<span class="new">新</span>' : ""}</div>
+    <div class="stage">
+      ${mark(file, 120, "big")}
+      <div class="sizes">
+        <div class="row">${mark(file, 48)}${mark(file, 32)}${mark(file, 24)}${mark(file, 16)}</div>
+        <div class="row dark">${mark(file, 32)}${mark(file, 16)}<span class="lock">${mark(file, 26)}${wordmark(26)}</span></div>
+        <div class="row lock">${mark(file, 30)}${wordmark(30)}</div>
+      </div>
+    </div>
+    <p class="idea">${idea}</p>
+  </div>`);
+}
+</script>
+</body>
+</html>

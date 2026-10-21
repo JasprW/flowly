@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Flowly theme colors</title>
+<style>
+  :root { --ink:#1E2120; --muted:#6B6A64; --paper:#F7F5F2; --line:#E4DFD8; --dark:#1A1C1B; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 44px 48px; background:var(--paper); color:var(--ink); font:14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; width:1700px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 22px; max-width:1300px; }
+  .head { display:grid; grid-template-columns:250px 150px 150px 1fr 1fr 150px; gap:14px; color:var(--muted); font-size:12px; font-weight:600; margin:0 0 8px; padding:0 4px; }
+  .row { display:grid; grid-template-columns:250px 150px 150px 1fr 1fr 150px; gap:14px; align-items:stretch; margin-bottom:12px; }
+  .meta { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .tag { font-weight:700; font-size:13px; color:#fff; border-radius:6px; padding:1px 7px; margin-right:6px; }
+  .name { font-weight:650; font-size:15px; }
+  .meta p { margin:6px 0 0; color:#3B3A36; font-size:12.5px; }
+  .sw { display:flex; gap:6px; margin-top:8px; align-items:center; font:11px ui-monospace, Menlo, monospace; color:var(--muted); }
+  .sw i { width:16px; height:16px; border-radius:4px; display:inline-block; border:1px solid rgba(0,0,0,.08); }
+  .cell { border-radius:14px; display:flex; align-items:center; justify-content:center; padding:12px; }
+  .cell.l { background:#fff; border:1px solid var(--line); }
+  .cell.d { background:var(--dark); }
+  .tile { width:96px; height:96px; border-radius:22px; display:flex; align-items:center; justify-content:center; }
+  .lock { justify-content:flex-start; padding:18px 22px; gap:12px; }
+  .stats { font:11.5px/1.7 ui-monospace, Menlo, monospace; color:#3B3A36; background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px; }
+  .ok { color:#1E7A43; } .warn { color:#B4530C; }
+  .ui { display:flex; gap:8px; align-items:center; margin-top:8px; }
+  .btn { font-size:12px; font-weight:600; color:#fff; border-radius:7px; padding:3px 10px; }
+  .chip { font-size:12px; border-radius:999px; padding:1px 9px; }
+</style>
+</head>
+<body>
+<h1>Flowly · 主题色候选</h1>
+<p class="sub">同一套标志放进 7 组候选色。每组一个浅色模式主色和一个深色模式提亮色。「双色」一列：小路用中性墨色，只有终点的对勾圈用主题色，象征 Done 由你签收。右侧是 WCAG 对比度：主色对白底、提亮色对深底，≥ 4.5 可用于文字和按钮，≥ 3 可用于图形。插件界面里的强调色跟随 Paseo 主题，主题色只用于 logo、README、registry 和宣传物料。</p>
+<div class="head"><span>色组</span><span>App 图标</span><span>深色 App 图标</span><span>横排 · 浅底（双色）</span><span>横排 · 深底</span><span>对比度</span></div>
+<div id="rows"></div>
+<script>
+const svgs = window.__SVGS || {};
+const PATH = `<circle cx="11" cy="52.5" r="5"/><path d="M22 52.5 C27 52.5 31 50.5 31 45.5"/><circle cx="31" cy="33.5" r="6"/><path d="M31 33.5 h0"/><path d="M31 21.5 C31 16.5 32.5 14.5 36 14.5"/>`;
+const CHECK = `<circle cx="50" cy="14.5" r="8"/><path d="M46.8 15 L49 17.2 L53 12.7"/>`;
+const mark = (size, path, check = path) => `<svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><g stroke="${path}">${PATH}</g><g stroke="${check}">${CHECK}</g></svg>`;
+const word = (h, color) => {
+  const src = svgs["flowly-wordmark.svg"] || "";
+  const vb = (/viewBox="([^"]+)"/.exec(src) || [0, "0 0 3 1"])[1].split(/\s+/).map(Number);
+  return src.replace("<svg ", `<svg style="color:${color}" height="${h}" width="${Math.round(h * vb[2] / vb[3])}" `);
+};
+const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const fmt = (r) => `<span class="${r >= 4.5 ? "ok" : "warn"}">${r.toFixed(1)}</span>`;
+const INK = "#1E2120", PAPER = "#F3F1EC", DARK = "#1A1C1B";
+const sets = [
+  ["A", "墨黑单色", "Ink", "#1E2120", "#F3F1EC", "现在的方案：最克制、最正式，不和 Paseo 或其他插件抢颜色；缺点是没有记忆点。"],
+  ["B", "森林绿", "Forest", "#20744A", "#5CC08E", "Paseo 自己的强调绿。和宿主一体，像官方插件；但也因此不太能区分出 Flowly。"],
+  ["C", "流水青", "Flow Teal", "#0E7C86", "#4FC3CC", "青色对应「flow」的水流感，比绿更冷静、更技术；和 Paseo 绿是邻近色，放在一起不冲突。"],
+  ["D", "靛蓝", "Indigo", "#3F4FC9", "#8E9BFF", "效率工具常用的可信、专注的蓝紫；正式感强，但和 Linear、Jira 一类产品容易撞色。"],
+  ["E", "电光紫", "Agent Violet", "#6B46E5", "#A891FF", "AI 产品常见的紫，最直接表达 agent-native；辨识度高，但同类很多。"],
+  ["F", "琥珀", "Amber", "#B45309", "#F5A524", "温暖、有人情味，呼应「Needs you」的提醒色；深色模式里很亮眼，浅色主色偏暗棕。"],
+  ["G", "珊瑚橙", "Coral", "#D2452F", "#FF8A73", "活泼、有能量，辨识度最高；更像消费类产品，正式感弱一些。"],
+];
+document.getElementById("rows").innerHTML = sets.map(([tag, name, en, c, t, note]) => `
+  <div class="row">
+    <div class="meta"><span class="tag" style="background:${c}">${tag}</span><span class="name">${name}</span> <span style="color:var(--muted);font-size:12px">${en}</span><p>${note}</p>
+      <div class="sw"><i style="background:${c}"></i>${c}<i style="background:${t};margin-left:8px"></i>${t}</div>
+      <div class="ui"><span class="btn" style="background:${c}">New task</span><span class="chip" style="color:${c};background:${c}1A">In review</span></div></div>
+    <div class="cell l"><div class="tile" style="background:${c}">${mark(64, "#FFFFFF")}</div></div>
+    <div class="cell d"><div class="tile" style="background:#26292A">${mark(64, t)}</div></div>
+    <div class="cell l lock">${mark(56, INK, c)}${word(32, INK)}<span style="width:18px"></span>${mark(40, c)}</div>
+    <div class="cell d lock">${mark(56, PAPER, t)}${word(32, PAPER)}<span style="width:18px"></span>${mark(40, t)}</div>
+    <div class="stats">主色 / 白 ${fmt(ratio(c, "#FFFFFF"))}<br>白字 / 主色 ${fmt(ratio("#FFFFFF", c))}<br>提亮 / 深底 ${fmt(ratio(t, DARK))}</div>
+  </div>`).join("");
+</script>
+</body>
+</html>

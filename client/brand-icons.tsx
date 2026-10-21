@@ -1,6 +1,7 @@
 import { memo } from "react";
-import { Image } from "react-native";
+import { Image, PixelRatio } from "react-native";
 import type { ConnectorFamily } from "../shared/connectors";
+import { flowlyMarkPng } from "./flowly-mark-data";
 import { useTheme } from "./ui";
 
 /**
@@ -32,4 +33,29 @@ export const BrandIcon = memo(function BrandIcon({ family, size = 16 }: { family
   const { colors } = useTheme();
   const source = family === "github" ? (isDarkColor(colors.surface0) ? logos.githubLight : logos.githubDark) : logos[family];
   return <Image source={source} accessibilityIgnoresInvertColors style={{ width: size, height: size }} resizeMode="contain" />;
+});
+
+const flowlyMarks = {
+  light: { 1: png(flowlyMarkPng.light[1]), 2: png(flowlyMarkPng.light[2]), 3: png(flowlyMarkPng.light[3]) },
+  dark: { 1: png(flowlyMarkPng.dark[1]), 2: png(flowlyMarkPng.dark[2]), 3: png(flowlyMarkPng.dark[3]) },
+} as const;
+
+/**
+ * Flowly's own mark (docs/brand/logo), small-size variant, for icons of 24 px and less such as
+ * the welcome tour title. Light ink on light surfaces, paper on dark ones. Decorative: the
+ * title next to it already says Flowly. Drawn for 20 pt: the PNG that matches the screen's
+ * pixel ratio is shown, so the image is not resampled (60 px scaled to 40 blurs its thin lines).
+ */
+export const FlowlyMark = memo(function FlowlyMark({ surface, size = 20 }: { surface: string; size?: number }) {
+  const scale = Math.min(3, Math.max(1, Math.ceil((size * PixelRatio.get()) / 20))) as 1 | 2 | 3;
+  const source = (isDarkColor(surface) ? flowlyMarks.dark : flowlyMarks.light)[scale];
+  return (
+    <Image
+      source={source}
+      accessible={false}
+      accessibilityIgnoresInvertColors
+      style={{ width: size, height: size }}
+      resizeMode="contain"
+    />
+  );
 });

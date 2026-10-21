@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Flowly">
+  <g transform="translate(-3 0)">
+    <rect x="12" y="10" width="12" height="44" rx="5"/>
+    <rect x="28" y="10" width="22" height="12" rx="5"/>
+    <rect x="28" y="26" width="15" height="11" rx="5"/>
+    <path stroke-width="3" d="M53 25 C53.6 29.6 54.4 30.4 59 31 C54.4 31.6 53.6 32.4 53 37 C52.4 32.4 51.6 31.6 47 31 C51.6 30.4 52.4 29.6 53 25 Z"/>
+  </g>
+</svg>

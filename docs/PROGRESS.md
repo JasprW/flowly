@@ -1,5 +1,15 @@
 # Implementation progress
 
+## Flowly logo and brand assets (card "plugin logo设计") — 2026-10-21
+
+- [x] Design, with the user choosing at each step: line-art drafts (`docs/brand/logo-drafts/v1-filled`, `v2-line`), direction H "status path", refined from the original (`v4-h-refined`, R1; an obvious f shape `v3-h-as-f` was rejected), check one step lighter (`v10-check`, K2: 3 units, 12% larger); wordmark "Flowly" in Inter Medium (SIL OFL 1.1) outlined to paths with l and y cut at 52° and a dot in the o (`v5-wordmark`, `v6-wordmark-details`, `v8-y-slant`, `v9-y-angle`); monochrome only, ink `#1E2120` on light and paper `#F3F1EC` on dark (`v7-colors`).
+- [x] Assets in `docs/brand/logo/` (mark, small mark, wordmark, lockup, app icons, 26 PNGs, favicon, overview, usage notes), all from `docs/brand/export-logo.mjs`; wordmark outline in `docs/brand/wordmark.json` from `docs/brand/outline-wordmark.py`.
+- [x] README.md and README.zh-CN.md open with the lockup in a `<picture>` that follows the reader's light/dark scheme. The welcome tour title shows the small mark (`FlowlyMark`, theme PNGs at 1x/2x/3x generated into `client/flowly-mark-data.ts`, about 3 KB, picked by pixel ratio so they are not resampled). ONBOARDING-SPEC §2 updated; no tip (a visual change, no new capability). Paseo's sidebar icon stays the Lucide `PanelsTopLeft` (the host accepts only Lucide names).
+- [x] PASS: `npm run typecheck`; `npm test`; `xmllint` on every SVG; README `<picture>` picks the light/dark lockup in Chromium (`colorScheme` light/dark); the title PNGs keep their colour (`#1E2120` / `#F3F1EC`).
+- [x] PASS (7c440b7, dirty): after `npm run typecheck` and `paseo plugin reload flowly`, the welcome tour in the Paseo web client (headless Chromium, light and dark) shows the mark at 20×20 px, 8 px before the 14 px title and centred on it, #1E2120 on the light surface and #F3F1EC on the dark one; no page errors (`docs/verification/flowly-logo-welcome-tour.md`).
+- [ ] UNRUN: the desktop app window and the phone apps (no desktop-control tool in the session).
+- [x] Small mark redrawn after the user found it blurred into a clump with uneven lines: a 20 grid at stroke 1.5, only the two ends (a solid start dot drawn 13% smaller so it looks as large as the open end ring) joined by one S curve; rounds in `docs/brand/logo-drafts/v11-small/` and `v12-two-ends/` (T5 chosen), compared at true pixel sizes by `docs/brand/render-small.mjs`. Used for the 16–48 px app icons, the favicon and the welcome tour title.
+
 ## Session pane: history, keyboard, scroll performance (card "sidebar session 优化") — 2026-10-20
 
 - [x] Design and feasibility: [SESSION-PANE-SPEC](SESSION-PANE-SPEC.md). Read-only SDK spike on the local daemon: `before`/`after` cursors page cleanly (tail 15 + before 15 = tail 30), whole turns of 1000 entries are ~69 KB slim.

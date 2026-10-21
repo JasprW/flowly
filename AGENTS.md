@@ -82,3 +82,9 @@
 - `paseo plugin logs flowly`
 
 When creating a commit, stage only this project's changes.
+
+## Git workflow
+
+- Never commit or push directly to `main`. When the user asks to commit or ship, create a branch from the latest `origin/main` (`<type>/<short-slug>`, e.g. `docs/flowly-logo`), commit there, push it, open a pull request with `gh pr create`, and merge it with `gh pr merge --squash --delete-branch`. Then bring the local `main` up to date.
+- Before opening the PR, run `npm run typecheck` and `npm test` on exactly the tree being committed. When the working tree holds other work, check that tree in a temporary `git worktree` of the commit.
+- The working tree is shared with other sessions. Commit only the current task's changes, by hunk when a file mixes work. Never stash, reset `--hard`, check out or otherwise overwrite someone else's uncommitted changes. If switching branches would touch their files, build the commit without switching: use a temporary index (`GIT_INDEX_FILE`) or a separate worktree, push it with `git push origin <sha>:refs/heads/<branch>`, and after the merge move the local `main` with `git fetch` and `git reset origin/main` (mixed: HEAD and index only, the working tree stays as it is).

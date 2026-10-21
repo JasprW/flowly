@@ -1,0 +1,56 @@
+[
+ {
+  "id": "S0",
+  "file": "s0-current.svg",
+  "name": "现在的小尺寸版",
+  "note": "参照",
+  "viewBox": "0 0 64 64",
+  "stroke": 6,
+  "body": "<circle cx='11.25' cy='52.25' r='5.5'/><path d='M16.75 52.25 C25.25 52.25 31.25 48.25 31.25 39.75'/><circle cx='31.25' cy='33.25' r='6.5'/><path d='M31.25 26.75 C31.25 18.75 34.75 14.75 41.25 14.75'/><circle cx='49.75' cy='14.75' r='8.5'/>"
+ },
+ {
+  "id": "T1",
+  "file": "t1-solid-start.svg",
+  "name": "实心起点 → 空心终点",
+  "note": "两端外径相同（6 单位），一条 S 曲线，两头各留 1 单位空隙",
+  "viewBox": "0 0 20 20",
+  "stroke": 1.5,
+  "body": "<circle cx='4' cy='16' r='3' fill='currentColor' stroke='none'/><path d='M8 16 C11.5 16 8.5 4 12 4'/><circle cx='16' cy='4' r='2.25'/>"
+ },
+ {
+  "id": "T2",
+  "file": "t2-solid-end.svg",
+  "name": "空心起点 → 实心终点",
+  "note": "同 T1，反过来：待办是空圈，完成是实心",
+  "viewBox": "0 0 20 20",
+  "stroke": 1.5,
+  "body": "<circle cx='4' cy='16' r='2.25'/><path d='M8 16 C11.5 16 8.5 4 12 4'/><circle cx='16' cy='4' r='3' fill='currentColor' stroke='none'/>"
+ },
+ {
+  "id": "T3",
+  "file": "t3-long-handles.svg",
+  "name": "T1 · 更舒展的 S",
+  "note": "控制柄拉长，中段更陡、两头更平，像一笔「∫」",
+  "viewBox": "0 0 20 20",
+  "stroke": 1.5,
+  "body": "<circle cx='4' cy='16' r='3' fill='currentColor' stroke='none'/><path d='M8 16 C13 16 7 4 12 4'/><circle cx='16' cy='4' r='2.25'/>"
+ },
+ {
+  "id": "T5",
+  "file": "t5-optical.svg",
+  "name": "T3 · 视觉等大",
+  "note": "实心圆看起来比空心圈大，把实心圆缩到外径 5.2 单位（空心圈 6），两端看着一样大",
+  "viewBox": "0 0 20 20",
+  "stroke": 1.5,
+  "body": "<circle cx='4' cy='16' r='2.6' fill='currentColor' stroke='none'/><path d='M7.75 16 C13 16 7 4 12 4'/><circle cx='16' cy='4' r='2.25'/>"
+ },
+ {
+  "id": "T6",
+  "file": "t6-optical-solid-end.svg",
+  "name": "T2 · 视觉等大",
+  "note": "空心起点 → 实心终点，同样缩小实心圆，S 用 T3 的舒展曲线",
+  "viewBox": "0 0 20 20",
+  "stroke": 1.5,
+  "body": "<circle cx='4' cy='16' r='2.25'/><path d='M8 16 C13 16 7 4 12.25 4'/><circle cx='16' cy='4' r='2.6' fill='currentColor' stroke='none'/>"
+ }
+]

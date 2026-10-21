@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Flowly logo</title>
+<style>
+  :root { --ink:#1E2120; --muted:#6B6A64; --paper:#F7F5F2; --line:#E4DFD8; --dark:#1E2120; --light:#F3F1EC; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:44px 48px 52px; background:var(--paper); color:var(--ink); font:14px/1.55 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; width:1600px; }
+  h1 { font-size:26px; margin:0 0 4px; letter-spacing:-.01em; }
+  h2 { font-size:13px; font-weight:650; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin:0 0 14px; }
+  .sub { color:var(--muted); margin:0 0 28px; max-width:1100px; }
+  .grid { display:grid; grid-template-columns:440px 1fr; gap:20px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:22px; }
+  .panel.dark { background:var(--dark); border-color:var(--dark); color:var(--light); }
+  .construct { position:relative; width:384px; height:384px; margin:4px auto 0; color:var(--ink);
+    background-image: linear-gradient(#EFEBE5 1px, transparent 1px), linear-gradient(90deg, #EFEBE5 1px, transparent 1px),
+                      linear-gradient(#DDD6CC 1px, transparent 1px), linear-gradient(90deg, #DDD6CC 1px, transparent 1px);
+    background-size: 12px 12px, 12px 12px, 48px 48px, 48px 48px; outline:1px solid #DDD6CC; }
+  .construct svg { position:absolute; inset:0; }
+  .pin { position:absolute; font-size:12px; font-weight:600; background:#fff; border:1px solid var(--line); border-radius:999px; padding:1px 8px; white-space:nowrap; }
+  ol.story { margin:18px 0 0; padding-left:20px; color:#3B3A36; }
+  ol.story li { margin:3px 0; }
+  .stack { display:flex; flex-direction:column; gap:20px; }
+  .row { display:flex; align-items:flex-end; gap:26px; flex-wrap:wrap; }
+  .cell { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .cap { font-size:12px; color:var(--muted); }
+  .dark .cap { color:#A9A69E; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .tile-edge svg { border-radius:21.9%; box-shadow:0 0 0 1px var(--line); }
+  .lock { padding:30px 28px; border-radius:14px; display:flex; align-items:center; }
+  .lock.l { background:#fff; border:1px solid var(--line); }
+  .lock.d { background:var(--dark); }
+  .readme { background:#fff; border:1px solid var(--line); border-radius:14px; padding:24px 28px; }
+  .readme .tagline { margin:10px 0 0; color:#3B3A36; font-size:15px; }
+  .rule { font-size:13px; color:#3B3A36; margin:6px 0 0; }
+</style>
+</head>
+<body>
+<h1>Flowly · logo 正式稿</h1>
+<p class="sub">方向 H「状态小路」：起点圈 → 进行中 → 对勾，沿一条拐两次弯的小路排开；从中间圈往上再向右拐的那一段，藏着一个 f 的弯钩。标志只用描边：64 格画布，4 单位线宽（对勾 3 单位），圆头圆角；24 px 及以下换小尺寸版（20 格、1.5 线宽：只留两端，实心起点和空心终点圈看起来一样大，中间一条 S 曲线）。字标是 Inter Medium 的「Flowly」，加了 l 和 y 的斜切、o 中心点。</p>
+<div class="grid">
+  <div class="panel">
+    <h2>结构</h2>
+    <div class="construct" id="construct">
+      <span class="pin" style="left:-8px;top:350px">① 起点</span>
+      <span class="pin" style="left:150px;top:324px">② 小路</span>
+      <span class="pin" style="left:236px;top:188px">③ 进行中</span>
+      <span class="pin" style="left:276px;top:-12px">④ 对勾</span>
+    </div>
+    <ol class="story">
+      <li>起点圈：卡片在 Todo，交给 agent。</li>
+      <li>小路拐两次弯：卡片自己走过 Design → Development → Test（Paseo 本意是散步）。</li>
+      <li>带点的圈：进行中，agent 正在干活。</li>
+      <li>对勾圈：最后由你签收，Done 是你的决定。</li>
+    </ol>
+  </div>
+  <div class="stack">
+    <div class="panel">
+      <h2>尺寸（≥ 32 px 用标准版，≤ 24 px 用小尺寸版）</h2>
+      <div class="row" id="sizes-light"></div>
+    </div>
+    <div class="panel dark">
+      <h2 style="color:#A9A69E">深色背景</h2>
+      <div class="row" id="sizes-dark"></div>
+    </div>
+    <div class="panel">
+      <h2>App 图标（插件 registry、npm、GitHub 头像、favicon）</h2>
+      <div class="row" id="icons"></div>
+    </div>
+  </div>
+</div>
+<div class="panel" style="margin-top:20px">
+  <h2>横排组合与字标</h2>
+  <div class="split">
+    <div class="lock l" id="lock-light"></div>
+    <div class="lock d" id="lock-dark"></div>
+  </div>
+  <div class="split" style="margin-top:20px">
+    <div class="readme" id="readme"></div>
+    <div>
+      <p class="rule"><b>留白：</b>四周至少留出对勾圈的直径（标志高度的 1/4）。</p>
+      <p class="rule"><b>最小尺寸：</b>标准版 32 px，小尺寸版 16 px；横排组合高度不小于 20 px。</p>
+      <p class="rule"><b>字标：</b>「Flowly」，Inter Medium（SIL Open Font License 1.1）转成路径，首字母大写，字距收紧 1%，l 和 y 斜切（小路上扬）、o 中心点（进行中）；不依赖字体文件，不要用别的字体重打。</p>
+      <p class="rule"><b>颜色：</b>单色描边，浅底用墨色 #1E2120，深底用 #F3F1EC；SVG 默认 currentColor，跟随文字颜色。</p>
+      <p class="rule"><b>不要：</b>给圈或小路填色、改线宽、拉伸、旋转、加阴影或描外框。</p>
+    </div>
+  </div>
+</div>
+<script>
+const svgs = window.__SVGS || {};
+const draw = (file, h) => {
+  const src = svgs[file];
+  if (!src) return `<img src="${file}" height="${h}">`;
+  const vb = /viewBox="([^"]+)"/.exec(src)[1].split(/\s+/).map(Number);
+  return src.replace("<svg ", `<svg width="${Math.round((h * vb[2]) / vb[3])}" height="${h}" `);
+};
+const mark = (size, theme) => draw(size <= 24 ? `flowly-mark-small-${theme}.svg` : `flowly-mark-${theme}.svg`, size);
+const icon = (size, theme) => draw(size <= 48 ? `flowly-icon-small-${theme}.svg` : `flowly-icon-${theme}.svg`, size);
+document.getElementById("construct").insertAdjacentHTML("afterbegin", draw("flowly-mark-light.svg", 384));
+const sizes = [128, 96, 64, 48, 32, 24, 16];
+for (const theme of ["light", "dark"]) {
+  document.getElementById(`sizes-${theme}`).innerHTML = sizes.map((s) => `<div class="cell">${mark(s, theme)}<span class="cap">${s}${s <= 24 ? " · 小" : ""}</span></div>`).join("");
+}
+document.getElementById("icons").innerHTML = ["light", "dark"].flatMap((theme) =>
+  [160, 64, 32, 16].map((s) => `<div class="cell${theme === "light" ? " tile-edge" : ""}">${icon(s, theme)}<span class="cap">${theme === "light" ? "浅" : "深"} ${s}${s <= 48 ? " · 小" : ""}</span></div>`)).join("");
+document.getElementById("lock-light").innerHTML = draw("flowly-lockup-light.svg", 150);
+document.getElementById("lock-dark").innerHTML = draw("flowly-lockup-dark.svg", 150);
+document.getElementById("readme").innerHTML = `${draw("flowly-lockup-light.svg", 56)}<p class="tagline">The agent-native workflow for Paseo.</p><div style="margin-top:16px;display:flex;gap:18px;align-items:center">${draw("flowly-wordmark-light.svg", 44)}<span class="cap">字标单独使用</span></div>`;
+</script>
+</body>
+</html>

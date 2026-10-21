@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flowly" viewBox="25 50 1000 410" fill="none" stroke="currentColor" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M80 330 V118 C80 88 100 70 128 70 H146 M48 150 H134"/>
+    <path d="M200 70 V330"/>
+    <circle cx="346" cy="240" r="90"/>
+    <path d="M470 150 L525 330 L600 170 L675 330 L730 150"/>
+    <path d="M790 70 V330"/>
+    <path d="M850 150 L928.6 330 M1000 150 L885 440"/>
+</svg>

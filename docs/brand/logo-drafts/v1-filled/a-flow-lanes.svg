@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Flowly">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2B8C5B"/><stop offset="1" stop-color="#17583A"/></linearGradient>
+    <clipPath id="lanes-clip">
+      <rect x="104" y="104" width="88" height="304" rx="44"/>
+      <rect x="212" y="104" width="88" height="304" rx="44"/>
+      <rect x="320" y="104" width="88" height="304" rx="44"/>
+    </clipPath>
+    <clipPath id="below"><path d="M0 350 H64 C176 350 200 256 256 256 S336 150 448 150 H512 V512 H0 Z"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#tile)"/>
+  <g id="lanes">
+    <rect x="104" y="104" width="88" height="304" rx="44" fill="#FFFFFF"/>
+    <rect x="212" y="104" width="88" height="304" rx="44" fill="#FFFFFF"/>
+    <rect x="320" y="104" width="88" height="304" rx="44" fill="#FFFFFF"/>
+  </g>
+  <g clip-path="url(#below)" fill="#8FE0B5">
+    <rect x="104" y="104" width="88" height="304" rx="44"/>
+    <rect x="212" y="104" width="88" height="304" rx="44"/>
+    <rect x="320" y="104" width="88" height="304" rx="44"/>
+  </g>
+  <path clip-path="url(#lanes-clip)" d="M40 350 H64 C176 350 200 256 256 256 S336 150 448 150 H472" fill="none" stroke="#1F6E48" stroke-width="20"/>
+</svg>

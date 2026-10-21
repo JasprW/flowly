@@ -4,6 +4,7 @@ import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useSettings } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import { onboardingSettings, onboardingSettingsValues, type OnboardingSettings } from "../shared/settings";
+import { FlowlyMark } from "./brand-icons";
 import { Modal } from "./modal";
 import { MotionReveal } from "./motion";
 import { stepPage, tipIds, welcomePageCount, withTipSeen, type TipId } from "./onboarding-logic";
@@ -302,6 +303,7 @@ export function WelcomeTour({
     <Modal
       open={open}
       title={t("Welcome to Flowly")}
+      icon={<FlowlyMark surface={theme.colors.surface0} />}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Flowly wordmark options</title>
+<style>
+  :root { --ink:#1E2120; --muted:#6B6A64; --paper:#F7F5F2; --line:#E4DFD8; --dark:#1E2120; --light:#F3F1EC; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 44px 48px; background:var(--paper); color:var(--ink); font:14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; width:1600px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 24px; max-width:1200px; }
+  .row { display:grid; grid-template-columns:230px 1.25fr 1fr; gap:16px; align-items:stretch; margin-bottom:14px; }
+  .meta { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .meta .tag { font-weight:700; font-size:13px; color:#fff; background:var(--ink); border-radius:6px; padding:1px 7px; margin-right:6px; }
+  .meta .name { font-weight:650; font-size:15px; }
+  .meta p { margin:8px 0 0; color:#3B3A36; font-size:13px; }
+  .box { border-radius:14px; padding:22px 26px; display:flex; flex-direction:column; justify-content:center; gap:16px; }
+  .box.l { background:#fff; border:1px solid var(--line); color:var(--ink); }
+  .box.d { background:var(--dark); color:var(--light); }
+  .line { display:flex; align-items:center; gap:28px; }
+</style>
+</head>
+<body>
+<h1>Flowly · y 尾巴斜切</h1>
+<p class="sub">l 斜切和 o 中心点保持不变，只改 y 尾巴的收口：Y0 是现在的圆尾，Y1 是 Inter 原样，Y2、Y3 把切口下角沿尾巴底边往左延长，切成斜角，和 l 的斜切成一套。</p>
+<div id="rows"></div>
+<script>
+const svgs = window.__SVGS || {};
+const draw = (file, h) => {
+  const src = svgs[file];
+  if (!src) return `<img src="${file}" height="${h}">`;
+  const vb = /viewBox="([^"]+)"/.exec(src)[1].split(/\s+/).map(Number);
+  return src.replace("<svg ", `<svg height="${h}" width="${Math.round(h * vb[2] / vb[3])}" `);
+};
+const rows = [
+  ["Y0", "圆尾（现在）", "y0-ball", "尾巴收成圆头。"],
+  ["Y1", "Inter 原样", "y1-none", "Inter 本来的收口：接近竖直的一刀。"],
+  ["Y2", "斜切 52°", "y2-slant-52", "切口下角往左延长，斜度适中，尾巴稍长一点。"],
+  ["Y3", "斜切 40°", "y3-slant-40", "更斜、更尖，和 l 顶端的斜切最像一套。"],
+];
+document.getElementById("rows").innerHTML = rows.map(([tag, name, file, note]) => `
+  <div class="row">
+    <div class="meta"><span class="tag">${tag}</span><span class="name">${name}</span><p>${note}</p></div>
+    <div class="box l"><div class="line">${draw(file + ".svg", 96)}</div><div class="line">${draw(file + "-lockup.svg", 40)}</div></div>
+    <div class="box d"><div class="line">${draw(file + ".svg", 96)}</div><div class="line">${draw(file + "-lockup.svg", 40)}</div></div>
+  </div>`).join("");
+</script>
+</body>
+</html>
