@@ -55,6 +55,7 @@ import {
   type AttentionItem,
 } from "./attention";
 import { relativeTime } from "./ui";
+import { Collapse } from "./disclosure";
 import { currentWrapup } from "../shared/wrapup-state";
 import { ProjectForm, TaskForm, type TaskSeed } from "./forms";
 import { ideaDescription } from "../shared/ideas";
@@ -1342,7 +1343,9 @@ function BoardContent(
             icon={dismissedOpen ? "ChevronDown" : "ChevronRight"}
             onPress={() => setDismissedOpen((open) => !open)}
           />
-          {dismissedOpen && dismissedAttention.map((item) => attentionRow(item))}
+          <Collapse open={dismissedOpen} id="dismissed-attention">
+            {dismissedAttention.map((item) => attentionRow(item))}
+          </Collapse>
         </View>
       )}
     </>
