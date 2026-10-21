@@ -133,3 +133,44 @@ Through the headless Flowly settings UI, before creating any Round 3 resources, 
 ### Round 3 summary
 
 **3 PASS, 0 FAIL, 0 UNRUN.** The previous D7 prompt failure was not reproduced: the question stayed available after the suggestion set ended, the setting change was read fresh while the native session remained open, manual Wrap up archived the session/workspace while keeping the card, and Auto wrap up on let the daemon archive without asking. D7c's post-action RPC overlapped a transient Flowly service restart; its UI no-question poll completed and the persisted state was verified after the plugin returned to running.
+
+## Round 4 — Sessions outside Flowly
+
+Date: 2026-10-21 (Asia/Singapore)  
+Test session: `e63b5616-a0db-47cd-9b11-4c3691dcde10` — `codex/gpt-6-luna`, full access.  
+Fixture model: `claude/claude-haiku-5-5`, `bypassPermissions`. No daemon restart, plugin reload/install, or desktop-window interaction was performed; browser checks used headless Chromium.
+
+### Settings baseline
+
+Before creating fixtures, the settings UI showed **Sessions outside Flowly off**, **Progress on**, **Suggested next steps on**, **Ideas on**, and **Tapping a suggested next step: Fill the message box**. After cleanup, the settings UI again showed exactly those values. Baseline and final UI evidence are in [settings-before.json](fixtures/native-session/round4/settings-before.json) and [UI evidence](fixtures/native-session/round4/ui-evidence.json) (`settings-final`).
+
+### Fixtures
+
+- F1 Tinylink temporary card `29534112-2e5a-4ab4-8593-959e08e19850`, workspace `wks_e64ad5e72317c26a`; plain, non-prepared session `fc55b9bf-74ce-4581-a0a7-f65592ba2daa`. A separate prepared session `dae03a64-a92c-4810-9afb-be23c4e91ac1` on this card was used for E7. The naturally generated “New session” idea also created session `527cd24d-9e47-4f9a-aefc-d2c5b9cb863f` in that workspace.
+- F2 temporary repository `/tmp/flowly-native-r4-ce0d95cc-0dd4-4205-a9f6-1438eb668067`, branch `r4-base`, native project `prj_e60c0fdccedd1931`, workspace `wks_f3ec3a0fb7ab3d43`, plain session `3ce52f0a-8c5c-45e1-b7a6-a74d0f533db0`. The task created `notes.md` with three ideas.
+- Detailed IDs, event records, raw timeline observations, settings toggles, and cleanup results are in [Round 4 fixture evidence](fixtures/native-session/round4/evidence.json). Screenshots are in [the Round 4 screenshot directory](native-session/round4/).
+
+### Results
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| E1 — outside insights disabled | **PASS** | F1's completed turn with the master switch off produced no insight child, no `flowly-summary` or `flowly-next-moves` rows, and no Ideas chip. Settings RPC reported `enabled:false`; see `e1-off-observation` in fixture evidence and [screenshot](native-session/round4/e1-f1-outside-disabled.png). |
+| E2 — enabled summaries and suggested moves | **PASS** | F1 and F2 each produced native Progress and ready Suggested next steps cards, with the move card after the last reply. Both row kinds/IDs matched `flowly-summary-<entryId>` and `flowly-next-moves-<eventId>`; both rows had no `taskId`, move status was `ready`, and both summary cards omitted “Open card”. F1 child `daf2fba3-6fbb-4741-8711-d399c2cf1174` and F2 child `58ceaaaf-3203-4ddd-b699-6baea66bd6e3` had the summarizer labels and were archived. Each move filled the correct session's composer exactly, focused it, and sent no message. See `outside-f1-native-inspection`, `e2-f1-fill`, `outside-f2-native-inspection`, `e2-f2-fill`, and [F1](native-session/round4/e2-f1-progress-next.png)/[F2](native-session/round4/e2-f2-progress-next.png) screenshots. |
+| E3 — Ideas presentation | **PASS, partial scope** | F1 naturally produced two ideas; native UI displayed **Ideas · 2**, and the popover title was “Ideas for this session”. F2 produced no ideas during its initial two turns, so idea presentation was verified on F1 only. No idea data was fabricated. |
+| E4 — idea actions | **PASS for Continue here and New session; UNRUN for Dismiss, New workspace, and non-Git error** | Continue here required confirmation, then sent the idea instruction exactly to F1. New session created `527cd24d-9e47-4f9a-aefc-d2c5b9cb863f` in the same workspace with that instruction as its first message. Both available ideas were consumed by those actions. Dismiss/New workspace/non-Git behavior could not be exercised because no open F2 idea existed; no ideas were fabricated. Evidence steps `e4-f1-continue`, `e4-f1-new-session`. |
+| E5 — individual switches | **PASS for Progress and Suggested next steps; UNRUN for Ideas gating** | With Progress off, F2's next turn appended a ready move row and no new Progress row. With Suggested next steps off, the next turn added no ready move row; the existing row was dismissed. The model did not emit a new summary during that latter turn, so Progress-on row emission was not observable there. Ideas was off for a turn, but F2 had no existing/open idea and emitted no new idea, so suppression itself is inconclusive. Each switch was changed in the settings UI and read back through the RPC. See `e5-progress-off-turn`, `e5-nextMoves-off-turn`, `e5-ideas-off-turn`. |
+| E6 — next turn dismissal | **PASS** | F2's ready row `flowly-next-moves-8f29f098-18ba-4ee6-b3b8-1e0d4ee90a64` was rewritten to `status:"dismissed"` on the same ID when its next turn started. See `e6-f2-turn-start-dismissed`. |
+| E7 — managed session unchanged | **PASS** | Managed session `dae03a64-a92c-4810-9afb-be23c4e91ac1` rendered a Progress row with `taskId` and an “Open card” button. Its move row also had the expected card task ID. The outside insight view was null and no child carried `flowly-session` for this managed session. See `e7-e8-managed-and-flowly-spotcheck` in UI evidence. |
+| E8 — Flowly board/drawer/session spot check | **PASS** | Flowly board displayed the fixture card; the drawer showed its Progress section; Flowly's own session view retained its suggestion row and did not show the outside Ideas chip. No new tip/tour copy appeared; the added switches were confined to AI features settings. See the E7/E8 UI evidence and [settings screenshot](native-session/round4/e8-flowly-settings-switches.png). |
+| Browser page errors | **PASS** | Successful headless UI runs recorded no `pageerror` events. A harness-only `ReferenceError` occurred after the managed E7/E8 observations had already been logged; it did not originate from the page or change those observations. |
+
+### Cleanup
+
+- `tasks.delete` removed F1's temporary card and archived its three sessions. The additional idea-created session was explicitly stopped and cleanup verified it archived/closed.
+- `paseo project delete` removed F2's temporary native project/workspace; the owned `/tmp/flowly-native-r4-...` directory was removed.
+- Cleanup verification in fixture evidence confirms both temporary cards/projects/workspaces are absent, fixture sessions are archived/closed, and the F2 temp directory is absent. Tinylink remains present with its same six original cards and statuses; its Git HEAD and clean working-tree hash match pre-test values.
+- Settings restoration was re-read through the UI after cleanup: outside sessions **off**, Progress **on**, Suggested next steps **on**, Ideas **on**, and tap behavior **Fill the message box**. No unrelated cards or sessions were deleted or changed.
+
+### Round 4 summary
+
+**10 PASS, 0 FAIL, 4 UNRUN subchecks** (E4 Dismiss/New workspace/non-Git cases; E5 Ideas gating). E2, E4 Continue/New session, E6, E7, and E8 passed. Remaining gaps require a naturally generated F2 idea and a session turn that emits an idea while Ideas is disabled.

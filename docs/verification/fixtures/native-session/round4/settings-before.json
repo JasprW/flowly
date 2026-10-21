@@ -1,0 +1,18 @@
+{
+  "recordedAt": "2026-10-21T00:30:21.329Z",
+  "recordedVia": "Headless Playwright, Flowly Settings UI",
+  "settings": {
+    "tappingSuggestedNextStep": "fill",
+    "sessionsOutsideFlowly": false,
+    "progress": true,
+    "suggestedNextSteps": true,
+    "ideas": true
+  },
+  "uiEvidence": {
+    "tappingSuggestedNextStep": "Fill the message box",
+    "sessionsOutsideFlowly": "off (track rgb(244, 244, 245), thumb at 0px)",
+    "progress": "on (track rgb(32, 116, 74), thumb at 14px)",
+    "suggestedNextSteps": "on (track rgb(32, 116, 74), thumb at 14px)",
+    "ideas": "on (session-view Ideas switch; track rgb(32, 116, 74), thumb at 14px)"
+  }
+}

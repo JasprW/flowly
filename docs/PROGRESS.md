@@ -17,7 +17,8 @@
 - [x] Daemon: `server/session-insights.ts` (store `session-insights.json`, capped; one child insight session per completed turn, merged while one runs; progress / moves / ideas from one JSON answer; rows appended in the background; suggestion ends at the next turn; idea actions here / session / workspace), `shared/session-insights.ts` (schemas, prompt, lenient parser), `NextMoveRows.writeSession`, hooks for unmanaged sessions, RPCs `sessions.insights` (etag), `sessions.idea-run`, `sessions.idea-dismiss`.
 - [x] Client: chip refresh reads insights only when switched on; `sessionChipMoves`; card-less Next moves card and Progress row (no Open card); `OutsideIdeasPopover`; settings switches. Flowly's own screens unchanged apart from the settings.
 - [x] PASS: `npm run typecheck`; `npm test` 102 files / 765 passed, 65 skipped (rebased on main).
-- [ ] UNRUN: Luna 6 live verification of §12.8.
+- [x] Luna 6 round 4 (session `e63b5616-a0db-47cd-9b11-4c3691dcde10`; fixtures: a plain session in a temporary Tinylink card's workspace and one in a temporary git repo outside any Flowly project, all cleaned up; settings restored): 10 PASS, 0 FAIL. Off does nothing; on gives both sessions a Progress row without Open card and a Next moves card under the reply (rows verified by SDK); Ideas chip "Ideas · 2" with Continue here and New session working; Progress and Next steps switches each gate their part; the next turn dismisses the card in place; a managed session keeps its card path (Open card, no outside run); Flowly's own screens unchanged. [Evidence](verification/native-session.md#round-4).
+- [ ] UNRUN (no idea was generated for the repo session): Ideas Dismiss, New workspace, the non-Git error, and the Ideas switch suppressing an open idea live. Covered by unit tests (`server/session-insights.test.ts`, `client/session-chips.test.ts`) only.
 
 ## Native session pane: Summary, Next moves, Ideas (P1) — 2026-10-20
 
