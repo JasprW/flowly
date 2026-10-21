@@ -424,6 +424,10 @@ function BoardContent(
     surfaceWidth,
   );
   const width = drawerWidth(preferredWidth, surfaceWidth || 1000);
+  // While the drawer is being dragged the board keeps one width, the widest it can have (the
+  // drawer overlays it), so columns neither reflow nor leave a blank gap when the drawer narrows.
+  const [resizing, setResizing] = useState(false);
+  const resizingFrom = resizing ? Math.max(0, surfaceWidth - 340 - 8 - 16) || null : null;
   const board = data.data;
   const linked = props.workspaceId
     ? board?.tasks.find((t) => t.workspaceId === props.workspaceId)
@@ -1326,7 +1330,9 @@ function BoardContent(
         // or closing re-lays out nothing underneath (PERFORMANCE-SPEC §3).
         ...(compact
           ? { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 30, backgroundColor: colors.surface0 }
-          : { width: width + 8, minHeight: 0, flexShrink: 0 }),
+          : resizingFrom != null
+            ? { position: "absolute", top: 0, bottom: 0, right: 0, width: width + 8, minHeight: 0, zIndex: 20, backgroundColor: colors.surface0 }
+            : { width: width + 8, minHeight: 0, flexShrink: 0 }),
         flexDirection: "row",
         // Only while opening or closing: at rest no animated props, so a stale native write cannot stay (MotionReveal).
         ...(drawer.settled ? null : { opacity: drawer.progress, transform: [{ translateX: lerp(drawer.progress, [32, 0]) }] }),
@@ -1336,6 +1342,8 @@ function BoardContent(
         <ResizeGrip
           width={width}
           maxWidth={drawerWidth(720, surfaceWidth || 1000)}
+          onStart={() => setResizing(true)}
+          onEnd={() => setResizing(false)}
           onChange={(next) =>
             setPreferredWidth(drawerWidth(next, surfaceWidth))
           }
@@ -1598,9 +1606,19 @@ function BoardContent(
             </View>
           </View>
         ) : (
-          <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
+          <View style={{ flex: 1, minHeight: 0, flexDirection: "row", ...(resizing ? { userSelect: "none" } : null) } as never}>
             {(
-              <MotionReveal transitionKey={`${project.id}|${page || (compact ? mobileStatus : "columns")}`} direction={-1} distance={compact ? 0 : 18} {...covered} style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+              <MotionReveal
+                transitionKey={`${project.id}|${page || (compact ? mobileStatus : "columns")}`}
+                direction={-1}
+                distance={compact ? 0 : 18}
+                {...covered}
+                style={
+                  resizingFrom == null
+                    ? { flex: 1, minWidth: 0, minHeight: 0 }
+                    : { width: resizingFrom, flexGrow: 0, flexShrink: 0, minHeight: 0, overflow: "hidden" }
+                }
+              >
                 {page === "insights" && board ? (
                   <InsightsPage
                     project={project}

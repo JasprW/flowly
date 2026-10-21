@@ -7,22 +7,30 @@ export function ResizeGrip({
   width,
   onChange,
   maxWidth = 720,
+  onStart,
+  onEnd,
 }: {
   width: number;
   onChange(width: number): void;
   maxWidth?: number;
+  /** Drag began / finished (released or interrupted). */
+  onStart?(): void;
+  onEnd?(): void;
 }) {
   const { colors } = useTheme();
   const [hovered, setHovered] = useState(false);
-  const current = useRef({ width, onChange });
-  current.current = { width, onChange };
+  const current = useRef({ width, onChange, onStart, onEnd });
+  current.current = { width, onChange, onStart, onEnd };
   const startWidth = useRef(width);
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
         startWidth.current = current.current.width;
+        current.current.onStart?.();
       },
+      onPanResponderRelease: () => current.current.onEnd?.(),
+      onPanResponderTerminate: () => current.current.onEnd?.(),
       onPanResponderMove: (_e, g) =>
         current.current.onChange(startWidth.current - g.dx),
       onPanResponderTerminationRequest: () => false,
