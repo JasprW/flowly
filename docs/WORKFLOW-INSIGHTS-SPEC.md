@@ -55,9 +55,9 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 4. **Run after**：整点选择，例如 09:00。
 5. 只读行：
    - “Looks at the last N days of commands.”（N 见 §4.1）；
-   - 有过运行时显示 “Last run: 168k in · 22k out · $0.80 · about $X per month at this pace.”
+   - 有过运行时显示 “Last run: 168k in · 22k out · $0.80. About $X per month for N projects at this pace.”
      - “in” 取运行结束时上下文里的 token 数。Claude 的 `inputTokens` 只计未缓存的部分，单看会偏小。
-     - 每月估算 = 上次费用 × 30 / `intervalDays`。
+     - 每月估算 = 一个周期的费用 × 30 / `intervalDays`。一个周期的费用是**每个仍被包含的项目**最近 30 天内最近一次有费用记录的运行之和（`workflow-insights.overview` 的 `cycleCostUsd` 与 `costProjects`）。2026-10-21 起；之前只用一个项目的一次运行，两个项目每天运行时会少算一半。
      - 没有费用数据时只显示 token。
 6. 按钮 **Delete collected commands…**，确认后清空所有项目的命令记录（§3.4），建议保留。
 
@@ -127,7 +127,11 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 - daemon 停机期间错过的运行，启动后只补跑一次，不补跑多次。
 - 全部项目一次只运行一个分析，排队顺序按上次运行时间升序。
 - 分析窗口：`windowDays = max(7, intervalDays)`，最多 14 天。
-- **安静期跳过**：自上次运行以来新增的 action 少于 50 条，或窗口内涉及的卡片少于 3 张时，不调用模型。本次运行记为 skipped，原因 “Not enough new activity”，同样算一次运行（重新计周期）。
+- **安静期跳过**：以下任一情况不调用模型，本次运行记为 skipped，原因 “Not enough new activity”，同样算一次运行（重新计周期）：
+  - 自上次运行以来新增的 action 少于 50 条；
+  - 窗口内涉及的卡片少于 2 张，且新增 action 少于 200 条。
+
+  2026-10-21 起；之前的门槛是 3 张卡，导致 Agent SMITH（2 张卡、两天 990 条 action）一直没有被分析。
 - **Run now**（Insights 区块）：
   - 任何时候都可以手动运行，总开关关闭时也可以，也不受安静期规则限制。
   - 项目还没有命令记录时（比如开关一直没开），先回填最近 7 天再分析；回填后仍然没有命令，记为 skipped（“No commands collected yet.”）。
@@ -148,7 +152,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 6. 被读得最多的文件，前 30。
 7. 失败的命令，最多 60 条，每条 260 字符。
 8. inline 摘录：按开头 240 字符去重后，**按卡片轮流抽样**（避免集中在少数长 session），最多 280 条。
-9. 已有建议：本项目 90 天内 open、accepted、dismissed 的建议标题与 target，并要求模型不要重复（§5.3）。
+9. 已有建议：本项目的 open 与 accepted 建议，以及 30 天内 dismissed 的建议。每条一行：`短 ID · 状态 · target: 标题 — proposal 前 160 字`。模型用短 ID 指代它们（§5.3）。
 
 ### 4.3 模型调用
 
@@ -159,19 +163,30 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 - prompt（英文，agent-facing）要点：
   - 可选的五类目标：`paseo_script`、`worktree_setup`、`repo_tool`、`agents_md`、`skill`；
   - 每条结论都要引用卡片短 ID 和次数；不推荐已存在的东西，除非组合起来能省事；git 写操作和一次性探索不做成脚本；重点解读内联脚本的用途；最多 8 条；如实标注置信度；
+  - 与已有建议说的是同一件事（措辞或范围不同也算）时，不要写成新建议，而是用 `updates` 填那条的短 ID，并给出刷新后的依据、proposal 和卡片；dismissed 或 accepted 的不要再提；
+  - 已有的 open 建议中有两条或以上说的是同一件事时，在 `merges` 里列出 `{ keep, drop[] }`，保留措辞最好的那条；
   - 不使用工具；**只返回一个 JSON 对象**。
 - 输出 schema：
-  `{ findings: [{ target, title, evidence, proposal, benefit, confidence: "high"|"medium"|"low", cards: string[] }], clusters: [{ purpose, count, cards }], noise, verdict }`。
+  `{ findings: [{ updates?, target, title, evidence, proposal, benefit, confidence: "high"|"medium"|"low", cards: string[] }], merges: [{ keep, drop: string[] }], noise, verdict }`。
   同时以 `outputSchema` 传入，但 **Claude 不强制执行它**：探针返回的是 markdown。
 - 解析：用 `firstObject` 取 JSON，兼容代码块和字符串数组。取不到时在同一 session 追加一条消息 “Reply again with only the JSON object described above.”，重试一次；仍失败则本次运行记为错误 “The workflow insights model returned no JSON.”。
 - 记录 `lastUsage`（输入、缓存、输出 token，以及 provider 给出的费用）。
 
 ### 4.4 校验（daemon，不信任模型的计数与 ID）
 
-- `cards` 中的短 ID 必须能对应到本项目、本窗口内有记录的卡片，对不上的丢弃。有效卡片少于 2 张的建议丢弃。
-- 标题按规范化 slug 和 target 生成指纹，与已有建议重复的丢弃（§5.3）。
+- `cards` 中的短 ID 必须能对应到本项目、本窗口内有记录的卡片，对不上的丢弃。有效卡片少于 2 张的建议丢弃；窗口里只有 1 张卡时，引用这 1 张即可。
+- 每条建议先判断是否在重复已有建议，判断顺序（§5.3）：
+  1. `updates` 填的 ID（完整 ID 或短 ID）能唯一对应一条已有建议；
+  2. 指纹（target + 规范化标题）相同；
+  3. 标题相似：同一 target 且相似度 ≥ 0.6，或任意 target 且相似度 ≥ 0.7。相似度是标题的 Jaccard 系数，英文按词计，中日韩文字按相邻两字计。
+- 判定为重复时：
+  - 对应 open 建议：刷新它（§5.3），不新增；同一次运行里多条指向同一条建议时，只取第一条；
+  - 对应 accepted 或 30 天内 dismissed 的建议：直接丢弃。
+- 不重复的建议，与本次已新增的建议之间也做同样的相似度比较，避免一次运行里出现两条相同的。
+- `merges`：`keep` 必须是已有的 open 或 accepted 建议，`drop` 里只保留其中 open 的、不等于 keep 的；无法对应的 ID 忽略。被合并掉的建议不再单独刷新。
 - 每个字段限长：title 120，evidence 1000，proposal 4000，benefit 500；超长的建议丢弃，不截断。
-- 最多保留 8 条。全部被丢弃时本次运行记为 ok，结果为 “No suggestions this time”。
+- 新增与刷新合计最多 8 条。既没有新增、刷新，也没有合并时，本次运行记为 ok，结果为 “No suggestions this time”。
+- 以上在写入 `workflow-insights.json` 的同一次串行写里，按写入那一刻的建议状态计算，所以运行期间用户刚忽略的建议不会被刷新回来。
 
 ## 5. 建议与落地
 
@@ -181,9 +196,10 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 
 ```
 { version: 1,
-  runs: [{ id, projectId, at, from, to, model, status: "ok"|"skipped"|"error", reason?, usage?, stats: { calls, actions, cards, sessions } }],
+  runs: [{ id, projectId, at, from, to, model, status: "ok"|"skipped"|"error", reason?, usage?,
+           findings, refreshed, merged, stats: { calls, actions, cards, sessions } }],
   findings: [{ id, projectId, runId, fingerprint, target, title, evidence, proposal, benefit, confidence, cards[],
-               status: "open"|"accepted"|"dismissed", acceptedTaskId?, createdAt, updatedAt }],
+               status: "open"|"accepted"|"dismissed", acceptedTaskId?, createdAt, updatedAt, seen, lastSeenAt? }],
   revision }
 ```
 
@@ -201,6 +217,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
   - target chip：paseo.json script / Worktree setup / Repo tool / AGENTS.md / Skill；
   - 标题、依据（可点击的卡片引用，打开卡片侧栏）、收益；
   - proposal 默认收起，展开后以等宽字体显示；
+  - 被多次运行发现时（`seen` > 1）显示 “Seen in N runs”；
   - AI 星星标记（AI-MARK-SPEC）。
 - 操作：
   - **Create card**：打开 New task 表单并预填：
@@ -224,8 +241,14 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 
 ### 5.3 去重与冷却
 
-- 指纹相同的已有建议：open 或 accepted 时不再重复生成；dismissed 时 30 天内不再出现，之后可以重新提出。
-- 已有建议的标题也会写进素材（§4.2 第 9 项），从源头减少重复。
+2026-10-21 在真实数据上发现：每天运行时，25 条 open 建议里约一半是在重说之前的建议（verify、看板查看、Daemon 连接各 3 次）。原因是模型每次换个说法，而只比较指纹拦不住。改为：
+
+- **由模型标注**：已有建议带短 ID 写进素材（§4.2 第 9 项）。模型发现同一件事时填 `updates`，发现已有建议之间互相重复时填 `merges`。这是主要手段，因为改写后的重复往往换了语言或角度，靠字面比对认不出来（真实数据里同一个“看板查看脚本”的两个标题相似度只有 0.13）。
+- **daemon 兜底**：指纹相同或标题明显相似（§4.4）也按重复处理。阈值取得保守：真实数据中的明显改写为 0.64 和 0.67；只共享通用词的标题（如 “alpha helper tool” 与 “bravo helper tool”）为 0.5，不算重复。
+- **刷新**：open 建议被再次发现时，更新 evidence、proposal、benefit、confidence；卡片取并集（最多 20 张）；`seen` 加 1，`lastSeenAt` 和 `runId` 改为本次。标题保持不变，用户认得出是同一条。
+- **合并**：keep 的 `seen` 加上被合并建议的 `seen`，卡片取并集，被合并的 open 建议删除。keep 是 accepted 时，同样删除它的 open 重复，因为这件事已经建了卡。
+- **已有的重复**：不在 daemon 启动时按字面自动合并（字面相似度认不出大部分重复，硬合并容易误伤）。下一次运行（定时或 Run now）时由模型给出 `merges`，统一收拢。
+- **冷却**：dismissed 的建议 30 天内不会再出现，也不会被刷新；之后可以作为新建议再提。accepted 的不会再出现。
 
 ### 5.4 让 agent 用上已有脚本
 
@@ -282,7 +305,9 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 - 调度：intervalDays × runHour × 时区；跨天；停机后只补跑一次；同一时刻只有一个运行。
 - 安静期跳过；素材预算裁剪与按卡片轮流抽样。
 - 解析：纯 JSON、代码块、markdown 中夹带 JSON、无 JSON 时的重试、仍失败的错误。
-- 校验：无效卡片 ID、少于 2 张卡、超长字段、重复指纹、dismissed 冷却。
+- 校验：无效卡片 ID、少于 2 张卡（窗口只有 1 张卡时除外）、超长字段、重复指纹、dismissed 冷却。
+- 重复（2026-10-21）：`updates` 刷新 open、不动 accepted/dismissed、未知 ID 视为新建议；跨语言的标题相似度兜底与不误判通用词；同一次运行内去重；`merges` 只合并 open；`applyReconciled` 的刷新、`seen` 累加与删除；以及两次运行之间的实际刷新与合并（daemon 测试）。
+- 一个周期的费用按项目求和；两张卡的忙碌项目在定时运行中会被分析。
 - 建卡时原子 accept 与错误回滚；设置缺字段时的默认值。
 - 提示规则（`client/onboarding-logic.test.ts`）；i18n 完整性。
 
@@ -301,7 +326,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 1. **默认关闭**，周期默认 **Weekly**，整点默认 09:00。
 2. **Auto 模型用 Sonnet**（5.5 → 5），而不是摘要用的便宜模型；不可用时才退回 Summary model。
 3. **窗口至少 7 天**，所以 Daily 是“每天看最近 7 天”，靠去重避免每天出现相同的建议。
-4. **安静期跳过**（新增 action 少于 50 条或少于 3 张卡），省下没有新信息时的 token。手动 Run now 不受此限制。
+4. **安静期跳过**（新增 action 少于 50 条，或少于 2 张卡且新增 action 少于 200 条；2026-10-21 由“少于 3 张卡”放宽，用户确认），省下没有新信息时的 token。手动 Run now 不受此限制。
 5. **只有开关打开才采集**，打开时回填 7 天；关闭不删数据，另设删除按钮。
 6. 建议放在 **Insights 页**，不进 Ideas 收件箱。Ideas 挂在某张来源卡上，而这里的建议是项目级的。
 7. `projectScripts` 写进 session 上下文，**与开关无关**：建议落地之后，agent 要能知道有这些脚本。

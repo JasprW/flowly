@@ -277,3 +277,73 @@ test("project remove backs up runs and suggestions; get_task lists paseo.json sc
   expect(await projectScripts({ primaryPath: x.root })).toEqual([{ name: "verify", type: "script" }]);
   expect(await readFile(join(x.root, "paseo.json"), "utf8")).toContain("npm test");
 });
+
+test("a later run refreshes the suggestion it repeats and merges repeats the model points out (§5.3)", async () => {
+  const x = await setup();
+  await x.log.append("p", records(6, 3));
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  const first = (await x.service.view("p")).findings[0];
+  // An older reworded copy, as left by runs before this fix.
+  await x.state.update((state) => {
+    state.findings.push({ ...first, id: "dddddddd-dup", fingerprint: "repo_tool:old-copy", title: "i18n catalog writer", seen: 2 });
+    return { value: undefined, changed: true };
+  });
+  x.setNow(NOW + 86_400_000);
+  x.replies.push(
+    JSON.stringify({
+      findings: [{ updates: first.id.slice(0, 8), target: "repo_tool", title: "i18n catalog tool", evidence: "5 cards now", proposal: "scripts/i18n.mjs add|rename", benefit: "fewer edits", confidence: "high", cards: ["bbbbbbbb", "cccccccc"] }],
+      merges: [{ keep: first.id.slice(0, 8), drop: ["dddddddd"] }],
+      noise: "",
+      verdict: "",
+    }),
+  );
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  const view = await x.service.view("p");
+  expect(view.findings).toHaveLength(1);
+  expect(view.findings[0]).toMatchObject({ id: first.id, title: "i18n helper", evidence: "5 cards now", seen: 4, status: "open" });
+  expect(view.findings[0].cards.sort()).toEqual(["aaaaaaaa-1", "bbbbbbbb-2", "cccccccc-3"]);
+  expect(view.lastRun).toMatchObject({ status: "ok", findings: 0, refreshed: 1, merged: 1 });
+  expect(view.lastRun?.reason).toBeUndefined();
+});
+
+test("the cost of one cycle adds up each included project's latest priced run", async () => {
+  const x = await setup();
+  await x.board.mutate((b) => {
+    b.projects.push({ ...b.projects[0], id: "q", paseoProjectId: "nq", title: "Q" });
+    b.projects.push({ ...b.projects[0], id: "off", paseoProjectId: "no", title: "Off", workflowInsights: false });
+  });
+  const run = (projectId: string, at: string, cost?: number) => ({
+    id: `${projectId}-${at}`,
+    projectId,
+    at,
+    from: at,
+    to: at,
+    model: "m",
+    manual: false,
+    status: "ok" as const,
+    findings: 0,
+    refreshed: 0,
+    merged: 0,
+    stats: { calls: 0, actions: 0, cards: 0, sessions: 0 },
+    ...(cost === undefined ? {} : { usage: { totalCostUsd: cost } }),
+  });
+  await x.state.update((state) => {
+    state.runs.push(run("p", "2026-10-18T05:00:00.000Z", 0.9), run("p", "2026-10-19T05:00:00.000Z", 0.5), run("q", "2026-10-19T05:00:00.000Z", 0.4), run("off", "2026-10-19T05:00:00.000Z", 9), run("p", "2026-10-19T06:00:00.000Z"));
+    return { value: undefined, changed: true };
+  });
+  const overview = await x.service.overview();
+  expect(overview.costProjects).toBe(2);
+  expect(overview.cycleCostUsd).toBeCloseTo(0.9);
+});
+
+test("a busy project with two cards is analyzed on schedule", async () => {
+  const x = await setup();
+  x.service.attach(x.paseo);
+  await x.log.append("p", records(30, 2));
+  await x.service.tick();
+  await settle(x.service);
+  expect((await x.service.view("p")).lastRun).toMatchObject({ status: "ok", manual: false });
+  expect(x.created).toHaveLength(1);
+});

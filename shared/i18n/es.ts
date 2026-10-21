@@ -1198,7 +1198,6 @@ const catalog: Catalog = {
   "Every 3 days": "Cada 3 días",
   "Weekly": "Semanal",
   "Every 2 weeks": "Cada 2 semanas",
-  "Last run: {in} in · {out} out · ${cost} · about ${month} per month at this pace.": "Última ejecución: {in} de entrada · {out} de salida · ${cost} · unos ${month} al mes a este ritmo.",
   "Last run: {in} in · {out} out.": "Última ejecución: {in} de entrada · {out} de salida.",
   "Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.": "Cada pocos días, un modelo lee los comandos de shell que los agentes ejecutaron en las tarjetas de este proyecto y sugiere scripts, herramientas y reglas que vale la pena conservar. Desactivado por defecto: gasta tokens y guarda un registro de comandos.",
   "Collecting commands. Suggestions appear in each project's Insights.": "Recogiendo comandos. Las sugerencias aparecen en Insights de cada proyecto.",
@@ -1215,5 +1214,8 @@ const catalog: Catalog = {
   "Could not delete the command log.": "No se pudo eliminar el registro de comandos.",
   "Commands are kept for 30 days, redacted, for {n} projects.": {"one": "Los comandos se guardan 30 días, anonimizados, para {n} proyecto.", "other": "Los comandos se guardan 30 días, anonimizados, para {n} proyectos."},
   "Nothing collected.": "No hay nada recogido.",
+  "Last run: {in} in · {out} out · ${cost}.": "Última ejecución: {in} de entrada · {out} de salida · ${cost}.",
+  "About ${month} per month for {n} projects at this pace.": {"one": "Unos ${month} al mes para {n} proyecto a este ritmo.", "other": "Unos ${month} al mes para {n} proyectos a este ritmo."},
+  "Seen in {n} runs": {"one": "Visto en {n} ejecución", "other": "Visto en {n} ejecuciones"},
 };
 export default catalog;

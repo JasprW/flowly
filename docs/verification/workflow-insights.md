@@ -28,6 +28,31 @@ Spec: [WORKFLOW-INSIGHTS-SPEC](../WORKFLOW-INSIGHTS-SPEC.md). Card `3df1723e`. I
   - Temporary session `649d313d` was archived by the plugin (2026-10-19T08:24:27Z), then deleted by this test. `paseo ls -a` shows no session with the `ultra-kanban-insight` label.
   - The 7 suggestions and the Flowly command log stay in the user's data, as the result of this run. They can be dismissed in Insights, and the log removed with *Delete collected commands*.
 
+## 2026-10-21: repeats, quiet rule, cost estimate
+
+Review of the scheduled runs on 10-20 and 10-21 (read only):
+- 25 open suggestions, about half restating earlier ones in other words or another language. The verify/check script, the board inspector and the DaemonClient helper came back 3 times each. Fingerprints did not catch them: the titles of the two board-inspector suggestions score only 0.13 on lexical similarity.
+- Agent SMITH (990 actions, 2 cards) was skipped every time by the 3-card quiet rule.
+- The monthly estimate took a single run of one project, so with two projects analyzed daily it was about half the real figure.
+
+Fix (spec §4.1, §4.3–§4.4, §5.1–§5.3, §2.3, §11):
+- The model refers to existing suggestions by short id: `updates` refreshes one, `merges` folds duplicate open ones into a kept one.
+- The daemon fallback is a lexical similarity check. Its thresholds were calibrated on the real titles: the clear rewordings score 0.64 and 0.67. A pair that shares only generic words ("alpha helper tool" / "bravo helper tool", 0.5) is not merged.
+- Quiet rule: under 2 cards still runs once there are at least 200 new actions.
+- Cycle cost: sum of the latest costed run per included project, last 30 days.
+
+PASS (on the PR branch tree):
+- `npm run typecheck`.
+- `npm test`: 839 passed, 65 skipped.
+- New tests:
+  - `shared/workflow-insights.test.ts` (30): the quiet thresholds; the material line format; parsing `updates`/`merges`; refreshing via `updates` but not accepted or dismissed suggestions; an unknown id treated as new; CJK and English similarity with negative cases; dedupe within a run; merge validation; `applyReconciled`.
+  - `server/workflow-insights.test.ts` (13): a later run refreshing and merging (seen 4, refreshed 1, merged 1, no "No suggestions" reason); the overview cycle cost over included projects only; a busy 2-card project analyzed on schedule.
+- i18n: 3 new strings in all 9 catalogs, 1 removed.
+
+UNRUN:
+- The merge of the existing repeats on real data. It happens on the next model run after PR #8 is installed.
+- "Seen in N runs" and the per-project cost line in a real window.
+
 ## UNRUN
 
 - The Insights section, settings group, project switch, Create card prefill and tip in a real desktop or compact window (no UI session was used).

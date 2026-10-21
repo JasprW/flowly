@@ -1198,7 +1198,6 @@ const catalog: Catalog = {
   "Every 3 days": "3 日ごと",
   "Weekly": "毎週",
   "Every 2 weeks": "2 週間ごと",
-  "Last run: {in} in · {out} out · ${cost} · about ${month} per month at this pace.": "前回の実行: 入力 {in} · 出力 {out} · ${cost} · このペースで月あたり約 ${month}。",
   "Last run: {in} in · {out} out.": "前回の実行: 入力 {in} · 出力 {out}。",
   "Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.": "数日ごとに、モデルがこのプロジェクトのカードでエージェントが実行したシェルコマンドを読み、残す価値のあるスクリプト・ツール・ルールを提案します。既定ではオフ: トークンを消費し、コマンドの記録を保存します。",
   "Collecting commands. Suggestions appear in each project's Insights.": "コマンドを収集中です。提案は各プロジェクトの Insights に表示されます。",
@@ -1215,5 +1214,8 @@ const catalog: Catalog = {
   "Could not delete the command log.": "コマンド記録を削除できませんでした。",
   "Commands are kept for 30 days, redacted, for {n} projects.": "コマンドはマスクして 30 日間保存しています（{n} プロジェクト）。",
   "Nothing collected.": "収集されたものはありません。",
+  "Last run: {in} in · {out} out · ${cost}.": "前回の実行: 入力 {in} · 出力 {out} · ${cost}。",
+  "About ${month} per month for {n} projects at this pace.": "このペースで {n} プロジェクト分、月あたり約 ${month}。",
+  "Seen in {n} runs": "{n} 回の実行で検出",
 };
 export default catalog;

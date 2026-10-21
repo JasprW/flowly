@@ -141,6 +141,15 @@
 - [x] Onboarding: tour row *Workflow insights*, tip `first-workflow-insight` (after `first-idea`), ONBOARDING-SPEC table, README (both). 56 strings in all 9 catalogs.
 - [x] PASS: typecheck; `npm test` 567 passed / 63 skipped; plugin reloaded. Live Run now on Flowly with `claude/claude-sonnet-5`: 240 s, $0.63, 7 suggestions, 4 of them matching the probe; the Playwright one did not come back. Details in [verification/workflow-insights.md](verification/workflow-insights.md).
 - [ ] UNRUN: real-window UI (desktop and compact), a scheduled run and an enable-time backfill in the live daemon, Codex shell items, Luna 6 test session.
+- [x] 2026-10-21 review of two days of scheduled runs. 25 open suggestions, about half of them repeats of earlier ones (verify/check, board inspector and DaemonClient helper, each 3 times). Agent SMITH was never analyzed: 990 actions but only 2 cards, under the 3-card quiet rule. The monthly cost estimate used one project's run.
+- [x] Fix on PR #8 (user request), spec §4.1, §4.3–§4.4, §5.1–§5.3, §2.3 and §11 updated:
+  - The model sees existing suggestions with a short id. It marks a repeat with `updates`, which refreshes the existing suggestion (evidence, cards, `seen` + 1) instead of adding one. It lists duplicates among open suggestions in `merges`.
+  - A daemon fallback treats a matching fingerprint, or a similar title (word and CJK-bigram Jaccard: ≥ 0.6 with the same target, ≥ 0.7 with any target), as a repeat.
+  - Quiet rule: under 50 new actions, or under 2 cards unless there are at least 200 new actions.
+  - The monthly estimate sums the latest run cost of each included project.
+  - Insights shows "Seen in N runs".
+  - The existing repeats are merged by the next model run. The data file is not edited directly.
+- [x] PASS: typecheck; `npm test` 839 passed / 65 skipped (the PR branch tree). UNRUN: the merge on real data (the next scheduled run or Run now after the PR is installed), the UI line in a real window.
 
 ## Card display: calmer layout and user-chosen fields — 2026-10-19
 

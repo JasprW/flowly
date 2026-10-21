@@ -1198,7 +1198,6 @@ const catalog: Catalog = {
   "Every 3 days": "3일마다",
   "Weekly": "매주",
   "Every 2 weeks": "2주마다",
-  "Last run: {in} in · {out} out · ${cost} · about ${month} per month at this pace.": "마지막 실행: 입력 {in} · 출력 {out} · ${cost} · 이 속도라면 월 약 ${month}.",
   "Last run: {in} in · {out} out.": "마지막 실행: 입력 {in} · 출력 {out}.",
   "Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.": "며칠마다 모델이 이 프로젝트의 카드에서 에이전트가 실행한 셸 명령을 읽고, 남겨 둘 만한 스크립트·도구·규칙을 제안합니다. 기본값은 꺼짐: 토큰을 쓰고 명령 기록을 보관합니다.",
   "Collecting commands. Suggestions appear in each project's Insights.": "명령을 수집하는 중입니다. 제안은 각 프로젝트의 Insights에 표시됩니다.",
@@ -1215,5 +1214,8 @@ const catalog: Catalog = {
   "Could not delete the command log.": "명령 기록을 삭제할 수 없습니다.",
   "Commands are kept for 30 days, redacted, for {n} projects.": "명령은 가려진 상태로 30일간 보관됩니다({n}개 프로젝트).",
   "Nothing collected.": "수집된 내용이 없습니다.",
+  "Last run: {in} in · {out} out · ${cost}.": "마지막 실행: 입력 {in} · 출력 {out} · ${cost}.",
+  "About ${month} per month for {n} projects at this pace.": "이 속도라면 프로젝트 {n}개에 월 약 ${month}.",
+  "Seen in {n} runs": "{n}회 실행에서 발견",
 };
 export default catalog;

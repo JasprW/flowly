@@ -13,7 +13,12 @@ export const INTERVALS = [1, 3, 7, 14] as const;
 export const RETENTION_DAYS = 30;
 export const BACKFILL_DAYS = 7;
 export const QUIET_ACTIONS = 50;
-export const QUIET_CARDS = 3;
+export const QUIET_CARDS = 2;
+/** A busy project with fewer cards still runs (§4.1). */
+export const BUSY_ACTIONS = 200;
+/** Title similarity that marks a reworded repeat: same target / any target (§4.4). */
+export const SIMILAR_SAME_TARGET = 0.6;
+export const SIMILAR_ANY_TARGET = 0.7;
 export const MATERIAL_LIMIT = 150_000;
 export const INLINE_CHARS = 560;
 export const INLINE_SAMPLE = 280;
@@ -402,10 +407,14 @@ function roundRobin<T>(queues: T[][]): T[] {
   return out;
 }
 
-/** Skip the model when little happened since the last run (§4.1). */
+/**
+ * Skip the model when little happened since the last run (§4.1): fewer than
+ * QUIET_ACTIONS new actions, or fewer than QUIET_CARDS cards in the window
+ * unless BUSY_ACTIONS new actions make up for it.
+ */
 export function quiet(sinceLast: readonly CommandRecord[], windowCards: number): boolean {
   const actions = sinceLast.reduce((n, r) => n + r.actions.length, 0);
-  return actions < QUIET_ACTIONS || windowCards < QUIET_CARDS;
+  return actions < QUIET_ACTIONS || (windowCards < QUIET_CARDS && actions < BUSY_ACTIONS);
 }
 
 export type ExistingConfig = { paseoScripts: string[]; paseoWorktree: string; packageScripts: Record<string, string>; commands: string };
@@ -416,7 +425,7 @@ export function buildMaterial(input: {
   agg: Aggregate;
   cards: readonly CardInfo[];
   config: ExistingConfig;
-  previous: readonly { target: string; title: string; status: string }[];
+  previous: readonly { id: string; target: string; title: string; status: string; proposal?: string }[];
 }): string {
   const { agg } = input;
   const head = [
@@ -427,7 +436,9 @@ export function buildMaterial(input: {
     `\n# Action commands (normalized key · runs · cards · sessions · failed runs · main lane), top 60\n${agg.keys.slice(0, 60).map((k) => `- ${k.key} · ${k.runs} · ${k.cards} · ${k.sessions} · ${k.failed} · ${k.lane}`).join("\n")}`,
     `\n# Repeated sequences of action commands within a session (distinct sessions >= 3), top 25\n${agg.sequences.slice(0, 25).map((s) => `- ${s.sessions} sessions: ${s.keys.join(" → ")}`).join("\n") || "(none)"}`,
     `\n# Files most often inspected with grep/sed/head/cat, top 30\n${agg.files.slice(0, 30).map((f) => `- ${f.file} · ${f.reads}`).join("\n") || "(none)"}`,
-    `\n# Suggestions already made (do not repeat them)\n${input.previous.map((p) => `- [${p.status}] ${p.target}: ${p.title}`).join("\n") || "(none)"}`,
+    `\n# Suggestions already made (id · status · target: title — proposal); refer to them by id, never repeat them as new\n${
+      input.previous.map((p) => `- ${shortId(p.id)} · ${p.status} · ${p.target}: ${p.title}${p.proposal ? ` — ${p.proposal.replace(/\s+/g, " ").slice(0, 160)}` : ""}`).join("\n") || "(none)"
+    }`,
   ].join("\n");
   const failedPart = (n: number) => `\n# Failed shell calls (${agg.failed.length}), redacted, up to ${n}\n${agg.failed.slice(0, n).map((f) => `[card ${f.card}] ${f.text}`).join("\n") || "(none)"}`;
   const inlinePart = (n: number) =>
@@ -465,10 +476,12 @@ Rules:
 - Do not recommend what already exists (package.json scripts, paseo.json, AGENTS.md commands) unless combining them saves real effort; say so explicitly.
 - Never turn git write operations (add, commit, push, tag) or one-off exploration into scripts.
 - For inline scripts, infer their purpose and cluster them; this is where most of the value is expected.
-- At most ${MAX_FINDINGS} findings, the most valuable first. Mark confidence honestly. Skip suggestions listed as already made.
+- At most ${MAX_FINDINGS} findings, the most valuable first. Mark confidence honestly.
+- Suggestions already made are listed with their 8-character ids. When a finding is about the same thing as one of them (even if you would word or scope it differently), do not write it as new: set "updates" to that id and give the refreshed evidence, proposal and cards. Never propose again something listed as dismissed or accepted.
+- When two or more suggestions already made with status open say the same thing, list them under "merges" as {"keep": id, "drop": [ids]}, keeping the one that is best worded.
 - Write titles and texts in the language most card titles use.
 - Do not use any tools. Answer with only one JSON object and nothing else:
-{"findings":[{"target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"]}],"noise":"what in the material was noise","verdict":"one or two sentences"}
+{"findings":[{"updates":"8-char id of the suggestion it refreshes, or empty","target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"]}],"merges":[{"keep":"8-char id","drop":["8-char ids"]}],"noise":"what in the material was noise","verdict":"one or two sentences"}
 
 ${material}`;
 }
@@ -485,23 +498,26 @@ const finding = {
     benefit: { type: "string" },
     confidence: { enum: [...confidences] },
     cards: { type: "array", items: { type: "string" } },
+    updates: { type: "string" },
   },
 };
+const merge = { type: "object", additionalProperties: false, required: ["keep", "drop"], properties: { keep: { type: "string" }, drop: { type: "array", items: { type: "string" } } } };
 /** Passed as outputSchema, but Claude does not enforce it: parsing stays lenient. */
 export const workflowJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["findings", "noise", "verdict"],
-  properties: { findings: { type: "array", items: finding }, noise: { type: "string" }, verdict: { type: "string" } },
+  required: ["findings", "merges", "noise", "verdict"],
+  properties: { findings: { type: "array", items: finding }, merges: { type: "array", items: merge }, noise: { type: "string" }, verdict: { type: "string" } },
 } as const;
 export const RETRY_PROMPT = "Reply again with only the JSON object described above, and nothing else.";
 
-export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[] };
+export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[]; updates?: string };
+export type RawMerge = { keep: string; drop: string[] };
 
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : Array.isArray(v) ? v.filter((x) => typeof x === "string").join("\n").trim() : "");
 
 /** The model's findings; null when the reply holds no JSON object (the caller retries once). */
-export function parseWorkflowOutput(reply: string | null | undefined): { findings: RawFinding[]; verdict: string } | null {
+export function parseWorkflowOutput(reply: string | null | undefined): { findings: RawFinding[]; merges: RawMerge[]; verdict: string } | null {
   const json = reply ? firstObject(reply) : null;
   if (!json) return null;
   let raw: unknown;
@@ -514,8 +530,13 @@ export function parseWorkflowOutput(reply: string | null | undefined): { finding
   const o = raw as Record<string, unknown>;
   const list = Array.isArray(o.findings) ? o.findings : null;
   if (!list) return null;
+  const ids = (v: unknown) => (Array.isArray(v) ? v : typeof v === "string" ? [v] : []).filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean);
   return {
     verdict: text(o.verdict),
+    merges: (Array.isArray(o.merges) ? o.merges : [])
+      .filter((m): m is Record<string, unknown> => !!m && typeof m === "object")
+      .map((m) => ({ keep: text(m.keep), drop: ids(m.drop) }))
+      .filter((m) => m.keep && m.drop.length),
     findings: list
       .filter((f): f is Record<string, unknown> => !!f && typeof f === "object")
       .map((f) => ({
@@ -526,6 +547,7 @@ export function parseWorkflowOutput(reply: string | null | undefined): { finding
         benefit: text(f.benefit),
         confidence: text(f.confidence).toLowerCase(),
         cards: (Array.isArray(f.cards) ? f.cards : []).filter((c): c is string => typeof c === "string").map((c) => c.trim()),
+        updates: text(f.updates),
       })),
   };
 }
@@ -559,19 +581,70 @@ export const findingSchema = z.object({
   acceptedTaskId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** Runs that found it: 1 when added, +1 each time a run refreshes it, summed when merged (§5.3). */
+  seen: z.number().int().min(1).default(1),
+  lastSeenAt: z.string().optional(),
 });
 export type Finding = z.infer<typeof findingSchema>;
+export type FindingDraft = Omit<Finding, "id" | "projectId" | "runId" | "status" | "createdAt" | "updatedAt" | "seen" | "lastSeenAt">;
+export type Reconciled = {
+  /** New suggestions. */
+  added: FindingDraft[];
+  /** Open suggestions the run found again: their evidence, proposal and cards are refreshed. */
+  refreshed: { id: string; draft: FindingDraft }[];
+  /** Open repeats folded into the suggestion kept. */
+  merged: { keep: string; drop: string[] }[];
+};
+
+const STOP_WORDS = new Set("a an the and or for to of with in on by as is are be via into from one new add use".split(" "));
+/** Words (ASCII) and character pairs (CJK): titles mix languages and get reworded. */
+function titleGrams(title: string): Set<string> {
+  const out = new Set<string>();
+  const lower = title.toLowerCase();
+  for (const w of lower.match(/[a-z0-9][a-z0-9._-]*/g) || []) {
+    const word = w.replace(/[._-]+$/, "");
+    if (word.length > 1 && !STOP_WORDS.has(word)) out.add(word);
+  }
+  for (const run of lower.match(/[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]+/g) || []) for (let i = 0; i + 1 < run.length; i++) out.add(run.slice(i, i + 2));
+  return out;
+}
+/** Jaccard similarity of two titles, 0..1. */
+export function titleSimilarity(a: string, b: string): number {
+  const x = titleGrams(a),
+    y = titleGrams(b);
+  let common = 0;
+  for (const g of x) if (y.has(g)) common++;
+  const union = x.size + y.size - common;
+  return union ? common / union : 0;
+}
+/** The daemon's fallback when the model does not say it is an update: a clearly reworded repeat. */
+export function similarFinding(a: { target: string; title: string }, b: { target: string; title: string }): boolean {
+  const sim = titleSimilarity(a.title, b.title);
+  return sim >= SIMILAR_ANY_TARGET || (a.target === b.target && sim >= SIMILAR_SAME_TARGET);
+}
+
+/** An existing suggestion by full id or its 8-character short id; null when unknown or ambiguous. */
+function findById(list: readonly Finding[], ref: string | undefined): Finding | null {
+  const id = (ref || "").trim().toLowerCase();
+  if (!id) return null;
+  const exact = list.find((f) => f.id === id);
+  if (exact) return exact;
+  const hits = list.filter((f) => shortId(f.id) === id.slice(0, 8));
+  return hits.length === 1 ? hits[0] : null;
+}
 
 /**
- * The daemon does not trust the model's ids or lengths (§4.4): unknown cards are
- * dropped, findings citing fewer than two known cards are dropped, over-long
- * fields drop the finding, repeats of open/accepted (or recently dismissed) ones
- * are dropped.
+ * The daemon does not trust the model's ids or lengths (§4.4). Unknown cards are
+ * dropped; a finding citing fewer than two known cards (one, when the window has
+ * one card) or with over-long fields is dropped. A finding is an update of an
+ * existing suggestion when the model says so (`updates`) or when its title is
+ * similar enough: open ones are refreshed, accepted or recently dismissed ones
+ * are left alone. Merges are kept only between existing open suggestions.
  */
 export function validateFindings(
   raw: readonly RawFinding[],
-  ctx: { cardIds: readonly string[]; existing: readonly Finding[]; now: number },
-): Omit<Finding, "id" | "projectId" | "runId" | "status" | "createdAt" | "updatedAt">[] {
+  ctx: { cardIds: readonly string[]; existing: readonly Finding[]; now: number; merges?: readonly RawMerge[] },
+): Reconciled {
   const byShort = new Map<string, string>();
   const ambiguous = new Set<string>();
   for (const id of ctx.cardIds) {
@@ -579,14 +652,14 @@ export function validateFindings(
     if (byShort.has(s) && byShort.get(s) !== id) ambiguous.add(s);
     byShort.set(s, id);
   }
-  const blocked = new Set(
-    ctx.existing
-      .filter((f) => f.status !== "dismissed" || ctx.now - Date.parse(f.updatedAt) < DISMISS_COOLDOWN_DAYS * DAY_MS)
-      .map((f) => f.fingerprint),
-  );
-  const out: ReturnType<typeof validateFindings> = [];
+  const minCards = Math.min(2, ctx.cardIds.length);
+  // Dismissed ones count only during their cooldown; after it they may come back as new.
+  const live = ctx.existing.filter((f) => f.status !== "dismissed" || ctx.now - Date.parse(f.updatedAt) < DISMISS_COOLDOWN_DAYS * DAY_MS);
+  const prints = new Set(live.map((f) => f.fingerprint));
+  const out: Reconciled = { added: [], refreshed: [], merged: [] };
+  const touched = new Set<string>();
   for (const f of raw) {
-    if (out.length >= MAX_FINDINGS) break;
+    if (out.added.length + out.refreshed.length >= MAX_FINDINGS) break;
     if (!(findingTargets as readonly string[]).includes(f.target)) continue;
     if (!f.title || !f.proposal) continue;
     if (f.title.length > findingLimits.title || f.evidence.length > findingLimits.evidence || f.proposal.length > findingLimits.proposal || f.benefit.length > findingLimits.benefit) continue;
@@ -598,12 +671,9 @@ export function validateFindings(
           .map((s) => byShort.get(s)!),
       ),
     ];
-    if (cards.length < 2) continue;
-    const print = fingerprint(f.target, f.title);
-    if (blocked.has(print)) continue;
-    blocked.add(print);
-    out.push({
-      fingerprint: print,
+    if (!cards.length || cards.length < minCards) continue;
+    const draft: FindingDraft = {
+      fingerprint: fingerprint(f.target, f.title),
       target: f.target as FindingTarget,
       title: f.title,
       evidence: f.evidence,
@@ -611,9 +681,73 @@ export function validateFindings(
       benefit: f.benefit,
       confidence: (confidences as readonly string[]).includes(f.confidence) ? (f.confidence as Finding["confidence"]) : "medium",
       cards: cards.slice(0, 20),
-    });
+    };
+    const match =
+      findById(live, f.updates) ||
+      live.find((e) => e.fingerprint === draft.fingerprint) ||
+      live.find((e) => similarFinding(draft, e)) ||
+      null;
+    if (match) {
+      // Accepted, dismissed or already refreshed by an earlier finding of this run: nothing to add.
+      if (match.status === "open" && !touched.has(match.id)) {
+        touched.add(match.id);
+        out.refreshed.push({ id: match.id, draft });
+      }
+      continue;
+    }
+    if (prints.has(draft.fingerprint) || out.added.some((a) => similarFinding(draft, a))) continue;
+    prints.add(draft.fingerprint);
+    out.added.push(draft);
   }
+  const dropped = new Set<string>();
+  for (const m of ctx.merges || []) {
+    const keep = findById(ctx.existing, m.keep);
+    if (!keep || keep.status === "dismissed" || dropped.has(keep.id)) continue;
+    const drop = m.drop
+      .map((ref) => findById(ctx.existing, ref))
+      .filter((f): f is Finding => !!f && f.status === "open" && f.id !== keep.id && !dropped.has(f.id));
+    const ids = [...new Set(drop.map((f) => f.id))];
+    if (!ids.length) continue;
+    for (const id of ids) dropped.add(id);
+    out.merged.push({ keep: keep.id, drop: ids });
+  }
+  // A suggestion merged away is not refreshed separately.
+  out.refreshed = out.refreshed.filter((r) => !dropped.has(r.id));
   return out;
+}
+
+/** Applies a run's refreshes and merges to the stored suggestions (in place). */
+export function applyReconciled(findings: Finding[], projectId: string, runId: string, at: string, rec: Pick<Reconciled, "refreshed" | "merged">) {
+  const byId = new Map(findings.filter((f) => f.projectId === projectId).map((f) => [f.id, f]));
+  for (const { id, draft } of rec.refreshed) {
+    const f = byId.get(id);
+    if (!f || f.status !== "open") continue;
+    f.evidence = draft.evidence;
+    f.proposal = draft.proposal;
+    f.benefit = draft.benefit;
+    f.confidence = draft.confidence;
+    f.cards = [...new Set([...draft.cards, ...f.cards])].slice(0, 20);
+    f.seen = (f.seen || 1) + 1;
+    f.lastSeenAt = at;
+    f.runId = runId;
+    f.updatedAt = at;
+  }
+  const gone = new Set<string>();
+  for (const { keep, drop } of rec.merged) {
+    const k = byId.get(keep);
+    if (!k) continue;
+    for (const id of drop) {
+      const d = byId.get(id);
+      if (!d || d.status !== "open" || gone.has(id)) continue;
+      k.seen = (k.seen || 1) + (d.seen || 1);
+      k.cards = [...new Set([...k.cards, ...d.cards])].slice(0, 20);
+      if (!k.lastSeenAt || (d.lastSeenAt || d.updatedAt) > k.lastSeenAt) k.lastSeenAt = d.lastSeenAt || d.updatedAt;
+      gone.add(id);
+    }
+    if (k.status === "open") k.updatedAt = at;
+  }
+  for (let i = findings.length - 1; i >= 0; i--) if (gone.has(findings[i].id)) findings.splice(i, 1);
+  return gone.size;
 }
 
 // ---- Stored state and views ----------------------------------------------------
@@ -641,6 +775,9 @@ export const runSchema = z.object({
   reason: z.string().max(500).optional(),
   usage: usageSchema.optional(),
   findings: z.number().int().min(0).default(0),
+  /** Suggestions this run refreshed and merged away (§5.3). */
+  refreshed: z.number().int().min(0).default(0),
+  merged: z.number().int().min(0).default(0),
   stats: z.object({ calls: z.number(), actions: z.number(), cards: z.number(), sessions: z.number() }),
 });
 export type WorkflowRun = z.infer<typeof runSchema>;
@@ -680,6 +817,10 @@ export const workflowOverviewSchema = z.object({
   lastRun: runSchema.nullable(),
   /** Projects with a command log on disk. */
   collected: z.number(),
+  /** One cycle's cost: the latest run of each included project with a cost, summed (§2.3). */
+  cycleCostUsd: z.number().nullable(),
+  /** How many projects that sum covers. */
+  costProjects: z.number(),
 });
 
 // ---- Project scripts for agents (§5.4) -------------------------------------------

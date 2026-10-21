@@ -3,6 +3,7 @@ import {
   MATERIAL_LIMIT,
   MAX_FINDINGS,
   aggregate,
+  applyReconciled,
   buildMaterial,
   classify,
   fingerprint,
@@ -14,7 +15,9 @@ import {
   quiet,
   redact,
   shellRecord,
+  similarFinding,
   splitChain,
+  titleSimilarity,
   trimState,
   validateFindings,
   windowDays,
@@ -159,11 +162,14 @@ const rec = (over: Partial<CommandRecord> & { id: string }): CommandRecord => ({
 });
 
 describe("aggregation and material", () => {
-  test("quiet below 50 new actions or 3 cards", () => {
-    const many = Array.from({ length: 50 }, (_, i) => rec({ id: String(i), actions: ["npm test"] }));
-    expect(quiet(many, 3)).toBe(false);
-    expect(quiet(many.slice(1), 3)).toBe(true);
-    expect(quiet(many, 2)).toBe(true);
+  test("quiet below 50 new actions, or below 2 cards unless 200 new actions", () => {
+    const actions = (n: number) => Array.from({ length: n }, (_, i) => rec({ id: String(i), actions: ["npm test"] }));
+    expect(quiet(actions(50), 3)).toBe(false);
+    expect(quiet(actions(49), 3)).toBe(true);
+    // Two cards are enough now (Agent SMITH: 990 actions on 2 cards was skipped forever).
+    expect(quiet(actions(50), 2)).toBe(false);
+    expect(quiet(actions(199), 1)).toBe(true);
+    expect(quiet(actions(200), 1)).toBe(false);
   });
   test("sequences count once per session; inline samples alternate between cards", () => {
     const records: CommandRecord[] = [];
@@ -187,10 +193,10 @@ describe("aggregation and material", () => {
       agg: aggregate(records),
       cards: Array.from({ length: 20 }, (_, i) => ({ id: `t${i}`, title: `Card ${i}`, tags: [], lane: "done" })),
       config: { paseoScripts: [], paseoWorktree: "", packageScripts: { test: "vitest run" }, commands: "" },
-      previous: [{ target: "repo_tool", title: "i18n helper", status: "open" }],
+      previous: [{ id: "f1a2b3c4-0000", target: "repo_tool", title: "i18n helper", status: "open", proposal: "scripts/i18n.mjs  add <key>" }],
     });
     expect(material.length).toBeLessThanOrEqual(MATERIAL_LIMIT);
-    expect(material).toContain("[open] repo_tool: i18n helper");
+    expect(material).toContain("f1a2b3c4 · open · repo_tool: i18n helper — scripts/i18n.mjs add <key>");
     expect(material).toContain('"test":"vitest run"');
   });
 });
@@ -213,12 +219,18 @@ describe("model output", () => {
     expect(parseWorkflowOutput("## Findings\n1. i18n helper")).toBeNull();
     expect(parseWorkflowOutput('{"verdict":"no list"}')).toBeNull();
   });
+  test("updates and merges are read; a merge without drops is ignored", () => {
+    const body = JSON.stringify({ findings: [finding({ updates: " f1a2b3c4 " })], merges: [{ keep: "aaaa1111", drop: ["bbbb2222", 3] }, { keep: "cccc3333", drop: [] }], noise: "", verdict: "" });
+    const out = parseWorkflowOutput(body)!;
+    expect(out.findings[0].updates).toBe("f1a2b3c4");
+    expect(out.merges).toEqual([{ keep: "aaaa1111", drop: ["bbbb2222"] }]);
+  });
   test("validation drops unknown cards, thin evidence, over-long fields and repeats", () => {
     const now = Date.parse("2026-10-19T00:00:00.000Z");
     const cardIds = ["aaaaaaaa-1111", "bbbbbbbb-2222", "cccccccc-3333"];
     const existing: Finding[] = [
-      { id: "f1", projectId: "p", runId: "r", fingerprint: fingerprint("skill", "Doc sync checklist"), target: "skill", title: "Doc sync checklist", evidence: "", proposal: "x", benefit: "", confidence: "high", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-10-10T00:00:00.000Z" },
-      { id: "f2", projectId: "p", runId: "r", fingerprint: fingerprint("agents_md", "Old rule"), target: "agents_md", title: "Old rule", evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-08-01T00:00:00.000Z" },
+      { id: "f1", projectId: "p", runId: "r", fingerprint: fingerprint("skill", "Doc sync checklist"), target: "skill", title: "Doc sync checklist", evidence: "", proposal: "x", benefit: "", confidence: "high", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-10-10T00:00:00.000Z", seen: 1 },
+      { id: "f2", projectId: "p", runId: "r", fingerprint: fingerprint("agents_md", "Old rule"), target: "agents_md", title: "Old rule", evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-08-01T00:00:00.000Z", seen: 1 },
     ];
     const out = validateFindings(
       [
@@ -233,23 +245,111 @@ describe("model output", () => {
       ],
       { cardIds, existing, now },
     );
-    expect(out.map((f) => f.title)).toEqual(["i18n helper script", "Old rule", "Odd confidence"]);
-    expect(out[0].cards).toEqual(["aaaaaaaa-1111", "bbbbbbbb-2222"]);
-    expect(out[2].confidence).toBe("medium");
+    expect(out.added.map((f) => f.title)).toEqual(["i18n helper script", "Old rule", "Odd confidence"]);
+    expect(out.added[0].cards).toEqual(["aaaaaaaa-1111", "bbbbbbbb-2222"]);
+    expect(out.added[2].confidence).toBe("medium");
+    expect(out.refreshed).toEqual([]);
   });
   test("at most MAX_FINDINGS are kept", () => {
+    const words = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima".split(" ");
     const out = validateFindings(
-      Array.from({ length: 12 }, (_, i) => finding({ title: `Finding ${i}` })),
+      words.map((w) => finding({ title: `${w} helper tool` })),
       { cardIds: ["aaaaaaaa-1", "bbbbbbbb-2"], existing: [], now: 0 },
     );
-    expect(out).toHaveLength(MAX_FINDINGS);
+    expect(out.added).toHaveLength(MAX_FINDINGS);
+  });
+  test("a window with one card accepts findings citing that card", () => {
+    const out = validateFindings([finding({ cards: ["aaaaaaaa"] })], { cardIds: ["aaaaaaaa-1"], existing: [], now: 0 });
+    expect(out.added).toHaveLength(1);
+  });
+});
+
+describe("repeats (§5.3)", () => {
+  const now = Date.parse("2026-10-21T00:00:00.000Z");
+  const cardIds = ["aaaaaaaa-1111", "bbbbbbbb-2222", "cccccccc-3333"];
+  const raw = (over: Partial<RawFinding> = {}): RawFinding => ({ target: "repo_tool", title: "Something new", evidence: "e2", proposal: "p2", benefit: "b2", confidence: "high", cards: ["aaaaaaaa", "cccccccc"], ...over });
+  const stored = (id: string, over: Partial<Finding> = {}): Finding => ({
+    id,
+    projectId: "p",
+    runId: "r1",
+    fingerprint: fingerprint(over.target || "repo_tool", over.title || id),
+    target: "repo_tool",
+    title: id,
+    evidence: "e1",
+    proposal: "p1",
+    benefit: "b1",
+    confidence: "medium",
+    cards: ["bbbbbbbb-2222"],
+    status: "open",
+    createdAt: "2026-10-19T00:00:00.000Z",
+    updatedAt: "2026-10-19T00:00:00.000Z",
+    seen: 1,
+    ...over,
+  });
+  test("the model's updates id refreshes an open suggestion instead of adding one", () => {
+    const existing = [stored("1a2b3c4d-open", { title: "Board inspector" }), stored("2b3c4d5e-done", { title: "Edit CLI", status: "accepted" }), stored("3c4d5e6f-gone", { title: "Asar dump", status: "dismissed", updatedAt: "2026-10-20T00:00:00.000Z" })];
+    const out = validateFindings(
+      [raw({ updates: "1a2b3c4d", title: "board.json query script" }), raw({ updates: "2b3c4d5e", title: "Assert edit tool" }), raw({ updates: "3c4d5e6f", title: "Dump the app bundle" }), raw({ updates: "ffffffff" })],
+      { cardIds, existing, now },
+    );
+    expect(out.refreshed.map((r) => r.id)).toEqual(["1a2b3c4d-open"]);
+    expect(out.refreshed[0].draft).toMatchObject({ evidence: "e2", proposal: "p2", cards: ["aaaaaaaa-1111", "cccccccc-3333"] });
+    // Accepted and recently dismissed ones are left alone; an unknown id is a new suggestion.
+    expect(out.added.map((f) => f.title)).toEqual(["Something new"]);
+  });
+  test("a reworded repeat is caught by title similarity, also across languages; different tools are not", () => {
+    const existing = [
+      stored("1a2b3c4d-x", { title: "“新增用户可见特性”交付 checklist skill(onboarding + i18n + README)", target: "skill" }),
+      stored("2b3c4d5e-x", { title: "board.json read-only inspector CLI" }),
+      stored("3c4d5e6f-x", { title: "一次性探测daemon状态时反复重写DaemonClient连接样板" }),
+    ];
+    const out = validateFindings(
+      [
+        raw({ target: "skill", title: "“新增用户可见特性”交付 checklist skill" }),
+        raw({ title: "board.json read-only inspector CLI (events, filters)" }),
+        raw({ title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本" }),
+      ],
+      { cardIds, existing, now },
+    );
+    expect(out.refreshed.map((r) => r.id)).toEqual(["1a2b3c4d-x", "2b3c4d5e-x"]);
+    expect(out.added.map((f) => f.title)).toEqual(["翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本"]);
+    expect(titleSimilarity("board.json read-only inspector CLI", "board.json read-only inspector CLI (events, filters)")).toBeGreaterThanOrEqual(0.6);
+    // Sharing only generic words is not a repeat.
+    expect(similarFinding({ target: "repo_tool", title: "alpha helper tool" }, { target: "repo_tool", title: "bravo helper tool" })).toBe(false);
+    expect(similarFinding({ target: "repo_tool", title: "一次性探测daemon状态时反复重写DaemonClient连接样板" }, { target: "repo_tool", title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本" })).toBe(false);
+  });
+  test("two findings of one run about the same thing add one suggestion", () => {
+    const out = validateFindings([raw({ title: "verify pipeline script" }), raw({ title: "verify pipeline script (typecheck)" })], { cardIds, existing: [], now });
+    expect(out.added).toHaveLength(1);
+  });
+  test("merges keep one suggestion and drop open repeats only", () => {
+    const existing = [stored("1a2b3c4d-k"), stored("2b3c4d5e-d"), stored("3c4d5e6f-acc", { status: "accepted" }), stored("4d5e6f7a-dis", { status: "dismissed" })];
+    const out = validateFindings([], {
+      cardIds,
+      existing,
+      now,
+      merges: [
+        { keep: "1a2b3c4d", drop: ["2b3c4d5e", "3c4d5e6f", "1a2b3c4d", "zzzzzzzz"] },
+        { keep: "4d5e6f7a", drop: ["2b3c4d5e"] },
+      ],
+    });
+    expect(out.merged).toEqual([{ keep: "1a2b3c4d-k", drop: ["2b3c4d5e-d"] }]);
+  });
+  test("applying a run refreshes in place, sums seen counts and removes merged repeats", () => {
+    const findings = [stored("1a2b3c4d-k", { seen: 2 }), stored("2b3c4d5e-d", { seen: 3, cards: ["cccccccc-3333"] }), stored("9e9e9e9e-other", { projectId: "q" })];
+    const draft = { fingerprint: "x", target: "repo_tool" as const, title: "new words", evidence: "fresh", proposal: "better", benefit: "b", confidence: "high" as const, cards: ["aaaaaaaa-1111"] };
+    const gone = applyReconciled(findings, "p", "r2", "2026-10-21T05:00:00.000Z", { refreshed: [{ id: "1a2b3c4d-k", draft }], merged: [{ keep: "1a2b3c4d-k", drop: ["2b3c4d5e-d"] }] });
+    expect(gone).toBe(1);
+    expect(findings.map((f) => f.id)).toEqual(["1a2b3c4d-k", "9e9e9e9e-other"]);
+    expect(findings[0]).toMatchObject({ title: "1a2b3c4d-k", evidence: "fresh", proposal: "better", seen: 6, runId: "r2", lastSeenAt: "2026-10-21T05:00:00.000Z" });
+    expect(findings[0].cards.sort()).toEqual(["aaaaaaaa-1111", "bbbbbbbb-2222", "cccccccc-3333"]);
   });
 });
 
 describe("state, settings and project scripts", () => {
   test("trimming keeps open suggestions, recent closed ones and the newest runs", () => {
-    const run = (i: number) => ({ id: `r${i}`, projectId: "p", at: new Date(Date.UTC(2026, 0, 1 + i)).toISOString(), from: "", to: "", model: "", manual: false, status: "ok" as const, findings: 0, stats: { calls: 0, actions: 0, cards: 0, sessions: 0 } });
-    const f = (id: string, status: Finding["status"], updatedAt: string): Finding => ({ id, projectId: "p", runId: "r", fingerprint: id, target: "skill", title: id, evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status, createdAt: updatedAt, updatedAt });
+    const run = (i: number) => ({ id: `r${i}`, projectId: "p", at: new Date(Date.UTC(2026, 0, 1 + i)).toISOString(), from: "", to: "", model: "", manual: false, status: "ok" as const, findings: 0, refreshed: 0, merged: 0, stats: { calls: 0, actions: 0, cards: 0, sessions: 0 } });
+    const f = (id: string, status: Finding["status"], updatedAt: string): Finding => ({ id, projectId: "p", runId: "r", fingerprint: id, target: "skill", title: id, evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status, createdAt: updatedAt, updatedAt, seen: 1 });
     const state: WorkflowState = {
       version: 1,
       revision: 0,

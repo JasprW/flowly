@@ -1198,7 +1198,6 @@ const catalog: Catalog = {
   "Every 3 days": "Каждые 3 дня",
   "Weekly": "Еженедельно",
   "Every 2 weeks": "Каждые 2 недели",
-  "Last run: {in} in · {out} out · ${cost} · about ${month} per month at this pace.": "Последний запуск: {in} на входе · {out} на выходе · ${cost} · примерно ${month} в месяц при такой частоте.",
   "Last run: {in} in · {out} out.": "Последний запуск: {in} на входе · {out} на выходе.",
   "Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.": "Раз в несколько дней модель читает shell-команды, которые агенты выполняли в карточках этого проекта, и предлагает скрипты, инструменты и правила, которые стоит сохранить. По умолчанию выключено: тратит токены и хранит журнал команд.",
   "Collecting commands. Suggestions appear in each project's Insights.": "Команды собираются. Предложения появляются в Insights каждого проекта.",
@@ -1215,5 +1214,8 @@ const catalog: Catalog = {
   "Could not delete the command log.": "Не удалось удалить журнал команд.",
   "Commands are kept for 30 days, redacted, for {n} projects.": {"one": "Команды хранятся 30 дней в обезличенном виде, для {n} проекта.", "few": "Команды хранятся 30 дней в обезличенном виде, для {n} проектов.", "many": "Команды хранятся 30 дней в обезличенном виде, для {n} проектов.", "other": "Команды хранятся 30 дней в обезличенном виде, для {n} проектов."},
   "Nothing collected.": "Ничего не собрано.",
+  "Last run: {in} in · {out} out · ${cost}.": "Последний запуск: {in} на входе · {out} на выходе · ${cost}.",
+  "About ${month} per month for {n} projects at this pace.": {"one": "Примерно ${month} в месяц на {n} проект при такой частоте.", "few": "Примерно ${month} в месяц на {n} проекта при такой частоте.", "many": "Примерно ${month} в месяц на {n} проектов при такой частоте.", "other": "Примерно ${month} в месяц на {n} проектов при такой частоте."},
+  "Seen in {n} runs": {"one": "Найдено в {n} запуске", "few": "Найдено в {n} запусках", "many": "Найдено в {n} запусках", "other": "Найдено в {n} запусках"},
 };
 export default catalog;

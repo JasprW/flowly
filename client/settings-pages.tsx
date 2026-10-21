@@ -366,15 +366,20 @@ function WorkflowInsightsGroup() {
   const interval = values?.intervalDays ?? 7;
   const last = overview.data?.lastRun;
   const cost = typeof last?.usage?.totalCostUsd === "number" ? last.usage.totalCostUsd : null;
+  // Every included project runs once per cycle: the estimate adds up each one's latest run (§2.3).
+  const cycle = overview.data?.cycleCostUsd ?? null;
+  const projects = overview.data?.costProjects ?? 0;
   const lastLine = last?.usage
-    ? cost !== null
-      ? t("Last run: {in} in · {out} out · ${cost} · about ${month} per month at this pace.", {
-          in: compactNumber(usageIn(last.usage)),
-          out: compactNumber(last.usage.outputTokens ?? 0),
-          cost: cost.toFixed(2),
-          month: ((cost * 30) / interval).toFixed(2),
-        })
-      : t("Last run: {in} in · {out} out.", { in: compactNumber(usageIn(last.usage)), out: compactNumber(last.usage.outputTokens ?? 0) })
+    ? [
+        cost !== null
+          ? t("Last run: {in} in · {out} out · ${cost}.", { in: compactNumber(usageIn(last.usage)), out: compactNumber(last.usage.outputTokens ?? 0), cost: cost.toFixed(2) })
+          : t("Last run: {in} in · {out} out.", { in: compactNumber(usageIn(last.usage)), out: compactNumber(last.usage.outputTokens ?? 0) }),
+        cycle !== null && projects
+          ? tn(projects, "About ${month} per month for {n} project at this pace.", "About ${month} per month for {n} projects at this pace.", { month: ((cycle * 30) / interval).toFixed(2) })
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
     : "";
   return (
     <>

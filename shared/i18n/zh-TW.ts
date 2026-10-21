@@ -1198,7 +1198,6 @@ const catalog: Catalog = {
   "Every 3 days": "每 3 天",
   "Weekly": "每週",
   "Every 2 weeks": "每兩週",
-  "Last run: {in} in · {out} out · ${cost} · about ${month} per month at this pace.": "上次執行：輸入 {in} · 輸出 {out} · ${cost} · 依此頻率每月約 ${month}。",
   "Last run: {in} in · {out} out.": "上次執行：輸入 {in} · 輸出 {out}。",
   "Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.": "每隔幾天，模型讀取 agent 在本專案卡片上執行的 shell 指令，建議值得保留的指令碼、工具和規則。預設關閉：它會消耗 token，並保存一份指令紀錄。",
   "Collecting commands. Suggestions appear in each project's Insights.": "正在收集指令。建議顯示在各專案的 Insights 中。",
@@ -1215,5 +1214,8 @@ const catalog: Catalog = {
   "Could not delete the command log.": "無法刪除指令紀錄。",
   "Commands are kept for 30 days, redacted, for {n} projects.": "指令已去識別化，保留 30 天，涉及 {n} 個專案。",
   "Nothing collected.": "尚未收集。",
+  "Last run: {in} in · {out} out · ${cost}.": "上次執行：輸入 {in} · 輸出 {out} · ${cost}。",
+  "About ${month} per month for {n} projects at this pace.": "依此頻率，{n} 個專案每月約 ${month}。",
+  "Seen in {n} runs": "已出現 {n} 次",
 };
 export default catalog;
