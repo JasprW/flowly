@@ -306,3 +306,22 @@ export function useTokensQuery(projectId: string, day: string | null, enabled: b
     placeholderData: (previous) => previous,
   });
 }
+
+/**
+ * A project's workflow insights (WORKFLOW-INSIGHTS-SPEC §5.2): read while the
+ * Insights page is open, every 10 s only while an analysis or backfill runs.
+ * `poll: false` reads once (the board's tip fact) and never polls.
+ */
+export function useWorkflowInsightsQuery(projectId: string, enabled: boolean, poll = true) {
+  const read = useRpc(rpc.workflowInsights);
+  const client = useQueryClient();
+  const key = ["flowly", "workflow-insights", projectId] as const;
+  return useQuery({
+    queryKey: key,
+    queryFn: () => readChanged(client, key, (etag) => read({ projectId, ...(etag ? { etag } : {}) })),
+    enabled,
+    staleTime: poll ? 0 : 5 * 60_000,
+    refetchInterval: (q) => (poll && enabled && (q.state.data?.running || q.state.data?.backfilling) ? 10_000 : false),
+    placeholderData: (previous) => previous,
+  });
+}

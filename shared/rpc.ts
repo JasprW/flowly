@@ -47,6 +47,7 @@ import { tokenInsightsSchema } from "./insights";
 import { digestViewSchema } from "./digest";
 import { perfReportSchema } from "./perf";
 import { localeCodes } from "./i18n";
+import { workflowOverviewSchema, workflowViewSchema } from "./workflow-insights";
 import { insightsWithHabitsSchema } from "./agent-habits";
 
 /** `{ etag }` in; the value is omitted when it still matches (PERFORMANCE-SPEC §3). */
@@ -658,4 +659,36 @@ export const projectTokens = defineRpc({
   name: "insights.tokens",
   input: z.strictObject({ ...insightsDay, day: z.string().max(10).optional(), etag: z.string().max(200).optional() }),
   output: z.object({ etag: z.string(), value: tokenInsightsSchema.optional() }),
+});
+
+// ---- Workflow insights (WORKFLOW-INSIGHTS-SPEC §6) ----
+export const workflowInsights = defineRpc({
+  name: "workflow-insights.get",
+  input: z.strictObject({ projectId: z.string().min(1).max(200), etag: z.string().max(200).optional() }),
+  output: z.object({ etag: z.string(), value: workflowViewSchema.optional() }),
+});
+export const runWorkflowInsights = defineRpc({
+  name: "workflow-insights.run",
+  input: z.strictObject({ projectId: z.string().min(1).max(200) }),
+  output: z.object({ queued: z.boolean() }),
+});
+export const setWorkflowFinding = defineRpc({
+  name: "workflow-insights.set-status",
+  input: z.strictObject({
+    projectId: z.string().min(1).max(200),
+    findingId: z.string().min(1).max(100),
+    status: z.enum(["open", "dismissed"]),
+    expectedRevision: z.number().int().min(0),
+  }),
+  output: z.object({ revision: z.number() }),
+});
+export const workflowInsightsOverview = defineRpc({
+  name: "workflow-insights.overview",
+  input: z.strictObject({}),
+  output: workflowOverviewSchema,
+});
+export const purgeWorkflowCommands = defineRpc({
+  name: "workflow-insights.purge",
+  input: z.strictObject({}),
+  output: z.object({ deletedProjects: z.number() }),
 });

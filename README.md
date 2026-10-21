@@ -90,6 +90,8 @@ One page for the day: cards done, new and reworked, turns, agent time, commits a
 
 **Agent habits** (always on, no tokens): a small block on the Insights page shows, for the last seven days, how often agents' deliveries come with suggested next steps and ideas, by day and by model, how many suggestions you took, and flags a model or session that made none over ten or more deliveries, so a rule that stops being followed shows up within a day.
 
+**Workflow insights** (optional, off by default): Flowly keeps a redacted log of the shell commands agents run on your cards, and on the schedule you pick (daily when tokens are plentiful, up to every two weeks when they are not) a model you choose reads the last week of it. It suggests what is worth keeping: `paseo.json` scripts and worktree setup, small repo tools for work agents keep redoing with inline code, AGENTS.md rules and skills. Each suggestion becomes a card with one click; quiet weeks are skipped without calling the model. Agents see the project's `paseo.json` scripts in their task context and run them instead of retyping commands.
+
 ## Languages
 
 The interface follows your device language, or pick one in **Flowly settings → Language**: English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. Agent instructions, daemon error details and the text agents and summaries write are not translated.

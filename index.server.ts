@@ -36,6 +36,9 @@ import { FlowLog } from "./server/flow-log";
 import { ProjectFolders, snapshotPath } from "./server/project-folder";
 import { GitStats } from "./server/git-stats";
 import { DigestStore, InsightsService } from "./server/insights";
+import { CommandLog } from "./server/command-log";
+import { WorkflowInsightsService, WorkflowStore } from "./server/workflow-insights";
+import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workflow-insights";
 import { sessionModel } from "./server/agent-model";
 import { turnPick, userTexts } from "./shared/agent-habits";
 
@@ -49,6 +52,7 @@ export default function contribute(server: PluginServerContext) {
   const statusPrefs = server.registerSettings(statusSettings);
   const ideasPrefs = server.registerSettings(ideasSettings);
   const nativePrefs = server.registerSettings(nativeSessionSettings);
+  const workflowPrefs = server.registerSettings(workflowInsightsSettings);
   const perfPrefs = server.registerSettings(performanceSettings);
   // The global switch for rules A1/A1r; unreadable settings keep the default (on).
   const autoStatusOn = async () => {
@@ -95,7 +99,34 @@ export default function contribute(server: PluginServerContext) {
   insights.usage = usage;
   server.handle(rpc.taskUsage, (input, { paseo }) => usage.task(input.taskId, paseo));
   server.handle(rpc.summaryHistory, (input) => summaries.store.history(input.taskId));
+  // Workflow insights (WORKFLOW-INSIGHTS-SPEC): command log, scheduled analysis, suggestions.
+  const workflowValues = async () => {
+    const state = await workflowPrefs.read().catch(() => null);
+    return workflowSettingsValues(state?.status === "ready" ? state.values : {});
+  };
+  const commands = new CommandLog(store.directory);
+  const workflow = new WorkflowInsightsService(store, commands, new WorkflowStore(store.directory), flow, workflowValues, summaries.settings);
+  workflow.start();
+  // Turning the switch on reads the last week of sessions once (§3.3).
+  let workflowWasOn: boolean | null = null;
+  const stopWorkflowPrefs = workflowPrefs.subscribe((state) => {
+    const on = workflowSettingsValues(state.status === "ready" ? state.values : {}).enabled;
+    if (workflowWasOn === false && on) workflow.requestBackfillAll();
+    workflowWasOn = on;
+  });
+  void workflowValues().then((v) => {
+    if (workflowWasOn === null) workflowWasOn = v.enabled;
+  });
+  server.handle(rpc.workflowInsights, async ({ projectId, etag }, { paseo }) => {
+    workflow.attach(paseo);
+    return ifChanged(await workflow.view(projectId), etag);
+  });
+  server.handle(rpc.runWorkflowInsights, (input, { paseo }) => workflow.run(input.projectId, paseo, true));
+  server.handle(rpc.setWorkflowFinding, (input) => workflow.setStatus(input));
+  server.handle(rpc.workflowInsightsOverview, () => workflow.overview());
+  server.handle(rpc.purgeWorkflowCommands, async () => ({ deletedProjects: await workflow.purge() }));
   const service = new BoardService(store);
+  service.insightFindings = { check: (p, id) => workflow.check(p, id), accept: (p, id, taskId) => workflow.accept(p, id, taskId) };
   // Read-only external inputs (CONNECTORS-SPEC): credentials and requests stay in the daemon.
   try {
     migrateTicketDirectory(store.directory);
@@ -119,6 +150,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.restoreProject, async (input, { paseo }) => {
     const { snapshot, ...restored } = await service.restoreProject(input, paseo);
     flow.remember(restored.project.id, snapshot.tasks.map((t) => t.id));
+    commands.remember(restored.project.id, snapshot.tasks.map((t) => t.id));
     await summaries.store.restoreEntries(snapshot.summaries).catch((e) =>
       console.error("Kanban summaries not restored:", e instanceof Error ? e.message : String(e)),
     );
@@ -290,14 +322,21 @@ export default function contribute(server: PluginServerContext) {
     return task;
   });
   server.handle(rpc.moveProject, (input) => store.moveProject(input));
-  server.handle(rpc.updateProject, (input) => store.updateProject(input));
+  server.handle(rpc.updateProject, async (input, { paseo }) => {
+    const before = (await store.read()).projects.find((p) => p.id === input.id);
+    const project = await store.updateProject(input);
+    // Included again: read its last week once, like turning the switch on (§3.3).
+    if (before?.workflowInsights === false && project.workflowInsights !== false && (await workflowValues()).enabled)
+      void workflow.backfill(project.id, paseo).catch(() => undefined);
+    return project;
+  });
   server.handle(rpc.removeProject, async (input, { paseo }) => {
     const taskIds = new Set((await store.read()).tasks.filter((t) => t.projectId === input.id).map((t) => t.id));
     const removed = await service.removeProject(input, paseo);
     await summaries.store.removeTasks(input.id, taskIds).catch((e) =>
       console.error("Kanban summaries not removed:", e instanceof Error ? e.message : String(e)),
     );
-    await Promise.all([flow.removeProject(input.id), insights.digests.removeProject(input.id)]).catch((e) =>
+    await Promise.all([flow.removeProject(input.id), insights.digests.removeProject(input.id), workflow.removeProject(input.id)]).catch((e) =>
       console.error("Kanban insights data not removed:", e instanceof Error ? e.message : String(e)),
     );
     return removed;
@@ -356,6 +395,10 @@ export default function contribute(server: PluginServerContext) {
     if (projectId)
       await flow.removeTask(projectId, deleted.id).catch((e) =>
         console.error("Kanban flow log not cleaned:", e instanceof Error ? e.message : String(e)),
+      );
+    if (projectId)
+      await workflow.removeTask(projectId, deleted.id).catch((e) =>
+        console.error("Workflow insights data not cleaned:", e instanceof Error ? e.message : String(e)),
       );
     await summaries.store.removeTasks(`task-${deleted.id}`, new Set([deleted.id])).catch((e) =>
       console.error("Kanban summaries not removed:", e instanceof Error ? e.message : String(e)),
@@ -457,6 +500,12 @@ export default function contribute(server: PluginServerContext) {
   server.on("agent.turn_ended", async (event, { paseo }) => {
     if (event.outcome.kind !== "failed") await composer.drain(event.agent.id, paseo).catch(() => undefined);
   });
+  // Shell calls of any card-workspace session (WORKFLOW-INSIGHTS-SPEC §3.1); after the hook, never blocking it.
+  server.on("agent.turn_ended", (event, { paseo }) => {
+    void workflow.recordTurn(event.agent, event.timeline, paseo).catch((e) =>
+      console.error("Workflow insights commands not recorded:", e instanceof Error ? e.message : String(e)),
+    );
+  });
   server.on("agent.permission_requested", async (event, { paseo }) => {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
@@ -493,6 +542,8 @@ export default function contribute(server: PluginServerContext) {
     }
   });
   return () => {
+    workflow.stop();
+    stopWorkflowPrefs();
     folders.stop();
     tools.stop();
   };

@@ -1,3 +1,311 @@
+# Workflow insights：从 agent 的命令里找出可复用的脚本、工具与流程
+
+状态：**已实现，待用户验收**（2026-10-19，卡片 `3df1723e` “paseo project settings互通”；用户当天确认本 spec 及 §11 的全部决定）。用户确认方向：“这个洞见功能做成开关，也增加模型配置和洞察周期设置，token 充裕可以设置为每天定时，不充足可以拉长周期”。本 spec 是 [PROJECT-INSIGHTS-SPEC](PROJECT-INSIGHTS-SPEC.md) 的扩展，不改变其已有行为。
+
+## 1. 目的与依据
+
+agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本、反复摸索同一套流程。Workflow insights 定期扫描本项目各卡片 session 实际执行过的 shell 命令，找出值得沉淀的东西，用户确认后变成一张卡片去落地，让以后的任务直接复用。
+
+2026-10-19 在 Flowly 项目上的两次只读探针（记录在卡片进展中，未落盘原始命令）：
+
+| | 72 h 规则统计 | 7 天 + `claude/claude-sonnet-5` |
+| --- | --- | --- |
+| 规模 | 18 session / 18 卡 / 941 次 shell 调用 | 44 session / 33 卡 / 4778 次调用，1364 段不同内联脚本 |
+| 结论 | 76% 是探索命令；只得出 1–2 条已写在 AGENTS.md 的建议（verify） | 6 条，只有 1 条属于 `paseo.json`：i18n 词条脚本、Playwright 正式依赖 + 共享浏览器模块、看板数据查看脚本、verify/redeploy、文档同步清单、fixture 清理清单 |
+| 代价 | 0 | 一次 267 s、约 $0.80（16.8 万上下文 token、2.2 万输出） |
+
+由此得到的设计取舍：
+
+- **规则负责采集、计数和筛选，LLM 负责解读**（尤其内联脚本的用途），并且建议目标不限于 `paseo.json`。
+- **LLM 不能每轮或每次打开页面跑**：需要跨多张卡的数据才有意义，单次代价不低。所以做成定时任务，用户按自己的 token 预算选周期。
+- **默认关闭**：要花 token，也会收集命令记录。
+
+## 2. 设置
+
+### 2.1 全局（host）设置 `workflow-insights`
+
+新设置定义（`shared/workflow-insights.ts`），`scope: "host"`，`version: 1`：
+
+| 字段 | 类型 / 默认 | 含义 |
+| --- | --- | --- |
+| `enabled` | boolean，`false` | 总开关：采集命令记录并按周期分析 |
+| `model` | string ≤200，`""` | `provider/model`；空为 Auto |
+| `intervalDays` | `1 \| 3 \| 7 \| 14`，`7` | 分析周期：每天 / 每 3 天 / 每周 / 每两周 |
+| `runHour` | 0–23，`9` | 到期当天在本地时间这个整点之后运行 |
+| `timeZone` | string ≤64，`""` | 客户端保存设置时自动写入设备的 IANA 时区；无效或空时用 daemon 本地时区 |
+
+- **Auto 模型**：依次取第一个可用的 `claude/claude-sonnet-5-5`、`claude/claude-sonnet-5`，都没有时用 Summary model 的解析结果（TASK-SUMMARY-SPEC §4）。理由：便宜的摘要模型不足以归纳跨卡片的模式，探针用的是 Sonnet 5。
+- 配置的模型不可用时，本次运行记为错误 “Workflow insights model … is not available.”，不改用其它模型。
+- 旧数据缺字段时按默认值读取（同 `summarySettingsValues`）。
+
+### 2.2 项目设置
+
+`Project.workflowInsights?: boolean`，缺省视为包含（同 `Project.workpad`）。在项目设置中显示开关 **Workflow insights**，说明 “Include this project when workflow insights run.”。关闭后：
+- 该项目不再采集、不再定时分析，Insights 页的区块显示已关闭；
+- 已有记录与建议保留；
+- 手动 Run now 仍可用。
+
+### 2.3 设置界面
+
+在 Settings → AI 分区新增分组 **Workflow insights**，说明文字：“Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.”
+
+1. 开关 **Workflow insights**。
+2. **Model**：Provider / Model 选择，交互与 Summary model 一致；Auto 显示 “Auto (Sonnet 5.5, then Sonnet 5)”。
+3. **How often**：选项 Daily / Every 3 days / Weekly / Every 2 weeks，副文案 “Daily needs plenty of tokens; longer periods cost less and still catch repeated work.”
+4. **Run after**：整点选择，例如 09:00。
+5. 只读行：
+   - “Looks at the last N days of commands.”（N 见 §4.1）；
+   - 有过运行时显示 “Last run: 168k in · 22k out · $0.80 · about $X per month at this pace.”
+     - “in” 取运行结束时上下文里的 token 数。Claude 的 `inputTokens` 只计未缓存的部分，单看会偏小。
+     - 每月估算 = 上次费用 × 30 / `intervalDays`。
+     - 没有费用数据时只显示 token。
+6. 按钮 **Delete collected commands…**，确认后清空所有项目的命令记录（§3.4），建议保留。
+
+开关从关到开时的提示：“Collecting starts now; the last 7 days are read once from the sessions' history.”（§3.3）
+
+## 3. 命令记录（采集）
+
+### 3.1 来源
+
+- `agent.turn_ended` hook 提供本轮 timeline（`index.server.ts` 已把它交给 workpad 与 summary）。取其中 `type: "tool_call"` 且 `detail.type === "shell"` 的条目，采集在 hook 返回后异步进行，不阻塞 hook。
+- 范围：本项目卡片 workspace 中的所有 session（与探针一致）。summarizer session（`flowly=summarizer`（兼容既有旧标签） 标签）不采集：hook 里按需查一次 agent 的标签并缓存。
+- 时间：hook 给出的本轮 timeline 条目没有时间戳，记为本轮结束的时间；回填用条目自带的 timestamp。
+- 粒度：每次 shell 调用一条记录，id 为 `<agentId>:<callId>`，hook 与回填得到的同一次调用只记一次。
+- 列：记录**命令发生时**卡片所在的列，即 hook 执行时的 `task.status`；回填时按流转日志回放取当时的列。
+- 已知限制：Claude 的 shell 条目只有 `command` 和 `output`，**没有 `cwd` 与 `exitCode`**，成功与否只看条目 status（completed/failed）。Codex 的 shell 条目格式尚未在真实数据上核对，代码按通用字段处理，缺失字段记为空。
+
+### 3.2 规范化与脱敏（纯函数，`shared/workflow-insights.ts`）
+
+每条命令按顶层的 `&&`、`||`、`;`、`|` 和换行拆分，尊重引号、`$( )` 和 heredoc。每段分类：
+
+- **skip**：`cd`/`pushd`/`popd`；纯环境变量赋值；shell 语法残片，包括 `{ } break continue esac case`、以 `)` 结尾的 case 分支、函数定义、以 `$变量` 开头的命令。探针第一轮出现过 8 种这类假命令，修正后为 0。
+- **explore**：只读或探索类命令（ls、cat、head、tail、sed、grep、rg、find、wc、jq……）以及 `git status/diff/log/show/…`。只计数，另外统计被读得最多的文件。
+- **action**：其余命令，生成规范化 key：
+  - 去掉前置的 `sudo`、`time`、`env`、`nohup`；`git -c`/`-C` 的参数去掉；
+  - npm/pnpm/yarn/bun 规范为 `npm run <script>`、`npm test`、`npm install`；`npx tsc` → `npm run typecheck`，`npx vitest` → `npm test`，仅当 package.json 中有对应脚本时才这样合并；
+  - `node`/`python3` 规范为 `<runtime> <script 相对路径>`，内联代码记为 `<runtime> <inline>`，临时目录下的脚本记为 `<tmp-script>`；
+  - `paseo` 保留前 3 个位置参数，ID 换成 `<id>`；
+  - 其它命令保留命令名和最多 2 个位置参数。
+- **inline 摘录**：`python3 - <<…`、`node -e` 等内联脚本另外保存一段摘录，经脱敏后截断到 560 字符。这是唯一保存的命令正文，因为 LLM 需要读它才能判断用途。
+- **脱敏**（对 key 和摘录都执行，**先脱敏再落盘**）：
+  - 仓库路径换成 `.`，home 目录换成 `~`，临时目录换成 `<tmp>`；
+  - 邮箱换成 `<email>`；URL 中的凭据换成 `<cred>`；
+  - `eyJ…`、`ghp_…`、`sk-…` 以及 ≥40 位的随机串换成 `<secret>`；
+  - `*TOKEN*`、`*KEY*`、`*SECRET*`、`*PASSWORD*`、`*AUTH*` 这类变量的赋值，以及 `Authorization: Bearer` 后面的值，换成 `<v>`。
+- 命令输出（`output`）一律不保存。
+
+### 3.3 回填
+
+总开关从关到开，或某项目的开关从关到开时，daemon 用 SDK（`agents.list` + `agents.ref(id).timeline.refetch`，只读）回填该项目最近 7 天的记录：
+- 并发不超过 2；按 id 去重；
+- 失败只记一条警告；
+- Insights 区块在回填期间显示 “Reading recent sessions…”。
+
+### 3.4 存储
+
+- 文件：`commands/<projectId>.jsonl`（与 `board.json` 同目录），每行一次 shell 调用：`{ id, at, taskId, agentId, lane, provider, status, actions, explore, files?, inline?, failed? }`。
+  - `status`：completed / failed / other。
+  - `actions`：各 action 段的规范化 key，按出现顺序。
+  - `explore`：探索段的个数；`files`：探索段读过的文件，最多 4 个。
+  - `inline`：内联脚本摘录；`failed`：失败调用的脱敏命令，最多 260 字。
+- 写入：按项目串行追加；文件无效的行跳过，不重置文件。
+- 保留：最近 30 天。每天第一次写入时裁剪，裁剪通过写临时文件后原子替换完成。
+- 删除：
+  - 永久删除卡片：重写日志，去掉该卡记录，被去掉的行写入 `removed/task-<id>-commands-<time>.jsonl`（同 TASK-DELETE-SPEC）；
+  - Remove 项目：整个文件移到 `removed/`；
+  - **Delete collected commands…**：删除所有项目的 `commands/*.jsonl`，不留备份，因为这是用户明确要求的隐私操作；
+  - 关闭开关只停止采集，不删除已有记录。
+
+## 4. 分析运行
+
+### 4.1 调度
+
+- daemon 每 15 分钟检查一次。项目到期的条件，以下全部满足：
+  1. 总开关打开，项目开关不为 false，项目未归档；
+  2. 当前本地时间已过 `runHour`；
+  3. 距该项目上次运行（成功、跳过或失败都算）的时间 ≥ `intervalDays` 天。比较按本地日期，所以 Daily 每天最多运行一次。
+- daemon 停机期间错过的运行，启动后只补跑一次，不补跑多次。
+- 全部项目一次只运行一个分析，排队顺序按上次运行时间升序。
+- 分析窗口：`windowDays = max(7, intervalDays)`，最多 14 天。
+- **安静期跳过**：自上次运行以来新增的 action 少于 50 条，或窗口内涉及的卡片少于 3 张时，不调用模型。本次运行记为 skipped，原因 “Not enough new activity”，同样算一次运行（重新计周期）。
+- **Run now**（Insights 区块）：
+  - 任何时候都可以手动运行，总开关关闭时也可以，也不受安静期规则限制。
+  - 项目还没有命令记录时（比如开关一直没开），先回填最近 7 天再分析；回填后仍然没有命令，记为 skipped（“No commands collected yet.”）。
+  - 项目已有运行进行中时，按钮显示 Analyzing…。
+- 定时检查遇到下面两种情况时直接跳过，不记录本次运行，也就不会把周期用掉：
+  - 项目还没有任何命令记录；
+  - 项目正在回填（开关刚打开时，回填完成前的那次检查）。
+
+### 4.2 素材（规则产出，纯函数）
+
+按以下顺序拼接，总长不超过 **150 000 字符**，超出时依次减少 inline 摘录数量和失败命令数量：
+
+1. 概况：窗口、session 数、卡片数、调用数、explore/action/skip 计数。
+2. 卡片清单：短 ID（前 8 位）、标题、类型、标签、当前列。
+3. 已有配置：项目根 `paseo.json` 的 `scripts`、`worktree` 部分（直接读文件，不需要内部 API）；`package.json` 的 `scripts`；根目录 `AGENTS.md` 或 `CLAUDE.md` 中的 Commands 一节（最多 4000 字）。
+4. action key 表（前 60）：运行次数、卡片数、session 数、失败次数、主要所在列。
+5. 重复序列：同一 session 内连续且不同的 action key 组成 2–4 元组，按出现的不同 session 数计，取 ≥3 的前 25 个。
+6. 被读得最多的文件，前 30。
+7. 失败的命令，最多 60 条，每条 260 字符。
+8. inline 摘录：按开头 240 字符去重后，**按卡片轮流抽样**（避免集中在少数长 session），最多 280 条。
+9. 已有建议：本项目 90 天内 open、accepted、dismissed 的建议标题与 target，并要求模型不要重复（§5.3）。
+
+### 4.3 模型调用
+
+- 与天级总结相同（PROJECT-INSIGHTS-SPEC §7）：
+  - 在项目根 workspace 创建临时 session，没有时用最近更新的卡片 workspace；
+  - 标签 `flowly=summarizer`（兼容既有旧标签）、`flowly-project=<id>`、`flowly-insight=workflow`；
+  - `waitForFinish(900000)`（15 分钟）；结束后在 `finally` 中归档。
+- prompt（英文，agent-facing）要点：
+  - 可选的五类目标：`paseo_script`、`worktree_setup`、`repo_tool`、`agents_md`、`skill`；
+  - 每条结论都要引用卡片短 ID 和次数；不推荐已存在的东西，除非组合起来能省事；git 写操作和一次性探索不做成脚本；重点解读内联脚本的用途；最多 8 条；如实标注置信度；
+  - 不使用工具；**只返回一个 JSON 对象**。
+- 输出 schema：
+  `{ findings: [{ target, title, evidence, proposal, benefit, confidence: "high"|"medium"|"low", cards: string[] }], clusters: [{ purpose, count, cards }], noise, verdict }`。
+  同时以 `outputSchema` 传入，但 **Claude 不强制执行它**：探针返回的是 markdown。
+- 解析：用 `firstObject` 取 JSON，兼容代码块和字符串数组。取不到时在同一 session 追加一条消息 “Reply again with only the JSON object described above.”，重试一次；仍失败则本次运行记为错误 “The workflow insights model returned no JSON.”。
+- 记录 `lastUsage`（输入、缓存、输出 token，以及 provider 给出的费用）。
+
+### 4.4 校验（daemon，不信任模型的计数与 ID）
+
+- `cards` 中的短 ID 必须能对应到本项目、本窗口内有记录的卡片，对不上的丢弃。有效卡片少于 2 张的建议丢弃。
+- 标题按规范化 slug 和 target 生成指纹，与已有建议重复的丢弃（§5.3）。
+- 每个字段限长：title 120，evidence 1000，proposal 4000，benefit 500；超长的建议丢弃，不截断。
+- 最多保留 8 条。全部被丢弃时本次运行记为 ok，结果为 “No suggestions this time”。
+
+## 5. 建议与落地
+
+### 5.1 数据
+
+文件 `workflow-insights.json`，串行写，写前备份，原子替换；文件无效时保留原文件并报错。结构：
+
+```
+{ version: 1,
+  runs: [{ id, projectId, at, from, to, model, status: "ok"|"skipped"|"error", reason?, usage?, stats: { calls, actions, cards, sessions } }],
+  findings: [{ id, projectId, runId, fingerprint, target, title, evidence, proposal, benefit, confidence, cards[],
+               status: "open"|"accepted"|"dismissed", acceptedTaskId?, createdAt, updatedAt }],
+  revision }
+```
+
+- 每个项目保留最近 20 次运行。accepted 和 dismissed 的建议保留 90 天，open 的一直保留。
+- Remove 项目时先备份到 `removed/` 再删除。永久删除卡片时，指向该卡的 `acceptedTaskId` 清空，建议本身保留，状态仍为 accepted。
+
+### 5.2 Insights 页区块
+
+在 Insights 页 Summary 之后、Token use 之前，新增区块 **Workflow insights**，桌面与紧凑布局都显示：
+
+- 页头：“Last run · 日期 · 模型 · 窗口 N days”，附 token 和费用；有运行进行中时显示 “Analyzing…”；回填中显示 “Reading recent sessions…”；还有 **Run now** 和齿轮按钮（打开 Settings → AI）。
+- 关闭状态：显示一行说明和 **Turn on** 按钮，打开设置分组；不显示空列表。
+- 跳过或出错：弱化显示原因一行，例如 “Skipped: not enough new activity”，或错误信息。
+- 建议卡片，按 confidence 再按 createdAt 排序。每张显示：
+  - target chip：paseo.json script / Worktree setup / Repo tool / AGENTS.md / Skill；
+  - 标题、依据（可点击的卡片引用，打开卡片侧栏）、收益；
+  - proposal 默认收起，展开后以等宽字体显示；
+  - AI 星星标记（AI-MARK-SPEC）。
+- 操作：
+  - **Create card**：打开 New task 表单并预填：
+    - 标题；
+    - 描述：proposal、收益、依据、引用卡片的标题，加上落地说明；
+    - 类型 `chore`；
+    - 标签 `agent-workflow`，paseo.json 与 worktree setup 两类再加 `paseo-json`。
+
+    `tasks.create` 新增可选的 `insightFindingId`，分两步处理：
+    1. 建 workspace 之前，先检查这条建议仍是 open，否则整笔失败；
+    2. 卡片写入之后，把建议标为 accepted，并记下 `acceptedTaskId`。
+
+    建议存在 `workflow-insights.json`，不在 `board.json` 里，所以这两步不在同一次写入中。第二步失败时，卡片照常建好，建议保持 open，并记录日志。同一 operationId 重放时不再检查，只补标 accepted。
+  - **Dismiss** / **Restore**。
+  - 已 accepted 的建议显示 “Card created”，点击打开那张卡片。
+- 落地说明：随 target 自动附在描述末尾，给接手卡片的 agent 看。
+  - `paseo_script` / `worktree_setup`：“Add it to paseo.json at the project root, run it once with `paseo script start <name>` (or create a worktree to test setup), and commit: worktree setup only reads the committed paseo.json.”
+  - `repo_tool`：“Add the tool, mention it in AGENTS.md Commands, and replace one real use to prove it works.”
+  - `agents_md` / `skill`：“Write it, then check it against the cited cards.”
+- 数据读取：只在 Insights 页打开时查询，带 etag。页面关闭后不轮询。运行进行中时每 10 秒查询一次。
+
+### 5.3 去重与冷却
+
+- 指纹相同的已有建议：open 或 accepted 时不再重复生成；dismissed 时 30 天内不再出现，之后可以重新提出。
+- 已有建议的标题也会写进素材（§4.2 第 9 项），从源头减少重复。
+
+### 5.4 让 agent 用上已有脚本
+
+卡片 session 的上下文文件（`tools.sessionContext`）和 `flowly_get_task` 新增字段 `projectScripts`：
+- 内容：项目根 `paseo.json` 中 scripts 的名字和 type，最多 20 个，**不含 command 正文**；
+- skill（两份副本）补一句：“When projectScripts lists a script for what you are about to do, run it with `paseo script start <name>` instead of retyping the commands.”
+- 此项与总开关无关：只要项目有 `paseo.json` 就提供。没有该文件时不出现这个字段。
+
+## 6. RPC
+
+| 方法 | 输入 | 输出 |
+| --- | --- | --- |
+| `workflow-insights.get` | `{ projectId, etag? }` | `{ etag, value? }`；value = `{ enabled, projectEnabled, backfilling, running, nextRunAt \| null, windowDays, lastRun \| null, findings[], revision }` |
+| `workflow-insights.run` | `{ projectId }` | `{ queued: true }`，已在运行时返回 `{ queued: false }` |
+| `workflow-insights.set-status` | `{ projectId, findingId, status: "open"\|"dismissed", expectedRevision }` | `{ revision }`；revision 不匹配时报错 `REVISION_CONFLICT: …`；已建卡的建议不能再改 |
+| `workflow-insights.overview` | `{}` | `{ lastRun \| null, collected }`，用于设置页的费用行和已收集的项目数 |
+| `workflow-insights.purge` | `{}` | `{ deletedProjects }` |
+| `tasks.create`（既有） | 新增可选 `insightFindingId` | 不变；建议不存在、不属于本项目或不是 open 状态时整笔写入失败 |
+
+所有输入用 zod 校验；daemon 错误信息用英文。
+
+## 7. 隐私与安全
+
+- 只采集 shell 命令。命令输出和其它工具调用的内容（文件读写、编辑）不采集。
+- 落盘之前先脱敏（§3.2）；日志中不出现 token、凭据或完整命令正文。
+- 发给模型的素材就是这些脱敏后的记录。模型用的是用户自己配置的 provider，与写这些命令的 agent 同属一套账户体系。
+- 没有新增内部 API：读 `paseo.json` 是读普通文件；timeline 的读取与 session 的创建用插件 SDK（`PaseoApi`）。
+- 建议不会自动执行任何东西，也不会自动建卡或修改文件。建卡需要用户点 Create card。
+
+## 8. Onboarding、文案与文档
+
+- 欢迎页特色列表在 *Project insights* 之后新增一行 *Workflow insights*：“Optional: on a schedule you choose, a model reads the commands agents ran and suggests scripts, tools and rules worth keeping.”
+- 新提示 `first-workflow-insight`：
+  - 显示条件：功能已打开，当前项目有 open 的建议，且没有打开 Insights 或 Ideas 页。看板只在这条提示还没看过时，为当前项目读一次建议，不轮询；
+  - 文案：“Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card.”；
+  - 优先级排在 `first-idea` 之后、`first-artifact` 之前。
+  - 功能默认关闭，新用户要等打开功能、产生了建议才会看到，这是有意的；功能本身由设置分组和欢迎页那一句介绍。
+- ONBOARDING-SPEC 的提示表、README（两份）的功能亮点、SPEC-OUTLINE、PROGRESS 同步更新。
+- 所有新文案用 `t()` 并加入全部语言目录（约 35 条）。agent 面向的文本（prompt、落地说明、skill）保持英文。
+
+## 9. 不在范围内
+
+- 直接写入 `paseo.json`：需要 `writeProjectConfig` 这个内部 API。由卡片的 agent 修改并提交，验证也一并完成。
+- 自动建卡或自动应用建议；跨项目汇总；按人统计。
+- 卡片上的 setup 状态显示、scripts 面板（本卡第一轮调研中的候选，另行立项）。
+- 非 shell 工具调用的模式分析，比如同一类 Read/Edit 序列、MCP 调用顺序。可以以后再扩展。
+
+## 10. 验收
+
+单元测试：
+- 拆分与分类：用探针中出现过的形态做用例，包括 heredoc、case 分支、函数定义、`git -c`、`$VAR` 命令、引号内的分隔符。
+- 规范化，包括 npx 合并的条件；脱敏的各条规则，用例中要包含真实 token 的形态。
+- 记录的 id 去重、30 天裁剪、删卡重写、项目移除。
+- 调度：intervalDays × runHour × 时区；跨天；停机后只补跑一次；同一时刻只有一个运行。
+- 安静期跳过；素材预算裁剪与按卡片轮流抽样。
+- 解析：纯 JSON、代码块、markdown 中夹带 JSON、无 JSON 时的重试、仍失败的错误。
+- 校验：无效卡片 ID、少于 2 张卡、超长字段、重复指纹、dismissed 冷却。
+- 建卡时原子 accept 与错误回滚；设置缺字段时的默认值。
+- 提示规则（`client/onboarding-logic.test.ts`）；i18n 完整性。
+
+检查与实测：
+- typecheck，全量 `npm test`，reload 本插件。
+- 在 Flowly 项目上手动 Run now（`claude/claude-sonnet-5`），与 2026-10-19 探针的 6 条结论对照：至少覆盖 i18n 和 Playwright 两条高置信度建议；确认临时 session 已归档；记录 token 和费用。
+- 用显式 full-access 的 `codex/gpt-6-luna` 测试 session，在 fixture 项目（或 Tinylink，只清理测试自己创建的东西）上检查：
+  - 设置分组的各项与保存；项目开关；
+  - Insights 区块的关闭、跳过、错误、建议列表、Create card、Dismiss/Restore；
+  - 桌面与紧凑布局；
+  - 回填与 Delete collected commands。
+- 证据保存到 `docs/verification/workflow-insights.md`。未实际运行的项一律记为 UNRUN。
+
+## 11. 我做的决定（可以推翻）
+
+1. **默认关闭**，周期默认 **Weekly**，整点默认 09:00。
+2. **Auto 模型用 Sonnet**（5.5 → 5），而不是摘要用的便宜模型；不可用时才退回 Summary model。
+3. **窗口至少 7 天**，所以 Daily 是“每天看最近 7 天”，靠去重避免每天出现相同的建议。
+4. **安静期跳过**（新增 action 少于 50 条或少于 3 张卡），省下没有新信息时的 token。手动 Run now 不受此限制。
+5. **只有开关打开才采集**，打开时回填 7 天；关闭不删数据，另设删除按钮。
+6. 建议放在 **Insights 页**，不进 Ideas 收件箱。Ideas 挂在某张来源卡上，而这里的建议是项目级的。
+7. `projectScripts` 写进 session 上下文，**与开关无关**：建议落地之后，agent 要能知道有这些脚本。
+
 ## 12. Agent habits：next moves 与 ideas 的使用率
 
 状态：**已实现，待用户验收**（2026-10-20，卡片 `5aaa5b01` “Insights: next-move and idea rates per session and model”；用户在评估后确认下面的调整）。

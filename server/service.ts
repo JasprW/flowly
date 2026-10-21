@@ -145,6 +145,8 @@ export class BoardService {
   private provision = Promise.resolve<unknown>(undefined);
   /** Reads external items added at creation (EXTERNAL-TRACKER-SPEC §5.4); set by the plugin entry. */
   connectors?: ConnectorService;
+  /** Workflow-insights suggestions a card can be created from (WORKFLOW-INSIGHTS-SPEC §5.2); set by the plugin entry. */
+  insightFindings?: { check(projectId: string, id: string): Promise<void>; accept(projectId: string, id: string, taskId: string): Promise<void> };
   constructor(readonly store: BoardStore) {}
   private serialize<T>(action: () => Promise<T>) {
     const result = this.provision.then(action);
@@ -443,7 +445,27 @@ export class BoardService {
       });
     }
   }
-  createTask(input: TaskInput, paseo: PaseoApi) {
+  /**
+   * A suggestion is checked before any workspace exists and marked accepted once
+   * the card is written; the two live in different files, so a failed accept
+   * leaves the card and the suggestion open (logged).
+   */
+  async createTask(input: TaskInput, paseo: PaseoApi) {
+    const findingId = input.insightFindingId;
+    if (findingId) {
+      if (!this.insightFindings) throw new Error("Workflow insights are unavailable.");
+      if (input.ideaId || input.followUpOf) throw new Error("A card comes from one suggestion, idea or source card.");
+      const board = await this.store.read();
+      if (!board.tasks.some((t) => t.operationId === input.operationId)) await this.insightFindings.check(input.projectId, findingId);
+    }
+    const task = await this.createCard(input, paseo);
+    if (findingId)
+      await this.insightFindings!.accept(input.projectId, findingId, task.id).catch((e) =>
+        console.error("Workflow insights suggestion not marked accepted:", e instanceof Error ? e.message : String(e)),
+      );
+    return task;
+  }
+  private createCard(input: TaskInput, paseo: PaseoApi) {
     return this.serialize(async () => {
       const board = await this.store.read();
       const previous = board.tasks.find(

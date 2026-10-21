@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { usePaseo, useSettings } from "@getpaseo/plugin/client";
+import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
 import { AUTO_MODELS, modelLabel, summarySettings, summarySettingsValues } from "../shared/summary";
 import {
@@ -20,13 +20,17 @@ import {
   wrapupSettingsValues,
 } from "../shared/settings";
 import { agentModelFromValues, type AgentModel } from "../shared/agent-defaults";
-import { deviceLocale, locales, t, tn } from "../shared/i18n";
+import { deviceLocale, formatLocale, locales, msg, t, tn } from "../shared/i18n";
 import { hideFinishedChoices } from "./finished-cards";
 import { modelOptions, providerOptions } from "./options";
 import { ModelDefaultGroup } from "./model-default";
 import { SettingRow, SettingSelect, SettingSwitch, SettingsGroup, SettingsPage } from "./settings-ui";
 import { useOnboarding } from "./onboarding";
 import { Notice, useTheme } from "./ui";
+import { compactNumber } from "../shared/usage";
+import * as rpc from "../shared/rpc";
+import { localZone } from "./queries";
+import { INTERVALS, WORKFLOW_AUTO_MODELS, usageIn, windowDays, workflowInsightsSettings, workflowSettingsValues } from "../shared/workflow-insights";
 
 const AUTO = "";
 
@@ -262,6 +266,7 @@ export function AiPage() {
           onChange={(digestEnabled) => summary.save({ digestEnabled })}
         />
       </SettingsGroup>
+      <WorkflowInsightsGroup />
       <SettingsGroup title={t("Ideas")} description={t("Agents suggest worthwhile next steps as ideas on their cards; you turn them into new tasks or dismiss them.")}>
         <SettingSwitch
           title={t("Ideas")}
@@ -323,5 +328,142 @@ export function AiPage() {
         />
       </SettingsGroup>
     </SettingsPage>
+  );
+}
+
+const intervalLabels: Record<(typeof INTERVALS)[number], string> = { 1: msg("Daily"), 3: msg("Every 3 days"), 7: msg("Weekly"), 14: msg("Every 2 weeks") };
+const hourLabel = (hour: number) => new Date(Date.UTC(2020, 0, 1, hour)).toLocaleTimeString(formatLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+
+/** Workflow insights (WORKFLOW-INSIGHTS-SPEC §2.3): the switch, model, cadence and the collected data. */
+function WorkflowInsightsGroup() {
+  const paseo = usePaseo();
+  const prefs = useStored(useSettings(workflowInsightsSettings), workflowSettingsValues);
+  const values = prefs.values;
+  // Every save carries the device zone, so "Run after" means this device's local hour.
+  const save = (patch: Partial<NonNullable<typeof values>>) => prefs.save({ ...patch, timeZone: localZone() || "" });
+  const stored = values?.model || AUTO;
+  const storedProvider = stored ? stored.slice(0, stored.indexOf("/")) : AUTO;
+  const [provider, setProvider] = useState(storedProvider);
+  useEffect(() => setProvider(storedProvider), [storedProvider]);
+  const on = !!values?.enabled;
+  const providers = useQuery({ queryKey: ["flowly", "providers"], queryFn: () => paseo.providers.listAvailable(), enabled: on });
+  const providerInfo = useQuery({ queryKey: ["flowly", "providerSnapshot"], queryFn: () => paseo.providers.snapshot(), enabled: on, staleTime: 60000 });
+  const models = useQuery({
+    queryKey: ["flowly", "workflow-models", provider],
+    queryFn: async () => {
+      const result = await paseo.providers.listModels(provider);
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
+    enabled: on && provider !== AUTO,
+  });
+  const readOverview = useRpc(rpc.workflowInsightsOverview);
+  const overview = useQuery({ queryKey: ["flowly", "workflow-overview"], queryFn: () => readOverview({}), staleTime: 30_000 });
+  const purge = useRpc(rpc.purgeWorkflowCommands);
+  const [confirm, setConfirm] = useState<"" | "ask" | "done" | "error">("");
+  const autoLabel = t("Auto ({models})", { models: WORKFLOW_AUTO_MODELS.map(modelLabel).join(t(", then ")) });
+  const storedModel = stored && provider === storedProvider ? stored.slice(stored.indexOf("/") + 1) : "";
+  const interval = values?.intervalDays ?? 7;
+  const last = overview.data?.lastRun;
+  const cost = typeof last?.usage?.totalCostUsd === "number" ? last.usage.totalCostUsd : null;
+  const lastLine = last?.usage
+    ? cost !== null
+      ? t("Last run: {in} in · {out} out · ${cost} · about ${month} per month at this pace.", {
+          in: compactNumber(usageIn(last.usage)),
+          out: compactNumber(last.usage.outputTokens ?? 0),
+          cost: cost.toFixed(2),
+          month: ((cost * 30) / interval).toFixed(2),
+        })
+      : t("Last run: {in} in · {out} out.", { in: compactNumber(usageIn(last.usage)), out: compactNumber(last.usage.outputTokens ?? 0) })
+    : "";
+  return (
+    <>
+      <SettingsGroup
+        title={t("Workflow insights")}
+        description={t("Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.")}
+      >
+        <SettingSwitch
+          title={t("Workflow insights")}
+          detail={on ? t("Collecting commands. Suggestions appear in each project's Insights.") : t("Collecting starts when you turn this on; the last 7 days are read once from the sessions' history.")}
+          value={on}
+          disabled={prefs.busy}
+          onChange={(enabled) => save({ enabled })}
+        />
+        {on && (
+          <>
+            <SettingSelect
+              title={t("Provider")}
+              value={provider}
+              placeholder={autoLabel}
+              disabled={prefs.busy}
+              loading={providers.isPending}
+              options={[{ value: AUTO, label: autoLabel, detail: t("Falls back to the Summary model when neither is available") }, ...providerOptions(providers.data?.providers || [], providerInfo.data?.entries || [])]}
+              onChange={(next) => {
+                setProvider(next);
+                if (next === AUTO) save({ model: "" });
+              }}
+            />
+            {provider !== AUTO && (
+              <SettingSelect
+                title={t("Model")}
+                value={storedModel}
+                placeholder={t("Choose a model")}
+                disabled={prefs.busy}
+                loading={models.isPending}
+                options={modelOptions(models.data?.models || [])}
+                onChange={(model) => save({ model: `${provider}/${model}` })}
+              />
+            )}
+            <SettingSelect
+              title={t("How often")}
+              detail={t("Daily needs plenty of tokens; longer periods cost less and still catch repeated work.")}
+              value={String(interval)}
+              placeholder={t(intervalLabels[interval as (typeof INTERVALS)[number]] ?? intervalLabels[7])}
+              disabled={prefs.busy}
+              options={INTERVALS.map((n) => ({ value: String(n), label: t(intervalLabels[n]) }))}
+              onChange={(next) => save({ intervalDays: Number(next) })}
+            />
+            <SettingSelect
+              title={t("Run after")}
+              detail={tn(windowDays(interval), "Looks at the last {n} day of commands. Quiet periods are skipped without calling the model.", "Looks at the last {n} days of commands. Quiet periods are skipped without calling the model.")}
+              value={String(values?.runHour ?? 9)}
+              placeholder={hourLabel(values?.runHour ?? 9)}
+              disabled={prefs.busy}
+              options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: hourLabel(h) }))}
+              onChange={(next) => save({ runHour: Number(next) })}
+            />
+          </>
+        )}
+        {!!lastLine && <SettingRow title={t("Cost")} detail={lastLine} />}
+        <SettingRow
+          title={t("Delete collected commands")}
+          detail={
+            confirm === "ask"
+              ? t("Press again to delete the command log of every project. Suggestions are kept.")
+              : confirm === "done"
+                ? t("Deleted.")
+                : confirm === "error"
+                  ? t("Could not delete the command log.")
+                  : overview.data?.collected
+                    ? tn(overview.data.collected, "Commands are kept for 30 days, redacted, for {n} project.", "Commands are kept for 30 days, redacted, for {n} projects.")
+                    : t("Nothing collected.")
+          }
+          disabled={!overview.data?.collected && confirm !== "ask"}
+          onPress={() => {
+            if (confirm !== "ask") return setConfirm("ask");
+            void purge({})
+              .then(() => {
+                setConfirm("done");
+                void overview.refetch();
+              })
+              .catch(() => setConfirm("error"));
+          }}
+        />
+      </SettingsGroup>
+      {on && provider !== AUTO && !storedModel && (
+        <Notice tone="info">{t("Pick a model to use this provider. Until then the stored choice stays: {choice}.", { choice: stored ? stored : autoLabel })}</Notice>
+      )}
+      <Problem text={prefs.problem} />
+    </>
   );
 }

@@ -17,6 +17,7 @@ import { familyOf, itemTypeOf } from "../shared/connectors";
 import { join } from "node:path";
 import { hostname } from "node:os";
 import type { Artifact, GitHead, NextMove, Workpad } from "../shared/model";
+import { projectScripts } from "./workflow-insights";
 import { mergeWorkpad, openItemLines, openItems, plansOf, validationFreshness, workpadEnabled, workpadNote, workpadOf, workpadUpdatedAction } from "../shared/workpad";
 import { defaultGit, readHead, resolveCommit, type Git } from "./workpad";
 import { deliveryReminders, type DeliveryCall } from "./reminders";
@@ -256,6 +257,8 @@ export class AgentService {
     }
     const revision = { task: r.task.revision, project: r.project.revision };
     const finished = ["done", "cancelled"].includes(r.task.status);
+    // The project's paseo.json scripts, so agents run them instead of retyping (WORKFLOW-INSIGHTS-SPEC §5.4).
+    const scripts = await projectScripts(r.project).catch(() => []);
     let externals = new Map<string, { changed: boolean; fingerprint: string; external: ExternalContext }>();
     const value: ToolContext = {
       identity,
@@ -324,6 +327,7 @@ export class AgentService {
         ...(workpadEnabled(r.project)
           ? { workpadEnabled: true, ...workpadContext(board.workpads, board.plans, r.task.id, identity.agentId) }
           : { workpadEnabled: false, workpad: null, plan: [] }),
+        ...(scripts.length ? { projectScripts: scripts } : {}),
         links: linksOf(board, r.task.id)
           .filter((v) => v.other)
           .map(({ relation, other }) => ({

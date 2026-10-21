@@ -324,20 +324,8 @@ export class InsightsService {
     await this.digests.put({ ...output, projectId: project.id, day: input.day, tz: tz || "", at: new Date(this.now()).toISOString(), model });
   }
 
-  /** The project root's own workspace, else the most recently updated live card workspace (§7). */
-  private async workspaceFor(project: Project, board: Board, paseo: PaseoApi) {
-    let cursor: string | undefined;
-    do {
-      const page = await paseo.workspaces.list({ page: { limit: 200, cursor } });
-      const root = page.entries.find((w) => w.projectId === project.paseoProjectId && w.workspaceDirectory === project.primaryPath);
-      if (root) return root.id;
-      cursor = page.pageInfo.nextCursor ?? undefined;
-    } while (cursor);
-    const card = board.tasks
-      .filter((t) => t.projectId === project.id && !t.archivedAt)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-    if (!card) throw new Error("No workspace to run the digest in: open a card in this project first.");
-    return card.workspaceId;
+  private workspaceFor(project: Project, board: Board, paseo: PaseoApi) {
+    return projectWorkspace(project, board, paseo, "the digest");
   }
 
   /** The day's activity as plain text for the digest model; "" when nothing happened. */
@@ -387,6 +375,25 @@ export class InsightsService {
       .join("\n\n");
     return { text: material ? clipMaterial(material) : "", taskIds: new Set(active.map((t) => t.id)), project, board };
   }
+}
+
+/**
+ * Where a project-level temporary session runs (PROJECT-INSIGHTS-SPEC §7): the
+ * project root's own workspace, else the most recently updated live card workspace.
+ */
+export async function projectWorkspace(project: Project, board: Board, paseo: PaseoApi, purpose: string) {
+  let cursor: string | undefined;
+  do {
+    const page = await paseo.workspaces.list({ page: { limit: 200, cursor } });
+    const root = page.entries.find((w) => w.projectId === project.paseoProjectId && w.workspaceDirectory === project.primaryPath);
+    if (root) return root.id;
+    cursor = page.pageInfo.nextCursor ?? undefined;
+  } while (cursor);
+  const card = board.tasks
+    .filter((t) => t.projectId === project.id && !t.archivedAt)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  if (!card) throw new Error(`No workspace to run ${purpose} in: open a card in this project first.`);
+  return card.workspaceId;
 }
 
 const label = (status: string | undefined) => (status ? historyStatusLabel(status as HistoryStatus) : "?");

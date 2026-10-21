@@ -209,6 +209,7 @@ function FeaturesPage() {
     { icon: "Ticket", color: colors.accent, title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, or GitHub/GitLab issue or pull request, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
     { icon: "Tags", color: colors.accent, title: t("Tags"), text: t("Tag cards by module or direction. Agents tag their own cards too; filter and search by #tag.") },
     { icon: "CircleGauge", color: colors.accent, title: t("Project insights"), text: t("Today's cards, turns, agent time, commits, tokens and what is waiting on you.") },
+    { icon: "Workflow", color: colors.accent, title: t("Workflow insights"), text: t("Optional: on a schedule you choose, a model reads the commands agents ran and suggests scripts, tools and rules worth keeping.") },
     { icon: "FolderGit2", color: colors.statusSuccess, title: t("Saved with your project"), text: t("Each project's board is also kept in its folder (.flowly, ignored by git). Add the folder again to restore it.") },
   ];
   return (

@@ -1,0 +1,582 @@
+import { mkdir, readFile, writeFile, rename, copyFile, unlink } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import type { PaseoApi } from "@getpaseo/client";
+import type { BoardStore } from "./store";
+import type { FlowLog } from "./flow-log";
+import type { CommandLog } from "./command-log";
+import { availableModels } from "./summaries";
+import { projectWorkspace } from "./insights";
+import { validZone } from "../shared/insights";
+import { SUMMARIZER_LABELS, isSummarizer, resolveModel, type SummarySettings } from "../shared/summary";
+import type { Board, Project } from "../shared/model";
+import {
+  BACKFILL_DAYS,
+  RETRY_PROMPT,
+  RUN_TIMEOUT_MS,
+  WORKFLOW_AUTO_MODELS,
+  WORKFLOW_LABEL,
+  aggregate,
+  buildMaterial,
+  emptyWorkflowState,
+  isDue,
+  laneAt,
+  nextRunAt,
+  parseWorkflowOutput,
+  projectScriptsFrom,
+  quiet,
+  shellRecord,
+  trimState,
+  validateFindings,
+  windowDays,
+  workflowJsonSchema,
+  workflowPrompt,
+  workflowStateSchema,
+  type CardInfo,
+  type CommandRecord,
+  type ExistingConfig,
+  type Finding,
+  type RunUsage,
+  type WorkflowRun,
+  type WorkflowSettings,
+  type WorkflowState,
+  type WorkflowView,
+} from "../shared/workflow-insights";
+
+const DAY_MS = 86_400_000;
+const TICK_MS = 15 * 60_000;
+const COMMANDS_LIMIT = 4000;
+
+/** `workflow-insights.json`: serialized writes, backup, atomic replacement; invalid data is preserved. */
+export class WorkflowStore {
+  private tail: Promise<unknown> = Promise.resolve();
+  constructor(readonly directory: string) {}
+  get path() {
+    return join(this.directory, "workflow-insights.json");
+  }
+  private async load(): Promise<WorkflowState> {
+    try {
+      return workflowStateSchema.parse(JSON.parse(await readFile(this.path, "utf8")));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyWorkflowState();
+      throw new Error(`Workflow insights data is invalid; preserved at ${this.path}. Restore a valid backup before continuing.`);
+    }
+  }
+  async read() {
+    await this.tail;
+    return this.load();
+  }
+  update<T>(operation: (state: WorkflowState) => Promise<{ value: T; changed: boolean }> | { value: T; changed: boolean }): Promise<T> {
+    const job = this.tail.then(async () => {
+      const state = await this.load();
+      const { value, changed } = await operation(state);
+      if (!changed) return value;
+      state.revision++;
+      workflowStateSchema.parse(state);
+      await mkdir(this.directory, { recursive: true, mode: 0o700 });
+      const temporary = `${this.path}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(temporary, JSON.stringify(state, null, 2), { mode: 0o600 });
+        try {
+          await copyFile(this.path, `${this.path}.bak`);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        await rename(temporary, this.path);
+      } finally {
+        await unlink(temporary).catch(() => undefined);
+      }
+      return value;
+    });
+    this.tail = job.then(
+      () => undefined,
+      () => undefined,
+    );
+    return job;
+  }
+}
+
+async function readText(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** The Commands section of AGENTS.md or CLAUDE.md at the project root (§4.2). */
+function commandsSection(text: string): string {
+  const match = /^#{1,3}\s*(?:commands|常用命令|命令)\b.*$/im.exec(text);
+  if (!match) return "";
+  const rest = text.slice(match.index + match[0].length);
+  const next = /^#{1,3}\s/m.exec(rest);
+  return (next ? rest.slice(0, next.index) : rest).trim().slice(0, COMMANDS_LIMIT);
+}
+
+/** package.json script names (for `npx tsc` → `npm run typecheck`) and the full table for the material. */
+async function packageScripts(root: string): Promise<Record<string, string>> {
+  const text = await readText(join(root, "package.json"));
+  if (!text) return {};
+  try {
+    const scripts = (JSON.parse(text) as { scripts?: unknown }).scripts;
+    if (!scripts || typeof scripts !== "object") return {};
+    return Object.fromEntries(Object.entries(scripts as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string").slice(0, 40));
+  } catch {
+    return {};
+  }
+}
+
+/** Script names and types in the project root's paseo.json, for agents (§5.4). */
+export async function projectScripts(project: Pick<Project, "primaryPath">) {
+  const text = await readText(join(project.primaryPath, "paseo.json"));
+  return text ? projectScriptsFrom(text) : [];
+}
+
+export const projectIncluded = (project: Project | undefined) => !!project && !project.archivedAt && project.workflowInsights !== false;
+
+/**
+ * Workflow insights (WORKFLOW-INSIGHTS-SPEC): records shell calls of card
+ * sessions, backfills on enable, runs the analysis on schedule or on request.
+ */
+export class WorkflowInsightsService {
+  private paseo: PaseoApi | null = null;
+  private running = new Set<string>();
+  private backfilling = new Set<string>();
+  private chain: Promise<unknown> = Promise.resolve();
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private first: ReturnType<typeof setTimeout> | null = null;
+  /** Agents known to be (or not be) Flowly's own summarizer sessions. */
+  private summarizer = new Map<string, boolean>();
+  constructor(
+    readonly board: BoardStore,
+    readonly log: CommandLog,
+    readonly state: WorkflowStore,
+    readonly flow: FlowLog,
+    readonly settings: () => Promise<WorkflowSettings>,
+    readonly summarySettings: () => Promise<SummarySettings>,
+    private now = () => Date.now(),
+    private timeoutMs = RUN_TIMEOUT_MS,
+    private home = homedir(),
+  ) {}
+
+  private pendingBackfill = false;
+  attach(paseo: PaseoApi) {
+    this.paseo = paseo;
+    if (this.pendingBackfill) {
+      this.pendingBackfill = false;
+      void this.backfillAll(paseo).catch(log("backfill"));
+    }
+  }
+  /** The switch was turned on: backfill now, or as soon as a Paseo connection is known. */
+  requestBackfillAll() {
+    if (this.paseo) void this.backfillAll(this.paseo).catch(log("backfill"));
+    else this.pendingBackfill = true;
+  }
+
+  /** Checks for due projects shortly after start, then every 15 minutes. */
+  start() {
+    if (this.timer) return;
+    this.first = setTimeout(() => void this.tick().catch(log("check")), 60_000);
+    this.timer = setInterval(() => void this.tick().catch(log("check")), TICK_MS);
+    this.first.unref?.();
+    this.timer.unref?.();
+  }
+  stop() {
+    if (this.first) clearTimeout(this.first);
+    if (this.timer) clearInterval(this.timer);
+    this.first = this.timer = null;
+  }
+
+  private async enabledFor(project: Project | undefined) {
+    return projectIncluded(project) && (await this.settings()).enabled;
+  }
+
+  private async scriptNames(project: Project) {
+    return new Set(Object.keys(await packageScripts(project.primaryPath)));
+  }
+
+  private async isSummarizer(agentId: string, paseo: PaseoApi) {
+    const known = this.summarizer.get(agentId);
+    if (known !== undefined) return known;
+    const snapshot = await paseo.agents.ref(agentId).refresh().catch(() => null);
+    const value = snapshot ? isSummarizer(snapshot.agent as { labels?: Record<string, string> | null }) : false;
+    this.summarizer.set(agentId, value);
+    return value;
+  }
+
+  /** A finished turn's shell calls (§3.1); never throws into the hook. */
+  async recordTurn(agent: { id: string; workspaceId: string | null; provider: string }, timeline: readonly unknown[], paseo: PaseoApi) {
+    this.attach(paseo);
+    if (!agent.workspaceId) return 0;
+    const board = await this.board.read();
+    const task = board.tasks.find((t) => t.workspaceId === agent.workspaceId && !t.archivedAt);
+    const project = board.projects.find((p) => p.id === task?.projectId);
+    if (!task || !project || !(await this.enabledFor(project))) return 0;
+    const ctx = { repo: project.primaryPath, home: this.home };
+    const scripts = await this.scriptNames(project);
+    const at = new Date(this.now()).toISOString();
+    const records = timeline
+      .map((item) => shellRecord(item as Record<string, unknown>, { taskId: task.id, agentId: agent.id, lane: task.status, provider: agent.provider, at }, ctx, scripts))
+      .filter((r): r is CommandRecord => !!r);
+    if (!records.length || (await this.isSummarizer(agent.id, paseo))) return 0;
+    return this.log.append(project.id, records);
+  }
+
+  /** Reads the last BACKFILL_DAYS of the project's card sessions once (§3.3). */
+  async backfill(projectId: string, paseo: PaseoApi) {
+    this.attach(paseo);
+    if (this.backfilling.has(projectId)) return 0;
+    this.backfilling.add(projectId);
+    try {
+      const board = await this.board.read();
+      const project = board.projects.find((p) => p.id === projectId);
+      if (!project || !projectIncluded(project)) return 0;
+      const tasks = board.tasks.filter((t) => t.projectId === projectId);
+      const byWorkspace = new Map(tasks.map((t) => [t.workspaceId, t]));
+      const cutoff = this.now() - BACKFILL_DAYS * DAY_MS;
+      const agents: { id: string; provider: string; task: (typeof tasks)[number] }[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await paseo.agents.list({ filter: { includeArchived: true }, page: { limit: 200, cursor } });
+        for (const { agent } of page.entries) {
+          const task = agent.workspaceId ? byWorkspace.get(agent.workspaceId) : undefined;
+          if (!task || isSummarizer(agent as { labels?: Record<string, string> | null })) continue;
+          const touched = Date.parse((agent as { lastActivityAt?: string }).lastActivityAt || agent.updatedAt || agent.createdAt || "");
+          if (Number.isFinite(touched) && touched < cutoff) continue;
+          agents.push({ id: agent.id, provider: String(agent.provider || ""), task });
+        }
+        cursor = page.pageInfo.nextCursor ?? undefined;
+      } while (cursor);
+      const changes = new Map<string, { at: string; from?: string; to?: string }[]>();
+      for (const e of await this.flow.read(projectId).catch(() => [])) {
+        if (e.action !== "status_changed") continue;
+        const list = changes.get(e.taskId) || [];
+        list.push(e);
+        changes.set(e.taskId, list);
+      }
+      for (const list of changes.values()) list.sort((a, b) => a.at.localeCompare(b.at));
+      const ctx = { repo: project.primaryPath, home: this.home };
+      const scripts = await this.scriptNames(project);
+      let written = 0;
+      // Two sessions at a time; each reads its timeline backwards until the cutoff.
+      const queue = [...agents];
+      const worker = async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          // Not `written += await …`: that reads `written` before the other worker adds to it.
+          const n = await this.backfillAgent(next, project.id, cutoff, changes.get(next.task.id) || [], ctx, scripts, paseo);
+          written += n;
+        }
+      };
+      await Promise.all([worker(), worker()]);
+      return written;
+    } finally {
+      this.backfilling.delete(projectId);
+    }
+  }
+
+  private async backfillAgent(
+    agent: { id: string; provider: string; task: { id: string; status: string } },
+    projectId: string,
+    cutoff: number,
+    changes: readonly { at: string; from?: string; to?: string }[],
+    ctx: { repo: string; home: string },
+    scripts: ReadonlySet<string>,
+    paseo: PaseoApi,
+  ) {
+    const records: CommandRecord[] = [];
+    let before: unknown;
+    try {
+      for (let page = 0; page < 120; page++) {
+        const res = await paseo.agents.ref(agent.id).timeline.refetch({
+          direction: before ? "before" : "tail",
+          ...(before ? { cursor: before as never } : {}),
+          limit: 200,
+          projection: "projected",
+        });
+        let oldest = Infinity;
+        for (const entry of res.entries) {
+          const t = Date.parse(entry.timestamp);
+          oldest = Math.min(oldest, t);
+          if (!(t >= cutoff)) continue;
+          const lane = laneAt(changes, t, agent.task.status);
+          const record = shellRecord(entry.item as Record<string, unknown>, { taskId: agent.task.id, agentId: agent.id, lane, provider: agent.provider, at: new Date(t).toISOString() }, ctx, scripts);
+          if (record) records.push(record);
+        }
+        if (!res.hasOlder || !res.startCursor || oldest < cutoff) break;
+        before = res.startCursor;
+      }
+    } catch (e) {
+      console.error("Workflow insights backfill skipped a session:", e instanceof Error ? e.message : String(e));
+    }
+    return records.length ? this.log.append(projectId, records) : 0;
+  }
+
+  /** Backfills every included project (the switch was just turned on). */
+  async backfillAll(paseo: PaseoApi) {
+    const board = await this.board.read();
+    for (const p of board.projects.filter(projectIncluded)) await this.backfill(p.id, paseo).catch(log("backfill"));
+  }
+
+  /** The newest run; of runs with the same time, the one written last. */
+  private lastRun(state: WorkflowState, projectId: string): WorkflowRun | null {
+    let last: WorkflowRun | null = null;
+    for (const r of state.runs) if (r.projectId === projectId && (!last || r.at >= last.at)) last = r;
+    return last;
+  }
+
+  /** Queues due projects, one analysis at a time (§4.1). */
+  async tick() {
+    const paseo = this.paseo;
+    if (!paseo) return;
+    const settings = await this.settings();
+    if (!settings.enabled) return;
+    const tz = validZone(settings.timeZone);
+    const [board, state] = await Promise.all([this.board.read(), this.state.read()]);
+    const due = board.projects
+      .filter(projectIncluded)
+      .map((p) => ({ p, last: this.lastRun(state, p.id) }))
+      .filter(({ p, last }) => !this.running.has(p.id) && !this.backfilling.has(p.id) && isDue({ now: this.now(), tz, runHour: settings.runHour, intervalDays: settings.intervalDays, lastRunAt: last?.at ?? null }))
+      .sort((a, b) => (a.last?.at ?? "").localeCompare(b.last?.at ?? ""));
+    for (const { p } of due) this.run(p.id, paseo, false);
+  }
+
+  /** Queues one analysis; false when one is already queued or running for the project. */
+  run(projectId: string, paseo: PaseoApi, manual: boolean): { queued: boolean } {
+    this.attach(paseo);
+    if (this.running.has(projectId)) return { queued: false };
+    this.running.add(projectId);
+    const job = this.chain.then(() => this.execute(projectId, paseo, manual));
+    this.chain = job.then(
+      () => undefined,
+      () => undefined,
+    );
+    void job.catch(log("run")).finally(() => this.running.delete(projectId));
+    return { queued: true };
+  }
+
+  private async config(project: Project): Promise<ExistingConfig> {
+    const [paseoJson, pkg, agentsMd, claudeMd] = await Promise.all([
+      readText(join(project.primaryPath, "paseo.json")),
+      packageScripts(project.primaryPath),
+      readText(join(project.primaryPath, "AGENTS.md")),
+      readText(join(project.primaryPath, "CLAUDE.md")),
+    ]);
+    let worktree = "";
+    try {
+      const raw = paseoJson ? (JSON.parse(paseoJson) as { worktree?: unknown }) : null;
+      if (raw?.worktree) worktree = JSON.stringify(raw.worktree).slice(0, 2000);
+    } catch {
+      worktree = "";
+    }
+    const scripts = paseoJson ? projectScriptsFrom(paseoJson).map((s) => `${s.name} (${s.type})`) : [];
+    return { paseoScripts: scripts, paseoWorktree: worktree, packageScripts: pkg, commands: commandsSection(agentsMd || "") || commandsSection(claudeMd || "") };
+  }
+
+  private async model(paseo: PaseoApi, settings: WorkflowSettings) {
+    const providers = await availableModels(paseo, settings.model);
+    const offered = (id: string) => {
+      const slash = id.indexOf("/");
+      const provider = providers.find((p) => p.provider === id.slice(0, slash) && p.available);
+      return slash > 0 && !!provider?.models.some((m) => m.id === id.slice(slash + 1) && (m as { isSelectable?: boolean }).isSelectable !== false);
+    };
+    if (settings.model) {
+      if (!offered(settings.model)) throw new Error(`Workflow insights model ${settings.model} is not available.`);
+      return settings.model;
+    }
+    const auto = WORKFLOW_AUTO_MODELS.find(offered);
+    if (auto) return auto;
+    const summary = await this.summarySettings();
+    return resolveModel(summary.summaryModel, summary.summaryModel ? await availableModels(paseo, summary.summaryModel) : providers);
+  }
+
+  private async record(run: Omit<WorkflowRun, "id" | "findings"> & { findings?: Omit<Finding, "id" | "projectId" | "runId" | "status" | "createdAt" | "updatedAt">[] }) {
+    const { findings = [], ...rest } = run;
+    const id = randomUUID();
+    await this.state.update((state) => {
+      state.runs.push({ ...rest, id, findings: findings.length });
+      for (const f of findings) state.findings.push({ ...f, id: randomUUID(), projectId: run.projectId, runId: id, status: "open", createdAt: run.at, updatedAt: run.at });
+      trimState(state, Date.parse(run.at));
+      return { value: undefined, changed: true };
+    });
+  }
+
+  private async execute(projectId: string, paseo: PaseoApi, manual: boolean) {
+    const settings = await this.settings();
+    const board = await this.board.read();
+    const project = board.projects.find((p) => p.id === projectId);
+    if (!project || project.archivedAt) return;
+    const days = windowDays(settings.intervalDays);
+    const now = this.now();
+    const from = new Date(now - days * DAY_MS).toISOString(),
+      to = new Date(now).toISOString();
+    let records = await this.log.read(projectId, now - days * DAY_MS);
+    // Run now on a project with nothing collected (the switch was off): read the last week first.
+    if (!records.length && manual) {
+      await this.backfill(projectId, paseo).catch(log("backfill"));
+      records = await this.log.read(projectId, now - days * DAY_MS);
+    }
+    const last = this.lastRun(await this.state.read(), projectId);
+    const sinceLast = last ? records.filter((r) => r.at > last.at) : records;
+    const agg = aggregate(records);
+    const stats = { calls: agg.calls, actions: agg.actions, cards: agg.cards, sessions: agg.sessions };
+    const base = { projectId, at: to, from, to, manual, stats, model: "" };
+    // A scheduled check with nothing collected waits instead of using up the interval.
+    if (!records.length) return manual ? this.record({ ...base, status: "skipped", reason: "No commands collected yet." }) : undefined;
+    if (!manual && quiet(sinceLast, agg.cards)) return this.record({ ...base, status: "skipped", reason: "Not enough new activity." });
+    let model = "";
+    try {
+      model = await this.model(paseo, settings);
+      const state = await this.state.read();
+      const existing = state.findings.filter((f) => f.projectId === projectId);
+      const cardIds = [...new Set(records.map((r) => r.taskId))];
+      const cards: CardInfo[] = cardIds
+        .map((id) => board.tasks.find((t) => t.id === id))
+        .filter((t): t is Board["tasks"][number] => !!t)
+        .map((t) => ({ id: t.id, title: t.title, type: t.type, tags: (t.tags || []).map((x) => x.tag), lane: t.status }));
+      const material = buildMaterial({
+        days,
+        agg,
+        cards,
+        config: await this.config(project),
+        previous: existing.filter((f) => f.status !== "dismissed" || now - Date.parse(f.updatedAt) < 30 * DAY_MS).map((f) => ({ target: f.target, title: f.title, status: f.status })),
+      });
+      const workspaceId = await projectWorkspace(project, board, paseo, "workflow insights");
+      const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+        config: { provider: model },
+        title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
+        labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
+        prompt: workflowPrompt(days, material),
+        outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
+      });
+      this.summarizer.set(agent.id, true);
+      let usage: RunUsage | undefined;
+      let parsed;
+      try {
+        const result = await agent.waitForFinish(this.timeoutMs);
+        if (result.status !== "idle")
+          throw new Error(
+            result.status === "timeout"
+              ? "The workflow insights model timed out."
+              : result.status === "permission"
+                ? "The workflow insights model asked for a permission."
+                : result.error || "The workflow insights model failed.",
+          );
+        parsed = parseWorkflowOutput(result.lastMessage);
+        if (!parsed) {
+          const retry = await agent.run(RETRY_PROMPT, { timeoutMs: 180_000 });
+          if (retry.status === "idle") parsed = parseWorkflowOutput(retry.lastMessage);
+        }
+        const u = agent.current()?.lastUsage;
+        if (u) usage = { inputTokens: u.inputTokens, cachedInputTokens: u.cachedInputTokens, outputTokens: u.outputTokens, totalCostUsd: u.totalCostUsd, contextTokens: u.contextWindowUsedTokens };
+      } finally {
+        await agent.archive().catch(() => undefined);
+      }
+      if (!parsed) throw new Error("The workflow insights model returned no JSON.");
+      const findings = validateFindings(parsed.findings, { cardIds, existing, now });
+      await this.record({ ...base, model, status: "ok", usage, findings, ...(findings.length ? {} : { reason: "No suggestions this time." }) });
+    } catch (e) {
+      await this.record({ ...base, model, status: "error", reason: (e instanceof Error ? e.message : String(e)).slice(0, 500) });
+    }
+  }
+
+  async view(projectId: string): Promise<WorkflowView> {
+    const [settings, board, state] = await Promise.all([this.settings(), this.board.read(), this.state.read()]);
+    const project = board.projects.find((p) => p.id === projectId);
+    if (!project) throw new Error("Project not found.");
+    const last = this.lastRun(state, projectId);
+    const included = projectIncluded(project);
+    const tz = validZone(settings.timeZone);
+    return {
+      enabled: settings.enabled,
+      projectEnabled: project.workflowInsights !== false,
+      backfilling: this.backfilling.has(projectId),
+      running: this.running.has(projectId),
+      nextRunAt:
+        settings.enabled && included
+          ? new Date(nextRunAt({ now: this.now(), tz, runHour: settings.runHour, intervalDays: settings.intervalDays, lastRunAt: last?.at ?? null })).toISOString()
+          : null,
+      windowDays: windowDays(settings.intervalDays),
+      lastRun: last,
+      findings: state.findings.filter((f) => f.projectId === projectId),
+      revision: state.revision,
+    };
+  }
+
+  /** For the settings page: the latest run anywhere, and how many projects have a log. */
+  async overview() {
+    const state = await this.state.read();
+    let lastRun: WorkflowRun | null = null;
+    for (const r of state.runs) if (r.status === "ok" && (!lastRun || r.at >= lastRun.at)) lastRun = r;
+    return { lastRun, collected: (await this.log.projects()).length };
+  }
+
+  /** Dismiss or restore a suggestion (§5.2). */
+  setStatus(input: { projectId: string; findingId: string; status: "open" | "dismissed"; expectedRevision: number }) {
+    return this.state.update((state) => {
+      if (state.revision !== input.expectedRevision) throw new Error("REVISION_CONFLICT: the suggestions changed; reload and try again.");
+      const f = state.findings.find((x) => x.id === input.findingId && x.projectId === input.projectId);
+      if (!f) throw new Error("This suggestion no longer exists.");
+      if (f.status === "accepted") throw new Error("This suggestion already has a card.");
+      if (f.status === input.status) return { value: { revision: state.revision }, changed: false };
+      f.status = input.status;
+      f.updatedAt = new Date(this.now()).toISOString();
+      return { value: { revision: state.revision + 1 }, changed: true };
+    });
+  }
+
+  /** `tasks.create` with `insightFindingId`: checked before any workspace exists (§5.2). */
+  async check(projectId: string, findingId: string) {
+    const f = (await this.state.read()).findings.find((x) => x.id === findingId);
+    if (!f || f.projectId !== projectId || f.status !== "open") throw new Error("This suggestion is no longer open.");
+  }
+
+  /** Marks the suggestion accepted once its card exists; a replayed create is a no-op. */
+  accept(projectId: string, findingId: string, taskId: string) {
+    return this.state.update((state) => {
+      const f = state.findings.find((x) => x.id === findingId && x.projectId === projectId);
+      if (!f || (f.status === "accepted" && f.acceptedTaskId === taskId)) return { value: undefined, changed: false };
+      f.status = "accepted";
+      f.acceptedTaskId = taskId;
+      f.updatedAt = new Date(this.now()).toISOString();
+      return { value: undefined, changed: true };
+    });
+  }
+
+  purge() {
+    return this.log.purge();
+  }
+
+  /** Permanent card delete: its command lines go, suggestions that created it forget the card. */
+  async removeTask(projectId: string, taskId: string) {
+    await this.log.removeTask(projectId, taskId);
+    await this.state.update((state) => {
+      let changed = false;
+      for (const f of state.findings)
+        if (f.acceptedTaskId === taskId) {
+          delete f.acceptedTaskId;
+          changed = true;
+        }
+      return { value: undefined, changed };
+    });
+  }
+
+  /** Project Remove: back up then drop the project's runs and suggestions; the log moves to `removed/`. */
+  async removeProject(projectId: string, now = new Date()) {
+    await this.log.removeProject(projectId, now);
+    await this.state.update(async (state) => {
+      const runs = state.runs.filter((r) => r.projectId === projectId);
+      const findings = state.findings.filter((f) => f.projectId === projectId);
+      if (!runs.length && !findings.length) return { value: null, changed: false };
+      const folder = join(this.state.directory, "removed");
+      await mkdir(folder, { recursive: true, mode: 0o700 });
+      const backup = join(folder, `${projectId}-workflow-insights-${now.toISOString().replace(/[:.]/g, "-")}.json`);
+      await writeFile(backup, JSON.stringify({ removedAt: now.toISOString(), runs, findings }, null, 2), { mode: 0o600, flag: "wx" });
+      state.runs = state.runs.filter((r) => r.projectId !== projectId);
+      state.findings = state.findings.filter((f) => f.projectId !== projectId);
+      return { value: backup, changed: true };
+    });
+  }
+}
+
+const log = (what: string) => (e: unknown) => console.error(`Workflow insights ${what} failed:`, e instanceof Error ? e.message : String(e));

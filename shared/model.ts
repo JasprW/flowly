@@ -105,6 +105,8 @@ export const projectSchema = z.object({
   autoStatus: z.boolean().optional(),
   /** Card workpads (WORKPAD-SPEC §9). Absent means enabled. */
   workpad: z.boolean().optional(),
+  /** Included in workflow insights (WORKFLOW-INSIGHTS-SPEC §2.2). Absent means included. */
+  workflowInsights: z.boolean().optional(),
   /** Display order in the project chooser (lower first); absent sorts by creation. */
   position: z.number().optional(),
   lanes: lanesSchema.optional(),
@@ -505,6 +507,7 @@ export const projectEdit = z.strictObject({
   archived: z.boolean().optional(),
   autoStatus: z.boolean().optional(),
   workpad: z.boolean().optional(),
+  workflowInsights: z.boolean().optional(),
   lanes: lanesSchema.optional(),
   /** A model sets the project default; null removes it (the global default applies again). */
   agentModel: agentModelSchema.nullable().optional(),
@@ -526,6 +529,8 @@ export const taskInput = z.strictObject({
   ideaId: z.string().min(1).optional(),
   /** Create as a follow-up of this card (CARD-LINKS-SPEC §3); not together with ideaId. */
   followUpOf: z.string().min(1).optional(),
+  /** Create from this open workflow-insights suggestion (WORKFLOW-INSIGHTS-SPEC §5.2). */
+  insightFindingId: z.string().min(1).max(100).optional(),
   /** External items added as inputs in the same write (EXTERNAL-TRACKER-SPEC §5.4, CONNECTORS-SPEC §8.2). */
   externals: z
     .array(z.strictObject({ connectionId: z.string().min(1), key: z.string().min(1).max(300), itemType: itemTypeSchema.optional() }))

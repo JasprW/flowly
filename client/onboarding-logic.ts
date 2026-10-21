@@ -28,7 +28,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "attention-dismiss", "sidebar-order", "connectors", "session-history"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -64,6 +64,8 @@ export interface TipFacts {
   hasSubagent: boolean;
   /** The current project has 6 or more active cards and no card is open (CARD-DISPLAY-SPEC §5). */
   busyBoard: boolean;
+  /** Workflow insights has an open suggestion for the current project (WORKFLOW-INSIGHTS-SPEC §8). */
+  workflowSuggestion: boolean;
   /** Three or more cards are in Attention, none of them dismissed yet (ATTENTION-DISMISS-SPEC §6). */
   crowdedAttention: boolean;
   /** A card's sidebar is open and shows at least one artifact or idea, so it has several sections (DRAWER-SPEC, Section order). */
@@ -88,6 +90,7 @@ const tipFact: Record<TipId, keyof TipFacts> = {
   "first-workpad": "hasWorkpad",
   subagents: "hasSubagent",
   "card-display": "busyBoard",
+  "first-workflow-insight": "workflowSuggestion",
   "attention-dismiss": "crowdedAttention",
   "sidebar-order": "fullSidebar",
   connectors: "cardOpen",
@@ -98,7 +101,7 @@ const tipFact: Record<TipId, keyof TipFacts> = {
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: TipId[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
+  const order: TipId[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-workflow-insight", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 

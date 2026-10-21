@@ -51,6 +51,7 @@ The page title has the detail line "Anything marked with the sparkle was written
 - *Follow-up ideas*: work an agent finds on the way lands in the Ideas inbox; Good idea or Dismiss.
 - *Inputs and outputs*: each card lists the files and links it worked from and delivered, added by agents or by you ([CARD-ARTIFACTS-SPEC](CARD-ARTIFACTS-SPEC.md)).
 - *Project insights*: today's cards, turns, agent time, commits, tokens and what is waiting on you.
+- *Workflow insights*: optional; on a schedule you choose, a model reads the commands agents ran and suggests scripts, tools and rules worth keeping (WORKFLOW-INSIGHTS-SPEC).
 
 **Page 4: Get started**
 
@@ -68,7 +69,7 @@ Primary **Create project** (opens the existing project form after the tour close
 
 ### 5. One-time contextual tips (small, non-modal)
 
-A tip is a single dismissible banner row (icon, one sentence, **Got it**) under the overview bar; only **Got it** records it as seen. Priority when several apply: agent-question, needs-you, attention-dismiss, first-done, older-finished, next-move, first-workpad, subagents, first-idea, first-artifact, first-ticket, first-tag, first-card, card-display, connectors, session-history, sidebar-order, project-menu, jira-connect. The empty-project hint takes the same slot and wins at the top of the relevant surface, using theme colours. At most one tip is visible at a time; a tip appears at most once per host (`tipsSeen`); dismissing or acting on the feature records it. Tips never block input, never move a focused input, and are not shown while the welcome tour is open.
+A tip is a single dismissible banner row (icon, one sentence, **Got it**) under the overview bar; only **Got it** records it as seen. Priority when several apply: agent-question, needs-you, attention-dismiss, first-done, older-finished, next-move, first-workpad, subagents, first-idea, first-workflow-insight, first-artifact, first-ticket, first-tag, first-card, card-display, connectors, session-history, sidebar-order, project-menu, jira-connect. The empty-project hint takes the same slot and wins at the top of the relevant surface, using theme colours. At most one tip is visible at a time; a tip appears at most once per host (`tipsSeen`); dismissing or acting on the feature records it. Tips never block input, never move a focused input, and are not shown while the welcome tour is open.
 
 | Tip id | Shown when | Text |
 | --- | --- | --- |
@@ -80,6 +81,7 @@ A tip is a single dismissible banner row (icon, one sentence, **Got it**) under 
 | `first-workpad` | the project's Card workpad switch is on, a card of the project has a workpad and no card is open (WORKPAD-SPEC §8, §9) | "This card has a workpad: the agent's acceptance criteria and checks. The card shows how many checks passed; open it to see which ran on which commit, and tick items yourself." |
 | `subagents` | a session of the project has a live Paseo child agent (SUBAGENTS-SPEC §7) | "When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo." |
 | `first-idea` | the first time Ideas has an open item | "An agent suggested follow-up work. Good idea starts a card or continues here; Dismiss removes it." |
+| `first-workflow-insight` | Workflow insights is on and the current project has an open suggestion (WORKFLOW-INSIGHTS-SPEC §8); read once per project while unseen, no polling | "Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card." |
 | `first-artifact` | a card of the project has an artifact and no card is open | "Cards now collect artifacts: the files and links a task worked from and delivered. Agents add them as they work; you can add your own in the card." |
 | `first-tag` | a card of the project has a tag an agent added and no card is open | "Agents tag their cards by module and direction. Open a card and tap a tag to filter the board by it, or search #tag." |
 | `first-done` | the user first moves a card to Done/Cancelled | "Done cards can be wrapped up: archive their sessions and workspace. Auto wrap up is in settings." |

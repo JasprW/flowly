@@ -319,6 +319,8 @@ export const toolContextSchema = z.object({
       acceptedAgentId: z.string().optional(),
     }),
   ),
+  /** Scripts in the project root's paseo.json (WORKFLOW-INSIGHTS-SPEC §5.4); absent when it has none. */
+  projectScripts: z.array(z.object({ name: z.string(), type: z.enum(["script", "service"]) })).optional(),
   /** The project's most used tags (CARD-TAGS-SPEC §2.3); reuse one when it fits. */
   projectTags: z.array(z.object({ tag: z.string(), count: z.number() })).optional(),
   /** The card's inputs and deliverables (CARD-ARTIFACTS-SPEC §4.2). `absolutePath` only for files. */

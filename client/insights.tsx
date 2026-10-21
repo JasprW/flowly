@@ -14,10 +14,11 @@ import { modelLabel } from "../shared/summary";
 import type { AttentionItem } from "./attention";
 import { Disclosure } from "./disclosure";
 import { Enter } from "./motion";
-import { localZone, useDigestQuery, useInsightsQuery, useTokensQuery } from "./queries";
+import { localZone, useDigestQuery, useInsightsQuery, useTokensQuery, useWorkflowInsightsQuery } from "./queries";
+import { usageIn, type Finding, type FindingTarget, type WorkflowView } from "../shared/workflow-insights";
 import { StatusIcon } from "./status";
 import { AiMark, Button, Dot, IconButton, Label, Notice, font, message, noFocusRing, radius, relativeTime, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
-import { formatLocale, t, tn } from "../shared/i18n";
+import { formatLocale, msg, t, tn } from "../shared/i18n";
 import { AgentHabits, habitsSummary } from "./agent-habits";
 
 const HOUR_MS = 3_600_000;
@@ -69,6 +70,8 @@ export const InsightsPage = memo(function InsightsPage({
   nameOf,
   onOpenTask,
   onBack,
+  onCreateFromFinding,
+  onOpenSettings,
 }: {
   project: Project;
   tasks: readonly Task[];
@@ -79,6 +82,10 @@ export const InsightsPage = memo(function InsightsPage({
   nameOf(status: Status): string;
   onOpenTask(id: string): void;
   onBack(): void;
+  /** Opens the new-task form prefilled from a workflow-insights suggestion. */
+  onCreateFromFinding(finding: Finding): void;
+  /** Settings → AI features, where workflow insights are configured. */
+  onOpenSettings(): void;
 }) {
   const { colors } = useTheme();
   const [day, setDay] = useState<string | null>(null);
@@ -141,6 +148,7 @@ export const InsightsPage = memo(function InsightsPage({
               {isToday && <Waiting data={data} attention={attention} titleOf={titleOf} nameOf={nameOf} onOpenTask={onOpenTask} />}
               {isToday && <Suggestions insights={data.insights} titleOf={titleOf} onOpenTask={onOpenTask} />}
               <Digest projectId={project.id} day={data.day} isToday={isToday} view={digest.data} error={digest.error} titleOf={titleOf} onOpenTask={onOpenTask} />
+              <WorkflowInsights projectId={project.id} active={active} titleOf={titleOf} onOpenTask={onOpenTask} onCreate={onCreateFromFinding} onOpenSettings={onOpenSettings} />
               <Section title={t("Agent habits")} detail={habitsSummary(data.habits)}>
                 <AgentHabits habits={data.habits} today={data.today} compact={compact} titleOf={titleOf} onOpenTask={onOpenTask} />
               </Section>
@@ -511,6 +519,269 @@ function Digest({
         </Label>
       )}
     </Section>
+  );
+}
+
+const targetLabels: Record<FindingTarget, string> = {
+  paseo_script: msg("paseo.json script"),
+  worktree_setup: msg("Worktree setup"),
+  repo_tool: msg("Repo tool"),
+  agents_md: msg("AGENTS.md"),
+  skill: msg("Skill"),
+};
+const confidenceLabels: Record<Finding["confidence"], string> = { high: msg("High confidence"), medium: msg("Medium confidence"), low: msg("Low confidence") };
+const confidenceRank = { high: 0, medium: 1, low: 2 } as const;
+
+/** The daemon's reasons are English identities; known ones read in the user's language. */
+function runReason(view: WorkflowView): string {
+  const run = view.lastRun;
+  if (!run) return "";
+  if (run.status === "error") return t("Last run failed: {message}", { message: run.reason || "" });
+  if (run.reason === "Not enough new activity.") return t("Skipped: not enough new activity since the last run.");
+  if (run.reason === "No commands collected yet.") return t("No commands collected yet. They are recorded as agents work on cards.");
+  if (run.reason === "No suggestions this time.") return t("No new suggestions this time.");
+  return "";
+}
+
+function usageLine(view: WorkflowView): string {
+  const u = view.lastRun?.usage;
+  if (!u) return "";
+  const parts = [t("{n} in", { n: compactNumber(usageIn(u)) }), t("{n} out", { n: compactNumber(u.outputTokens ?? 0) })];
+  if (typeof u.totalCostUsd === "number") parts.push(`$${u.totalCostUsd.toFixed(2)}`);
+  return parts.join(" · ");
+}
+
+/** Workflow insights (WORKFLOW-INSIGHTS-SPEC §5.2): scheduled suggestions from the commands agents ran. */
+function WorkflowInsights({
+  projectId,
+  active,
+  titleOf,
+  onOpenTask,
+  onCreate,
+  onOpenSettings,
+}: {
+  projectId: string;
+  active: boolean;
+  titleOf(id: string): string;
+  onOpenTask(id: string): void;
+  onCreate(finding: Finding): void;
+  onOpenSettings(): void;
+}) {
+  const query = useWorkflowInsightsQuery(projectId, active);
+  const run = useRpc(rpc.runWorkflowInsights);
+  const setStatus = useRpc(rpc.setWorkflowFinding);
+  const client = useQueryClient();
+  const [failed, setFailed] = useState("");
+  const [showDismissed, setShowDismissed] = useState(false);
+  const view = query.data;
+  const refresh = () => client.invalidateQueries({ queryKey: ["flowly", "workflow-insights", projectId] });
+  const runNow = async () => {
+    setFailed("");
+    try {
+      await run({ projectId });
+      await refresh();
+    } catch (e) {
+      setFailed(message(e));
+    }
+  };
+  const change = async (finding: Finding, status: "open" | "dismissed") => {
+    if (!view) return;
+    setFailed("");
+    try {
+      await setStatus({ projectId, findingId: finding.id, status, expectedRevision: view.revision });
+    } catch (e) {
+      setFailed(message(e));
+    }
+    await refresh();
+  };
+  const busy = !!view && (view.running || view.backfilling);
+  const trailing = view ? (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
+      {(view.enabled || view.lastRun) && (
+        <Button quiet small icon="Play" disabled={busy} label={t("Analyze the last days now")} onPress={() => void runNow()}>
+          {view.running ? t("Analyzing…") : t("Run now")}
+        </Button>
+      )}
+      <IconButton icon="Settings" label={t("Workflow insights settings")} onPress={onOpenSettings} />
+    </View>
+  ) : null;
+  const findings = view ? [...view.findings].sort((a, b) => confidenceRank[a.confidence] - confidenceRank[b.confidence] || b.createdAt.localeCompare(a.createdAt)) : [];
+  const open = findings.filter((f) => f.status === "open");
+  const accepted = findings.filter((f) => f.status === "accepted");
+  const dismissed = findings.filter((f) => f.status === "dismissed");
+  const last = view?.lastRun;
+  return (
+    <Section title={t("Workflow insights")} ai detail={open.length ? String(open.length) : undefined} trailing={trailing}>
+      {!view ? (
+        <Label muted size={font.sm}>
+          {query.error ? message(query.error) : t("Loading…")}
+        </Label>
+      ) : (
+        <View style={{ gap: space[2] }}>
+          {!view.enabled && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
+              <View style={{ flex: 1, minWidth: 200 }}>
+                <Label muted size={font.sm}>
+                  {t("Off. When on, a model reads the shell commands agents ran on this project's cards every few days and suggests scripts, tools and rules worth keeping.")}
+                </Label>
+              </View>
+              <Button small onPress={onOpenSettings}>
+                {t("Turn on")}
+              </Button>
+            </View>
+          )}
+          {view.enabled && !view.projectEnabled && (
+            <Label muted size={font.sm}>
+              {t("This project is left out of workflow insights in its settings. Run now still works.")}
+            </Label>
+          )}
+          {view.backfilling && (
+            <Label muted size={font.sm}>
+              {t("Reading recent sessions…")}
+            </Label>
+          )}
+          {(last || view.nextRunAt) && (
+            <Label muted size={font.xs} selectable={false}>
+              {[
+                last ? t("Last run {time}", { time: relativeTime(last.at) }) : "",
+                last?.model ? modelLabel(last.model) : "",
+                last ? tn(view.windowDays, "last {n} day", "last {n} days") : "",
+                last ? usageLine(view) : "",
+                view.nextRunAt && !view.running ? t("Next run {time}", { time: nextLabel(view.nextRunAt) }) : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Label>
+          )}
+          {!!runReason(view) && (
+            <Label muted size={font.sm}>
+              {runReason(view)}
+            </Label>
+          )}
+          {!!failed && (
+            <Label muted size={font.sm}>
+              {failed}
+            </Label>
+          )}
+          {open.map((f) => (
+            <FindingCard key={f.id} finding={f} titleOf={titleOf} onOpenTask={onOpenTask} onCreate={() => onCreate(f)} onDismiss={() => void change(f, "dismissed")} />
+          ))}
+          {accepted.map((f) => (
+            <FindingCard key={f.id} finding={f} titleOf={titleOf} onOpenTask={onOpenTask} />
+          ))}
+          {view.enabled && !open.length && !accepted.length && last?.status === "ok" && !runReason(view) && (
+            <Label muted size={font.sm}>
+              {t("No open suggestions.")}
+            </Label>
+          )}
+          {dismissed.length > 0 && (
+            <Disclosure title={t("Dismissed ({n})", { n: dismissed.length })} open={showDismissed} onChange={setShowDismissed}>
+              <View style={{ gap: space[2] }}>
+                {dismissed.map((f) => (
+                  <FindingCard key={f.id} finding={f} titleOf={titleOf} onOpenTask={onOpenTask} onRestore={() => void change(f, "open")} />
+                ))}
+              </View>
+            </Disclosure>
+          )}
+        </View>
+      )}
+    </Section>
+  );
+}
+
+function nextLabel(iso: string) {
+  const at = new Date(iso);
+  if (at.getTime() - Date.now() < 15 * 60_000) return t("soon");
+  return at.toLocaleString(formatLocale(), { weekday: "short", hour: "numeric", minute: "2-digit" });
+}
+
+function FindingCard({
+  finding,
+  titleOf,
+  onOpenTask,
+  onCreate,
+  onDismiss,
+  onRestore,
+}: {
+  finding: Finding;
+  titleOf(id: string): string;
+  onOpenTask(id: string): void;
+  onCreate?(): void;
+  onDismiss?(): void;
+  onRestore?(): void;
+}) {
+  const { colors } = useTheme();
+  const [proposal, setProposal] = useState(false);
+  return (
+    <View style={{ padding: space[3], gap: space[2], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, opacity: finding.status === "dismissed" ? 0.75 : 1 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
+        <View style={{ paddingHorizontal: space[2], height: touch ? 24 : 20, justifyContent: "center", borderRadius: radius.full, backgroundColor: colors.surface2 }}>
+          <Label size={font.xs} selectable={false}>
+            {t(targetLabels[finding.target])}
+          </Label>
+        </View>
+        <Label muted size={font.xs} selectable={false}>
+          {t(confidenceLabels[finding.confidence])}
+        </Label>
+      </View>
+      <Label bold size={font.base}>
+        {finding.title}
+      </Label>
+      {!!finding.benefit && <Label size={font.md}>{finding.benefit}</Label>}
+      {!!finding.evidence && (
+        <Label muted size={font.sm}>
+          {finding.evidence}
+        </Label>
+      )}
+      {finding.cards.length > 0 && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
+          {finding.cards.slice(0, 6).map((id) => (
+            <TaskChip key={id} title={titleOf(id)} onPress={() => onOpenTask(id)} />
+          ))}
+          {finding.cards.length > 6 && (
+            <Label muted size={font.sm} selectable={false}>
+              +{finding.cards.length - 6}
+            </Label>
+          )}
+        </View>
+      )}
+      <Disclosure title={t("Proposal")} open={proposal} onChange={setProposal}>
+        <View style={{ padding: space[2], borderRadius: radius.md, backgroundColor: colors.surface0 }}>
+          <Label mono size={font.sm}>
+            {finding.proposal}
+          </Label>
+        </View>
+      </Disclosure>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
+        {finding.status === "open" && onCreate && (
+          <Button small primary icon="Plus" onPress={onCreate}>
+            {t("Create card")}
+          </Button>
+        )}
+        {finding.status === "open" && onDismiss && (
+          <Button small quiet onPress={onDismiss}>
+            {t("Dismiss")}
+          </Button>
+        )}
+        {finding.status === "dismissed" && onRestore && (
+          <Button small quiet icon="RotateCcw" onPress={onRestore}>
+            {t("Restore")}
+          </Button>
+        )}
+        {finding.status === "accepted" && (
+          <Button
+            small
+            quiet
+            icon="ArrowUpRight"
+            disabled={!finding.acceptedTaskId}
+            label={finding.acceptedTaskId ? t("Open {title}", { title: titleOf(finding.acceptedTaskId) }) : undefined}
+            onPress={() => finding.acceptedTaskId && onOpenTask(finding.acceptedTaskId)}
+          >
+            {t("Card created")}
+          </Button>
+        )}
+      </View>
+    </View>
   );
 }
 

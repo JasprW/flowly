@@ -62,7 +62,7 @@ import { waitingOn } from "../shared/links";
 import { LinkPicker } from "./task-links";
 import { TaskDrawer } from "./drawer";
 import { DeleteTaskDialog } from "./task-delete";
-import { useBoardQuery, useLiveAgents, useResourcesQuery } from "./queries";
+import { useBoardQuery, useLiveAgents, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
 import { useStableCallback, useStableTheme } from "./stable";
 import { isLegacyScope } from "../shared/scope";
 import { LaneList } from "./lane-list";
@@ -76,6 +76,7 @@ import { LocaleRoot } from "./i18n";
 import { agentModelFromValues, effectiveAgentModel, startingAgent } from "../shared/agent-defaults";
 import { SettingsFab, SettingsModal, type SettingsSection } from "./summary-settings";
 import { SettingsOpenerContext } from "./settings-opener";
+import { findingDescription, workflowInsightsSettings, workflowSettingsValues, type Finding } from "../shared/workflow-insights";
 import { WrapupModal } from "./wrapup";
 import { performanceLogOn, performanceSettings, ideasSettings, ideasSettingsValues, modelSettings, modelSettingsValues, wrapupSettings, wrapupSettingsValues } from "../shared/settings";
 import { pickOutputSession } from "./card-output";
@@ -144,6 +145,7 @@ const tipText: Record<TipId, () => string> = {
   connectors: () => t("The Artifacts + now adds Confluence pages and GitHub or GitLab issues and pull requests too, besides files, links and Jira tickets. Connect services in Settings → Connections."),
   "project-menu": () => t("Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove."),
   subagents: () => t("When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo."),
+  "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
   "card-display": () => t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
   "attention-dismiss": () => t("Not ready to decide? Dismiss a card from Attention. It comes back when something new happens."),
   "sidebar-order": () => t("Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar."),
@@ -912,6 +914,26 @@ function BoardContent(
     setProject(card.projectId);
     createFromIdea(idea);
   }, [ideaInput, board]);
+  // WORKFLOW-INSIGHTS-SPEC §5.2: the new-task form, prefilled from a suggestion.
+  const createFromFinding = useStableCallback((finding: Finding) =>
+    setTaskForm({
+      status: "todo",
+      seed: {
+        insightFindingId: finding.id,
+        title: finding.title,
+        description: findingDescription(
+          finding,
+          finding.cards.map((id) => board?.tasks.find((t) => t.id === id)?.title).filter((x): x is string => !!x),
+        ),
+        type: "chore",
+        tags: ["agent-workflow", ...(finding.target === "paseo_script" || finding.target === "worktree_setup" ? ["paseo-json"] : [])],
+      },
+    }),
+  );
+  const openAiSettings = useStableCallback(() => {
+    setSettingsSection("ai");
+    setMenu("settings");
+  });
   const openSettingsAt = useStableCallback((section: SettingsSection) => {
     setSettingsSection(section);
     setMenu("settings");
@@ -961,6 +983,11 @@ function BoardContent(
   const projectAttention = useMemo(() => attention.filter((i) => i.project.id === project?.id), [attention, project?.id]);
   // First-run guidance (ONBOARDING-SPEC): the welcome tour, empty-board hint and one-time tips.
   const onboarding = useOnboarding();
+  // Tip "first-workflow-insight": one read per project while the tip is unseen and the feature on; never polls.
+  const workflowPrefs = useSettings(workflowInsightsSettings);
+  const workflowOn = workflowPrefs.status === "ready" && workflowSettingsValues(workflowPrefs.values).enabled;
+  const workflowTipDue = !!project && workflowOn && !!onboarding.values && !onboarding.values.tipsSeen.includes("first-workflow-insight");
+  const workflowView = useWorkflowInsightsQuery(project?.id || "", workflowTipDue, false);
   const inPanel = !!props.workspaceId;
   const dialogOpen = !!menu || !!projectForm || !!taskForm || !!removing || !!deleting || !!wrapPrompt || !!linking;
   const welcome = welcomeDecision({
@@ -1012,6 +1039,7 @@ function BoardContent(
           crowdedAttention: attention.length >= 3 && dismissedAttention.length === 0,
           cardWithSession: !!task && !!cardIndex.agentsByWorkspace.get(task.workspaceId)?.length,
           fullSidebar: !!task && (board.artifacts.some((a) => a.taskId === task.id) || board.ideas.some((i) => i.taskId === task.id)),
+          workflowSuggestion: workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen,
       });
@@ -1630,6 +1658,8 @@ function BoardContent(
                     nameOf={nameOf}
                     onOpenTask={openTaskById}
                     onBack={closePage}
+                    onCreateFromFinding={createFromFinding}
+                    onOpenSettings={openAiSettings}
                   />
                 ) : page === "ideas" && ideasOn && board ? (
                   <IdeasPage
@@ -2149,7 +2179,7 @@ function BoardContent(
         )}
         {taskForm && project && (
           <TaskForm
-            key={taskForm.task?.id || taskForm.seed?.ideaId || taskForm.seed?.followUpOf || taskForm.status}
+            key={taskForm.task?.id || taskForm.seed?.ideaId || taskForm.seed?.insightFindingId || taskForm.seed?.followUpOf || taskForm.status}
             project={project}
             task={taskForm.task}
             seed={taskForm.seed}
@@ -2162,6 +2192,8 @@ function BoardContent(
               setTaskForm(null);
               if (launch?.sessionId) toast.show(t("Task created and its agent started"), { variant: "success" });
               else if (launch?.error) toast.error(t("Task created, but the agent did not start: {error}. Start it from the task.", { error: launch.error }));
+              // The suggestion now shows "Card created".
+              if (taskForm.seed?.insightFindingId) void queryClient.invalidateQueries({ queryKey: ["flowly", "workflow-insights", project.id] });
               refresh();
             }}
           />

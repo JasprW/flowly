@@ -76,6 +76,7 @@ export function ProjectForm({
     [links, setLinkList] = useState<string[]>(() => project?.links?.map((l) => l.target) ?? []),
     [autoStatus, setAutoStatus] = useState(project?.autoStatus !== false),
     [workpad, setWorkpad] = useState(project?.workpad !== false),
+    [workflowInsights, setWorkflowInsights] = useState(project?.workflowInsights !== false),
     [agentModel, setAgentModel] = useState<AgentModel | null>(project?.agentModel ?? null),
     [archivedShown, setArchivedShown] = useState(!!showArchived),
     [lanes, setLanes] = useState<Lane[]>(() => projectLanes(project)),
@@ -111,6 +112,7 @@ export function ProjectForm({
           description,
           ...(autoStatus !== (project.autoStatus !== false) ? { autoStatus } : {}),
           ...(workpad !== (project.workpad !== false) ? { workpad } : {}),
+          ...(workflowInsights !== (project.workflowInsights !== false) ? { workflowInsights } : {}),
           ...(JSON.stringify(lanes) !== JSON.stringify(projectLanes(project)) ? { lanes } : {}),
           ...(JSON.stringify(agentModel) !== JSON.stringify(project.agentModel ?? null) ? { agentModel } : {}),
         });
@@ -277,6 +279,14 @@ export function ProjectForm({
               onChange={setWorkpad}
             />
           )}
+          {project && (
+            <Toggle
+              title={t("Workflow insights")}
+              detail={t("Include this project when workflow insights run. Turn the feature itself on in Settings → AI features.")}
+              value={workflowInsights}
+              onChange={setWorkflowInsights}
+            />
+          )}
           {project && onShowArchived && (
             <Toggle
               title={t("Show archived")}
@@ -390,6 +400,8 @@ function startStatus(project: Project, requested: Status): Status {
 /** A new task prefilled from an idea (IDEAS-SPEC §6) or following up a card (CARD-LINKS-SPEC §5.5). */
 export type TaskSeed = {
   ideaId?: string;
+  /** From a workflow-insights suggestion (WORKFLOW-INSIGHTS-SPEC §5.2). */
+  insightFindingId?: string;
   followUpOf?: string;
   followUpTitle?: string;
   title: string;
@@ -532,6 +544,7 @@ export function TaskForm({
             baseRef,
             branchName,
             ...(seed?.ideaId ? { ideaId: seed.ideaId } : {}),
+            ...(seed?.insightFindingId ? { insightFindingId: seed.insightFindingId } : {}),
             ...(seed?.followUpOf ? { followUpOf: seed.followUpOf } : {}),
             ...(externals.length
               ? { externals: externals.map((x) => ({ connectionId: x.item.connectionId, key: x.item.key, itemType: x.item.itemType })) }

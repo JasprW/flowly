@@ -588,6 +588,18 @@ test("workpad: off for the project — tool refused, no gate, get_task hides it;
   expect(ctx.workpad).toMatchObject({ revision: 1, validation: [{ id: "e2e" }] });
 });
 
+test("get_task lists the project's paseo.json scripts by name and type only (WORKFLOW-INSIGHTS-SPEC §5.4)", async () => {
+  const x = await setup();
+  expect((await x.service.get(x.identity)).projectScripts).toBeUndefined();
+  await writeFile(`${x.a}/paseo.json`, JSON.stringify({ scripts: { verify: { type: "script", command: "npm run typecheck && npm test" }, web: { command: "npm run dev" } } }));
+  const ctx = await x.service.get(x.identity);
+  expect(ctx.projectScripts).toEqual([
+    { name: "verify", type: "script" },
+    { name: "web", type: "service" },
+  ]);
+  expect(JSON.stringify(ctx)).not.toContain("npm run dev");
+});
+
 // Next moves ride on the delivery call (NEXT-MOVES-SPEC §8).
 const commitMove = { label: "Commit", prompt: "Commit and push." };
 const suggestions = (board: Awaited<ReturnType<BoardStore["read"]>>) => board.events.filter((e) => e.action === "next_moves_suggested");
