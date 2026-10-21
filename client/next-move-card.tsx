@@ -10,7 +10,7 @@ import { moveToDone, wrapupNeed } from "./native-actions";
 import { fillComposer } from "./web-composer";
 import { WrapupQuestion } from "./native-popovers";
 import { SharedMotionProvider } from "./motion";
-import { NativeCardFrame } from "./native-card";
+import { NativeCardSection } from "./native-card";
 import {
   IconButton,
   Label,
@@ -232,8 +232,8 @@ function MoveChip(p: {
 
 function Frame({ header, children }: { header?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <NativeCardFrame testID="session-next-moves-card" title={t("Suggested next steps")} trailing={header}>
+    <NativeCardSection testID="session-next-moves-card" title={t("Suggested next steps")} trailing={header}>
       {children}
-    </NativeCardFrame>
+    </NativeCardSection>
   );
 }

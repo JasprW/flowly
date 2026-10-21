@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { View } from "react-native";
-import { cardFrameStyle } from "./content-card";
-import { AiMark, Label, font, space, useTheme } from "./ui";
+import { AiMark, Label, font, space } from "./ui";
 
 /**
  * The small heading above a Flowly card in Paseo's own timeline (NATIVE-SESSION-SPEC §5.3, §6.3): the AI mark and the
@@ -22,13 +21,12 @@ export function NativeCardHeading({ title, trailing }: { title: string; trailing
   );
 }
 
-/** A heading with a framed card under it that is not clamped text (Next steps, its wrap-up question): the same frame and 12 pt padding as Progress. */
-export function NativeCardFrame({ title, trailing, testID, children }: { title: string; trailing?: ReactNode; testID?: string; children: ReactNode }) {
-  const { colors } = useTheme();
+/** The Next steps section (its chips, or the wrap-up question after Move to Done): the heading, then the content straight under it, no card around it (user decision 2026-10-21). */
+export function NativeCardSection({ title, trailing, testID, children }: { title: string; trailing?: ReactNode; testID?: string; children: ReactNode }) {
   return (
     <View testID={testID} style={{ gap: space[1.5] }}>
       <NativeCardHeading title={title} trailing={trailing} />
-      <View style={{ ...cardFrameStyle(colors), padding: space[3], gap: space[2] }}>{children}</View>
+      {children}
     </View>
   );
 }
