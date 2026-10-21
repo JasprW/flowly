@@ -125,6 +125,22 @@ PASS:
 
 UNRUN: a live run with this change, until it is merged and installed.
 
+### 2026-10-21: after merging PR #12 (e8b727f)
+
+- PR #12 was up to date with main and CI passed. Squash-merged as `e8b727f`.
+- Local main was reset to it, with the PR diff applied to the shared tree first; others' 19 files were kept. typecheck PASS; `npm test` 848 passed, 65 skipped. Plugin reloaded, no errors.
+- Run now on Flowly (`claude/claude-sonnet-5-5`): ok, about 60 s, **$0.47**. Counts: **7 added, 11 replaced**. Open suggestions went from 11 to 7, with no duplicates left. Cycle cost: $0.93 over 2 projects.
+- Topics after the run:
+  - a check/verify script;
+  - an i18n catalog helper;
+  - a board.json query tool;
+  - a Playwright helper;
+  - a partial-commit helper (new);
+  - an AGENTS.md fixture/cleanup convention;
+  - AGENTS.md pitfalls such as `sed -i` on macOS (new).
+- Dropped this time: the asar dump helper, the feature-delivery checklist skill and the docs-append scripts.
+- **Regression: all 7 titles and texts are in German.** The prompt says "the language most card titles use". The open suggestions, which were in Chinese, are no longer in the material, so nothing anchored the language. The German i18n catalog excerpts in the inline samples probably pulled it there. Not fixed yet.
+
 ## UNRUN
 
 - The Insights section, settings group, project switch, Create card prefill and tip in a real desktop or compact window (no UI session was used).
