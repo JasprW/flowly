@@ -59,6 +59,7 @@ import { pendingRequests, type PendingRequest, type PermissionReply } from "../s
 import { workspaceSession } from "./session";
 import { TaskProgress } from "./task-progress";
 import { TaskUsage } from "./task-usage";
+import { SessionMarkdown } from "./session-content";
 import { TaskIdeas } from "./task-ideas";
 import { LinkOrigin, TaskLinks } from "./task-links";
 import { TaskArtifacts } from "./task-artifacts";
@@ -985,7 +986,7 @@ function TaskDrawerView({
             )}
             {onOpenTask && <LinkOrigin taskId={task.id} onOpenTask={onOpenTask} />}
             {!!task.description && (
-              <Label size={font.base} selectable>{task.description}</Label>
+              <SessionMarkdown text={task.description} />
             )}
             {order.map((id) => <Fragment key={id}>{section(id)}</Fragment>)}
             {settled && (

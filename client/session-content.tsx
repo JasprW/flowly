@@ -27,6 +27,7 @@ const Inline = memo(function Inline({
   return (
     <View style={{ minWidth: 0, flexShrink: 1 }}>
       <Text
+        selectable
         style={{
           color: colors.foreground,
           fontSize: size,
@@ -181,6 +182,7 @@ export const SessionMarkdown = memo(function SessionMarkdown({ text }: { text: s
                 </Label>
               )}
               <Text
+                selectable
                 style={{
                   color: colors.foreground,
                   fontSize: 12,
