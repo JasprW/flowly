@@ -1,5 +1,6 @@
 import { attentionDismissInput, attentionDismissalSchema, attentionRestoreInput } from "./attention-dismiss";
 import { defineRpc } from "@getpaseo/plugin";
+import { sessionInsightViewSchema } from "./session-insights";
 import { z } from "zod";
 import {
   ideaAdoption,
@@ -499,7 +500,26 @@ export const nativeChips = defineRpc({
     autoWrapup: z.boolean(),
     /** What tapping a message suggestion on the Next moves card does (NATIVE-SESSION-SPEC §6.4). */
     nextMoveTap: z.enum(["fill", "copy"]),
+    /** Sessions Flowly does not manage (NATIVE-SESSION-SPEC §12.6): the switch and its three parts. */
+    outside: z.object({ enabled: z.boolean(), progress: z.boolean(), nextMoves: z.boolean(), ideas: z.boolean() }),
   }),
+});
+/** Sessions Flowly does not manage: each one's current suggestion and open ideas (NATIVE-SESSION-SPEC §12.7). */
+export const sessionInsights = defineRpc({
+  name: "sessions.insights",
+  input: z.strictObject({ etag: z.string().max(200).optional() }),
+  output: z.object({ etag: z.string(), value: z.array(sessionInsightViewSchema).optional() }),
+});
+const sessionIdeaTarget = z.strictObject({ agentId: z.string().min(1).max(200), ideaId: z.string().min(1).max(200) });
+export const runSessionIdea = defineRpc({
+  name: "sessions.idea-run",
+  input: sessionIdeaTarget.extend({ target: z.enum(["here", "session", "workspace"]) }),
+  output: z.object({ target: z.enum(["here", "session", "workspace"]), agentId: z.string().optional(), workspaceId: z.string().optional() }),
+});
+export const dismissSessionIdea = defineRpc({
+  name: "sessions.idea-dismiss",
+  input: sessionIdeaTarget,
+  output: z.object({ ok: z.literal(true) }),
 });
 export const configureSession = defineRpc({
   name: "sessions.configure",

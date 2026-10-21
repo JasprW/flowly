@@ -37,6 +37,17 @@ export class NextMoveRows {
     }
   }
 
+  /** A suggestion for a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4): same card, no card fields. */
+  async writeSession(agentId: string, suggestionId: string, moves: { label: string; prompt: string }[], paseo: PaseoApi): Promise<void> {
+    try {
+      const id = nextRowId(suggestionId);
+      await this.write(paseo, agentId, id, { status: "ready", eventId: suggestionId, moves });
+      this.live.set(agentId, id);
+    } catch (e) {
+      console.error("Flowly next steps card not added:", e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async turnStarted(agentId: string, paseo: PaseoApi): Promise<void> {
     const id = this.live.get(agentId);
     if (!id) return;

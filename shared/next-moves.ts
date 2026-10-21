@@ -86,3 +86,20 @@ export function chipMoves(input: {
   const moves = shownMoves(suggestion.moves, input.cardFinished);
   return moves.length ? { eventId: suggestion.id, moves: [...moves] } : null;
 }
+
+/**
+ * The Next moves card of a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4): its stored suggestion, under the
+ * same rules as `chipMoves` (idle, nothing waiting, no newer message from the person, not hidden here).
+ */
+export function sessionChipMoves(input: {
+  suggestion: { id: string; at: string; moves: NextMove[]; current: boolean } | null;
+  agent: Parameters<typeof chipMoves>[0]["agent"];
+  hidden: (eventId: string) => boolean;
+}): { eventId: string; moves: NextMove[] } | null {
+  const { agent, suggestion } = input;
+  if (!suggestion?.current || !suggestion.moves.length || input.hidden(suggestion.id)) return null;
+  if (agent.archivedAt || agent.status === "running" || agent.status === "initializing") return null;
+  if (agent.pendingPermissions?.length || agent.attentionReason === "permission") return null;
+  if (agent.lastUserMessageAt && Date.parse(agent.lastUserMessageAt) > Date.parse(suggestion.at)) return null;
+  return { eventId: suggestion.id, moves: [...suggestion.moves] };
+}

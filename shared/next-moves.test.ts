@@ -92,3 +92,17 @@ test("the native Next chip follows Flowly's suggestion row (NATIVE-SESSION-SPEC 
   expect(chipMoves({ ...base, cardFinished: true })?.moves).toEqual([{ label: "Verify", prompt: "Verify it" }]);
   expect(chipMoves({ ...base, cardFinished: true, events: [ev("2", "next_moves_suggested", "a", { moves: [{ label: "Done", moveTo: "done" }] })] })).toBeNull();
 });
+
+test("an outside session's suggestion card follows the same rules without board events (NATIVE-SESSION-SPEC §12.4)", async () => {
+  const { sessionChipMoves } = await import("./next-moves");
+  const suggestion = { id: "s1", at: "2026-10-21T00:00:05Z", moves: [{ label: "Go", prompt: "Go on" }], current: true };
+  const idle = { id: "a", status: "idle", pendingPermissions: [], attentionReason: null, lastUserMessageAt: "2026-10-21T00:00:00Z", archivedAt: null };
+  const base = { suggestion, agent: idle, hidden: () => false };
+  expect(sessionChipMoves(base)).toEqual({ eventId: "s1", moves: [{ label: "Go", prompt: "Go on" }] });
+  expect(sessionChipMoves({ ...base, suggestion: null })).toBeNull();
+  expect(sessionChipMoves({ ...base, suggestion: { ...suggestion, current: false } })).toBeNull();
+  expect(sessionChipMoves({ ...base, agent: { ...idle, status: "running" } })).toBeNull();
+  expect(sessionChipMoves({ ...base, agent: { ...idle, pendingPermissions: [{}] } })).toBeNull();
+  expect(sessionChipMoves({ ...base, agent: { ...idle, lastUserMessageAt: "2026-10-21T00:00:09Z" } })).toBeNull();
+  expect(sessionChipMoves({ ...base, hidden: (id) => id === "s1" })).toBeNull();
+});

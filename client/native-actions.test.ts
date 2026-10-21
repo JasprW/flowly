@@ -94,3 +94,14 @@ test("wrapupNeed reads Auto wrap up fresh: on, nothing is asked (the daemon wrap
   x.state.autoWrapup = true;
   expect(await wrapupNeed(x.client as never, { taskId: "t1" })).toBe("none");
 });
+
+test("outside session ideas go to the daemon with their target", async () => {
+  const { runSessionIdea, dismissSessionIdea } = await import("./native-actions");
+  const x = fake();
+  await runSessionIdea(x.client as never, { agentId: "a9", ideaId: "i9", target: "workspace" });
+  await dismissSessionIdea(x.client as never, { agentId: "a9", ideaId: "i8" });
+  expect(x.calls.filter((c) => c.name.startsWith("sessions.idea"))).toEqual([
+    { name: "sessions.idea-run", input: { agentId: "a9", ideaId: "i9", target: "workspace" } },
+    { name: "sessions.idea-dismiss", input: { agentId: "a9", ideaId: "i8" } },
+  ]);
+});

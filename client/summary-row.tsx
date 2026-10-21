@@ -47,12 +47,14 @@ export const SummaryRow = memo(function SummaryRow({ data, onOpenCard }: { data:
 /** The renderer Paseo calls for `flowly-summary` rows in its own timeline. */
 export function NativeSummaryItem(props: PluginTimelineItemProps<SummaryRowData>) {
   const data = props.item.data;
+  // A session Flowly does not manage has no card to open (NATIVE-SESSION-SPEC §12.4).
+  const cardLink = data.taskId && data.workspaceId ? { taskId: data.taskId, workspaceId: data.workspaceId } : null;
   return (
     <Theme.Provider value={props.theme}>
       {/* Paseo renders this outside Flowly's tree: without it Show more / Show less would never animate. */}
       <SharedMotionProvider>
         <View style={{ paddingVertical: space[1] }}>
-          <SummaryRow data={data} onOpenCard={() => openCardFromRow(data, props.agentId)} />
+          <SummaryRow data={data} onOpenCard={cardLink ? () => openCardFromRow(cardLink, props.agentId) : undefined} />
         </View>
       </SharedMotionProvider>
     </Theme.Provider>

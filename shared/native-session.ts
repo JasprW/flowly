@@ -12,8 +12,9 @@ export const summaryRowKind = "flowly-summary";
 export const summaryRowVersion = 1;
 
 export const summaryRowSchema = z.object({
-  taskId: z.string().min(1),
-  workspaceId: z.string().min(1),
+  /** Absent for a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4): no card to open. */
+  taskId: z.string().min(1).optional(),
+  workspaceId: z.string().min(1).optional(),
   entryId: z.string().min(1),
   state: z.string(),
   target: z.string(),
@@ -53,8 +54,9 @@ export const nextRowVersion = 1;
 export const nextRowSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("ready"),
-    taskId: z.string().min(1),
-    workspaceId: z.string().min(1),
+    /** Absent for a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4). */
+    taskId: z.string().min(1).optional(),
+    workspaceId: z.string().min(1).optional(),
     /** The `next_moves_suggested` event the card shows; the card hides once it is no longer current. */
     eventId: z.string().min(1),
     moves: z.array(nextMoveSchema).min(1).max(nextMoveLimits.count),
@@ -63,3 +65,17 @@ export const nextRowSchema = z.discriminatedUnion("status", [
 ]);
 export type NextRowData = z.infer<typeof nextRowSchema>;
 export const nextRowId = (eventId: string) => `${nextRowKind}-${eventId}`;
+
+/** A Progress row for a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4): same kind and look, no card. */
+export function sessionSummaryRow(summary: { id: string; at: string; model: string; state: string; target: string; recap: string; next: string }) {
+  const data: SummaryRowData = {
+    entryId: summary.id,
+    state: summary.state,
+    target: summary.target,
+    recap: summary.recap,
+    next: summary.next,
+    model: summary.model,
+    at: summary.at,
+  };
+  return { type: "plugin" as const, id: summaryRowId(summary.id), kind: summaryRowKind, version: summaryRowVersion, data };
+}

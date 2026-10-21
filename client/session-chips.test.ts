@@ -299,3 +299,69 @@ test("the Next moves card keeps an open wrap-up question after its moves stop be
   setWrapPending("a1", "ev1", null);
   expect(cardView(ready, null, "a1")).toBe("hidden");
 });
+
+describe("sessions Flowly does not manage (NATIVE-SESSION-SPEC §12)", () => {
+  const popovers = { ideas: () => null, outsideIdeas: () => null };
+  const live = (id: string, workspaceId: string, labels: Record<string, string> = {}) => ({
+    id, workspaceId, archivedAt: null, title: id, labels, status: "idle", pendingPermissions: [], lastUserMessageAt: "2026-10-21T00:00:00Z",
+  });
+  function fakeOutside(enabled: boolean) {
+    const calls: string[] = [];
+    const pills: { id: string; agentId: string; label: string; removed: boolean }[] = [];
+    const view = [
+      { agentId: "o1", workspaceId: "wx", suggestion: { id: "s1", at: "2026-10-21T00:00:05Z", moves: [{ label: "Go", prompt: "Go on" }], current: true }, ideas: [{ id: "i1", title: "Idea", detail: "", rationale: "", scope: "new", status: "open", createdAt: "x", updatedAt: "1" }] },
+      { agentId: "m1", workspaceId: "w1", suggestion: { id: "s2", at: "2026-10-21T00:00:05Z", moves: [{ label: "X", prompt: "x" }], current: true }, ideas: [] },
+    ];
+    const client = {
+      rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+        calls.push(def.name);
+        if (def.name === "sessions.native-chips")
+          return { managed: [{ agentId: "m1", taskId: "t1", workspaceId: "w1" }], ideas: true, autoWrapup: false, nextMoveTap: "copy", outside: { enabled, progress: true, nextMoves: true, ideas: true } };
+        if (def.name === "sessions.insights") return input.etag === "x1" ? { etag: "x1" } : { etag: "x1", value: view };
+        if (input.etag === "e1") return { etag: "e1" };
+        return { etag: "e1", value: { projects: [project], tasks: [{ ...task("Card"), status: "development", archivedAt: null }], events: [], ideas: [] } };
+      }),
+      paseo: {
+        agents: {
+          list: vi.fn(async () => ({
+            entries: [live("o1", "wx"), live("m1", "w1"), live("sub", "wx", { "paseo.parent-agent-id": "o1" }), live("sum", "wx", { flowly: "summarizer" })].map((agent) => ({ agent })),
+            pageInfo: { nextCursor: null },
+          })),
+        },
+      },
+      addComposerPill: vi.fn((c: { id: string; agentId: string; button: { label: string } }) => {
+        const pill = { id: c.id, agentId: c.agentId, label: c.button.label, removed: false };
+        pills.push(pill);
+        return { update: () => undefined, remove: () => void (pill.removed = true) };
+      }),
+      openScreen: vi.fn(),
+    };
+    return { client, calls, pills };
+  }
+
+  test("off (the default): insights are never read and no outside session gets a card or chip", async () => {
+    const { outsideState } = await import("./native-chips");
+    const { client, calls, pills } = fakeOutside(false);
+    const stop = registerSessionChips(client as never, 1000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(calls).not.toContain("sessions.insights");
+    expect(outsideState("o1")).toBeNull();
+    expect(pills.filter((p) => p.agentId === "o1")).toEqual([]);
+    stop();
+  });
+
+  test("on: the outside session's current moves and its Ideas chip; managed sessions, subagents and summarizers are not outside", async () => {
+    const { outsideState } = await import("./native-chips");
+    const { client, calls, pills } = fakeOutside(true);
+    const stop = registerSessionChips(client as never, 1000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outsideState("o1")).toMatchObject({ agentId: "o1", workspaceId: "wx", moves: { eventId: "s1", moves: [{ label: "Go", prompt: "Go on" }] }, nextMoveTap: "copy", ideas: [{ id: "i1" }] });
+    expect(pills.filter((p) => p.id === "flowly-ideas" && !p.removed).map((p) => [p.agentId, p.label])).toEqual([["o1", "Ideas · 1"]]);
+    for (const id of ["m1", "sub", "sum"]) expect(outsideState(id)).toBeNull();
+    // Later rounds send the etag.
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(calls.filter((c) => c === "sessions.insights").length).toBeGreaterThanOrEqual(2);
+    stop();
+    expect(outsideState("o1")).toBeNull();
+  });
+});

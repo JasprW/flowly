@@ -284,6 +284,34 @@ export function AiPage() {
           options={tapOptions}
           onChange={(next) => native.save({ nextMoveTap: next === "copy" ? "copy" : "fill" })}
         />
+        <SettingSwitch
+          title={t("Sessions outside Flowly")}
+          detail={t("Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.")}
+          value={native.values?.outside ?? false}
+          disabled={native.busy}
+          onChange={(outside) => native.save({ outside })}
+        />
+        <SettingSwitch
+          title={t("Progress")}
+          detail={t("A progress row after each turn. Turn it off if another plugin already writes recaps.")}
+          value={native.values?.outsideProgress ?? true}
+          disabled={native.busy || !native.values?.outside}
+          onChange={(outsideProgress) => native.save({ outsideProgress })}
+        />
+        <SettingSwitch
+          title={t("Suggested next steps")}
+          detail={t("A card with the messages you are likely to send next.")}
+          value={native.values?.outsideNextMoves ?? true}
+          disabled={native.busy || !native.values?.outside}
+          onChange={(outsideNextMoves) => native.save({ outsideNextMoves })}
+        />
+        <SettingSwitch
+          title={t("Ideas")}
+          detail={t("Follow-ups worth doing, kept with the session: continue there, or start them in a new session or workspace.")}
+          value={native.values?.outsideIdeas ?? true}
+          disabled={native.busy || !native.values?.outside}
+          onChange={(outsideIdeas) => native.save({ outsideIdeas })}
+        />
       </SettingsGroup>
       <SettingsGroup title={t("Artifacts")} description={t("Each card lists its inputs and outputs: files and links it worked from or delivered. You can always add them by hand.")}>
         <SettingSwitch

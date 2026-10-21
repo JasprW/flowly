@@ -3,8 +3,9 @@ import { Pressable, ScrollView, View } from "react-native";
 import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
 import type { PluginButtonContentProps } from "@getpaseo/plugin/client";
 import type { Idea } from "../shared/model";
-import { chipClient, refreshChipsNow, useChipState, type ChipState } from "./native-chips";
-import { continueIdea, dismissIdea, newCardFromIdea, openCard, wrapupNow } from "./native-actions";
+import type { SessionIdea } from "../shared/session-insights";
+import { chipClient, refreshChipsNow, useChipState, useOutsideState, type ChipState } from "./native-chips";
+import { continueIdea, dismissIdea, dismissSessionIdea, newCardFromIdea, openCard, runSessionIdea, wrapupNow } from "./native-actions";
 import { CardField } from "./content-card";
 import { SharedMotionProvider } from "./motion";
 import { AiMark, Button, Label, Notice, Theme, font, message, noFocusRing, radius, space, useTheme, verticalScroll } from "./ui";
@@ -129,26 +130,9 @@ function IdeasBody({ agentId, close }: { agentId: string; close(): void }) {
   );
 }
 
-function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { idea: Idea; agentId: string; canContinue: boolean; expanded: boolean; onToggle(): void; close(): void }) {
+/** One idea in a popover: title, scope and the expandable detail; `children` are its actions. */
+function IdeaShell({ idea, expanded, onToggle, footer, children }: { idea: Pick<Idea, "title" | "detail" | "rationale" | "scope">; expanded: boolean; onToggle(): void; footer?: React.ReactNode; children: React.ReactNode }) {
   const { colors } = useTheme();
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [confirm, setConfirm] = useState(false);
-  const client = chipClient();
-  const act = (work: () => Promise<unknown>, done: string) => {
-    if (!client) return;
-    setBusy(true);
-    setError("");
-    void work()
-      .then(() => {
-        toast.show(done, { variant: "success" });
-        refreshChipsNow();
-        close();
-      })
-      .catch((e) => setError(message(e)))
-      .finally(() => setBusy(false));
-  };
   return (
     <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, padding: space[2], gap: space[2] }}>
       <Pressable
@@ -174,36 +158,136 @@ function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { i
           {!!idea.rationale && <CardField title={t("Why")} text={idea.rationale} />}
         </View>
       )}
-      {confirm && <Label muted size={font.sm}>{t("Sends this idea to this session.")}</Label>}
-      {!!error && <Notice tone="danger">{error}</Notice>}
-      <View style={{ flexDirection: "row", gap: space[2], flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <Button small quiet disabled={busy} label={t("Dismiss {title}", { title: idea.title })} onPress={() => act(() => dismissIdea(client!, { ideaId: idea.id }), t("Idea dismissed"))}>
-          {t("Dismiss")}
-        </Button>
-        <Button
-          small
-          quiet
-          icon="SquarePlus"
-          disabled={busy || !client}
-          onPress={() => {
-            if (!client) return;
-            newCardFromIdea(client, { ideaId: idea.id });
-            close();
-          }}
-        >
-          {t("Start a new task")}
-        </Button>
-        {canContinue &&
-          (confirm ? (
-            <Button small primary icon="CornerDownRight" disabled={busy} onPress={() => act(() => continueIdea(client!, { ideaId: idea.id, agentId }), t("Idea sent"))}>
-              {t("Send")}
-            </Button>
-          ) : (
-            <Button small icon="CornerDownRight" disabled={busy} onPress={() => setConfirm(true)}>
-              {t("Continue here")}
-            </Button>
-          ))}
-      </View>
+      {footer}
+      <View style={{ flexDirection: "row", gap: space[2], flexWrap: "wrap", justifyContent: "flex-end" }}>{children}</View>
     </View>
+  );
+}
+
+/** Runs an idea action: a toast and an immediate chip refresh on success, the error in place otherwise. */
+function useIdeaAction(close: () => void) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const act = (work: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setError("");
+    void work()
+      .then(() => {
+        toast.show(done, { variant: "success" });
+        refreshChipsNow();
+        close();
+      })
+      .catch((e) => setError(message(e)))
+      .finally(() => setBusy(false));
+  };
+  return { busy, error, act };
+}
+
+function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { idea: Idea; agentId: string; canContinue: boolean; expanded: boolean; onToggle(): void; close(): void }) {
+  const { busy, error, act } = useIdeaAction(close);
+  const [confirm, setConfirm] = useState(false);
+  const client = chipClient();
+  return (
+    <IdeaShell
+      idea={idea}
+      expanded={expanded}
+      onToggle={onToggle}
+      footer={
+        <>
+          {confirm && <Label muted size={font.sm}>{t("Sends this idea to this session.")}</Label>}
+          {!!error && <Notice tone="danger">{error}</Notice>}
+        </>
+      }
+    >
+      <Button small quiet disabled={busy || !client} label={t("Dismiss {title}", { title: idea.title })} onPress={() => client && act(() => dismissIdea(client, { ideaId: idea.id }), t("Idea dismissed"))}>
+        {t("Dismiss")}
+      </Button>
+      <Button
+        small
+        quiet
+        icon="SquarePlus"
+        disabled={busy || !client}
+        onPress={() => {
+          if (!client) return;
+          newCardFromIdea(client, { ideaId: idea.id });
+          close();
+        }}
+      >
+        {t("Start a new task")}
+      </Button>
+      {canContinue &&
+        (confirm ? (
+          <Button small primary icon="CornerDownRight" disabled={busy || !client} onPress={() => client && act(() => continueIdea(client, { ideaId: idea.id, agentId }), t("Idea sent"))}>
+            {t("Send")}
+          </Button>
+        ) : (
+          <Button small icon="CornerDownRight" disabled={busy} onPress={() => setConfirm(true)}>
+            {t("Continue here")}
+          </Button>
+        ))}
+    </IdeaShell>
+  );
+}
+
+/** Ideas of a session Flowly does not manage (NATIVE-SESSION-SPEC §12.5): here, a new session, or a new workspace. */
+export function OutsideIdeasPopover(props: PluginButtonContentProps) {
+  return (
+    <Frame props={props} title={t("Ideas for this session")}>
+      <OutsideIdeasBody agentId={agentOf(props)} close={props.close} />
+    </Frame>
+  );
+}
+
+function OutsideIdeasBody({ agentId, close }: { agentId: string; close(): void }) {
+  const state = useOutsideState(agentId);
+  const [open, setOpen] = useState("");
+  if (!state?.ideas.length) return <Label muted size={font.sm}>{t("No open ideas.")}</Label>;
+  return (
+    <>
+      {state.ideas.map((idea) => (
+        <OutsideIdeaItem key={idea.id} idea={idea} agentId={agentId} expanded={open === idea.id} onToggle={() => setOpen(open === idea.id ? "" : idea.id)} close={close} />
+      ))}
+    </>
+  );
+}
+
+function OutsideIdeaItem({ idea, agentId, expanded, onToggle, close }: { idea: SessionIdea; agentId: string; expanded: boolean; onToggle(): void; close(): void }) {
+  const { busy, error, act } = useIdeaAction(close);
+  const [confirm, setConfirm] = useState(false);
+  const client = chipClient();
+  const run = (target: "here" | "session" | "workspace", done: string) =>
+    client && act(() => runSessionIdea(client, { agentId, ideaId: idea.id, target }), done);
+  return (
+    <IdeaShell
+      idea={idea}
+      expanded={expanded}
+      onToggle={onToggle}
+      footer={
+        <>
+          {confirm && <Label muted size={font.sm}>{t("Sends this idea to this session.")}</Label>}
+          {!!error && <Notice tone="danger">{error}</Notice>}
+        </>
+      }
+    >
+      <Button small quiet disabled={busy || !client} label={t("Dismiss {title}", { title: idea.title })} onPress={() => client && act(() => dismissSessionIdea(client, { agentId, ideaId: idea.id }), t("Idea dismissed"))}>
+        {t("Dismiss")}
+      </Button>
+      <Button small quiet icon="GitBranch" disabled={busy || !client} onPress={() => run("workspace", t("Started in a new workspace"))}>
+        {t("New workspace")}
+      </Button>
+      <Button small quiet icon="Plus" disabled={busy || !client} onPress={() => run("session", t("Started in a new session"))}>
+        {t("New session")}
+      </Button>
+      {confirm ? (
+        <Button small primary icon="CornerDownRight" disabled={busy || !client} onPress={() => run("here", t("Idea sent"))}>
+          {t("Send")}
+        </Button>
+      ) : (
+        <Button small icon="CornerDownRight" disabled={busy} onPress={() => setConfirm(true)}>
+          {t("Continue here")}
+        </Button>
+      )}
+    </IdeaShell>
   );
 }

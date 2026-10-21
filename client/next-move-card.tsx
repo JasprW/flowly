@@ -4,7 +4,7 @@ import { copyText, Icon, useToast } from "@getpaseo/plugin/client/react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import type { NextMove } from "../shared/model";
 import type { NextRowData } from "../shared/native-session";
-import { cardView, chipClient, refreshChipsNow, setWrapPending, useChipState, useWrapPending, type ChipState } from "./native-chips";
+import { cardView, chipClient, refreshChipsNow, setWrapPending, useChipState, useOutsideState, useWrapPending, type ChipState } from "./native-chips";
 import { hideMoves } from "./hidden-moves";
 import { moveToDone, wrapupNeed } from "./native-actions";
 import { fillComposer } from "./web-composer";
@@ -38,6 +38,8 @@ export function NativeNextMovesItem(
 ) {
   const { data } = props.item;
   const state = useChipState(props.agentId);
+  // A row without a card belongs to a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4).
+  const outside = useOutsideState(props.agentId);
   const eventId = data.status === "ready" ? data.eventId : "";
   const wrap = useWrapPending(props.agentId, eventId);
   const view = cardView(data, state, props.agentId);
@@ -55,8 +57,12 @@ export function NativeNextMovesItem(
                 needsFlowly={wrap.need === "needs-flowly"}
               />
             </Frame>
-          ) : state?.moves ? (
-            <NextMovesCard state={state} eventId={eventId} moves={state.moves.moves} />
+          ) : data.taskId ? (
+            state?.moves ? (
+              <NextMovesCard agentId={props.agentId} card={state} nextMoveTap={state.nextMoveTap} eventId={eventId} moves={state.moves.moves} />
+            ) : null
+          ) : outside?.moves ? (
+            <NextMovesCard agentId={props.agentId} card={null} nextMoveTap={outside.nextMoveTap} eventId={eventId} moves={outside.moves.moves} />
           ) : null}
         </View>
       </SharedMotionProvider>
@@ -65,11 +71,16 @@ export function NativeNextMovesItem(
 }
 
 const NextMovesCard = memo(function NextMovesCard({
-  state,
+  agentId,
+  card,
+  nextMoveTap,
   eventId,
   moves,
 }: {
-  state: ChipState;
+  agentId: string;
+  /** The card's state for Move to Done; null for a session Flowly does not manage (it has no action moves). */
+  card: ChipState | null;
+  nextMoveTap: "fill" | "copy";
   eventId: string;
   moves: readonly NextMove[];
 }) {
@@ -80,7 +91,8 @@ const NextMovesCard = memo(function NextMovesCard({
   const pick = (move: NextMove) => {
     setError("");
     if (move.moveTo === "done") {
-      if (!client) return;
+      const state = card;
+      if (!client || !state) return;
       setBusy(true);
       void (async () => {
         await moveToDone(client, {
@@ -101,14 +113,14 @@ const NextMovesCard = memo(function NextMovesCard({
     }
     if (!move.prompt) return;
     if (
-      state.nextMoveTap === "fill" &&
-      fillComposer(state.agentId, move.prompt)
+      nextMoveTap === "fill" &&
+      fillComposer(agentId, move.prompt)
     )
       return;
     void copyText(move.prompt)
       .then(() =>
         toast.show(
-          state.nextMoveTap === "fill"
+          nextMoveTap === "fill"
             ? t("Copied. Paste it into the message box.")
             : t("Copied"),
           { variant: "success" },
@@ -136,7 +148,7 @@ const NextMovesCard = memo(function NextMovesCard({
             first={index === 0}
             height={height}
             disabled={busy}
-            fill={state.nextMoveTap === "fill"}
+            fill={nextMoveTap === "fill"}
             onPress={() => pick(move)}
           />
         ))}

@@ -3,7 +3,7 @@ import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { BoardScreen, WorkspaceBoard } from "./client/board";
 import { registerSessionChips } from "./client/session-link";
 import { NativeSummaryItem } from "./client/summary-row";
-import { IdeasPopover } from "./client/native-popovers";
+import { IdeasPopover, OutsideIdeasPopover } from "./client/native-popovers";
 import { NativeNextMovesItem } from "./client/next-move-card";
 import { nextRowKind, nextRowSchema, nextRowVersion, summaryRowKind, summaryRowSchema, summaryRowVersion } from "./shared/native-session";
 import { SidebarEntry } from "./client/sidebar";
@@ -104,8 +104,9 @@ export default function contribute(client: PluginClientContext) {
       commandItems();
       commandItems = registerCommandItems(client);
     });
-  // The Task chip, plus the Ideas chip on Flowly-managed sessions (NATIVE-SESSION-SPEC §7).
-  const stopChips = registerSessionChips(client, undefined, undefined, { ideas: IdeasPopover });
+  // The Task chip, plus the Ideas chip on Flowly-managed sessions (NATIVE-SESSION-SPEC §7) and, when switched on,
+  // on sessions Flowly does not manage (§12).
+  const stopChips = registerSessionChips(client, undefined, undefined, { ideas: IdeasPopover, outsideIdeas: OutsideIdeasPopover });
   perfEarly("plugin.load", perfNow() - bootAt);
   return () => {
     stopped = true;

@@ -77,3 +77,11 @@ export function openCard(client: Client, input: { taskId: string; workspaceId: s
     params: { taskId: input.taskId, workspaceId: input.workspaceId, sessionId: input.agentId, requestId: chipRequestId() },
   });
 }
+
+/** An idea of a session Flowly does not manage (NATIVE-SESSION-SPEC §12.5): the daemon re-checks it is still open. */
+export function runSessionIdea(client: Client, input: { agentId: string; ideaId: string; target: "here" | "session" | "workspace" }) {
+  return client.rpc(rpc.runSessionIdea, input);
+}
+export function dismissSessionIdea(client: Client, input: { agentId: string; ideaId: string }) {
+  return client.rpc(rpc.dismissSessionIdea, input);
+}

@@ -1144,5 +1144,14 @@ const catalog: Catalog = {
   "Connect another service…": "連線其他服務…",
   "Add an artifact: a file, link, or an item from a connected service": "加入產出物：檔案、連結，或已連線服務中的項目",
   "Recent output · open in Paseo for the full conversation": "最近輸出 · 在 Paseo 中開啟可檢視完整對話",
+  "Ideas for this session": "本 session 的 Ideas",
+  "Started in a new workspace": "已在新的 workspace 中開始",
+  "New workspace": "新 workspace",
+  "Started in a new session": "已在新的 session 中開始",
+  "Sessions outside Flowly": "Flowly 之外的 session",
+  "Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.": "也為不受 Flowly 管理的 session 提供進度列、建議的下一步和 ideas。每完成一輪，Summary 模型會在一個用完即封存的短子 session 中讀取最近的對話（傳送給該模型的 provider）。",
+  "A progress row after each turn. Turn it off if another plugin already writes recaps.": "每輪之後的進度列。如果其他外掛已在寫 recap，可以關掉。",
+  "A card with the messages you are likely to send next.": "一張卡片，列出你接下來可能傳送的訊息。",
+  "Follow-ups worth doing, kept with the session: continue there, or start them in a new session or workspace.": "值得做的後續工作，跟隨 session 保存：在原 session 繼續，或在新 session、新 workspace 中開始。",
 };
 export default catalog;

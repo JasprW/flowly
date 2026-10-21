@@ -28,6 +28,7 @@ import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
 import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./server/progress-rules";
 import { NextMoveRows } from "./server/next-move-rows";
+import { SessionInsightService, SessionInsightStore } from "./server/session-insights";
 import { SummaryService, SummaryStore } from "./server/summaries";
 import { UsageService } from "./server/usage";
 import { summarySettings, summarySettingsValues } from "./shared/summary";
@@ -66,6 +67,19 @@ export default function contribute(server: PluginServerContext) {
       return summarySettingsValues(state?.status === "ready" ? state.values : {});
     },
   );
+  // Progress, next steps and ideas for sessions Flowly does not manage (NATIVE-SESSION-SPEC §12); off by default.
+  const nativeValues = async () => {
+    const state = await nativePrefs.read().catch(() => null);
+    return nativeSessionSettingsValues(state?.status === "ready" ? state.values : {});
+  };
+  const sessionInsights = new SessionInsightService(new SessionInsightStore(store.directory), nextRows, async () => {
+    const [native, summary] = await Promise.all([nativeValues(), summaries.settings()]);
+    return {
+      enabled: native.outside,
+      parts: { progress: native.outsideProgress, nextMoves: native.outsideNextMoves, ideas: native.outsideIdeas },
+      model: summary.summaryModel,
+    };
+  });
   // Untrimmed event log + project insights (PROJECT-INSIGHTS-SPEC).
   const flow = new FlowLog(store.directory);
   store.flow = flow;
@@ -195,12 +209,20 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.managedSessions, () => tools.secrets.managedSessions());
   server.handle(rpc.nativeChips, async () => {
     const [wrap, native] = await Promise.all([wrapupPrefs.read().catch(() => null), nativePrefs.read().catch(() => null)]);
+    const values = nativeSessionSettingsValues(native?.status === "ready" ? native.values : {});
     return {
       managed: await tools.secrets.managedSessions(),
       ideas: await tools.agents.ideasOn(),
       autoWrapup: wrapupSettingsValues(wrap?.status === "ready" ? wrap.values : {}).autoWrapup,
-      nextMoveTap: nativeSessionSettingsValues(native?.status === "ready" ? native.values : {}).nextMoveTap,
+      nextMoveTap: values.nextMoveTap,
+      outside: { enabled: values.outside, progress: values.outsideProgress, nextMoves: values.outsideNextMoves, ideas: values.outsideIdeas },
     };
+  });
+  server.handle(rpc.sessionInsights, async (input) => ifChanged(await sessionInsights.view(), input.etag));
+  server.handle(rpc.runSessionIdea, (input, { paseo }) => sessionInsights.runIdea(input, paseo));
+  server.handle(rpc.dismissSessionIdea, async (input) => {
+    await sessionInsights.dismissIdea(input);
+    return { ok: true as const };
   });
   server.handle(rpc.refreshSummary, async (input, { paseo }) => {
     const managed = (await tools.secrets.managedSessions()).filter((s) => s.taskId === input.taskId);
@@ -385,7 +407,11 @@ export default function contribute(server: PluginServerContext) {
   server.on("agent.turn_started", async (event, { paseo }) => {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
-    if (!identity) return;
+    if (!identity) {
+      // A session Flowly does not manage: its Next moves card goes and its suggestion ends (NATIVE-SESSION-SPEC §12.2).
+      void sessionInsights.turnStarted(event.agent.id, paseo);
+      return;
+    }
     // The previous turn's Next moves card goes (in place) as this turn starts; never blocks the hook.
     void nextRows.turnStarted(identity.agentId, paseo);
     const auto = await autoStatusOn();
@@ -399,7 +425,14 @@ export default function contribute(server: PluginServerContext) {
     const endedAt = new Date().toISOString();
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
-    if (!identity) return;
+    if (!identity) {
+      // A session Flowly does not manage (NATIVE-SESSION-SPEC §12): insights after a completed turn, when switched on.
+      if (event.outcome.kind === "completed")
+        void sessionInsights.enqueue(event.agent, event.timeline, paseo, endedAt).catch((e) =>
+          console.error("Flowly session insight failed:", e instanceof Error ? e.message : String(e)),
+        );
+      return;
+    }
     const auto = await autoStatusOn();
     // Agent habits (WORKFLOW-INSIGHTS-SPEC §12.4): the model this turn ran on, and whether the user's message took one of the suggestions that were open.
     const model = await sessionModel(paseo, event.agent);

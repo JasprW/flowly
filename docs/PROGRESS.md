@@ -1,5 +1,13 @@
 # Implementation progress
 
+## Native session pane P2–P4: sessions outside Flowly — 2026-10-21
+
+- [x] Request: give every session Flowly does not manage the same Progress / Next moves / Ideas without joining a project; ideas may continue in the session, a new session or a new workspace. User decisions: Paseo child sessions (like card summaries), off by default, three switches. [Spec §12](NATIVE-SESSION-SPEC.md).
+- [x] Daemon: `server/session-insights.ts` (store `session-insights.json`, capped; one child insight session per completed turn, merged while one runs; progress / moves / ideas from one JSON answer; rows appended in the background; suggestion ends at the next turn; idea actions here / session / workspace), `shared/session-insights.ts` (schemas, prompt, lenient parser), `NextMoveRows.writeSession`, hooks for unmanaged sessions, RPCs `sessions.insights` (etag), `sessions.idea-run`, `sessions.idea-dismiss`.
+- [x] Client: chip refresh reads insights only when switched on; `sessionChipMoves`; card-less Next moves card and Progress row (no Open card); `OutsideIdeasPopover`; settings switches. Flowly's own screens unchanged apart from the settings.
+- [x] PASS: `npm run typecheck`; `npm test` 102 files / 765 passed, 65 skipped (rebased on main).
+- [ ] UNRUN: Luna 6 live verification of §12.8.
+
 ## Native session pane: Summary, Next moves, Ideas (P1) — 2026-10-20
 
 - [x] Card request "summary、next move、ideas上原生session": the same features in Paseo's own session view for Flowly-managed sessions; user decisions: Summary through the native timeline, P1 only, timeline rows best effort; later (after the prompt-suggestions reference) Next moves as a timeline card instead of a chip, tapping fills Paseo's message box by default (setting: or copy), Ideas stays a chip. [Spec](NATIVE-SESSION-SPEC.md), [plan](superpowers/plans/2026-10-20-native-session.md).

@@ -200,3 +200,72 @@ P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工�
 - 渲染组件、弹层组件的拆分与文件名。
 - chip 标签在不同语言下的具体缩写。
 - 若 host 的 popover 在手机上放不下输入框，可改为弹层内“Edit”跳到一个 Flowly 屏幕完成编辑；需在本 spec 记录。
+
+## 12. 非 Flowly 管理的 session（P2–P4，2026-10-21）
+
+用户 2026-10-21 要求：所有非 Flowly 管理的 session 也直接获得 Progress 与 Next moves，**不纳入任何 project 管理**；Ideas 也按 session 支持（在当前 session 继续、开新 session、开新 workspace），但不进入任何 project 的 Ideas。用户决定：用 **Paseo 子 session** 生成（与卡片 summary 相同的机制）；**默认关闭**；Progress / Next steps / Ideas **三项分别可开关**（与 paseo-recap 重复时可只关 Progress）。本节以新 commit 交付，不改动前面 P1 的 commit。
+
+### 12.1 范围
+
+- “外部 session”：未被 Flowly 管理（不在 `sessions.managed` 里）、未归档、有 workspace、不是子 agent（`parentAgentId` 为空）、不是 Flowly 自己的辅助 session（summarizer）的 session。包括：卡片 workspace 里未加入卡片的 session（P2）、Flowly 项目里不属于卡片的 session（P3）、不在任何 Flowly 项目里的 session（P4）。
+- 管理 session 维持 §5–§7 的卡片路径，不变。
+- Flowly 内部的行为与样式不变（§3），唯一新增是设置项（§12.6）。
+
+### 12.2 生成（daemon，`server/session-insights.ts`）
+
+- 触发：外部 session 的 `agent.turn_ended`，`outcome=completed`，且设置总开关开、三项中至少一项开。回合文本同 TASK-SUMMARY-SPEC §2（`turnText`，忽略插件行），为空则跳过。
+- 单飞与合并：每个 session 同时最多一个生成；运行中又结束的回合合并为下一次（同卡片 summary）。
+- 运行：在该 session 的 workspace 里创建它的**子 session**（`parent` = 该 session），模型 = Summary model 设置（Auto 同卡片），标题 `Flowly insights · <session 标题>`，标签 `{flowly: "summarizer", "flowly-session": <agentId>}`，`outputSchema`，`waitForFinish(120 s)`，`finally` 中归档。会在 Paseo 里留下一个已归档子 session（用户已知并接受）。
+- 一次调用同时产出三项（关掉的项不在提示里要求、输出被忽略）：
+  - `update/state/target/recap/next`：同卡片 summary，但以 session 标题与工作目录代替卡片标题/描述/泳道；上一版作为输入。
+  - `moves`：0–3 条“用户最可能发的下一条消息”（`label` ≤60 字、`prompt` ≤2000 字，与对话同语言）；没有明确下一步时为空。外部 session 没有 Move to Done。
+  - `ideas`：0–2 条与当前目标**不同**、值得单独做的后续工作（`title/detail/rationale/scope`），已开放的 idea 标题作为输入以免重复；本 session 已有 5 条 open idea 时不再要求。
+- 失败（模型不可用、超时、权限、输出不合 schema）只记到该 session 的 `error` 并记日志，不重试。
+
+### 12.3 数据（`session-insights.json`，与 `board.json` 同目录）
+
+串行写、备份、原子替换；无效内容保留文件并报错，不重置。
+
+```
+{ version: 1,
+  sessions: [{ agentId, workspaceId, title, updatedAt,
+               summary: { id, at, model, state, target, recap, next } | null,
+               suggestion: { id, at, moves: [{label, prompt}], current: boolean } | null,
+               ideas: [{ id, title, detail, rationale, scope, status: "open" | "dismissed" | "adopted",
+                         adopted?: { target: "here" | "session" | "workspace", agentId?, workspaceId? },
+                         createdAt, updatedAt }],
+               error: { at, message } | null }] }
+```
+
+- 每个 session 最多 20 条 idea（超出删最早的非 open）、最多 5 条 open；最多保存 300 个 session，超出删最久未更新的。
+- `suggestion.current` 在该 session 下一轮开始时置为 false。
+
+### 12.4 原生 timeline 行
+
+- Progress：`flowly-summary` 行（§5.2），`taskId`/`workspaceId` 变为可选；外部 session 的行不带 `taskId`，卡片上不显示 “Open card”。追加规则同 §5.1（新一轮已开始或已归档则跳过）。
+- Next moves：`flowly-next-moves` 行（§6.1），`taskId`/`workspaceId` 可选，`eventId` 为 `suggestion.id`；回合结束写 ready、下一轮开始原位改写 dismissed（同一 `NextMoveRows`）。
+- 客户端当前性：行的 `eventId` 等于该 session 最新且 `current` 的 suggestion，且 session 空闲、无待答问题、用户之后没发过消息、本机未关闭这一组（与 `chipMoves` 相同的规则）。点建议的行为同 §6.4（默认填入，可设为复制）。
+
+### 12.5 Ideas chip（外部 session）
+
+- 有 open idea 时显示 `Ideas · N` chip（与 §7 同 id、同外观）；弹层列出该 session 的 open ideas（标题、scope 提示，点开看 detail/rationale）。
+- 操作（重新读取并校验 idea 仍 open 后执行，执行后立即刷新 chip）：
+  - **Continue here**：确认后把 idea 指令发到当前 session（与 `ideas.adopt` 相同的指令文字），记为 adopted(here)。
+  - **New session**：在同一 workspace 新建 session（与当前 session 同 provider/model），首条消息为 idea 指令，记为 adopted(session)。
+  - **New workspace**：从当前 session 的 workspace 目录 branch-off 一个 worktree workspace（与卡片新建 worktree 相同的方式），在其中新建 session 并发送 idea 指令，记为 adopted(workspace)。目录不是 git 仓库时报错并提示用 New session。
+  - **Dismiss**。
+- 不出现在任何 project 的 Ideas 页；没有 “Start a new task”。
+
+### 12.6 设置
+
+host 设置 `native-session` 增加字段（默认值保证旧存储可读）：`outside`（默认 **false**）、`outsideProgress` / `outsideNextMoves` / `outsideIdeas`（默认 true，仅在 `outside` 开时生效）。Flowly 设置 → AI features → “Paseo's session view” 新增总开关与三个子开关，并说明：开启后，每个外部 session 每完成一轮会用 Summary 模型跑一次（读取最近对话，发送给该模型的 provider），并留下一个已归档的子 session。
+
+### 12.7 客户端注册与性能
+
+- `sessions.native-chips` 增加 `outside` 设置；开启时，chip 刷新每轮用 etag 读 `sessions.insights`（未变时极小），只取有 live 外部 session 的数据：每个 session 的当前 suggestion 与 open ideas。关闭时不读。
+- 外部 session 的 Next moves 当前性与 Ideas chip 都在同一刷新里计算，不新增轮询或订阅。
+
+### 12.8 验收
+
+- 单元：外部 session 判定（管理 / 子 agent / summarizer / 无 workspace / 归档）、设置门控（总开关、三项）、单飞合并、输出解析（moves/ideas 上限与容错）、存储上限、suggestion 在下一轮失效、行追加与跳过、idea 操作三种目标与重新校验、chip 当前性。
+- Luna 6（全权限）：开启设置后，一个普通（非 Flowly）session 完成一轮 → 原生 timeline 出现 Progress 与 Next moves 卡片、Ideas chip（若有 idea）；三项开关分别生效；Continue here / New session / New workspace / Dismiss；关闭总开关后不再生成；管理 session 行为不变；测试结束恢复设置为原值并清理全部 fixture。

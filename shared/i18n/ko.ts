@@ -1144,5 +1144,14 @@ const catalog: Catalog = {
   "Connect another service…": "다른 서비스 연결…",
   "Add an artifact: a file, link, or an item from a connected service": "산출물 추가: 파일, 링크 또는 연결된 서비스의 항목",
   "Recent output · open in Paseo for the full conversation": "최근 출력 · 전체 대화는 Paseo에서 열어 확인",
+  "Ideas for this session": "이 세션의 아이디어",
+  "Started in a new workspace": "새 워크스페이스에서 시작함",
+  "New workspace": "새 워크스페이스",
+  "Started in a new session": "새 세션에서 시작함",
+  "Sessions outside Flowly": "Flowly 밖의 세션",
+  "Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.": "Flowly가 관리하지 않는 세션에도 진행 행, 제안된 다음 단계, 아이디어를 제공합니다. 턴이 끝날 때마다 요약 모델이 곧바로 보관되는 짧은 하위 세션에서 최근 대화를 읽습니다(해당 모델의 제공자에게 전송됨).",
+  "A progress row after each turn. Turn it off if another plugin already writes recaps.": "각 턴 후의 진행 행. 다른 플러그인이 이미 요약을 작성한다면 끄세요.",
+  "A card with the messages you are likely to send next.": "다음에 보낼 가능성이 큰 메시지를 보여 주는 카드.",
+  "Follow-ups worth doing, kept with the session: continue there, or start them in a new session or workspace.": "해볼 만한 후속 작업을 세션별로 보관: 그 세션에서 이어 가거나 새 세션이나 새 워크스페이스에서 시작합니다.",
 };
 export default catalog;

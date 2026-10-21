@@ -1144,5 +1144,14 @@ const catalog: Catalog = {
   "Connect another service…": "Connecter un autre service…",
   "Add an artifact: a file, link, or an item from a connected service": "Ajouter un artefact : un fichier, un lien ou un élément d'un service connecté",
   "Recent output · open in Paseo for the full conversation": "Sortie récente · ouvrez dans Paseo pour la conversation complète",
+  "Ideas for this session": "Idées pour cette session",
+  "Started in a new workspace": "Démarré dans un nouvel espace de travail",
+  "New workspace": "Nouvel espace de travail",
+  "Started in a new session": "Démarré dans une nouvelle session",
+  "Sessions outside Flowly": "Sessions hors Flowly",
+  "Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.": "Donne aussi aux sessions que Flowly ne gère pas une ligne d'avancement, des prochaines étapes suggérées et des idées. Après chaque tour terminé, le modèle de résumé lit la conversation récente (envoyée au fournisseur de ce modèle) dans une courte session enfant archivée juste après.",
+  "A progress row after each turn. Turn it off if another plugin already writes recaps.": "Une ligne d'avancement après chaque tour. Désactivez-la si un autre plugin écrit déjà des récapitulatifs.",
+  "A card with the messages you are likely to send next.": "Une carte avec les messages que vous enverrez probablement ensuite.",
+  "Follow-ups worth doing, kept with the session: continue there, or start them in a new session or workspace.": "Des suites qui valent la peine, gardées avec la session : continuez-y, ou lancez-les dans une nouvelle session ou un nouvel espace de travail.",
 };
 export default catalog;

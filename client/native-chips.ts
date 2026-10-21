@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import type { Idea, NextMove, Project, Task } from "../shared/model";
-import type { NextRowData, SummaryRowData } from "../shared/native-session";
+import type { NextRowData } from "../shared/native-session";
+import type { SessionIdea } from "../shared/session-insights";
 
 /**
  * What Paseo's session view shows for a Flowly-managed session (NATIVE-SESSION-SPEC §6-8): the current Next moves
@@ -21,6 +22,30 @@ export type ChipState = {
   /** What tapping a message suggestion on the Next moves card does (NATIVE-SESSION-SPEC §6.4). */
   nextMoveTap: "fill" | "copy";
 };
+
+/** A session Flowly does not manage (NATIVE-SESSION-SPEC §12): its current suggestion and open ideas. */
+export type OutsideState = {
+  agentId: string;
+  workspaceId: string;
+  moves: { eventId: string; moves: NextMove[] } | null;
+  ideas: SessionIdea[];
+  nextMoveTap: "fill" | "copy";
+};
+const outside = new Map<string, OutsideState>();
+export function setOutsideState(agentId: string, state: OutsideState | null) {
+  if (state) outside.set(agentId, state);
+  else if (!outside.delete(agentId)) return;
+  listeners.forEach((listener) => listener());
+}
+export function outsideStateIds() {
+  return [...outside.keys()];
+}
+export function outsideState(agentId: string) {
+  return outside.get(agentId) ?? null;
+}
+export function useOutsideState(agentId: string) {
+  return useSyncExternalStore(subscribe, () => outsideState(agentId));
+}
 
 let client: PluginClientContext | null = null;
 const states = new Map<string, ChipState>();
@@ -46,9 +71,10 @@ export function chipState(agentId: string) {
   return states.get(agentId) ?? null;
 }
 export function clearChipStates() {
-  if (!states.size && !pending.size) return;
+  if (!states.size && !pending.size && !outside.size) return;
   states.clear();
   pending.clear();
+  outside.clear();
   listeners.forEach((listener) => listener());
 }
 
@@ -75,7 +101,9 @@ export function useWrapPending(agentId: string, eventId: string) {
 export function cardView(row: NextRowData, state: Pick<ChipState, "moves"> | null, agentId: string): "wrap" | "moves" | "hidden" {
   if (row.status !== "ready") return "hidden";
   if (wrapPending(agentId, row.eventId)) return "wrap";
-  return state?.moves?.eventId === row.eventId ? "moves" : "hidden";
+  // A row without a card belongs to a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4).
+  const current = row.taskId ? state?.moves : outsideState(agentId)?.moves;
+  return current?.eventId === row.eventId ? "moves" : "hidden";
 }
 function subscribe(listener: () => void) {
   listeners.add(listener);
@@ -99,7 +127,7 @@ let requestSequence = 0;
 export const chipRequestId = () => `${Date.now()}-n${++requestSequence}`;
 
 /** "Open card" on a summary row: the same validated board link as the Task chip (SESSION-CHIP-SPEC). */
-export function openCardFromRow(data: Pick<SummaryRowData, "taskId" | "workspaceId">, agentId: string) {
+export function openCardFromRow(data: { taskId: string; workspaceId: string }, agentId: string) {
   client?.openScreen({
     screenId: "board",
     params: { taskId: data.taskId, workspaceId: data.workspaceId, sessionId: agentId, requestId: chipRequestId() },

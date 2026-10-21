@@ -1144,5 +1144,14 @@ const catalog: Catalog = {
   "Connect another service…": "別のサービスを接続…",
   "Add an artifact: a file, link, or an item from a connected service": "成果物を追加：ファイル、リンク、または接続済みサービスの項目",
   "Recent output · open in Paseo for the full conversation": "最近の出力 · 会話全体は Paseo で開いて確認",
+  "Ideas for this session": "このセッションのアイデア",
+  "Started in a new workspace": "新しいワークスペースで開始しました",
+  "New workspace": "新しいワークスペース",
+  "Started in a new session": "新しいセッションで開始しました",
+  "Sessions outside Flowly": "Flowly 外のセッション",
+  "Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.": "Flowly が管理していないセッションにも進捗行、次のステップの提案、アイデアを表示します。ターンが完了するたびに、サマリーモデルが直後にアーカイブされる短い子セッションで最近の会話を読み取ります（そのモデルのプロバイダーに送信されます）。",
+  "A progress row after each turn. Turn it off if another plugin already writes recaps.": "各ターン後の進捗行。別のプラグインが既に要約を書いている場合はオフにしてください。",
+  "A card with the messages you are likely to send next.": "次に送りそうなメッセージを並べたカード。",
+  "Follow-ups worth doing, kept with the session: continue there, or start them in a new session or workspace.": "やる価値のあるフォローアップをセッションごとに保存。そのセッションで続けるか、新しいセッションやワークスペースで始められます。",
 };
 export default catalog;

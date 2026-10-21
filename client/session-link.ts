@@ -8,10 +8,23 @@ import type {
   PluginScreenParams,
 } from "@getpaseo/plugin/client";
 import type { RpcOutput } from "@getpaseo/plugin";
-import { nativeChips, readBoard, readBoardChanged } from "../shared/rpc";
-import { chipMoves } from "../shared/next-moves";
+import { nativeChips, readBoard, readBoardChanged, sessionInsights } from "../shared/rpc";
+import type { SessionInsightView } from "../shared/session-insights";
+import { parentOf } from "../shared/subagents";
+import { isSummarizer } from "../shared/summary";
+import { chipMoves, sessionChipMoves } from "../shared/next-moves";
 import { movesHidden, onMovesHidden } from "./hidden-moves";
-import { chipStateIds, clearChipStates, setChipClient, setChipRefresher, setChipState, type ChipState } from "./native-chips";
+import {
+  chipStateIds,
+  clearChipStates,
+  outsideStateIds,
+  setChipClient,
+  setChipRefresher,
+  setChipState,
+  setOutsideState,
+  type ChipState,
+  type OutsideState,
+} from "./native-chips";
 import { listAgents } from "./resources";
 import { readBoardDelta, type Board } from "./board-read";
 import { t } from "../shared/i18n";
@@ -112,9 +125,11 @@ const newRequestId = () => `${Date.now()}-${++requestSequence}`;
 /** The first chip round waits this long, so it does not compete with the plugin's own first paint (PERFORMANCE-SPEC, Cold start). */
 export const CHIPS_START_DELAY_MS = 2500;
 
-/** The Ideas chip's popover (NATIVE-SESSION-SPEC §7); passed in so this module stays free of UI code. */
+/** The Ideas chip's popovers (NATIVE-SESSION-SPEC §7, §12.5); passed in so this module stays free of UI code. */
 export type ChipPopovers = {
   ideas: ComponentType<PluginButtonContentProps>;
+  /** For a session Flowly does not manage; without it those sessions get no Ideas chip. */
+  outsideIdeas?: ComponentType<PluginButtonContentProps>;
 };
 
 export function registerSessionChips(
@@ -131,8 +146,11 @@ export function registerSessionChips(
   // (NATIVE-SESSION-SPEC §6): this refresh only records which suggestion set is current for it.
   type Extra = { binding: string; signature: string; chip: PluginButtonRegistration };
   const ideaPills = new Map<string, Extra>();
-  let chipInfo: { managed: Set<string>; ideas: boolean; autoWrapup: boolean; nextMoveTap: "fill" | "copy" } | null = null,
+  type Outside = { enabled: boolean; progress: boolean; nextMoves: boolean; ideas: boolean };
+  let chipInfo: { managed: Set<string>; ideas: boolean; autoWrapup: boolean; nextMoveTap: "fill" | "copy"; outside: Outside } | null = null,
     chipInfoAt = 0;
+  let outsideEtag = "",
+    outsideViews = new Map<string, SessionInsightView>();
   if (popovers) setChipClient(client);
   let lastRound: { current: LinkBoard; live: PaseoAgent[]; tasks: Map<string, LinkBoard["tasks"][number]> } | null = null;
   // Hiding a set on the Next moves card takes it away at once, not at the next round.
@@ -217,12 +235,41 @@ export function registerSessionChips(
       syncPill(ideaPills, "flowly-ideas", actor.id, task.workspaceId, binding,
         JSON.stringify(ideas.map((i) => [i.id, i.updatedAt])), ideas.length ? ideasButton(state) : null);
     }
+    const seenOutside = syncOutside(agents);
     for (const agentId of [...ideaPills.keys()]) {
-      if (seen.has(agentId)) continue;
+      if (seen.has(agentId) || seenOutside.has(agentId)) continue;
       ideaPills.get(agentId)?.chip.remove();
       ideaPills.delete(agentId);
     }
     for (const agentId of chipStateIds()) if (!seen.has(agentId)) setChipState(agentId, null);
+    for (const agentId of outsideStateIds()) if (!seenOutside.has(agentId)) setOutsideState(agentId, null);
+  }
+  /** NATIVE-SESSION-SPEC §12: live, top-level sessions Flowly does not manage, when switched on. */
+  function syncOutside(agents: readonly PaseoAgent[]) {
+    const seen = new Set<string>();
+    const settings = chipInfo?.outside;
+    if (!popovers || !chipInfo || !settings?.enabled) return seen;
+    for (const actor of agents) {
+      if (chipInfo.managed.has(actor.id) || actor.archivedAt || !actor.workspaceId || parentOf(actor) || isSummarizer(actor)) continue;
+      const view = outsideViews.get(actor.id);
+      const moves = settings.nextMoves ? sessionChipMoves({ suggestion: view?.suggestion ?? null, agent: actor, hidden: movesHidden }) : null;
+      const ideas = settings.ideas && popovers.outsideIdeas ? [...(view?.ideas ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : [];
+      if (!moves && !ideas.length) continue;
+      seen.add(actor.id);
+      const state: OutsideState = { agentId: actor.id, workspaceId: actor.workspaceId, moves, ideas, nextMoveTap: chipInfo.nextMoveTap };
+      setOutsideState(actor.id, state);
+      syncPill(ideaPills, "flowly-ideas", actor.id, actor.workspaceId, JSON.stringify(["outside", actor.workspaceId]),
+        JSON.stringify(ideas.map((i) => [i.id, i.updatedAt])), ideas.length ? outsideIdeasButton(ideas.length) : null);
+    }
+    return seen;
+  }
+  function outsideIdeasButton(count: number) {
+    return {
+      title: t("Ideas for this session"),
+      label: t("Ideas · {n}", { n: count }),
+      icon: "Lightbulb",
+      behavior: { kind: "popover" as const, Content: popovers!.outsideIdeas! },
+    };
   }
   // The board screen re-reads and validates the link before showing anything
   // (fail-closed), so the chip only navigates. Keeping SDK/RPC calls out of
@@ -304,9 +351,21 @@ export function registerSessionChips(
         const info = await client.rpc(nativeChips, {}).catch(() => null);
         if (disposed) return;
         chipInfo = info
-          ? { managed: new Set(info.managed.map((m) => m.agentId)), ideas: info.ideas, autoWrapup: info.autoWrapup, nextMoveTap: info.nextMoveTap }
+          ? { managed: new Set(info.managed.map((m) => m.agentId)), ideas: info.ideas, autoWrapup: info.autoWrapup, nextMoveTap: info.nextMoveTap, outside: info.outside ?? { enabled: false, progress: false, nextMoves: false, ideas: false } }
           : chipInfo;
         chipInfoAt = Date.now();
+      }
+      // Sessions Flowly does not manage (NATIVE-SESSION-SPEC §12.7): read only when switched on, by etag.
+      if (popovers && chipInfo?.outside?.enabled) {
+        const result = await client.rpc(sessionInsights, outsideEtag ? { etag: outsideEtag } : {}).catch(() => null);
+        if (disposed) return;
+        if (result) {
+          if (result.value) outsideViews = new Map(result.value.map((v) => [v.agentId, v]));
+          outsideEtag = result.etag;
+        }
+      } else if (outsideEtag) {
+        outsideEtag = "";
+        outsideViews = new Map();
       }
       const agents = [...live, ...archived.filter((a) => !liveIds.has(a.id))];
       const current = board!;
