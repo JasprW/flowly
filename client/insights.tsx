@@ -723,11 +723,6 @@ function FindingCard({
         <Label muted size={font.xs} selectable={false}>
           {t(confidenceLabels[finding.confidence])}
         </Label>
-        {(finding.seen ?? 1) > 1 && (
-          <Label muted size={font.xs} selectable={false}>
-            {tn(finding.seen, "Seen in {n} run", "Seen in {n} runs")}
-          </Label>
-        )}
       </View>
       <Label bold size={font.base}>
         {finding.title}

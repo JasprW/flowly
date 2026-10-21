@@ -1216,6 +1216,5 @@ const catalog: Catalog = {
   "Nothing collected.": "Rien de collecté.",
   "Last run: {in} in · {out} out · ${cost}.": "Dernière exécution : {in} en entrée · {out} en sortie · ${cost}.",
   "About ${month} per month for {n} projects at this pace.": {"one": "Environ ${month} par mois pour {n} projet à ce rythme.", "other": "Environ ${month} par mois pour {n} projets à ce rythme."},
-  "Seen in {n} runs": {"one": "Vu dans {n} exécution", "other": "Vu dans {n} exécutions"},
 };
 export default catalog;

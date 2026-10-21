@@ -18,7 +18,7 @@ import {
   WORKFLOW_AUTO_MODELS,
   WORKFLOW_LABEL,
   aggregate,
-  applyReconciled,
+  replaceOpen,
   buildMaterial,
   emptyWorkflowState,
   isDue,
@@ -38,8 +38,6 @@ import {
   type CommandRecord,
   type ExistingConfig,
   type RawFinding,
-  type RawMerge,
-  type Reconciled,
   type RunUsage,
   type WorkflowRun,
   type WorkflowSettings,
@@ -394,23 +392,20 @@ export class WorkflowInsightsService {
   }
 
   /**
-   * Stores a run. The model's findings are reconciled against the suggestions as
-   * they are at write time (the user may have dismissed one while the run went):
-   * new ones are added, repeats refresh the open suggestion, merges fold repeats.
+   * Stores a run. A run with new suggestions replaces the project's open ones
+   * (§5.3), checked against the suggestions as they are at write time (the user
+   * may have dismissed one while the run went). Accepted and dismissed ones stay.
    */
-  private async record(
-    run: Omit<WorkflowRun, "id" | "findings" | "refreshed" | "merged">,
-    result?: { findings: RawFinding[]; merges: RawMerge[]; cardIds: readonly string[] },
-  ) {
+  private async record(run: Omit<WorkflowRun, "id" | "findings" | "replaced">, result?: { findings: RawFinding[]; cardIds: readonly string[] }) {
     const id = randomUUID();
     return this.state.update((state) => {
-      const rec: Reconciled = result
-        ? validateFindings(result.findings, { cardIds: result.cardIds, existing: state.findings.filter((f) => f.projectId === run.projectId), now: Date.parse(run.at), merges: result.merges })
-        : { added: [], refreshed: [], merged: [] };
-      const merged = applyReconciled(state.findings, run.projectId, id, run.at, rec);
-      for (const f of rec.added) state.findings.push({ ...f, id: randomUUID(), projectId: run.projectId, runId: id, status: "open", createdAt: run.at, updatedAt: run.at, seen: 1, lastSeenAt: run.at });
-      const counts = { findings: rec.added.length, refreshed: rec.refreshed.length, merged };
-      const reason = run.status === "ok" && !counts.findings && !counts.refreshed && !counts.merged ? { reason: "No suggestions this time." } : {};
+      const drafts = result ? validateFindings(result.findings, { cardIds: result.cardIds, existing: state.findings.filter((f) => f.projectId === run.projectId), now: Date.parse(run.at) }) : [];
+      // A run without valid suggestions keeps the previous ones rather than emptying the list.
+      const replaced = drafts.length
+        ? replaceOpen(state.findings, run.projectId, drafts.map((f) => ({ ...f, id: randomUUID(), projectId: run.projectId, runId: id, status: "open" as const, createdAt: run.at, updatedAt: run.at })))
+        : 0;
+      const counts = { findings: drafts.length, replaced };
+      const reason = run.status === "ok" && !drafts.length ? { reason: "No suggestions this time." } : {};
       state.runs.push({ ...run, ...reason, id, ...counts });
       trimState(state, Date.parse(run.at));
       return { value: counts, changed: true };
@@ -456,8 +451,8 @@ export class WorkflowInsightsService {
         cards,
         config: await this.config(project),
         previous: existing
-          .filter((f) => f.status !== "dismissed" || now - Date.parse(f.updatedAt) < 30 * DAY_MS)
-          .map((f) => ({ id: f.id, target: f.target, title: f.title, status: f.status, proposal: f.proposal })),
+          .filter((f) => f.status === "accepted" || (f.status === "dismissed" && now - Date.parse(f.updatedAt) < 30 * DAY_MS))
+          .map((f) => ({ target: f.target, title: f.title, status: f.status, proposal: f.proposal })),
       });
       const workspaceId = await projectWorkspace(project, board, paseo, "workflow insights");
       const agent = await paseo.workspaces.ref(workspaceId).agents.create({
@@ -491,7 +486,7 @@ export class WorkflowInsightsService {
         await agent.archive().catch(() => undefined);
       }
       if (!parsed) throw new Error("The workflow insights model returned no JSON.");
-      await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, merges: parsed.merges, cardIds });
+      await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, cardIds });
     } catch (e) {
       await this.record({ ...base, model, status: "error", reason: (e instanceof Error ? e.message : String(e)).slice(0, 500) });
     }

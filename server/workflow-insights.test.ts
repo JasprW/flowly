@@ -174,10 +174,11 @@ test("a manual run calls the model once, stores validated suggestions and archiv
   expect(x.created[0].labels).toMatchObject({ flowly: "summarizer", "flowly-project": "p", "flowly-insight": "workflow" });
   expect(x.created[0].prompt).toContain("npm run typecheck");
   expect(x.archived()).toBe(1);
-  // The same suggestion is not repeated by the next run.
+  // The next run replaces it instead of adding a second copy.
   await x.service.run("p", x.paseo, true);
   await settle(x.service);
   expect((await x.service.view("p")).findings).toHaveLength(1);
+  expect((await x.service.view("p")).lastRun).toMatchObject({ findings: 1, replaced: 1 });
 });
 
 test("a reply without JSON is retried once, then the run is an error", async () => {
@@ -278,34 +279,37 @@ test("project remove backs up runs and suggestions; get_task lists paseo.json sc
   expect(await readFile(join(x.root, "paseo.json"), "utf8")).toContain("npm test");
 });
 
-test("a later run refreshes the suggestion it repeats and merges repeats the model points out (§5.3)", async () => {
+test("a later run replaces the open suggestions, keeps accepted and dismissed ones, and keeps the old list when it finds nothing valid (§5.3)", async () => {
   const x = await setup();
   await x.log.append("p", records(6, 3));
   x.service.run("p", x.paseo, true);
   await settle(x.service);
   const first = (await x.service.view("p")).findings[0];
-  // An older reworded copy, as left by runs before this fix.
   await x.state.update((state) => {
-    state.findings.push({ ...first, id: "dddddddd-dup", fingerprint: "repo_tool:old-copy", title: "i18n catalog writer", seen: 2 });
+    state.findings.push(
+      { ...first, id: "dddddddd-acc", fingerprint: "repo_tool:fixture-checklist", title: "Fixture checklist", status: "accepted", acceptedTaskId: "aaaaaaaa-1" },
+      { ...first, id: "eeeeeeee-dis", fingerprint: "skill:doc-sync", target: "skill", title: "Doc sync", status: "dismissed" },
+    );
     return { value: undefined, changed: true };
   });
   x.setNow(NOW + 86_400_000);
-  x.replies.push(
-    JSON.stringify({
-      findings: [{ updates: first.id.slice(0, 8), target: "repo_tool", title: "i18n catalog tool", evidence: "5 cards now", proposal: "scripts/i18n.mjs add|rename", benefit: "fewer edits", confidence: "high", cards: ["bbbbbbbb", "cccccccc"] }],
-      merges: [{ keep: first.id.slice(0, 8), drop: ["dddddddd"] }],
-      noise: "",
-      verdict: "",
-    }),
-  );
+  const finding = (title: string, cards: string[]) => ({ target: "repo_tool", title, evidence: "5 cards", proposal: "scripts/x.mjs", benefit: "less typing", confidence: "high", cards });
+  x.replies.push(JSON.stringify({ findings: [finding("Board inspector", ["bbbbbbbb", "cccccccc"]), finding("Fixture checklist", ["aaaaaaaa", "bbbbbbbb"])], noise: "", verdict: "" }));
   x.service.run("p", x.paseo, true);
   await settle(x.service);
-  const view = await x.service.view("p");
-  expect(view.findings).toHaveLength(1);
-  expect(view.findings[0]).toMatchObject({ id: first.id, title: "i18n helper", evidence: "5 cards now", seen: 4, status: "open" });
-  expect(view.findings[0].cards.sort()).toEqual(["aaaaaaaa-1", "bbbbbbbb-2", "cccccccc-3"]);
-  expect(view.lastRun).toMatchObject({ status: "ok", findings: 0, refreshed: 1, merged: 1 });
-  expect(view.lastRun?.reason).toBeUndefined();
+  let view = await x.service.view("p");
+  expect(view.findings.filter((f) => f.status === "open").map((f) => f.title)).toEqual(["Board inspector"]);
+  expect(view.findings.map((f) => f.id)).toEqual(expect.arrayContaining(["dddddddd-acc", "eeeeeeee-dis"]));
+  expect(view.findings.some((f) => f.id === first.id)).toBe(false);
+  expect(view.lastRun).toMatchObject({ status: "ok", findings: 1, replaced: 1 });
+  // Nothing valid (unknown cards): the previous suggestions stay.
+  x.setNow(NOW + 2 * 86_400_000);
+  x.replies.push(JSON.stringify({ findings: [finding("Something", ["zzzzzzzz", "yyyyyyyy"])], noise: "", verdict: "" }));
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  view = await x.service.view("p");
+  expect(view.findings.filter((f) => f.status === "open").map((f) => f.title)).toEqual(["Board inspector"]);
+  expect(view.lastRun).toMatchObject({ findings: 0, replaced: 0, reason: "No suggestions this time." });
 });
 
 test("the cost of one cycle adds up each included project's latest priced run", async () => {
@@ -324,8 +328,7 @@ test("the cost of one cycle adds up each included project's latest priced run", 
     manual: false,
     status: "ok" as const,
     findings: 0,
-    refreshed: 0,
-    merged: 0,
+    replaced: 0,
     stats: { calls: 0, actions: 0, cards: 0, sessions: 0 },
     ...(cost === undefined ? {} : { usage: { totalCostUsd: cost } }),
   });

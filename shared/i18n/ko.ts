@@ -1216,6 +1216,5 @@ const catalog: Catalog = {
   "Nothing collected.": "수집된 내용이 없습니다.",
   "Last run: {in} in · {out} out · ${cost}.": "마지막 실행: 입력 {in} · 출력 {out} · ${cost}.",
   "About ${month} per month for {n} projects at this pace.": "이 속도라면 프로젝트 {n}개에 월 약 ${month}.",
-  "Seen in {n} runs": "{n}회 실행에서 발견",
 };
 export default catalog;

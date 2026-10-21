@@ -1216,6 +1216,5 @@ const catalog: Catalog = {
   "Nothing collected.": "収集されたものはありません。",
   "Last run: {in} in · {out} out · ${cost}.": "前回の実行: 入力 {in} · 出力 {out} · ${cost}。",
   "About ${month} per month for {n} projects at this pace.": "このペースで {n} プロジェクト分、月あたり約 ${month}。",
-  "Seen in {n} runs": "{n} 回の実行で検出",
 };
 export default catalog;

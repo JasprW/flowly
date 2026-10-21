@@ -94,6 +94,37 @@ PASS:
 
 UNRUN: a live run with this change. The installed plugin runs the main tree, which does not have it until the PR is merged.
 
+### 2026-10-21: after merging PR #10 (06acf6f)
+
+- PR #10 was rebased onto `090df6a` because branch protection requires an up-to-date branch. typecheck and 853 tests passed on that tree; CI (Node 22, Node 24, CI gate) passed. Squash-merged as `06acf6f`.
+- Local main was reset to it, with the PR diff applied to the shared working tree first; others' files were kept. Main tree: typecheck PASS, `npm test` 854 passed, 65 skipped. `paseo plugin reload flowly`: running, no errors.
+- Run now on Flowly (`claude/claude-sonnet-5-5`): ok, about 50 s, **$0.48**, 127k context tokens, 3.5k output tokens.
+  - Counts: **1 added, 6 refreshed, 1 merged**. Open suggestions stay at 11.
+- The model followed the new contract. Its raw reply, read from the archived temporary session `b0c39ad1`, has 7 findings: 6 set `updates`, and 1 sets `nearest` plus `difference`. It also merged last run's repeat "check 与 reload 合并" into `verify` (`verify` is now seen 5×).
+- The 1 new suggestion, "app.paseo.sh 截图/探测脚本模板:固定 Playwright 路径与权限", names `cfe3cfbc` (the shared DaemonClient + Playwright harness) as nearest. Its stated difference: it covers only the Playwright screenshot template, with fixed paths and the local-network-access permission. That is a **narrower version** of `cfe3cfbc`, which the prompt says to treat as an update. So it is a borderline repeat. The daemon cannot judge whether a stated difference is real.
+- Last run's other repeat, "追加 docs/PROGRESS.md 和 SPEC-OUTLINE.md 条目的脚本" (`3b4f9a20`), is still open. Its original "文档追加脚本" (`46aff43b`) was refreshed, but the model did not list the pair in `merges`.
+- Overview: `cycleCostUsd` 0.93 over 2 projects.
+
+### 2026-10-21: each run replaces the open suggestions
+
+User decision: suggestions must not accumulate; a new run replaces the old ones. On branch `feat/workflow-insights-replace`:
+- An ok run with at least one valid suggestion removes the project's open suggestions and stores the new ones (`runs[].replaced`). A run without valid suggestions keeps the old list.
+- Accepted and dismissed suggestions are kept. The material lists only them, so the model does not propose them again; the daemon still drops repeats of them (fingerprint or similar title).
+- Removed: `updates`, `merges`, `nearest`, `difference`, the `seen`/`lastSeenAt` fields and the "Seen in N runs" line (string removed from all 9 catalogs). Spec §4.2, §4.3, §4.4, §5.1–§5.3, §10 and §11 are updated.
+
+PASS:
+- `npm run typecheck`.
+- `npm test` (branch tree): 847 passed, 65 skipped.
+- Tests in `shared/workflow-insights.test.ts`:
+  - open suggestions do not block a finding;
+  - accepted and recently dismissed ones do not come back, even reworded or in another language;
+  - a dismissal past its cooldown no longer blocks;
+  - dedupe within a run;
+  - `replaceOpen` removes only this project's open suggestions.
+- `server/workflow-insights.test.ts`: a second run replaces the open suggestion and keeps the accepted and dismissed ones; a run with nothing valid keeps the old list.
+
+UNRUN: a live run with this change, until it is merged and installed.
+
 ## UNRUN
 
 - The Insights section, settings group, project switch, Create card prefill and tip in a real desktop or compact window (no UI session was used).

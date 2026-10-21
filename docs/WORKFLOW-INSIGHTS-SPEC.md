@@ -152,7 +152,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 6. 被读得最多的文件，前 30。
 7. 失败的命令，最多 60 条，每条 260 字符。
 8. inline 摘录：按开头 240 字符去重后，**按卡片轮流抽样**（避免集中在少数长 session），最多 280 条。
-9. 已有建议：本项目的 open 与 accepted 建议，以及 30 天内 dismissed 的建议。每条一行：`短 ID · 状态 · target: 标题 — proposal 前 160 字`。模型用短 ID 指代它们（§5.3）。
+9. 已关闭的建议：本项目 accepted 的建议，以及 30 天内 dismissed 的建议，每条一行：`状态 · target: 标题 — proposal 前 160 字`，并要求模型不要再提（§5.3）。open 的建议不放进素材，因为本次结果会替换它们。
 
 ### 4.3 模型调用
 
@@ -163,12 +163,8 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 - prompt（英文，agent-facing）要点：
   - 可选的五类目标：`paseo_script`、`worktree_setup`、`repo_tool`、`agents_md`、`skill`；
   - 每条结论都要引用卡片短 ID 和次数；不推荐已存在的东西，除非组合起来能省事；git 写操作和一次性探索不做成脚本；重点解读内联脚本的用途；最多 8 条；如实标注置信度；
-  - 与已有建议说的是同一件事（措辞或范围不同也算）时，不要写成新建议，而是用 `updates` 填那条的短 ID，并给出刷新后的依据、proposal 和卡片；dismissed 或 accepted 的不要再提；
-  - 列出了已有建议时，没填 `updates` 的每条建议都要填 `nearest`（最接近的已有建议的短 ID）和 `difference`（一句话说明它覆盖了哪些 nearest 没有的内容）。已有建议的收窄、扩大或组合版本（例如同一组命令再加一步）不算不同，应填 `updates`。说不出真正的不同时就填 `updates`；两者都没有的建议会被丢弃；
-  - 已有的 open 建议中有两条或以上说的是同一件事时，在 `merges` 里列出 `{ keep, drop[] }`，保留措辞最好的那条；
-  - 不使用工具；**只返回一个 JSON 对象**。
-- 输出 schema：
-  `{ findings: [{ updates?, nearest?, difference?, target, title, evidence, proposal, benefit, confidence: "high"|"medium"|"low", cards: string[] }], merges: [{ keep, drop: string[] }], noise, verdict }`。
+  - 列出的已 accepted 或 dismissed 的建议不要再提，换说法或收窄范围也不行；本次结果会替换之前运行留下的 open 建议，所以要列出所有仍值得做的事，而不只是新发现；
+  `{ findings: [{ target, title, evidence, proposal, benefit, confidence: "high"|"medium"|"low", cards: string[] }], noise, verdict }`。
   同时以 `outputSchema` 传入，但 **Claude 不强制执行它**：探针返回的是 markdown。
 - 解析：用 `firstObject` 取 JSON，兼容代码块和字符串数组。取不到时在同一 session 追加一条消息 “Reply again with only the JSON object described above.”，重试一次；仍失败则本次运行记为错误 “The workflow insights model returned no JSON.”。
 - 记录 `lastUsage`（输入、缓存、输出 token，以及 provider 给出的费用）。
@@ -176,20 +172,11 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 ### 4.4 校验（daemon，不信任模型的计数与 ID）
 
 - `cards` 中的短 ID 必须能对应到本项目、本窗口内有记录的卡片，对不上的丢弃。有效卡片少于 2 张的建议丢弃；窗口里只有 1 张卡时，引用这 1 张即可。
-- 每条建议先判断是否在重复已有建议，判断顺序（§5.3）：
-  1. `updates` 填的 ID（完整 ID 或短 ID）能唯一对应一条已有建议；
-  2. 填了 `nearest` 但 `difference` 为空，且 `nearest` 能对应一条已有建议：视为它的更新；
-  3. 指纹（target + 规范化标题）相同；
-  4. 标题相似：同一 target 且相似度 ≥ 0.6，或任意 target 且相似度 ≥ 0.7。相似度是标题的 Jaccard 系数，英文按词计，中日韩文字按相邻两字计。
-- 判定为重复时：
-  - 对应 open 建议：刷新它（§5.3），不新增；同一次运行里多条指向同一条建议时，只取第一条；
-  - 对应 accepted 或 30 天内 dismissed 的建议：直接丢弃。
-- 不重复的建议：素材里列出了已有建议（§4.2 第 9 项不为空）而它没有 `difference` 时丢弃，因为模型没有说明它和已有建议有什么不同。`nearest` 对不上已有建议、但写了 `difference` 的，仍按新建议处理。
-- 新建议与本次已新增的建议之间也做同样的相似度比较，避免一次运行里出现两条相同的。
-- `merges`：`keep` 必须是已有的 open 或 accepted 建议，`drop` 里只保留其中 open 的、不等于 keep 的；无法对应的 ID 忽略。被合并掉的建议不再单独刷新。
+- 与 accepted 或 30 天内 dismissed 的建议重复的丢弃：指纹（target + 规范化标题）相同，或标题相似（同一 target 且相似度 ≥ 0.6，或任意 target 且相似度 ≥ 0.7；相似度是标题的 Jaccard 系数，英文按词计，中日韩文字按相邻两字计）。open 建议不参与比较，它们会被替换（§5.3）。
+- 同一次运行内的建议之间也做同样的比较，避免出现两条相同的。
 - 每个字段限长：title 120，evidence 1000，proposal 4000，benefit 500；超长的建议丢弃，不截断。
-- 新增与刷新合计最多 8 条。既没有新增、刷新，也没有合并时，本次运行记为 ok，结果为 “No suggestions this time”。
-- 以上在写入 `workflow-insights.json` 的同一次串行写里，按写入那一刻的建议状态计算，所以运行期间用户刚忽略的建议不会被刷新回来。
+- 最多保留 8 条。全部被丢弃时本次运行记为 ok，结果为 “No suggestions this time”，之前的 open 建议保留（§5.3）。
+- 以上在写入 `workflow-insights.json` 的同一次串行写里，按写入那一刻的建议状态计算，所以运行期间用户刚忽略的建议不会被重新加回来。
 
 ## 5. 建议与落地
 
@@ -200,9 +187,9 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 ```
 { version: 1,
   runs: [{ id, projectId, at, from, to, model, status: "ok"|"skipped"|"error", reason?, usage?,
-           findings, refreshed, merged, stats: { calls, actions, cards, sessions } }],
+           findings, replaced, stats: { calls, actions, cards, sessions } }],
   findings: [{ id, projectId, runId, fingerprint, target, title, evidence, proposal, benefit, confidence, cards[],
-               status: "open"|"accepted"|"dismissed", acceptedTaskId?, createdAt, updatedAt, seen, lastSeenAt? }],
+               status: "open"|"accepted"|"dismissed", acceptedTaskId?, createdAt, updatedAt }],
   revision }
 ```
 
@@ -220,7 +207,6 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
   - target chip：paseo.json script / Worktree setup / Repo tool / AGENTS.md / Skill；
   - 标题、依据（可点击的卡片引用，打开卡片侧栏）、收益；
   - proposal 默认收起，展开后以等宽字体显示；
-  - 被多次运行发现时（`seen` > 1）显示 “Seen in N runs”；
   - AI 星星标记（AI-MARK-SPEC）。
 - 操作：
   - **Create card**：打开 New task 表单并预填：
@@ -242,17 +228,17 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
   - `agents_md` / `skill`：“Write it, then check it against the cited cards.”
 - 数据读取：只在 Insights 页打开时查询，带 etag。页面关闭后不轮询。运行进行中时每 10 秒查询一次。
 
-### 5.3 去重与冷却
+### 5.3 每次运行替换 open 建议
 
-2026-10-21 在真实数据上发现：每天运行时，25 条 open 建议里约一半是在重说之前的建议（verify、看板查看、Daemon 连接各 3 次）。原因是模型每次换个说法，而只比较指纹拦不住。改为：
+用户决定（2026-10-21）：建议不累积，新一次运行的结果覆盖旧的。
 
-- **由模型标注**：已有建议带短 ID 写进素材（§4.2 第 9 项）。模型发现同一件事时填 `updates`，发现已有建议之间互相重复时填 `merges`。这是主要手段，因为改写后的重复往往换了语言或角度，靠字面比对认不出来（真实数据里同一个“看板查看脚本”的两个标题相似度只有 0.13）。
-- **新建议要说明不同**（2026-10-21 合并 PR #8 后的 Run now：13 条重复都合并对了，但新增的 2 条仍是 open 建议的重复，“check 与 reload 合并”之于 `verify`、“追加 PROGRESS/SPEC-OUTLINE 条目的脚本”之于“文档追加脚本”，标题相似度 0.00 和 0.40，兜底拦不住）：模型对每条新建议都必须指出最接近的已有建议并写出不同之处（§4.3），只写 `nearest` 不写不同视为更新，两者都没有就丢弃（§4.4）。这样模型必须逐条对照已有建议，而不是只在想起来时才填 `updates`。代价：模型漏填时，一条真正的新建议要等下一次运行才会出现。
-- **daemon 兜底**：指纹相同或标题明显相似（§4.4）也按重复处理。阈值取得保守：真实数据中的明显改写为 0.64 和 0.67；只共享通用词的标题（如 “alpha helper tool” 与 “bravo helper tool”）为 0.5，不算重复。
-- **刷新**：open 建议被再次发现时，更新 evidence、proposal、benefit、confidence；卡片取并集（最多 20 张）；`seen` 加 1，`lastSeenAt` 和 `runId` 改为本次。标题保持不变，用户认得出是同一条。
-- **合并**：keep 的 `seen` 加上被合并建议的 `seen`，卡片取并集，被合并的 open 建议删除。keep 是 accepted 时，同样删除它的 open 重复，因为这件事已经建了卡。
-- **已有的重复**：不在 daemon 启动时按字面自动合并（字面相似度认不出大部分重复，硬合并容易误伤）。下一次运行（定时或 Run now）时由模型给出 `merges`，统一收拢。
-- **冷却**：dismissed 的建议 30 天内不会再出现，也不会被刷新；之后可以作为新建议再提。accepted 的不会再出现。
+- **替换**：一次 ok 的运行只要得到至少 1 条有效建议，就删除本项目所有 open 建议，换成这次的结果。`runs[].replaced` 记录删除了多少条。
+- **不清空**：一条有效建议都没有时（模型没给出，或全部被校验丢弃），之前的 open 建议保留，避免一次失败的回复把列表清空。skipped 和 error 的运行不动建议。
+- **保留**：accepted（已建卡，带 `acceptedTaskId`）和 dismissed 的建议不受替换影响。
+- **冷却**：dismissed 的建议 30 天内不会再出现（§4.4），之后可以作为新建议再提；accepted 的不会再出现。二者以“状态 · target: 标题 — proposal”写进素材，让模型不要再提。
+- **代价**：模型每次的结果有波动。某条仍然有用、但这次没被提到的建议会消失，要等它下次再被提出来；想留住它就趁它还在时建卡。周期越长（例如每周），这个波动越少。
+- **为什么**：之前试过让模型标注 `updates`/`merges` 刷新已有建议，以及要求新建议写出与最接近建议的不同（PR #8、#10）。重复确实减少了，但机制复杂，模型仍会把收窄版当新建议。替换的做法简单，而且列表永远只反映最近一次分析。
+- **兼容**：旧数据里的 `seen`、`lastSeenAt`、`refreshed`、`merged` 字段读取时忽略。下一次有结果的运行会替换掉旧的 open 建议，包括之前累积的重复。
 
 ### 5.4 让 agent 用上已有脚本
 
@@ -310,7 +296,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 - 安静期跳过；素材预算裁剪与按卡片轮流抽样。
 - 解析：纯 JSON、代码块、markdown 中夹带 JSON、无 JSON 时的重试、仍失败的错误。
 - 校验：无效卡片 ID、少于 2 张卡（窗口只有 1 张卡时除外）、超长字段、重复指纹、dismissed 冷却。
-- 重复（2026-10-21）：`updates` 刷新 open、不动 accepted/dismissed、未知 ID 加上 `difference` 视为新建议；2026-10-21 漏掉的两对（低于相似度兜底；不说明不同就丢弃；只给 `nearest` 就刷新它；写了不同才新增；没有列出已有建议时不要求）；跨语言的标题相似度兜底与不误判通用词；同一次运行内去重；`merges` 只合并 open；`applyReconciled` 的刷新、`seen` 累加与删除；以及两次运行之间的实际刷新与合并（daemon 测试）。
+- 替换（2026-10-21）：open 建议不阻止新建议；accepted 与冷却期内 dismissed 的建议不会回来（跨语言改写也拦住，通用词不误判）；同一次运行内去重；`replaceOpen` 只删本项目 open 建议；daemon 测试里第二次运行替换 open、保留 accepted/dismissed，没有有效建议时保留旧列表。
 - 一个周期的费用按项目求和；两张卡的忙碌项目在定时运行中会被分析。
 - 建卡时原子 accept 与错误回滚；设置缺字段时的默认值。
 - 提示规则（`client/onboarding-logic.test.ts`）；i18n 完整性。
@@ -329,7 +315,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 
 1. **默认关闭**，周期默认 **Weekly**，整点默认 09:00。
 2. **Auto 模型用 Sonnet**（5.5 → 5），而不是摘要用的便宜模型；不可用时才退回 Summary model。
-3. **窗口至少 7 天**，所以 Daily 是“每天看最近 7 天”，靠去重避免每天出现相同的建议。
+3. **窗口至少 7 天**，所以 Daily 是“每天看最近 7 天”。每次运行替换 open 建议（§5.3，2026-10-21 用户决定），不会每天累积相同的建议。
 4. **安静期跳过**（新增 action 少于 50 条，或少于 2 张卡且新增 action 少于 200 条；2026-10-21 由“少于 3 张卡”放宽，用户确认），省下没有新信息时的 token。手动 Run now 不受此限制。
 5. **只有开关打开才采集**，打开时回填 7 天；关闭不删数据，另设删除按钮。
 6. 建议放在 **Insights 页**，不进 Ideas 收件箱。Ideas 挂在某张来源卡上，而这里的建议是项目级的。

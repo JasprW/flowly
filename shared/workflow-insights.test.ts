@@ -3,7 +3,7 @@ import {
   MATERIAL_LIMIT,
   MAX_FINDINGS,
   aggregate,
-  applyReconciled,
+  replaceOpen,
   buildMaterial,
   classify,
   fingerprint,
@@ -193,10 +193,10 @@ describe("aggregation and material", () => {
       agg: aggregate(records),
       cards: Array.from({ length: 20 }, (_, i) => ({ id: `t${i}`, title: `Card ${i}`, tags: [], lane: "done" })),
       config: { paseoScripts: [], paseoWorktree: "", packageScripts: { test: "vitest run" }, commands: "" },
-      previous: [{ id: "f1a2b3c4-0000", target: "repo_tool", title: "i18n helper", status: "open", proposal: "scripts/i18n.mjs  add <key>" }],
+      previous: [{ target: "repo_tool", title: "i18n helper", status: "dismissed", proposal: "scripts/i18n.mjs  add <key>" }],
     });
     expect(material.length).toBeLessThanOrEqual(MATERIAL_LIMIT);
-    expect(material).toContain("f1a2b3c4 · open · repo_tool: i18n helper — scripts/i18n.mjs add <key>");
+    expect(material).toContain("- dismissed · repo_tool: i18n helper — scripts/i18n.mjs add <key>");
     expect(material).toContain('"test":"vitest run"');
   });
 });
@@ -219,20 +219,12 @@ describe("model output", () => {
     expect(parseWorkflowOutput("## Findings\n1. i18n helper")).toBeNull();
     expect(parseWorkflowOutput('{"verdict":"no list"}')).toBeNull();
   });
-  test("updates and merges are read; a merge without drops is ignored", () => {
-    const body = JSON.stringify({ findings: [finding({ updates: " f1a2b3c4 " })], merges: [{ keep: "aaaa1111", drop: ["bbbb2222", 3] }, { keep: "cccc3333", drop: [] }], noise: "", verdict: "" });
-    const out = parseWorkflowOutput(body)!;
-    expect(out.findings[0].updates).toBe("f1a2b3c4");
-    const near = parseWorkflowOutput(JSON.stringify({ findings: [finding({ nearest: "f1a2b3c4", difference: " adds reload " })], merges: [], noise: "", verdict: "" }))!;
-    expect(near.findings[0]).toMatchObject({ nearest: "f1a2b3c4", difference: "adds reload" });
-    expect(out.merges).toEqual([{ keep: "aaaa1111", drop: ["bbbb2222"] }]);
-  });
   test("validation drops unknown cards, thin evidence, over-long fields and repeats", () => {
     const now = Date.parse("2026-10-19T00:00:00.000Z");
     const cardIds = ["aaaaaaaa-1111", "bbbbbbbb-2222", "cccccccc-3333"];
     const existing: Finding[] = [
-      { id: "f1", projectId: "p", runId: "r", fingerprint: fingerprint("skill", "Doc sync checklist"), target: "skill", title: "Doc sync checklist", evidence: "", proposal: "x", benefit: "", confidence: "high", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-10-10T00:00:00.000Z", seen: 1 },
-      { id: "f2", projectId: "p", runId: "r", fingerprint: fingerprint("agents_md", "Old rule"), target: "agents_md", title: "Old rule", evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-08-01T00:00:00.000Z", seen: 1 },
+      { id: "f1", projectId: "p", runId: "r", fingerprint: fingerprint("skill", "Doc sync checklist"), target: "skill", title: "Doc sync checklist", evidence: "", proposal: "x", benefit: "", confidence: "high", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-10-10T00:00:00.000Z" },
+      { id: "f2", projectId: "p", runId: "r", fingerprint: fingerprint("agents_md", "Old rule"), target: "agents_md", title: "Old rule", evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status: "dismissed", createdAt: "", updatedAt: "2026-08-01T00:00:00.000Z" },
     ];
     const out = validateFindings(
       [
@@ -244,13 +236,12 @@ describe("model output", () => {
         finding({ target: "agents_md", title: "Old rule" }),
         finding({ target: "magic", title: "Bad target" }),
         finding({ title: "Odd confidence", confidence: "certain", cards: ["bbbbbbbb", "cccccccc"] }),
-      ].map((f) => ({ ...f, difference: "a different routine" })),
+      ],
       { cardIds, existing, now },
     );
-    expect(out.added.map((f) => f.title)).toEqual(["i18n helper script", "Old rule", "Odd confidence"]);
-    expect(out.added[0].cards).toEqual(["aaaaaaaa-1111", "bbbbbbbb-2222"]);
-    expect(out.added[2].confidence).toBe("medium");
-    expect(out.refreshed).toEqual([]);
+    expect(out.map((f) => f.title)).toEqual(["i18n helper script", "Old rule", "Odd confidence"]);
+    expect(out[0].cards).toEqual(["aaaaaaaa-1111", "bbbbbbbb-2222"]);
+    expect(out[2].confidence).toBe("medium");
   });
   test("at most MAX_FINDINGS are kept", () => {
     const words = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima".split(" ");
@@ -258,15 +249,15 @@ describe("model output", () => {
       words.map((w) => finding({ title: `${w} helper tool` })),
       { cardIds: ["aaaaaaaa-1", "bbbbbbbb-2"], existing: [], now: 0 },
     );
-    expect(out.added).toHaveLength(MAX_FINDINGS);
+    expect(out).toHaveLength(MAX_FINDINGS);
   });
   test("a window with one card accepts findings citing that card", () => {
     const out = validateFindings([finding({ cards: ["aaaaaaaa"] })], { cardIds: ["aaaaaaaa-1"], existing: [], now: 0 });
-    expect(out.added).toHaveLength(1);
+    expect(out).toHaveLength(1);
   });
 });
 
-describe("repeats (§5.3)", () => {
+describe("each run replaces the open suggestions (§5.3)", () => {
   const now = Date.parse("2026-10-21T00:00:00.000Z");
   const cardIds = ["aaaaaaaa-1111", "bbbbbbbb-2222", "cccccccc-3333"];
   const raw = (over: Partial<RawFinding> = {}): RawFinding => ({ target: "repo_tool", title: "Something new", evidence: "e2", proposal: "p2", benefit: "b2", confidence: "high", cards: ["aaaaaaaa", "cccccccc"], ...over });
@@ -285,112 +276,48 @@ describe("repeats (§5.3)", () => {
     status: "open",
     createdAt: "2026-10-19T00:00:00.000Z",
     updatedAt: "2026-10-19T00:00:00.000Z",
-    seen: 1,
     ...over,
   });
-  test("the model's updates id refreshes an open suggestion instead of adding one", () => {
-    const existing = [stored("1a2b3c4d-open", { title: "Board inspector" }), stored("2b3c4d5e-done", { title: "Edit CLI", status: "accepted" }), stored("3c4d5e6f-gone", { title: "Asar dump", status: "dismissed", updatedAt: "2026-10-20T00:00:00.000Z" })];
-    const out = validateFindings(
-      [raw({ updates: "1a2b3c4d", title: "board.json query script" }), raw({ updates: "2b3c4d5e", title: "Assert edit tool" }), raw({ updates: "3c4d5e6f", title: "Dump the app bundle" }), raw({ updates: "ffffffff", difference: "not about the board" })],
-      { cardIds, existing, now },
-    );
-    expect(out.refreshed.map((r) => r.id)).toEqual(["1a2b3c4d-open"]);
-    expect(out.refreshed[0].draft).toMatchObject({ evidence: "e2", proposal: "p2", cards: ["aaaaaaaa-1111", "cccccccc-3333"] });
-    // Accepted and recently dismissed ones are left alone; an unknown id with a stated difference is a new suggestion.
-    expect(out.added.map((f) => f.title)).toEqual(["Something new"]);
+  test("open suggestions do not block a finding: the run replaces them", () => {
+    const out = validateFindings([raw({ title: "Board inspector" })], { cardIds, existing: [stored("1a2b3c4d-open", { title: "Board inspector" })], now });
+    expect(out.map((f) => f.title)).toEqual(["Board inspector"]);
   });
-  test("a reworded repeat is caught by title similarity, also across languages; different tools are not", () => {
+  test("accepted and recently dismissed suggestions do not come back, also reworded or in another language", () => {
     const existing = [
-      stored("1a2b3c4d-x", { title: "“新增用户可见特性”交付 checklist skill(onboarding + i18n + README)", target: "skill" }),
-      stored("2b3c4d5e-x", { title: "board.json read-only inspector CLI" }),
-      stored("3c4d5e6f-x", { title: "一次性探测daemon状态时反复重写DaemonClient连接样板" }),
+      stored("1a2b3c4d-acc", { title: "board.json read-only inspector CLI", status: "accepted" }),
+      stored("2b3c4d5e-dis", { title: "“新增用户可见特性”交付 checklist skill(onboarding + i18n + README)", target: "skill", status: "dismissed", updatedAt: "2026-10-20T00:00:00.000Z" }),
+      stored("3c4d5e6f-old", { title: "Old rule", target: "agents_md", status: "dismissed", updatedAt: "2026-08-01T00:00:00.000Z" }),
     ];
     const out = validateFindings(
       [
-        raw({ target: "skill", title: "“新增用户可见特性”交付 checklist skill" }),
         raw({ title: "board.json read-only inspector CLI (events, filters)" }),
-        raw({ title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本", nearest: "3c4d5e6f", difference: "解包 app.asar，不是连 daemon" }),
+        raw({ target: "skill", title: "“新增用户可见特性”交付 checklist skill" }),
+        raw({ target: "agents_md", title: "Old rule" }),
+        raw({ title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本" }),
       ],
       { cardIds, existing, now },
     );
-    expect(out.refreshed.map((r) => r.id)).toEqual(["1a2b3c4d-x", "2b3c4d5e-x"]);
-    expect(out.added.map((f) => f.title)).toEqual(["翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本"]);
-    expect(titleSimilarity("board.json read-only inspector CLI", "board.json read-only inspector CLI (events, filters)")).toBeGreaterThanOrEqual(0.6);
-    // Sharing only generic words is not a repeat.
+    // A dismissal older than the cooldown no longer blocks.
+    expect(out.map((f) => f.title)).toEqual(["Old rule", "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本"]);
     expect(similarFinding({ target: "repo_tool", title: "alpha helper tool" }, { target: "repo_tool", title: "bravo helper tool" })).toBe(false);
-    expect(similarFinding({ target: "repo_tool", title: "一次性探测daemon状态时反复重写DaemonClient连接样板" }, { target: "repo_tool", title: "翻查已安装Paseo.app内置SDK源码时反复重写asar解包脚本" })).toBe(false);
-  });
-  // The two repeats the 2026-10-21 Run now added after PR #8: titles too different for the fallback.
-  const missed = [
-    { existing: "验证流水线 `verify`:typecheck、test、插件重载、检查日志", repeat: "改完代码的收尾:check 与 reload 合并", target: "paseo_script" },
-    { existing: "文档追加脚本:PROGRESS.md / SPEC-OUTLINE.md 条目的幂等插入", repeat: "追加 docs/PROGRESS.md 和 SPEC-OUTLINE.md 条目的脚本", target: "repo_tool" },
-  ] as const;
-  const missedExisting = () => [
-    stored("d7bbb584-verify", { title: missed[0].existing, target: "paseo_script" }),
-    stored("46aff43b-docs", { title: missed[1].existing }),
-  ];
-  test("the 2026-10-21 repeats are below the similarity fallback", () => {
-    for (const m of missed) expect(similarFinding({ target: m.target, title: m.repeat }, { target: m.target, title: m.existing })).toBe(false);
-  });
-  test("a new finding that gives no difference from the suggestions shown is dropped", () => {
-    const out = validateFindings(
-      missed.map((m) => raw({ target: m.target, title: m.repeat })),
-      { cardIds, existing: missedExisting(), now },
-    );
-    expect(out.added).toEqual([]);
-    expect(out.refreshed).toEqual([]);
-  });
-  test("naming the nearest suggestion without a difference refreshes it", () => {
-    const out = validateFindings(
-      [raw({ target: "paseo_script", title: missed[0].repeat, nearest: "d7bbb584" }), raw({ title: missed[1].repeat, nearest: "46aff43b", difference: "" })],
-      { cardIds, existing: missedExisting(), now },
-    );
-    expect(out.refreshed.map((r) => r.id)).toEqual(["d7bbb584-verify", "46aff43b-docs"]);
-    expect(out.added).toEqual([]);
-  });
-  test("a stated difference keeps a new finding; with no suggestions shown none is needed", () => {
-    const out = validateFindings(
-      [raw({ title: "asar 解包脚本", nearest: "46aff43b", difference: "解包 Paseo.app 的 app.asar，与文档无关" })],
-      { cardIds, existing: missedExisting(), now },
-    );
-    expect(out.added.map((f) => f.title)).toEqual(["asar 解包脚本"]);
-    expect(validateFindings([raw({ title: missed[1].repeat })], { cardIds, existing: [], now }).added).toHaveLength(1);
-    // Dismissed past its cooldown was not shown, so it does not count.
-    const old = [stored("46aff43b-docs", { title: missed[1].existing, status: "dismissed", updatedAt: "2026-08-01T00:00:00.000Z" })];
-    expect(validateFindings([raw({ title: missed[1].repeat })], { cardIds, existing: old, now }).added).toHaveLength(1);
+    expect(titleSimilarity("board.json read-only inspector CLI", "board.json read-only inspector CLI (events, filters)")).toBeGreaterThanOrEqual(0.6);
   });
   test("two findings of one run about the same thing add one suggestion", () => {
     const out = validateFindings([raw({ title: "verify pipeline script" }), raw({ title: "verify pipeline script (typecheck)" })], { cardIds, existing: [], now });
-    expect(out.added).toHaveLength(1);
+    expect(out).toHaveLength(1);
   });
-  test("merges keep one suggestion and drop open repeats only", () => {
-    const existing = [stored("1a2b3c4d-k"), stored("2b3c4d5e-d"), stored("3c4d5e6f-acc", { status: "accepted" }), stored("4d5e6f7a-dis", { status: "dismissed" })];
-    const out = validateFindings([], {
-      cardIds,
-      existing,
-      now,
-      merges: [
-        { keep: "1a2b3c4d", drop: ["2b3c4d5e", "3c4d5e6f", "1a2b3c4d", "zzzzzzzz"] },
-        { keep: "4d5e6f7a", drop: ["2b3c4d5e"] },
-      ],
-    });
-    expect(out.merged).toEqual([{ keep: "1a2b3c4d-k", drop: ["2b3c4d5e-d"] }]);
-  });
-  test("applying a run refreshes in place, sums seen counts and removes merged repeats", () => {
-    const findings = [stored("1a2b3c4d-k", { seen: 2 }), stored("2b3c4d5e-d", { seen: 3, cards: ["cccccccc-3333"] }), stored("9e9e9e9e-other", { projectId: "q" })];
-    const draft = { fingerprint: "x", target: "repo_tool" as const, title: "new words", evidence: "fresh", proposal: "better", benefit: "b", confidence: "high" as const, cards: ["aaaaaaaa-1111"] };
-    const gone = applyReconciled(findings, "p", "r2", "2026-10-21T05:00:00.000Z", { refreshed: [{ id: "1a2b3c4d-k", draft }], merged: [{ keep: "1a2b3c4d-k", drop: ["2b3c4d5e-d"] }] });
-    expect(gone).toBe(1);
-    expect(findings.map((f) => f.id)).toEqual(["1a2b3c4d-k", "9e9e9e9e-other"]);
-    expect(findings[0]).toMatchObject({ title: "1a2b3c4d-k", evidence: "fresh", proposal: "better", seen: 6, runId: "r2", lastSeenAt: "2026-10-21T05:00:00.000Z" });
-    expect(findings[0].cards.sort()).toEqual(["aaaaaaaa-1111", "bbbbbbbb-2222", "cccccccc-3333"]);
+  test("replacing removes only this project's open suggestions", () => {
+    const findings = [stored("o1"), stored("o2"), stored("acc", { status: "accepted" }), stored("dis", { status: "dismissed" }), stored("other", { projectId: "q" })];
+    const removed = replaceOpen(findings, "p", [stored("n1", { runId: "r2" })]);
+    expect(removed).toBe(2);
+    expect(findings.map((f) => f.id)).toEqual(["acc", "dis", "other", "n1"]);
   });
 });
 
 describe("state, settings and project scripts", () => {
   test("trimming keeps open suggestions, recent closed ones and the newest runs", () => {
-    const run = (i: number) => ({ id: `r${i}`, projectId: "p", at: new Date(Date.UTC(2026, 0, 1 + i)).toISOString(), from: "", to: "", model: "", manual: false, status: "ok" as const, findings: 0, refreshed: 0, merged: 0, stats: { calls: 0, actions: 0, cards: 0, sessions: 0 } });
-    const f = (id: string, status: Finding["status"], updatedAt: string): Finding => ({ id, projectId: "p", runId: "r", fingerprint: id, target: "skill", title: id, evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status, createdAt: updatedAt, updatedAt, seen: 1 });
+    const run = (i: number) => ({ id: `r${i}`, projectId: "p", at: new Date(Date.UTC(2026, 0, 1 + i)).toISOString(), from: "", to: "", model: "", manual: false, status: "ok" as const, findings: 0, replaced: 0, stats: { calls: 0, actions: 0, cards: 0, sessions: 0 } });
+    const f = (id: string, status: Finding["status"], updatedAt: string): Finding => ({ id, projectId: "p", runId: "r", fingerprint: id, target: "skill", title: id, evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status, createdAt: updatedAt, updatedAt });
     const state: WorkflowState = {
       version: 1,
       revision: 0,

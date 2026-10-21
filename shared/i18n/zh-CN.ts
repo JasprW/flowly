@@ -1216,6 +1216,5 @@ const catalog: Catalog = {
   "Nothing collected.": "尚未收集。",
   "Last run: {in} in · {out} out · ${cost}.": "上次运行：输入 {in} · 输出 {out} · ${cost}。",
   "About ${month} per month for {n} projects at this pace.": "按此频率，{n} 个项目每月约 ${month}。",
-  "Seen in {n} runs": "已出现 {n} 次",
 };
 export default catalog;
