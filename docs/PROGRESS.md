@@ -667,3 +667,17 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
   in [verification/ci-cd.md](verification/ci-cd.md) when completed. No new npm
   version or actual publish is part of this setup's verification.
 - Onboarding: contributor tooling only; no welcome-tour or one-time tip change.
+
+## 2026-10-21 External items can be registered as outputs (card "外部条目（PR/MR 等）也能登记为 output")
+
+- An agent's own pull/merge request can now be registered with `role=output`
+  ([CONNECTORS-SPEC](CONNECTORS-SPEC.md) §3.1, [CARD-ARTIFACTS-SPEC](CARD-ARTIFACTS-SPEC.md) §2): the server no longer
+  forces external items to `input`, and editing can change their role. Paste and the + menu picker still default to
+  input.
+- An agent re-adding an entry the user added with another role gets a `notice` in the tool result (kept in the receipt,
+  so a replay returns it) instead of a silent no-op.
+- Output items keep their live status; their unread follows new comments and reviews only (fingerprint
+  `<content>~<discussion>`), so the agent's own pushes do not mark its PR unread. Inputs compare as before.
+- Skill (both copies): "part of the task's requirements" is limited to inputs; own PR/MR goes in as output.
+- Existing artifacts forced to input before this change are not migrated.
+- Onboarding: bug fix of an agent-facing rule; no welcome-tour or one-time tip change.

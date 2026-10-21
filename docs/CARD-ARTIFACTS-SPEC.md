@@ -43,13 +43,15 @@
 | `input` | 完成任务所依据或参考的材料 | 需求文档、设计稿、issue 链接、日志、相关资料 |
 | `output` | 本任务的交付物 | 新写的 spec、报告、导出文件、PR、验证证据 |
 
+外部条目（Jira、Confluence、GitHub/GitLab，CONNECTORS-SPEC §3.1）与其他条目一样可取任一角色：人粘贴或从选择器添加默认 input，agent 自己开的 PR/MR 登记为 output。role 不再因为是外部条目而被强制为 input。
+
 ### 2.2 文件路径
 
 - 添加时服务端把路径解析为绝对路径（相对路径以卡片 workspace 目录为基准），`realpath` 后必须位于该卡的 scope 目录之内（`shared/scope.ts` 的有效目录：workspace 目录、项目根、legacy scope 目录；linked root 的符号链接按目标解析后也算在内）。目录外的路径拒绝：“Files outside this card's directories can't be added.”
 - 存储时，位于 workspace 目录内的保存为相对 workspace 的路径（前缀 `./`），其余保存绝对路径。这样 worktree 被收尾后重建（WORKSPACE-RESTORE-SPEC）路径仍然有效。
 - 文件在添加时必须存在（文件或目录均可）；之后被删除、移动或 worktree 被移除时，记录保留，界面显示 “Missing”。
 - URL 只接受 `http:`/`https:`，最长 2000。
-- 同一卡片内 `(kind, target)` 唯一；重复添加返回已有那条，若提供了新的 role/title/note 则按 §3 更新规则处理。
+- 同一卡片内 `(kind, target)` 唯一；重复添加返回已有那条，若提供了新的 role/title/note 则按 §3 更新规则处理。agent 重复添加人添加的条目时不改它；role 与已有的不同时，工具结果带 `notice`（见 §4.1）。
 
 ### 2.3 事件
 
@@ -72,7 +74,7 @@
 
 新增两个 MCP 工具（CLI 同步提供 `artifact` / `artifact-remove` 子命令），都遵循现有签名 request + expectedRevision 协议，幂等，不改 task revision：
 
-- `flowly_add_artifact`：`{ expectedRevision, request, role, target, title?, note? }`。`kind` 由 target 推断（`http(s)://` 为 url，`file://` 与其余为 file）。重复 target 时更新该条的 role/title/note（仅当该条由 agent 添加，任一 session；人添加的保持不变，返回已有那条，回执 `eventId` 为空）。结果带 `artifactId`。路径错误返回 `ARTIFACT_INVALID`。
+- `flowly_add_artifact`：`{ expectedRevision, request, role, target, title?, note? }`。`kind` 由 target 推断（`http(s)://` 为 url，`file://` 与其余为 file）。重复 target 时更新该条的 role/title/note（仅当该条由 agent 添加，任一 session；人添加的保持不变，返回已有那条，回执 `eventId` 为空；此时若请求的 role 与已有的不同，结果带 `notice`：“Already added by the user as <role>; role not changed. …”，回执同样保存它，重放时原样返回）。结果带 `artifactId`。路径错误返回 `ARTIFACT_INVALID`。
 - `flowly_remove_artifact`：`{ expectedRevision, request, id }`。只能移除 agent 添加的产物（任一 session 均可，因为同卡的 session 共享工作）；人添加的拒绝：`ARTIFACT_FORBIDDEN` “Only the user can remove artifacts they added.”
 
 工具描述要点（写进 description 与 skill）：

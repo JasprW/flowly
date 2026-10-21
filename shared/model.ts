@@ -424,6 +424,8 @@ export const receiptSchema = z.object({
   eventId: z.string(),
   /** The artifact an artifact write added, updated or removed. */
   artifactId: z.string().optional(),
+  /** Why an artifact write did not apply what was asked (an agent can't change an entry the user added); shown in the tool result. */
+  notice: z.string().optional(),
   /** The workpad revision a workpad write committed. */
   workpadRevision: z.number().int().positive().optional(),
   taskRevision: z.number().int().positive(),

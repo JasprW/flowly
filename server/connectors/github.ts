@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { classifyQuery, connectorLimits, githubFromUrl, githubItemUrl, splitRepoKey, type ExternalSummary } from "../../shared/connectors";
 import { ExternalError, ReadOnlyHttp, cut, mapLimit, retryAfter, type Fetch, type StoredConnection } from "./http";
 import type { ConnectorAdapter, Fetched, ItemRef } from "./types";
+import { withDiscussion } from "./fingerprint";
 
 /** GitHub issues and pull requests (CONNECTORS-SPEC §6), github.com and Enterprise Server, REST. */
 
@@ -183,18 +184,9 @@ export const githubAdapter: ConnectorAdapter = {
   },
   fingerprint(full) {
     const { issue, comments, pull, reviews } = full as Full;
-    return createHash("sha256")
-      .update(
-        JSON.stringify([
-          issue.title || "",
-          issue.body || "",
-          comments.map((c) => `${c.id}:${c.updated_at || c.created_at}`),
-          reviews.map((r) => `${r.id}:${r.state}`),
-          pull?.head?.sha || "",
-        ]),
-      )
-      .digest("hex")
-      .slice(0, 16);
+    const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+    const discussion = [comments.map((c) => `${c.id}:${c.updated_at || c.created_at}`), reviews.map((r) => `${r.id}:${r.state}`)];
+    return withDiscussion(hash([issue.title || "", issue.body || "", ...discussion, pull?.head?.sha || ""]), hash(discussion));
   },
   markdown(summary, full, limit) {
     const { issue, comments, pull, reviews, files } = full as Full;

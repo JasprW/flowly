@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "vitest";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { agentFixture } from "./agent-fixture";
-import { ArtifactService, normalizeTarget } from "./artifacts";
+import { ArtifactService, editArtifact, normalizeTarget, putArtifact } from "./artifacts";
 import { artifactContextLines } from "../shared/artifacts";
 import { AgentService } from "./agent-service";
 
@@ -158,4 +158,60 @@ test("unread: artifacts added or edited since the session's last get_task, never
   const restarted = new AgentService(x.store, x.secrets);
   restarted.attach(x.paseo);
   expect((await restarted.get(x.identity)).artifacts.filter((a) => a.unread).map((a) => a.id)).toEqual([human.id]);
+});
+
+const pull = { connectionId: "c1", provider: "github", key: "o/r#5", remoteId: "5", itemType: "pull" } as const;
+const pullUrl = "https://github.com/o/r/pull/5";
+
+test("external items keep the role they are given; editing can change it (CARD-ARTIFACTS-SPEC §2.2)", async () => {
+  const x = await setup();
+  const pr = { taskId: "t", kind: "url", target: pullUrl, external: pull, createdBy: "agent", agentId: "actor" } as const;
+  const out = await x.store.transaction((board) => ({ value: putArtifact(x.store, board, { ...pr, role: "output" }), changed: true }));
+  expect(out.artifact).toMatchObject({ role: "output", external: { key: "o/r#5" } });
+  expect(out.notice).toBeUndefined();
+  // The same agent registers it again as an input: the role follows, nothing is forced back.
+  const again = await x.store.transaction((board) => ({ value: putArtifact(x.store, board, { ...pr, role: "input" }), changed: true }));
+  expect(again.artifact).toMatchObject({ id: out.artifact.id, role: "input" });
+  const edited = await editArtifact(x.store, { id: out.artifact.id, updatedAt: again.artifact.updatedAt, role: "output" });
+  expect(edited).toMatchObject({ role: "output", external: { key: "o/r#5" } });
+});
+
+test("a person's paste or picker defaults to input; an explicit output stays output", async () => {
+  const x = await setup();
+  const human = { taskId: "t", kind: "url", target: pullUrl, external: pull, createdBy: "human" } as const;
+  const picked = await x.store.transaction((board) => ({ value: putArtifact(x.store, board, { ...human, role: "input" }), changed: true }));
+  expect(picked.artifact.role).toBe("input");
+  const second = await x.store.transaction((board) => ({
+    value: putArtifact(x.store, board, { ...human, target: "https://github.com/o/r/pull/6", external: { ...pull, key: "o/r#6", remoteId: "6" }, role: "output" }),
+    changed: true,
+  }));
+  expect(second.artifact.role).toBe("output");
+});
+
+test("an agent re-adding a person's item with another role is told, not silently ignored", async () => {
+  const x = await setup();
+  const base = { taskId: "t", kind: "url", target: pullUrl, external: pull } as const;
+  const mine = await x.store.transaction((board) => ({ value: putArtifact(x.store, board, { ...base, role: "input", createdBy: "human" }), changed: true }));
+  const put = await x.store.transaction((board) => ({
+    value: putArtifact(x.store, board, { ...base, role: "output", createdBy: "agent", agentId: "actor" }),
+    changed: false,
+  }));
+  expect(put).toMatchObject({ changed: false, artifact: { id: mine.artifact.id, role: "input" } });
+  expect(put.notice).toMatch(/added by the user as input/);
+  // The same role needs no notice.
+  const same = await x.store.transaction((board) => ({
+    value: putArtifact(x.store, board, { ...base, role: "input", createdBy: "agent", agentId: "actor" }),
+    changed: false,
+  }));
+  expect(same.notice).toBeUndefined();
+});
+
+test("agent tool result carries the notice and keeps it on replay", async () => {
+  const x = await setup();
+  await x.artifacts.create({ taskId: "t", role: "input", target: "https://issue.example/1" }, x.paseo);
+  const ctx = await x.service.get(x.identity);
+  const first = await x.service.write(x.identity, "artifact", { ...input(ctx), role: "output", target: "https://issue.example/1" });
+  expect(first.notice).toMatch(/role not changed/);
+  const replay = await x.service.write(x.identity, "artifact", { ...input(ctx), role: "output", target: "https://issue.example/1" });
+  expect(replay).toMatchObject({ replayed: true, notice: first.notice });
 });

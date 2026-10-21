@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fakeService, fixtures, type Route } from "./fake";
+import { fingerprintChanged } from "./fingerprint";
 import { ConnectorService } from "./service";
 
 const env = fixtures();
@@ -132,7 +133,11 @@ describe("GitLab (CONNECTORS-SPEC §5)", () => {
       expect(first.markdown).toContain(part);
     expect(first.markdown).not.toContain("assigned to @bob");
     items[0]!.sha = "def456";
-    expect((await x.service.detail(ref, true)).fingerprint).not.toBe(first.fingerprint);
+    const pushed = await x.service.detail(ref, true);
+    expect(pushed.fingerprint).not.toBe(first.fingerprint);
+    expect(fingerprintChanged("output", first.fingerprint, pushed.fingerprint)).toBe(false);
+    notes["team/app!8"].push({ id: 3, body: "Looks good" } as never);
+    expect(fingerprintChanged("output", pushed.fingerprint, (await x.service.detail(ref, true)).fingerprint)).toBe(true);
     items[0]!.state = "merged";
     const merged = await x.service.detail(ref, true);
     expect(merged.summary.status).toBe("Merged");

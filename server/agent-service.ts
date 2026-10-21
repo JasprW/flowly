@@ -8,6 +8,7 @@ import { isResolved, linksOf } from "../shared/links";
 import { absoluteTarget, artifactsOf } from "../shared/artifacts";
 import { changeTags, normalizeTags, projectTagStats, tagChangeNote } from "../shared/tags";
 import { setTags } from "./store";
+import { fingerprintChanged } from "./connectors/fingerprint";
 import { artifactRoots, dropArtifact, externalArtifact, missingArtifacts, normalizeTarget, putArtifact } from "./artifacts";
 import { ArtifactReadStore } from "./artifact-reads";
 import { ExternalError } from "./connectors/http";
@@ -108,7 +109,7 @@ export class AgentService {
           stale: !hit || hit.stale,
           connection: ref ? "ok" : "removed",
         },
-        changed: !!fingerprint && !!seen[a.id] && seen[a.id] !== fingerprint,
+        changed: fingerprintChanged(a.role, seen[a.id], fingerprint),
         fingerprint,
       });
     }
@@ -540,6 +541,7 @@ export class AgentService {
         task.updatedAt = new Date(this.clock()).toISOString();
       }
       let artifactId: string | undefined;
+      let notice: string | undefined;
       const artifactEvent = artifactWrite
         ? (() => {
             try {
@@ -562,6 +564,7 @@ export class AgentService {
                   new Date(this.clock()).toISOString(),
                 );
                 artifactId = put.artifact.id;
+                notice = put.notice;
                 return { id: put.eventId ?? "", at: new Date(this.clock()).toISOString() };
               }
               const dropped = dropArtifact(this.store, board, (input as ArtifactRemovalInput).id, {
@@ -744,6 +747,7 @@ export class AgentService {
         action,
         eventId: event.id,
         ...(artifactId ? { artifactId } : {}),
+        ...(notice ? { notice } : {}),
         ...(workpadRevision ? { workpadRevision } : {}),
         taskRevision: task.revision,
         projectRevision: project.revision,
@@ -758,6 +762,7 @@ export class AgentService {
       key: _key,
       payloadHash: _hash,
       expiresAt: _expires,
+      notice,
       ...receipt
     } = result.receipt;
     try {
@@ -766,13 +771,14 @@ export class AgentService {
         at: new Date(this.clock()).toISOString(),
         action,
       });
-      return { receipt, replayed: result.replayed, ...remindersField(result.reminders), ...ideaField(result.ideaId), ...(result.artifactId ? { artifactId: result.artifactId } : {}), current };
+      return { receipt, replayed: result.replayed, ...remindersField(result.reminders), ...ideaField(result.ideaId), ...(result.artifactId ? { artifactId: result.artifactId } : {}), ...(notice ? { notice } : {}), current };
     } catch (e) {
       return {
         receipt,
         replayed: result.replayed,
         ...remindersField(result.reminders),
         ...ideaField(result.ideaId), ...(result.artifactId ? { artifactId: result.artifactId } : {}),
+        ...(notice ? { notice } : {}),
         current: null,
         contextError: e instanceof Error ? e.message : "Re-read the task.",
       };

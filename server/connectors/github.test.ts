@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { githubApiRoot, githubSummary } from "./github";
 import { fakeService, fixtures, type Route } from "./fake";
+import { fingerprintChanged } from "./fingerprint";
 
 const env = fixtures();
 afterEach(() => env.cleanup());
@@ -109,7 +110,12 @@ describe("GitHub (CONNECTORS-SPEC §6)", () => {
       expect(first.markdown).toContain(part);
     expect(first.markdown).not.toContain("### dee · commented");
     items[0]!.sha = "bbb222";
-    expect((await x.service.detail(ref, true)).fingerprint).not.toBe(first.fingerprint);
+    const pushed = await x.service.detail(ref, true);
+    expect(pushed.fingerprint).not.toBe(first.fingerprint);
+    // A push does not move the discussion part, a new review does (what an output PR watches).
+    expect(fingerprintChanged("output", first.fingerprint, pushed.fingerprint)).toBe(false);
+    items[0]!.reviews!.push({ id: 11, state: "APPROVED", body: "ok" });
+    expect(fingerprintChanged("output", pushed.fingerprint, (await x.service.detail(ref, true)).fingerprint)).toBe(true);
     items[0]!.state = "closed";
     items[0]!.merged = true;
     expect((await x.service.detail(ref, true)).summary.status).toBe("Merged");

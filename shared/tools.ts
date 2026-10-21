@@ -394,6 +394,8 @@ export const toolResultSchema = z.object({
   reminders: z.array(z.string()).optional(),
   /** The proposed idea, for flowly_propose_idea. */
   ideaId: z.string().optional(),
+  /** For flowly_add_artifact: the write succeeded but not as asked (an entry the user added keeps its role). */
+  notice: z.string().optional(),
   /** The added, updated or removed artifact, for the artifact tools. */
   artifactId: z.string().optional(),
   current: toolContextSchema.nullable(),

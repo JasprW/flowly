@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { classifyQuery, connectorLimits, gitlabFromUrl, gitlabItemUrl, splitRepoKey, type ExternalSummary, type ItemType } from "../../shared/connectors";
 import { ExternalError, ReadOnlyHttp, cut, mapLimit, retryAfter, type Fetch, type StoredConnection } from "./http";
 import type { ConnectorAdapter, Fetched, ItemRef } from "./types";
+import { withDiscussion } from "./fingerprint";
 
 /** GitLab issues and merge requests (CONNECTORS-SPEC §5), gitlab.com and self-managed, REST v4. */
 
@@ -218,10 +219,9 @@ export const gitlabAdapter: ConnectorAdapter = {
   },
   fingerprint(full) {
     const { item: x, notes } = full as Full;
-    return createHash("sha256")
-      .update(JSON.stringify([x.title || "", x.description || "", notes.map((n) => `${n.id}:${n.updated_at || n.created_at}`), x.sha || ""]))
-      .digest("hex")
-      .slice(0, 16);
+    const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+    const discussion = notes.map((n) => `${n.id}:${n.updated_at || n.created_at}`);
+    return withDiscussion(hash([x.title || "", x.description || "", discussion, x.sha || ""]), hash(discussion));
   },
   markdown(summary, full, limit) {
     const { item: x, notes, files } = full as Full;

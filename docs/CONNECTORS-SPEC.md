@@ -10,7 +10,7 @@
 
 结论：
 
-1. **沿用 Jira 的四条原则**：单向只读；外部状态不驱动卡片；外部条目是一种 input artifact；凭据只在 daemon。GitHub/GitLab 的 PR/MR 也一样：Flowly 不评论、不 approve、不合并、不改标签，PR 自动化仍在 v1 范围外（AGENTS.md）。
+1. **沿用 Jira 的四条原则**：单向只读；外部状态不驱动卡片；外部条目是一种 artifact，默认 input（agent 自己开的 PR/MR 可以登记为 output，§3.1）；凭据只在 daemon。GitHub/GitLab 的 PR/MR 也一样：Flowly 不评论、不 approve、不合并、不改标签，PR 自动化仍在 v1 范围外（AGENTS.md）。
 2. **一个 connector 框架，四个 provider 族**：Jira（已有）、Confluence、GitHub、GitLab。识别链接、选择器、快照缓存、unread、agent 读取、设置页全部走同一套接口，provider 只实现“怎么认链接、怎么搜、怎么读、怎么转 Markdown”。
 3. **Artifacts 只有一个 +**：点开是添加菜单，“文件或链接”加上每个已连接的 connector；侧栏不再单独放 Jira 图标按钮。粘贴任何已连接服务的链接，照样自动识别。
 4. **改用通用名**（用户 2026-10-20 决定，§3.3）：artifact 字段 `ticket` → `external`，工具 `flowly_read_ticket` → `flowly_read_external`，CLI `ticket` → `external`，RPC `tickets.*` → `connectors.*`。旧工具名与 CLI 命令保留为别名，看板升到 v5 并迁移数据。
@@ -59,6 +59,8 @@ external: z.object({
 }).optional(),
 ```
 
+**role（2026-10-21 修订）**：外部条目的 `role` 与普通条目一样由调用方决定，服务端不再强制为 input。默认仍是 input：人在 + 菜单的选择器和“文件或链接”里粘贴都默认 input（表单有 Role 选择器，可选 output）。典型的 output 是 agent 自己开的 PR/MR，它保留实时状态（Open / Merged）。output 外部条目不是任务需求，skill 不按需求对待它（§9）；人可以在编辑里改 role，agent 重复登记自己添加的条目时也可改 role。**agent 不能改人添加的条目**：重复登记时 role 不同，工具结果带 `notice`（“Already added by the user as input; role not changed.”），不再静默。旧数据里被强制为 input 的条目不迁移。
+
 旧数据全部是 Jira，`itemType` 缺省即 `issue`。v4 → v5 迁移只做一件事：把每个 artifact 的 `ticket` 改名为 `external`，其余原样保留；第一次写入前留一份 `board.pre-v5.json`（与 v4 迁移的做法相同）。旧版本 plugin 读到 v5 文件会校验失败并保留文件，不会重置数据，也不会悄悄丢掉 `external` 字段。
 
 ### 3.2 连接与缓存
@@ -76,6 +78,8 @@ external: z.object({
 | GitLab | 标题、描述、非系统 note id+`updated_at`；MR 另加 head sha |
 
 PR/MR 的 head sha 计入指纹：新的 push 意味着要 review 的内容变了，应提示 agent 重读。
+
+**output 条目的 unread（2026-10-21）**：agent 自己 push 不应让自己开的 PR 变成 unread。指纹因此写成 `<全部内容>~<讨论部分>`（`server/connectors/fingerprint.ts`）：前半就是原来的指纹（旧值照常比较，不会误报），后半只含评论和 review（GitHub：评论、review；GitLab：非系统 note）。input 条目比较前半（任何内容变化都算）；role 为 output 且指纹带讨论部分时只比较后半，所以新提交、描述修改不算，新评论或 review 才算 unread。Jira/Confluence 没有讨论部分，output 仍比较全部内容。已读记录只有旧格式（无讨论部分）时没有基线，不报 unread，下一次读取后建立。
 
 ### 3.3 命名（用户 2026-10-20 决定：改为通用名）
 
@@ -208,7 +212,7 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 ```
 
 - 选 connector 项打开对应的选择器（现 `LinkTicket` 泛化为 `LinkExternal`），我的最近 + 搜索，选中即添加为 input，toast “Linked <key>”。多个同族连接时选择器顶部切换连接（`lastTicketConnection` 改为按族记忆：`lastConnections: Record<family, id>`，旧值迁入 jira）。
-- “文件或链接…”即现在的表单；粘贴的链接属于任一已连接服务时自动识别为该条目（role 固定 input，与 Jira 一致）。
+- “文件或链接…”即现在的表单；粘贴的链接属于任一已连接服务时自动识别为该条目（role 取表单所选，默认 input；2026-10-21 起不再固定为 input，agent 自己开的 PR/MR 可登记为 output）。
 - 一个连接都没有时，+ 直接打开“文件或链接”表单，表单下方一行淡色提示“也可以连接 Jira、Confluence、GitHub、GitLab”。
 
 ### 8.2 New task 表单
@@ -237,7 +241,7 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 - `get_task.artifacts[].external`：`provider`、`itemType`、`key`、`summary`、`status`、`statusCategory`、`type`、`priority`、`assignee`、`container`、`updated`、`stale`、`connection`（`removed` 时）。Confluence 的 `status` 为空。Jira 条目额外带 deprecated 的 `ticket`（§3.3）。
 - 新工具 `flowly_read_external`（CLI `external --id`）：读取本卡的外部条目 input，包括 Jira 工单、Confluence 页面、GitHub/GitLab issue 或 PR/MR。PR/MR 返回改动文件名但不含 diff：要看代码改动，agent 应在本地 `git fetch` 对应分支（返回的 Markdown 头部写明分支和 head sha）。旧名 `flowly_read_ticket` / CLI `ticket` 为别名。
 - session 上下文 Inputs 行：`- [user] group/proj!34 Fix login (GitLab merge request; read it with flowly_read_external artifactId=…): <url>`。
-- skill：把“An artifact with a ticket field is a Jira ticket…”改写为 external 条目的通用说明，其余规则不变（是需求输入；状态只供参考；不要尝试修改外部系统；冲突时以用户为准；交付时写明依据的条目）。追加一句：PR/MR 输入要 review 或续做时，用 git 获取其分支，不要通过 Flowly 写回。
+- skill：把“An artifact with a ticket field is a Jira ticket…”改写为 external 条目的通用说明，其余规则不变（是需求输入；状态只供参考；不要尝试修改外部系统；冲突时以用户为准；交付时写明依据的条目）。追加一句：PR/MR 输入要 review 或续做时，用 git 获取其分支，不要通过 Flowly 写回。（2026-10-21）“是需求输入”限定为 role=input；agent 自己开的 PR/MR 用 role=output 登记，显示实时状态，unread（新评论/review）时读它看评审意见；工具结果带 `notice` 时按它处理。
 - 错误码见 §3.3。
 
 ## 10. 实施顺序与测试

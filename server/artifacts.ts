@@ -107,16 +107,27 @@ export async function externalArtifact(connectors: ConnectorService | undefined,
 /**
  * Adds an artifact to `board`, or updates the card's existing one with the
  * same target (CARD-ARTIFACTS-SPEC §2.2). An agent never changes one a
- * person added; that one is returned as is.
+ * person added; that one is returned as is, with a `notice` when the role
+ * asked for differs, so the change is never silent.
  */
-export function putArtifact(store: BoardStore, board: Board, input: NewArtifact, now = new Date().toISOString()) {
+export function putArtifact(
+  store: BoardStore,
+  board: Board,
+  input: NewArtifact,
+  now = new Date().toISOString(),
+): { artifact: Artifact; changed: boolean; eventId?: string; notice?: string } {
   const { task } = liveCard(board, input.taskId);
   const actor = input.createdBy === "agent" ? { actor: "agent" as const, agentId: input.agentId } : { actor: "human" as const };
   const existing = board.artifacts.find((a) => a.taskId === task.id && a.kind === input.kind && a.target === input.target);
   if (existing) {
-    if (input.createdBy === "agent" && existing.createdBy === "human") return { artifact: existing, changed: false };
+    if (input.createdBy === "agent" && existing.createdBy === "human")
+      return {
+        artifact: existing,
+        changed: false,
+        ...(input.role !== existing.role ? { notice: `Already added by the user as ${existing.role}; role not changed. Their entries are not edited by agents.` } : {}),
+      };
     const next = {
-      role: input.external ? ("input" as const) : input.role,
+      role: input.role,
       title: input.title?.trim() || existing.title,
       note: input.note !== undefined ? input.note.trim() : existing.note,
     };
@@ -131,7 +142,7 @@ export function putArtifact(store: BoardStore, board: Board, input: NewArtifact,
     id: randomUUID(),
     taskId: task.id,
     projectId: task.projectId,
-    role: input.external ? "input" : input.role,
+    role: input.role,
     kind: input.kind,
     target: input.target,
     title: input.title?.trim() || defaultTitle(input.kind, input.target),
@@ -170,7 +181,7 @@ export function editArtifact(store: BoardStore, input: ArtifactEdit) {
     liveCard(board, artifact.taskId);
     if (artifact.updatedAt !== input.updatedAt) throw new Error("This artifact changed. Reload and try again.");
     const next = {
-      role: artifact.external ? artifact.role : (input.role ?? artifact.role),
+      role: input.role ?? artifact.role,
       title: input.title?.trim() || artifact.title,
       note: input.note !== undefined ? input.note : artifact.note,
     };

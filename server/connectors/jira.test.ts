@@ -318,12 +318,12 @@ describe("cards and external inputs (EXTERNAL-TRACKER-SPEC §5.4)", () => {
     expect((await x.store.read()).tasks).toHaveLength(0);
   });
 
-  test("linking a ticket to an existing card by link or bare key; the role is always input and the card is unchanged", async () => {
+  test("linking a ticket to an existing card by link or bare key; the role is the one given (input by default) and the card is unchanged", async () => {
     const x = await board([issue("AB-1", "Empty result page"), issue("AB-2", "Second")]);
     const card = await x.service.createTask(x.input, x.paseo);
     const artifacts = new ArtifactService(x.store, x.tickets);
     const byLink = await artifacts.create({ taskId: card.id, role: "output", target: "https://jira.example.com/browse/AB-1" }, x.paseo);
-    expect(byLink).toMatchObject({ role: "input", title: "AB-1 Empty result page", external: { key: "AB-1" } });
+    expect(byLink).toMatchObject({ role: "output", title: "AB-1 Empty result page", external: { key: "AB-1" } });
     const byKey = await artifacts.create({ taskId: card.id, role: "input", target: "ab-2" }, x.paseo);
     expect(byKey).toMatchObject({ target: "https://jira.example.com/browse/AB-2", external: { key: "AB-2" } });
     // The same ticket again updates nothing new.
@@ -407,12 +407,12 @@ describe("agents (EXTERNAL-TRACKER-SPEC §4)", () => {
     await expect(x.service.readExternal(x.identity, { artifactId: "other-card-artifact" })).rejects.toMatchObject({ code: "EXTERNAL_NOT_FOUND" });
   });
 
-  test("an agent adding a ticket link gets an external input", async () => {
+  test("an agent adding a ticket link gets an external item with the role it asked for", async () => {
     const x = await agent([issue("AB-1", "A")]);
     const ctx = await x.service.get(x.identity);
     const result = await x.service.write(x.identity, "artifact", { expectedRevision: ctx.revision, request: ctx.request, role: "output", target: "https://jira.example.com/browse/AB-1" });
     const added = (await x.store.read()).artifacts.find((a) => a.id === result.artifactId)!;
-    expect(added).toMatchObject({ role: "input", createdBy: "agent", title: "AB-1 A", external: { key: "AB-1" } });
+    expect(added).toMatchObject({ role: "output", createdBy: "agent", title: "AB-1 A", external: { key: "AB-1" } });
   });
 });
 
