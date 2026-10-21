@@ -10,7 +10,7 @@ Not translated, on purpose:
 
 - agent-facing text: the skill, MCP tool descriptions, prompts, work instructions and anything the daemon sends to a model;
 - daemon error messages and RPC validation text (technical, English);
-- text written by models (task progress summaries, daily digest): they follow the language of the conversation / cards, as before;
+- text written by models (task progress summaries, daily digest, Workflow and session insights, agents' next moves and ideas): they follow the separate **AI output language** setting, stated explicitly in every prompt ([AI-LANGUAGE-SPEC](AI-LANGUAGE-SPEC.md)); it defaults to the interface language;
 - user content (titles, descriptions, notes, ideas, lane names a project renamed).
 
 Languages: English (source), 简体中文 `zh-CN`, 繁體中文 `zh-TW`, 日本語 `ja`, 한국어 `ko`, Español `es`, Français `fr`, Deutsch `de`, Português (Brasil) `pt-BR`, Русский `ru`. The list is `locales` in `shared/i18n.ts`.

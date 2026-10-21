@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rename, copyFile, unlink } from "node:fs/pr
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
+import type { LocaleCode } from "../shared/i18n";
 import type { BoardStore } from "./store";
 import type { FlowLog } from "./flow-log";
 import type { GitStats } from "./git-stats";
@@ -142,6 +143,7 @@ export class InsightsService {
     readonly summaries: SummaryStore,
     readonly digests: DigestStore,
     readonly settings: () => Promise<SummarySettings>,
+    readonly language: () => Promise<LocaleCode>,
     private timeoutMs = DIGEST_TIMEOUT_MS,
     private now = () => Date.now(),
   ) {}
@@ -298,7 +300,7 @@ export class InsightsService {
     const settings = await this.settings();
     const model = resolveModel(settings.summaryModel, await availableModels(paseo, settings.summaryModel));
     const workspaceId = await this.workspaceFor(project, board, paseo);
-    const prompt = digestPrompt({ project: project.title, day: input.day, today: input.day === dayKey(this.now(), tz), material: text });
+    const prompt = digestPrompt({ project: project.title, day: input.day, today: input.day === dayKey(this.now(), tz), material: text, language: await this.language() });
     const agent = await paseo.workspaces.ref(workspaceId).agents.create({
       config: { provider: model },
       title: `Kanban digest · ${project.title} · ${input.day}`.slice(0, 120),

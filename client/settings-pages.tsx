@@ -4,6 +4,8 @@ import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
 import { AUTO_MODELS, modelLabel, summarySettings, summarySettingsValues } from "../shared/summary";
 import {
+  aiLanguageSettings,
+  aiLanguageSettingsValues,
   boardViewSettings,
   boardViewValues,
   ideasSettings,
@@ -20,7 +22,7 @@ import {
   wrapupSettingsValues,
 } from "../shared/settings";
 import { agentModelFromValues, type AgentModel } from "../shared/agent-defaults";
-import { deviceLocale, formatLocale, locales, msg, t, tn } from "../shared/i18n";
+import { deviceLocale, formatLocale, getLocale, locales, msg, t, tn } from "../shared/i18n";
 import { hideFinishedChoices } from "./finished-cards";
 import { modelOptions, providerOptions } from "./options";
 import { ModelDefaultGroup } from "./model-default";
@@ -240,13 +242,30 @@ export function AiPage() {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const ideas = useStored(useSettings(ideasSettings), ideasSettingsValues);
   const native = useStored(useSettings(nativeSessionSettings), nativeSessionSettingsValues);
+  const aiLanguage = useStored(useSettings(aiLanguageSettings), aiLanguageSettingsValues);
+  const interfaceName = locales.find((l) => l.code === getLocale())?.name ?? "English";
+  const sameAsInterface = t("Same as interface language ({language})", { language: interfaceName });
   const tapOptions = [
     { value: "fill", label: t("Fill the message box") },
     { value: "copy", label: t("Copy") },
   ];
   return (
     <SettingsPage title={t("AI features")} description={t("What the board writes and suggests for you. The model is chosen under Models.")}>
-      <Problem text={summary.problem || ideas.problem || native.problem} />
+      <Problem text={summary.problem || ideas.problem || native.problem || aiLanguage.problem} />
+      <SettingsGroup
+        title={t("Output language")}
+        description={t("The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.")}
+      >
+        <SettingSelect
+          title={t("AI output language")}
+          detail={t("Applies from the next run; text already written stays as it is.")}
+          value={aiLanguage.values?.aiLanguage ?? "interface"}
+          placeholder={sameAsInterface}
+          disabled={aiLanguage.busy}
+          options={[{ value: "interface", label: sameAsInterface }, ...locales.map((l) => ({ value: l.code as string, label: l.name }))]}
+          onChange={(next) => aiLanguage.save({ aiLanguage: next as NonNullable<typeof aiLanguage.values>["aiLanguage"] })}
+        />
+      </SettingsGroup>
       <SettingsGroup
         title={t("Task progress summary")}
         description={t("After each agent turn on a card, a cheap model updates the card's state, recap and next step. It runs as a short child session that is archived right after.")}

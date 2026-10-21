@@ -79,7 +79,7 @@ async function setup() {
   const log = new CommandLog(board.directory);
   const state = new WorkflowStore(board.directory);
   let now = NOW;
-  const service = new WorkflowInsightsService(board, log, state, flow, async () => settings, async () => summary, () => now, 1000, "/home/me");
+  const service = new WorkflowInsightsService(board, log, state, flow, async () => settings, async () => summary, async () => "en", () => now, 1000, "/home/me");
   return {
     root,
     board,

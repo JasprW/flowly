@@ -4,7 +4,7 @@ import { BoardStore, columnOrder } from "./server/store";
 import { BoardService, dataDirectory, migrateLegacyPluginData } from "./server/service";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
-import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues } from "./shared/settings";
+import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { WrapupService } from "./server/wrapup";
@@ -16,7 +16,8 @@ import { ifChanged } from "./server/etag";
 import { BoardDeltas } from "./server/board-delta";
 import { perfLine } from "./shared/perf";
 import { catalogs } from "./shared/i18n-all";
-import type { LocaleCode } from "./shared/i18n";
+import { deviceLocale, type LocaleCode } from "./shared/i18n";
+import { resolveAiLanguage } from "./shared/ai-language";
 import { ComposerService, ComposerStore } from "./server/composer";
 import { adoptIdea } from "./server/ideas";
 import { createLink, deleteLink } from "./server/links";
@@ -44,7 +45,9 @@ import { turnPick, userTexts } from "./shared/agent-habits";
 
 export default function contribute(server: PluginServerContext) {
   server.registerSettings(boardViewSettings);
-  server.registerSettings(languageSettings);
+  const languagePrefs = server.registerSettings(languageSettings);
+  const aiLanguagePrefs = server.registerSettings(aiLanguageSettings);
+  const devicePrefs = server.registerSettings(deviceLanguageSettings);
   server.registerSettings(modelSettings);
   server.registerSettings(onboardingSettings);
   const summaryPrefs = server.registerSettings(summarySettings);
@@ -63,6 +66,16 @@ export default function contribute(server: PluginServerContext) {
   const store = new BoardStore(dataDirectory());
   // The Next moves card in Paseo's own timeline (NATIVE-SESSION-SPEC §6.1).
   const nextRows = new NextMoveRows(store);
+  // The language of everything AI writes (AI-LANGUAGE-SPEC §3); unreadable settings fall back along the chain.
+  const aiLanguage = async () => {
+    const [ai, interfaceLanguage, device] = await Promise.all([aiLanguagePrefs.read().catch(() => null), languagePrefs.read().catch(() => null), devicePrefs.read().catch(() => null)]);
+    return resolveAiLanguage({
+      ai: aiLanguageSettingsValues(ai?.status === "ready" ? ai.values : {}).aiLanguage,
+      interface: languageSettingsValues(interfaceLanguage?.status === "ready" ? interfaceLanguage.values : {}).language,
+      reported: deviceLanguageValue(device?.status === "ready" ? device.values : {}),
+      host: deviceLocale(),
+    });
+  };
   const summaries = new SummaryService(
     store,
     new SummaryStore(store.directory),
@@ -70,6 +83,7 @@ export default function contribute(server: PluginServerContext) {
       const state = await summaryPrefs.read().catch(() => null);
       return summarySettingsValues(state?.status === "ready" ? state.values : {});
     },
+    aiLanguage,
   );
   // Progress, next steps and ideas for sessions Flowly does not manage (NATIVE-SESSION-SPEC §12); off by default.
   const nativeValues = async () => {
@@ -83,11 +97,11 @@ export default function contribute(server: PluginServerContext) {
       parts: { progress: native.outsideProgress, nextMoves: native.outsideNextMoves, ideas: native.outsideIdeas },
       model: summary.summaryModel,
     };
-  });
+  }, aiLanguage);
   // Untrimmed event log + project insights (PROJECT-INSIGHTS-SPEC).
   const flow = new FlowLog(store.directory);
   store.flow = flow;
-  const insights = new InsightsService(store, flow, new GitStats(), summaries.store, new DigestStore(store.directory), summaries.settings);
+  const insights = new InsightsService(store, flow, new GitStats(), summaries.store, new DigestStore(store.directory), summaries.settings, aiLanguage);
   void insights.reconcile().catch((e) => console.error("Kanban flow log backfill failed:", e instanceof Error ? e.message : String(e)));
   server.handle(rpc.projectInsights, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.project(input, paseo), etag));
   server.handle(rpc.projectDigest, (input, { paseo }) => insights.digest(input, paseo));
@@ -105,7 +119,7 @@ export default function contribute(server: PluginServerContext) {
     return workflowSettingsValues(state?.status === "ready" ? state.values : {});
   };
   const commands = new CommandLog(store.directory);
-  const workflow = new WorkflowInsightsService(store, commands, new WorkflowStore(store.directory), flow, workflowValues, summaries.settings);
+  const workflow = new WorkflowInsightsService(store, commands, new WorkflowStore(store.directory), flow, workflowValues, summaries.settings, aiLanguage);
   workflow.start();
   // Turning the switch on reads the last week of sessions once (§3.3).
   let workflowWasOn: boolean | null = null;
@@ -210,6 +224,7 @@ export default function contribute(server: PluginServerContext) {
     const state = await ideasPrefs.read().catch(() => null);
     return ideasSettingsValues(state?.status === "ready" ? state.values : {}).ideas;
   };
+  tools.agents.aiLanguage = aiLanguage;
   tools.agents.artifactsOn = async () => {
     const state = await ideasPrefs.read().catch(() => null);
     return ideasSettingsValues(state?.status === "ready" ? state.values : {}).artifacts;

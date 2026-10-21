@@ -1216,5 +1216,11 @@ const catalog: Catalog = {
   "Nothing collected.": "Ничего не собрано.",
   "Last run: {in} in · {out} out · ${cost}.": "Последний запуск: {in} на входе · {out} на выходе · ${cost}.",
   "About ${month} per month for {n} projects at this pace.": {"one": "Примерно ${month} в месяц на {n} проект при такой частоте.", "few": "Примерно ${month} в месяц на {n} проекта при такой частоте.", "many": "Примерно ${month} в месяц на {n} проектов при такой частоте.", "other": "Примерно ${month} в месяц на {n} проектов при такой частоте."},
+  "AI-written text follows Settings → AI features → AI output language. It starts as your interface language.": "Текст, написанный ИИ, следует настройке «Настройки → Функции ИИ → Язык вывода ИИ». По умолчанию это язык интерфейса.",
+  "Same as interface language ({language})": "Как язык интерфейса ({language})",
+  "Output language": "Язык вывода",
+  "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "Язык текста, который пишет ИИ: сводки карточек, ежедневный дайджест, аналитика рабочих процессов, аналитика сессий, а также следующие шаги и идеи, которые предлагают агенты. Ваши собственные заголовки и заметки не переводятся.",
+  "AI output language": "Язык вывода ИИ",
+  "Applies from the next run; text already written stays as it is.": "Действует со следующего запуска; уже написанный текст остаётся как есть.",
 };
 export default catalog;

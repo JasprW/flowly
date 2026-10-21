@@ -52,7 +52,7 @@ const nextMoveList = z
         .trim()
         .min(1)
         .max(nextMoveLimits.label)
-        .describe("Button text: a short verb phrase in the user's language, e.g. \"Verify with Luna\" or \"Commit and push\"."),
+        .describe("Button text: a short verb phrase in the language of get_task outputLanguage, e.g. \"Verify with Luna\" or \"Commit and push\"."),
       prompt: z
         .string()
         .trim()
@@ -110,19 +110,19 @@ export const progressInputSchema = z.strictObject({
 export const ideaInputSchema = z.strictObject({
   expectedRevision: revisionSchema,
   request: requestSchema,
-  title: z.string().trim().min(1).max(ideaLimits.title).describe("Short task title for the follow-up card."),
+  title: z.string().trim().min(1).max(ideaLimits.title).describe("Short task title for the follow-up card, in the language of get_task outputLanguage."),
   detail: z
     .string()
     .trim()
     .min(1)
     .max(ideaLimits.detail)
-    .describe("What the follow-up task should do and how to tell it is done."),
+    .describe("What the follow-up task should do and how to tell it is done, in the language of get_task outputLanguage."),
   rationale: z
     .string()
     .trim()
     .min(1)
     .max(ideaLimits.rationale)
-    .describe("Why it is worth doing and what in this card's work led to it."),
+    .describe("Why it is worth doing and what in this card's work led to it, in the language of get_task outputLanguage."),
   context: z
     .string()
     .trim()
@@ -334,6 +334,8 @@ export const toolContextSchema = z.object({
   projectScripts: z.array(z.object({ name: z.string(), type: z.enum(["script", "service"]) })).optional(),
   /** The project's most used tags (CARD-TAGS-SPEC §2.3); reuse one when it fits. */
   projectTags: z.array(z.object({ tag: z.string(), count: z.number() })).optional(),
+  /** The language for next-move labels and prompts and for ideas (AI-LANGUAGE-SPEC §5). */
+  outputLanguage: z.object({ code: z.string(), name: z.string() }).optional(),
   /** The card's inputs and deliverables (CARD-ARTIFACTS-SPEC §4.2). `absolutePath` only for files. */
   artifacts: z.array(
     z.object({

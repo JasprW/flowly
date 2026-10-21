@@ -1,4 +1,6 @@
 import { isSummarizer } from "../shared/summary";
+import { outputLanguage } from "../shared/ai-language";
+import type { LocaleCode } from "../shared/i18n";
 import { enabledStatuses, laneEnabled, laneName } from "../shared/lanes";
 import type { PaseoApi } from "@getpaseo/client";
 import { randomUUID } from "node:crypto";
@@ -62,6 +64,8 @@ export class AgentService {
   ideasOn: () => Promise<boolean> = async () => true;
   /** The Agent artifacts setting; off refuses artifact writes (CARD-ARTIFACTS-SPEC §4.3). */
   artifactsOn: () => Promise<boolean> = async () => true;
+  /** The AI output language (AI-LANGUAGE-SPEC §5), returned by get_task as outputLanguage. */
+  aiLanguage: () => Promise<LocaleCode> = async () => "en";
   /** Reads the workspace HEAD and verifies commits for the workpad (WORKPAD-SPEC §4.2, §5.1). */
   git: Git = defaultGit;
   constructor(
@@ -294,6 +298,7 @@ export class AgentService {
         return {
           activity: board.events.filter((e) => e.taskId === r.task.id).slice(-20),
           projectTags: projectTagStats(board.tasks, r.project.id).map(({ tag, count }) => ({ tag, count })),
+          outputLanguage: outputLanguage(await this.aiLanguage()),
           ideas: board.ideas
             .filter((i) => i.taskId === r.task.id)
             .map((i) => ({

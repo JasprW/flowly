@@ -2,6 +2,8 @@ import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { firstObject } from "./summary";
 import { dayKey } from "./insights";
+import { outputLanguageRule } from "./ai-language";
+import type { LocaleCode } from "./i18n";
 
 /**
  * Workflow insights (WORKFLOW-INSIGHTS-SPEC): a log of the shell commands agents
@@ -461,7 +463,7 @@ export type FindingTarget = (typeof findingTargets)[number];
 export const confidences = ["high", "medium", "low"] as const;
 export const findingLimits = { title: 120, evidence: 1000, proposal: 4000, benefit: 500 } as const;
 
-export function workflowPrompt(days: number, material: string): string {
+export function workflowPrompt(days: number, material: string, language: LocaleCode): string {
   return `You analyse how coding agents worked on one software project over the last ${days} days, from the shell commands they ran, so the project owner can turn repeated work into reusable project settings and tools.
 
 Targets you may recommend:
@@ -478,7 +480,7 @@ Rules:
 - For inline scripts, infer their purpose and cluster them; this is where most of the value is expected.
 - At most ${MAX_FINDINGS} findings, the most valuable first. Mark confidence honestly.
 - Suggestions the owner already accepted or dismissed are listed. Do not propose them again, even reworded or narrowed. This run's findings replace the open suggestions of earlier runs, so list everything still worth doing, not only what is new.
-- Write titles and texts in the language most card titles use.
+- ${outputLanguageRule(language)}
 - Do not use any tools. Answer with only one JSON object and nothing else:
 {"findings":[{"target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"]}],"noise":"what in the material was noise","verdict":"one or two sentences"}
 

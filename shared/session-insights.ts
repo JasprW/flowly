@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { outputLanguageRule } from "./ai-language";
+import type { LocaleCode } from "./i18n";
 import { nextMoveLimits } from "./model";
 import { ideaInstruction } from "./ideas";
 import { DESCRIPTION_LIMIT, FIELD_LIMIT, firstObject, targetText } from "./summary";
@@ -172,6 +174,7 @@ export function insightPrompt(input: {
   openIdeas: readonly string[];
   openIdeaCount: number;
   parts: InsightParts;
+  language: LocaleCode;
 }): string {
   const { parts } = input;
   const ideasFull = input.openIdeaCount >= SESSION_OPEN_IDEAS_MAX;
@@ -202,7 +205,8 @@ export function insightPrompt(input: {
             : `- "ideas": 0-${IDEAS_PER_RUN} follow-ups worth doing that go beyond what the person is doing now (a bug noticed on the way, a refactor, a separate feature). Each has "title" (at most 120 characters), "detail" (what to do and how to tell it is done), "rationale" (why) and "scope" ("here" when it extends the current goal, else "new"). Most turns have none: only propose something clearly worth it, and never repeat an open idea below.`,
         ]
       : []),
-    "- Write in the language the person uses in the conversation. Be concrete and terse.",
+    `- ${outputLanguageRule(input.language)}`,
+    "- Be concrete and terse.",
     "",
     `Session: ${clip(input.title || "(untitled)", 200)}`,
     `Working directory: ${clip(input.cwd, 300)}`,

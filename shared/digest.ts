@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { firstObject } from "./summary";
+import { outputLanguageRule } from "./ai-language";
+import type { LocaleCode } from "./i18n";
 
 /** A project's daily change digest, written by a cheap model (PROJECT-INSIGHTS-SPEC §7). */
 export const DIGEST_DAYS = 60;
@@ -90,7 +92,7 @@ export function parseDigest(text: string | null | undefined, taskIds: ReadonlySe
   return parsed.data;
 }
 
-export function digestPrompt(input: { project: string; day: string; today: boolean; material: string }): string {
+export function digestPrompt(input: { project: string; day: string; today: boolean; material: string; language: LocaleCode }): string {
   return [
     `You write a short daily digest of a software project managed on a Kanban board, where AI coding agents work on cards with one person.`,
     `Summarize ${input.today ? "today so far" : "the day"} (${input.day}) from the material below. Do not use any tools; answer only with the JSON object.`,
@@ -100,7 +102,7 @@ export function digestPrompt(input: { project: string; day: string; today: boole
     '- "done": cards finished, with what they delivered. "progressed": cards that moved forward and where they stand. "issues": problems, rework, failures, open questions. "next": what the person should look at or start next.',
     `- Each list has at most ${DIGEST_ITEMS} items. Each item is { "text": one short sentence (at most 20 words or 40 Chinese characters), "taskId": the card id from the material, or "" }.`,
     "- Only use facts from the material. Skip empty categories (empty list). No file paths unless they are the point.",
-    "- Write in the language the cards are written in.",
+    `- ${outputLanguageRule(input.language)}`,
     "",
     `Project: ${input.project}`,
     "",

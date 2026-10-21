@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rename, copyFile, unlink } from "node:fs/pr
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
+import type { LocaleCode } from "../shared/i18n";
 import type { BoardStore } from "./store";
 import { laneName } from "../shared/lanes";
 import {
@@ -160,6 +161,7 @@ export class SummaryService {
     readonly board: BoardStore,
     readonly store: SummaryStore,
     readonly settings: () => Promise<SummarySettings>,
+    readonly language: () => Promise<LocaleCode>,
     private timeoutMs = SUMMARY_TIMEOUT_MS,
     private rowTimeoutMs = SUMMARY_ROW_TIMEOUT_MS,
   ) {}
@@ -244,6 +246,7 @@ export class SummaryService {
       lane: laneName(project, task.status),
       previous,
       transcript: truncateTranscript(batch.text),
+      language: await this.language(),
     });
     // A child of the session whose turn ended, in the card's own workspace: no
     // new native project or workspace. Board views hide it by label.

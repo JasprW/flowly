@@ -1216,5 +1216,11 @@ const catalog: Catalog = {
   "Nothing collected.": "Nada coletado.",
   "Last run: {in} in · {out} out · ${cost}.": "Última execução: {in} de entrada · {out} de saída · ${cost}.",
   "About ${month} per month for {n} projects at this pace.": {"one": "Cerca de ${month} por mês para {n} projeto neste ritmo.", "other": "Cerca de ${month} por mês para {n} projetos neste ritmo."},
+  "AI-written text follows Settings → AI features → AI output language. It starts as your interface language.": "O texto escrito pela IA segue Configurações → Recursos de IA → Idioma de saída da IA. Por padrão, é o idioma da interface.",
+  "Same as interface language ({language})": "Igual ao idioma da interface ({language})",
+  "Output language": "Idioma de saída",
+  "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "O idioma do texto que a IA escreve: resumos de cartões, o resumo diário, insights de fluxo de trabalho, insights de sessão e os próximos passos e ideias que os agentes sugerem. Seus próprios títulos e notas nunca são traduzidos.",
+  "AI output language": "Idioma de saída da IA",
+  "Applies from the next run; text already written stays as it is.": "Vale a partir da próxima execução; o texto já escrito permanece como está.",
 };
 export default catalog;

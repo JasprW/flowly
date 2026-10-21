@@ -601,6 +601,13 @@ test("get_task lists the project's paseo.json scripts by name and type only (WOR
   expect(JSON.stringify(ctx)).not.toContain("npm run dev");
 });
 
+test("get_task returns the AI output language for next moves and ideas (AI-LANGUAGE-SPEC §5)", async () => {
+  const x = await setup();
+  expect((await x.service.get(x.identity)).outputLanguage).toEqual({ code: "en", name: "English" });
+  x.service.aiLanguage = async () => "zh-CN";
+  expect((await x.service.get(x.identity)).outputLanguage).toEqual({ code: "zh-CN", name: "Simplified Chinese" });
+});
+
 // Next moves ride on the delivery call (NEXT-MOVES-SPEC §8).
 const commitMove = { label: "Commit", prompt: "Commit and push." };
 const suggestions = (board: Awaited<ReturnType<BoardStore["read"]>>) => board.events.filter((e) => e.action === "next_moves_suggested");

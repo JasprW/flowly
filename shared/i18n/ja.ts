@@ -1216,5 +1216,11 @@ const catalog: Catalog = {
   "Nothing collected.": "収集されたものはありません。",
   "Last run: {in} in · {out} out · ${cost}.": "前回の実行: 入力 {in} · 出力 {out} · ${cost}。",
   "About ${month} per month for {n} projects at this pace.": "このペースで {n} プロジェクト分、月あたり約 ${month}。",
+  "AI-written text follows Settings → AI features → AI output language. It starts as your interface language.": "AI が書くテキストは 設定 → AI 機能 → AI の出力言語 に従います。初期値はインターフェース言語です。",
+  "Same as interface language ({language})": "インターフェース言語と同じ（{language}）",
+  "Output language": "出力言語",
+  "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "AI が書くテキストの言語：カードの要約、日次ダイジェスト、ワークフローインサイト、セッションインサイト、エージェントが提案する次のステップとアイデア。あなた自身のタイトルやメモは翻訳されません。",
+  "AI output language": "AI の出力言語",
+  "Applies from the next run; text already written stays as it is.": "次回の実行から反映されます。すでに書かれたテキストはそのままです。",
 };
 export default catalog;

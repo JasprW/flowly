@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
+import type { LocaleCode } from "../shared/i18n";
 import type { BoardStore } from "./store";
 import type { FlowLog } from "./flow-log";
 import type { CommandLog } from "./command-log";
@@ -156,6 +157,7 @@ export class WorkflowInsightsService {
     readonly flow: FlowLog,
     readonly settings: () => Promise<WorkflowSettings>,
     readonly summarySettings: () => Promise<SummarySettings>,
+    readonly language: () => Promise<LocaleCode>,
     private now = () => Date.now(),
     private timeoutMs = RUN_TIMEOUT_MS,
     private home = homedir(),
@@ -459,7 +461,7 @@ export class WorkflowInsightsService {
         config: { provider: model },
         title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
-        prompt: workflowPrompt(days, material),
+        prompt: workflowPrompt(days, material, await this.language()),
         outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
       });
       this.summarizer.set(agent.id, true);

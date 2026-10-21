@@ -1216,5 +1216,11 @@ const catalog: Catalog = {
   "Nothing collected.": "수집된 내용이 없습니다.",
   "Last run: {in} in · {out} out · ${cost}.": "마지막 실행: 입력 {in} · 출력 {out} · ${cost}.",
   "About ${month} per month for {n} projects at this pace.": "이 속도라면 프로젝트 {n}개에 월 약 ${month}.",
+  "AI-written text follows Settings → AI features → AI output language. It starts as your interface language.": "AI가 쓰는 글은 설정 → AI 기능 → AI 출력 언어를 따릅니다. 기본값은 인터페이스 언어입니다.",
+  "Same as interface language ({language})": "인터페이스 언어와 동일 ({language})",
+  "Output language": "출력 언어",
+  "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "AI가 쓰는 글의 언어: 카드 요약, 일일 다이제스트, 워크플로 인사이트, 세션 인사이트, 에이전트가 제안하는 다음 단계와 아이디어. 직접 쓴 제목과 메모는 번역되지 않습니다.",
+  "AI output language": "AI 출력 언어",
+  "Applies from the next run; text already written stays as it is.": "다음 실행부터 적용됩니다. 이미 작성된 글은 그대로 유지됩니다.",
 };
 export default catalog;

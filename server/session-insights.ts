@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/pr
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
+import type { LocaleCode } from "../shared/i18n";
 import { SUMMARIZER_LABELS, resolveModel, truncateTranscript, turnText } from "../shared/summary";
 import {
   SESSION_IDEAS_MAX,
@@ -103,6 +104,7 @@ export class SessionInsightService {
     readonly store: SessionInsightStore,
     readonly rows: NextMoveRows,
     readonly settings: () => Promise<InsightSettings>,
+    readonly language: () => Promise<LocaleCode>,
     private timeoutMs = INSIGHT_TIMEOUT_MS,
     private rowTimeoutMs = ROW_TIMEOUT_MS,
   ) {}
@@ -183,6 +185,7 @@ export class SessionInsightService {
     const before = (await this.store.read()).sessions.find((s) => s.agentId === agent.id);
     const open = (before?.ideas ?? []).filter((i) => i.status === "open");
     const model = resolveModel(settings.model, await availableModels(paseo, settings.model));
+    const language = await this.language();
     // A child of the session in its own workspace, like the card summarizer: no new project or workspace.
     const child = await paseo.workspaces.ref(agent.workspaceId!).agents.create({
       parent: agent.id,
@@ -197,6 +200,7 @@ export class SessionInsightService {
         openIdeas: open.map((i) => i.title),
         openIdeaCount: open.length,
         parts,
+        language,
       }),
       outputSchema: insightJsonSchema(parts) as unknown as Record<string, unknown>,
     });

@@ -1,5 +1,18 @@
 # Implementation progress
 
+## AI output language (card "AI output language setting for all AI features") — 2026-10-21
+
+Spec: [AI-LANGUAGE-SPEC](AI-LANGUAGE-SPEC.md). A Workflow insights Run now wrote all suggestions in German because each prompt guessed the language from its material; one setting now decides and every prompt states it.
+
+- [x] Spec written first (setting, resolution chain, auto-mode decision, prompt line, `outputLanguage`).
+- [x] Settings `ai-language` (`aiLanguage`: `interface` | language code) and `device-language` (reported by the client while the interface language is `auto`); `resolveAiLanguage` in `shared/ai-language.ts`.
+- [x] Settings → AI features → Output language; nine catalogs.
+- [x] Summary, digest, session-insights and workflow prompts take a required `language` and carry `outputLanguageRule`; old wording removed; services get `language()` from `index.server.ts`.
+- [x] `flowly_get_task` returns `outputLanguage`; tool descriptions, `server/skill-source.ts` and `skills/flowly/SKILL.md` use it for next moves and ideas.
+- [x] Onboarding: tip `ai-language` (fact `hasSummary`); README Languages sentence; no welcome-tour change (no change to the Project/Card/Session map or a headline capability).
+- [x] `shared/ai-language.test.ts` (resolution, settings, one test per prompt builder), `server/agent-service.test.ts` (outputLanguage), `client/onboarding-logic.test.ts` (tip).
+- [ ] Live: Workflow insights Run now in the configured language ([verification/ai-language.md](verification/ai-language.md)).
+
 ## Card setup reminders and soft gate (card "Flowly 流程约束强化") — 2026-10-21
 
 Spec: [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md). Analysis of the board showed the misses concentrated on title-only cards run by Sonnet 5.5 at medium/auto thinking; the causes were the skill's late, vague wording, silent gaps, feedback only at wrap-up, and a workpad gate that only fired when a workpad existed.

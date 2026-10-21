@@ -94,7 +94,7 @@ One page for the day: cards done, new and reworked, turns, agent time, commits a
 
 ## Languages
 
-The interface follows your device language, or pick one in **Flowly settings → Language**: English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. Agent instructions, daemon error details and the text agents and summaries write are not translated.
+The interface follows your device language, or pick one in **Flowly settings → Language**: English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português (Brasil) and Русский. Agent instructions, daemon error details and the text agents and summaries write are not translated. AI-written text (summaries, the daily digest, Workflow insights, suggested next steps and ideas) has its own language, **Flowly settings → AI features → AI output language**; it follows the interface language until you pick one.
 
 | 日本語 | Deutsch |
 | --- | --- |

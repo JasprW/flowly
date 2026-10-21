@@ -2,7 +2,8 @@ import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
 import { boardSorts } from "./sort";
 import { priorities, statusSchema, taskTypes } from "./model";
-import { languageChoices } from "./i18n";
+import { languageChoices, localeCodes } from "./i18n";
+import { aiLanguageChoices } from "./ai-language";
 import { cardActivityModes } from "./card-display";
 
 /** Host-scoped board view preferences (not board data). */
@@ -157,6 +158,38 @@ export type LanguageSettings = z.infer<typeof languageSettings.schema>;
 export function languageSettingsValues(values: unknown): LanguageSettings {
   const parsed = languageSettings.schema.safeParse(values ?? {});
   return parsed.success ? parsed.data : languageSettings.schema.parse({});
+}
+
+/** Language of everything AI writes (AI-LANGUAGE-SPEC §2): follow the interface language (default) or one fixed language. Host-scoped. */
+export const aiLanguageSettings = defineSettings({
+  id: "ai-language",
+  scope: "host",
+  version: 1,
+  schema: z.object({
+    aiLanguage: z.enum(aiLanguageChoices).default("interface"),
+  }),
+});
+export type AiLanguageSettings = z.infer<typeof aiLanguageSettings.schema>;
+export function aiLanguageSettingsValues(values: unknown): AiLanguageSettings {
+  const parsed = aiLanguageSettings.schema.safeParse(values ?? {});
+  return parsed.success ? parsed.data : aiLanguageSettings.schema.parse({});
+}
+
+/**
+ * The device language a client last reported (AI-LANGUAGE-SPEC §3): the daemon cannot see the device,
+ * so the interface language "auto" resolves through this. No settings page; empty until a client reports.
+ */
+export const deviceLanguageSettings = defineSettings({
+  id: "device-language",
+  scope: "host",
+  version: 1,
+  schema: z.object({
+    locale: z.enum(["", ...localeCodes]).default(""),
+  }),
+});
+export function deviceLanguageValue(values: unknown): string {
+  const parsed = deviceLanguageSettings.schema.safeParse(values ?? {});
+  return parsed.success ? parsed.data.locale : "";
 }
 
 /** First-run guidance (ONBOARDING-SPEC): whether the welcome tour was seen and which one-time tips were shown. Host-scoped. */

@@ -1216,5 +1216,11 @@ const catalog: Catalog = {
   "Nothing collected.": "尚未收集。",
   "Last run: {in} in · {out} out · ${cost}.": "上次运行：输入 {in} · 输出 {out} · ${cost}。",
   "About ${month} per month for {n} projects at this pace.": "按此频率，{n} 个项目每月约 ${month}。",
+  "AI-written text follows Settings → AI features → AI output language. It starts as your interface language.": "AI 写的文字遵循 设置 → AI 功能 → AI 输出语言，默认与界面语言一致。",
+  "Same as interface language ({language})": "与界面语言相同（{language}）",
+  "Output language": "输出语言",
+  "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "AI 所写文字的语言：卡片摘要、每日摘要、工作流洞察、会话洞察，以及 agent 建议的下一步和想法。你自己的标题和备注不会被翻译。",
+  "AI output language": "AI 输出语言",
+  "Applies from the next run; text already written stays as it is.": "从下一次运行起生效；已写好的文字保持原样。",
 };
 export default catalog;

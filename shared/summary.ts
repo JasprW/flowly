@@ -1,5 +1,7 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
+import { outputLanguageRule } from "./ai-language";
+import type { LocaleCode } from "./i18n";
 
 /** Task progress summaries written after each agent turn (TASK-SUMMARY-SPEC). */
 export const SUMMARY_VERSIONS = 50;
@@ -198,6 +200,7 @@ export function summaryPrompt(input: {
   lane: string;
   previous: Pick<SummaryEntry, "state" | "target" | "recap" | "next"> | null;
   transcript: string;
+  language: LocaleCode;
 }): string {
   return [
     "You keep a short progress summary for a task on a Kanban board. An AI coding agent works on the task in conversation with a person.",
@@ -211,7 +214,8 @@ export function summaryPrompt(input: {
     '- "recap": the outcomes that matter for judging progress across the whole task, not only this turn: at most 4 "- " lines, each at most 15 words (or 30 Chinese characters). Merge or drop older points to stay within 4; keep decisions and results, skip routine steps (reading files, running commands, retries).',
     '- Every value except "update" is a single string, never an array.',
     '- "next": the single next step, or who is being waited on, in one sentence of at most 20 words (or 40 Chinese characters).',
-    "- Write in the language the person uses in the conversation. Be concrete and terse; no filler, no file paths or IDs unless they are the point.",
+    `- ${outputLanguageRule(input.language)}`,
+    "- Be concrete and terse; no filler, no file paths or IDs unless they are the point.",
     "",
     `Task: ${input.title}`,
     input.description ? `Description:\n${clip(input.description, DESCRIPTION_LIMIT)}` : "",

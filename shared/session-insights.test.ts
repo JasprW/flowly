@@ -36,7 +36,7 @@ test("drops malformed moves and ideas instead of failing the whole run; rejects 
 });
 
 test("the prompt and schema only ask for enabled parts; open idea titles are listed to avoid repeats; a full idea list asks for none", () => {
-  const base = { title: "Fix login", cwd: "/repo", previous: null, transcript: "User: fix it", openIdeas: ["Add rate limit"], openIdeaCount: 1 };
+  const base = { title: "Fix login", cwd: "/repo", previous: null, transcript: "User: fix it", openIdeas: ["Add rate limit"], openIdeaCount: 1, language: "en" as const };
   const all = insightPrompt({ ...base, parts });
   expect(all).toContain('"moves"');
   expect(all).toContain('"ideas"');

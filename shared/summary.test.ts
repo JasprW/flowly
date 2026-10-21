@@ -74,6 +74,7 @@ test("prompt carries the card, previous summary and transcript", () => {
     lane: "In progress",
     previous: { state: "S", target: "Goal: T", recap: "R", next: "N" },
     transcript: "User: hi",
+    language: "en",
   });
   expect(prompt).toContain("Task: Login");
   expect(prompt).toContain("State: S");
@@ -82,7 +83,7 @@ test("prompt carries the card, previous summary and transcript", () => {
   expect(prompt).toContain("User: hi");
   expect(prompt).toContain("revise the current summary");
   expect(prompt).not.toContain("d".repeat(2001));
-  expect(summaryPrompt({ title: "x", description: "", lane: "Todo", previous: null, transcript: "" })).toContain('"update" must be true');
+  expect(summaryPrompt({ title: "x", description: "", lane: "Todo", previous: null, transcript: "", language: "en" })).toContain('"update" must be true');
 });
 
 test("summarizer sessions are recognized by label", () => {
