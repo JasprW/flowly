@@ -111,12 +111,12 @@ P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工�
 ### 6.1 何时写入与撤下（daemon，`server/next-move-rows.ts`）
 
 - **回合结束**（看板管理 session 的 `agent.turn_ended`，`outcome=completed`）：该 session 有当前建议（`openNextMoves`，去掉卡片已 Done/Cancelled 时的动作建议后非空）时，追加一行 `kind: "flowly-next-moves"`、`version: 1`、`id: "flowly-next-moves-<eventId>"`，`data = { status: "ready", taskId, workspaceId, eventId, moves }`。在回合结束而不是在 agent 记录建议时写入，是为了让卡片排在 agent 最后一条回复之后。显式“没有下一步”（空列表）不写。
-- **下一轮开始**（该 session 的 `agent.turn_started`）：把该 session 上一张卡片以同一 id 改写为 `{ status: "dismissed" }`（Paseo 按 id 原位替换，渲染为空），历史里不堆积旧卡片。
+- **下一轮开始**（该 session 的 `agent.turn_started`）：把该 session 上一张卡片以同一 id 改写为 `{ status: "past", eventId, moves }`（Paseo 按 id 原位替换）：建议仍然显示，但胶囊禁用、不再强调第一条、没有 ×。2026-10-21 用户决定：宿主给每个插件行套一个带 16px 下边距的外层容器，行无法删除，渲染为空（旧做法 `{ status: "dismissed" }`）也会留下这 16px 空白，插件 API 去不掉，所以改为保留上一轮的建议但不可点。daemon 重启前已写成 `dismissed` 的行仍渲染为空。
 - 写入在后台进行（10 s 超时），失败只记日志，不影响 Flowly 的事件与状态。与 Progress 行相同：行只在 daemon 内存，daemon 重启或 session 重载后消失（§5.5）。插件 reload 后不记得上一张卡片的 id，旧卡片由客户端的当前性检查隐藏（§6.2）。
 
 ### 6.2 显示条件（客户端）
 
-卡片只在以下都成立时显示，否则渲染为空：行 `status: "ready"`；该行的 `eventId` 等于 chip 刷新为该 session 算出的当前建议（`chipMoves`：session 空闲、没有待答问题、用户之后没有发过消息、本机没有关闭这一组）。非看板管理 session 没有卡片。Flowly 自己的 session 视图不显示插件行（§5.4），Flowly 内建议行不变。
+`status: "past"` 的行显示冻结的建议（禁用），除非用户已在本机关闭这一组（`movesHidden`），此时渲染为空。其余行卡片只在以下都成立时显示，否则渲染为空：行 `status: "ready"`；该行的 `eventId` 等于 chip 刷新为该 session 算出的当前建议（`chipMoves`：session 空闲、没有待答问题、用户之后没有发过消息、本机没有关闭这一组）。非看板管理 session 没有卡片。Flowly 自己的 session 视图不显示插件行（§5.4），Flowly 内建议行不变。
 
 ### 6.3 外观
 
@@ -196,7 +196,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 单元（focused）：
 
 - summary 追加：新版本追加、`update=false`/失败不追加、新一轮已开始时跳过、归档 session 跳过、追加失败不影响写入；data 与版本字段一致。
-- Next moves 卡片：回合结束写 ready 行（空列表、非 completed、卡片已完成只剩动作建议时不写）、下一轮开始改写为 dismissed、插件内存中的行 id 按 session 记录；当前性规则（`chipMoves`）；预填拼接与退回复制。
+- Next moves 卡片：回合结束写 ready 行（空列表、非 completed、卡片已完成只剩动作建议时不写）、下一轮开始改写为 past（保留建议、禁用）、插件内存中的行 id 与建议按 session 记录；当前性规则（`chipMoves`）；预填拼接与退回复制。
 - Ideas chip：计数、Ideas 开关、只对管理 session 注册、绑定变化时移除重建、卸载后不再注册；不再注册 Next chip。
 - 新 board 参数 `ideaId` 的校验与一次性消费。
 
@@ -258,7 +258,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 ### 12.4 原生 timeline 行
 
 - Progress：`flowly-summary` 行（§5.2），`taskId`/`workspaceId` 变为可选；外部 session 的行不带 `taskId`，卡片上不显示 “Open card”。追加规则同 §5.1（新一轮已开始或已归档则跳过）。
-- Next moves：`flowly-next-moves` 行（§6.1），`taskId`/`workspaceId` 可选，`eventId` 为 `suggestion.id`；回合结束写 ready、下一轮开始原位改写 dismissed（同一 `NextMoveRows`）。
+- Next moves：`flowly-next-moves` 行（§6.1），`taskId`/`workspaceId` 可选，`eventId` 为 `suggestion.id`；回合结束写 ready、下一轮开始原位改写 past（同一 `NextMoveRows`；`dismissed` 仅是旧行的形态）。
 - 客户端当前性：行的 `eventId` 等于该 session 最新且 `current` 的 suggestion，且 session 空闲、无待答问题、用户之后没发过消息、本机未关闭这一组（与 `chipMoves` 相同的规则）。点建议的行为同 §6.4（默认填入，可设为复制）。
 
 ### 12.5 Ideas chip（外部 session）

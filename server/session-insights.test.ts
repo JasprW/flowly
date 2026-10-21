@@ -140,7 +140,7 @@ test("the next turn ends the suggestion; a run that finishes after a newer turn 
   await x.service.turnStarted("a1", x.paseo);
   expect((await x.store.read()).sessions[0].suggestion?.current).toBe(false);
   expect(await x.service.view()).toEqual([]);
-  expect(x.appended.at(-1)?.row.data).toEqual({ status: "dismissed" });
+  expect(x.appended.at(-1)?.row.data).toMatchObject({ status: "past", moves: [{ label: "A", prompt: "a" }] });
   const rowsBefore = x.appended.length;
   x.replies.push({ text: x.json({ state: "Later", moves: [{ label: "B", prompt: "b" }] }) });
   await x.service.enqueue(x.agent, turn("y"), x.paseo, new Date(Date.now() - 60_000).toISOString());

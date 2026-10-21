@@ -3,6 +3,7 @@ import type { PluginClientContext } from "@getpaseo/plugin/client";
 import type { Idea, NextMove, Project, Task } from "../shared/model";
 import type { NextRowData } from "../shared/native-session";
 import type { SessionIdea } from "../shared/session-insights";
+import { movesHidden } from "./hidden-moves";
 
 /**
  * What Paseo's session view shows for a Flowly-managed session (NATIVE-SESSION-SPEC §6-8): the current Next moves
@@ -122,8 +123,12 @@ export function wrapPending(agentId: string, eventId: string) {
 export function useWrapPending(agentId: string, eventId: string) {
   return useSyncExternalStore(subscribe, () => wrapPending(agentId, eventId));
 }
-/** What a Next moves timeline row shows: its open wrap-up question, its moves while they are current, or nothing. */
-export function cardView(row: NextRowData, state: Pick<ChipState, "moves"> | null, agentId: string): "wrap" | "moves" | "hidden" {
+/**
+ * What a Next moves timeline row shows: its open wrap-up question, its moves while they are current, its moves
+ * disabled once the next turn started (`past`, unless the user hid that set), or nothing.
+ */
+export function cardView(row: NextRowData, state: Pick<ChipState, "moves"> | null, agentId: string): "wrap" | "moves" | "past" | "hidden" {
+  if (row.status === "past") return movesHidden(row.eventId) ? "hidden" : "past";
   if (row.status !== "ready") return "hidden";
   if (wrapPending(agentId, row.eventId)) return "wrap";
   // A row without a card belongs to a session Flowly does not manage (NATIVE-SESSION-SPEC §12.4).

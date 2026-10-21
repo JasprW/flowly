@@ -41,7 +41,7 @@ async function setup(status = "development") {
   return { board, paseo, appended, event, rows: new NextMoveRows(board), failAppend: () => (fail = true) };
 }
 
-test("a completed turn with suggestions writes one ready card after the reply; the next turn rewrites it as dismissed", async () => {
+test("a completed turn with suggestions writes one ready card after the reply; the next turn rewrites it as a past card with the same moves", async () => {
   const x = await setup();
   await x.event("s1", "agent.turn_started", 1);
   await x.event("ev1", "next_moves_suggested", 2, { moves: [{ label: "Verify", prompt: "Verify it" }, { label: "Done", moveTo: "done" }] });
@@ -59,7 +59,7 @@ test("a completed turn with suggestions writes one ready card after the reply; t
     },
   ]);
   await x.rows.turnStarted("a1", x.paseo);
-  expect(x.appended[1]).toEqual({ agentId: "a1", row: { type: "plugin", id: "flowly-next-moves-ev1", kind: "flowly-next-moves", version: 1, data: { status: "dismissed" } } });
+  expect(x.appended[1]).toEqual({ agentId: "a1", row: { type: "plugin", id: "flowly-next-moves-ev1", kind: "flowly-next-moves", version: 1, data: { status: "past", eventId: "ev1", moves: [{ label: "Verify", prompt: "Verify it" }, { label: "Done", moveTo: "done" }] } } });
   // Nothing left to dismiss.
   await x.rows.turnStarted("a1", x.paseo);
   expect(x.appended).toHaveLength(2);

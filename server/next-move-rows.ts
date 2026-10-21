@@ -1,6 +1,7 @@
 import type { PaseoApi } from "@getpaseo/client";
 import type { BoardStore } from "./store";
 import { openNextMoves, shownMoves } from "../shared/next-moves";
+import type { NextMove } from "../shared/model";
 import { nextRowId, nextRowKind, nextRowVersion, type NextRowData } from "../shared/native-session";
 import { within } from "./summaries";
 
@@ -8,12 +9,13 @@ const ROW_TIMEOUT_MS = 10_000;
 
 /**
  * The session's suggested next steps as a card in Paseo's own timeline (NATIVE-SESSION-SPEC §6.1): written after a
- * completed turn, under the agent's last reply, and rewritten as dismissed in place when the session's next turn
- * starts. Best effort and in memory only, like every appended row: nothing here touches Flowly's own data.
+ * completed turn, under the agent's last reply, and rewritten in place as a past card (the same moves, shown disabled)
+ * when the session's next turn starts. A row cannot be removed and the host keeps its slot, so the moves stay visible
+ * rather than leaving an empty gap. Best effort and in memory only, like every appended row: nothing here touches Flowly's own data.
  */
 export class NextMoveRows {
   /** The card each session shows now, by agent id; forgotten on plugin reload (the client then hides stale cards). */
-  private live = new Map<string, string>();
+  private live = new Map<string, { id: string; eventId: string; moves: NextMove[] }>();
   constructor(
     readonly board: BoardStore,
     private timeoutMs = ROW_TIMEOUT_MS,
@@ -31,7 +33,7 @@ export class NextMoveRows {
       const id = nextRowId(suggestion.id);
       const data: NextRowData = { status: "ready", taskId: task.id, workspaceId: task.workspaceId, eventId: suggestion.id, moves: [...moves] };
       await this.write(paseo, identity.agentId, id, data);
-      this.live.set(identity.agentId, id);
+      this.live.set(identity.agentId, { id, eventId: suggestion.id, moves: [...moves] });
     } catch (e) {
       console.error("Flowly next steps card not added:", e instanceof Error ? e.message : String(e));
     }
@@ -42,20 +44,20 @@ export class NextMoveRows {
     try {
       const id = nextRowId(suggestionId);
       await this.write(paseo, agentId, id, { status: "ready", eventId: suggestionId, moves });
-      this.live.set(agentId, id);
+      this.live.set(agentId, { id, eventId: suggestionId, moves: [...moves] });
     } catch (e) {
       console.error("Flowly next steps card not added:", e instanceof Error ? e.message : String(e));
     }
   }
 
   async turnStarted(agentId: string, paseo: PaseoApi): Promise<void> {
-    const id = this.live.get(agentId);
-    if (!id) return;
+    const live = this.live.get(agentId);
+    if (!live) return;
     this.live.delete(agentId);
     try {
-      await this.write(paseo, agentId, id, { status: "dismissed" });
+      await this.write(paseo, agentId, live.id, { status: "past", eventId: live.eventId, moves: live.moves });
     } catch (e) {
-      console.error("Flowly next steps card not dismissed:", e instanceof Error ? e.message : String(e));
+      console.error("Flowly next steps card not retired:", e instanceof Error ? e.message : String(e));
     }
   }
 

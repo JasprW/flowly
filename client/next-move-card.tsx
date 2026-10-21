@@ -5,7 +5,7 @@ import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import type { NextMove } from "../shared/model";
 import type { NextRowData } from "../shared/native-session";
 import { cardView, chipClient, refreshChipsNow, requestRowRefresh, setWrapPending, useChipState, useOutsideState, useWrapPending, type ChipState } from "./native-chips";
-import { hideMoves } from "./hidden-moves";
+import { hideMoves, useHiddenMovesVersion } from "./hidden-moves";
 import { moveToDone, wrapupNeed } from "./native-actions";
 import { fillComposer } from "./web-composer";
 import { WrapupQuestion } from "./native-popovers";
@@ -30,7 +30,8 @@ import { t } from "../shared/i18n";
  * The session's suggested next steps as a card under the agent's last reply in Paseo's own timeline
  * (NATIVE-SESSION-SPEC §6). Shown only while its suggestion set is current (the chip refresh's `chipMoves`); a
  * message move fills this session's message box (or copies it, per the setting or where filling is impossible),
- * nothing is sent; Move to Done moves the card and may ask to wrap up.
+ * nothing is sent; Move to Done moves the card and may ask to wrap up. Once the session's next turn started the row
+ * keeps its moves, disabled (the host keeps a row's slot, so an empty row would leave a gap).
  */
 export function NativeNextMovesItem(
   props: PluginTimelineItemProps<NextRowData>,
@@ -41,6 +42,7 @@ export function NativeNextMovesItem(
   const outside = useOutsideState(props.agentId);
   const eventId = data.status === "ready" ? data.eventId : "";
   const wrap = useWrapPending(props.agentId, eventId);
+  useHiddenMovesVersion();
   const view = cardView(data, state, props.agentId);
   // The row arrives by push; its state by the chip refresh. When the row is here first, ask for a round now rather
   // than at the next tick (once per row). A stale row asks once and stays hidden (NATIVE-SESSION-SPEC §8).
@@ -48,12 +50,14 @@ export function NativeNextMovesItem(
   useEffect(() => {
     if (unknown) requestRowRefresh(props.agentId, eventId);
   }, [unknown, props.agentId, eventId]);
-  if (view === "hidden" || data.status !== "ready") return null;
+  if (view === "hidden" || data.status === "dismissed") return null;
   return (
     <Theme.Provider value={props.theme}>
       <SharedMotionProvider>
         <View style={{ paddingVertical: space[1] }}>
-          {view === "wrap" && wrap ? (
+          {data.status === "past" ? (
+            <PastMovesCard moves={data.moves} />
+          ) : view === "wrap" && wrap ? (
             // Kept after Move to Done ended this suggestion set (NATIVE-SESSION-SPEC §6.4).
             <Frame>
               <WrapupQuestion
@@ -145,23 +149,47 @@ const NextMovesCard = memo(function NextMovesCard({
         />
       }
     >
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1.5] }}>
-        {moves.map((move, index) => (
-          <MoveChip
-            key={`${index}:${move.label}`}
-            move={move}
-            first={index === 0}
-            height={height}
-            disabled={busy}
-            fill={nextMoveTap === "fill"}
-            onPress={() => pick(move)}
-          />
-        ))}
-      </View>
+      <MoveChips moves={moves} height={height} disabled={busy} fill={nextMoveTap === "fill"} onPick={pick} />
       {!!error && <Notice tone="danger">{error}</Notice>}
     </Frame>
   );
 });
+
+/** The previous turn's suggestions: still visible, nothing to press. */
+const PastMovesCard = memo(function PastMovesCard({ moves }: { moves: readonly NextMove[] }) {
+  return (
+    <Frame>
+      <MoveChips moves={moves} height={touch ? 32 : 26} disabled past fill={false} onPick={noop} />
+    </Frame>
+  );
+});
+const noop = () => {};
+
+function MoveChips(p: {
+  moves: readonly NextMove[];
+  height: number;
+  disabled: boolean;
+  /** An earlier turn's suggestions: no chip is emphasized. */
+  past?: boolean;
+  fill: boolean;
+  onPick(move: NextMove): void;
+}) {
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1.5] }}>
+      {p.moves.map((move, index) => (
+        <MoveChip
+          key={`${index}:${move.label}`}
+          move={move}
+          first={index === 0 && !p.past}
+          height={p.height}
+          disabled={p.disabled}
+          fill={p.fill}
+          onPress={() => p.onPick(move)}
+        />
+      ))}
+    </View>
+  );
+}
 
 function MoveChip(p: {
   move: NextMove;

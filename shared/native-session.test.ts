@@ -14,11 +14,13 @@ test("the summary row's kind and id follow Paseo's id rule", () => {
   expect(row.id).toMatch(hostId);
 });
 
-test("the Next moves card row: kind and id follow Paseo's id rule; ready and dismissed shapes parse", async () => {
+test("the Next moves card row: kind and id follow Paseo's id rule; ready, past and dismissed shapes parse", async () => {
   const { nextRowKind, nextRowId, nextRowSchema } = await import("./native-session");
   expect(nextRowKind).toMatch(hostId);
   expect(nextRowId("6f1c2d3e-0000-4000-8000-000000000001")).toMatch(hostId);
   expect(nextRowSchema.safeParse({ status: "ready", taskId: "t", workspaceId: "w", eventId: "e", moves: [{ label: "Verify", prompt: "Verify it" }, { label: "Done", moveTo: "done" }] }).success).toBe(true);
   expect(nextRowSchema.safeParse({ status: "dismissed" }).success).toBe(true);
+  expect(nextRowSchema.safeParse({ status: "past", eventId: "e", moves: [{ label: "Verify", prompt: "Verify it" }] }).success).toBe(true);
+  expect(nextRowSchema.safeParse({ status: "past", eventId: "e", moves: [] }).success).toBe(false);
   expect(nextRowSchema.safeParse({ status: "ready", taskId: "t", workspaceId: "w", eventId: "e", moves: [] }).success).toBe(false);
 });

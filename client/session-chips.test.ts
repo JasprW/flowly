@@ -294,6 +294,13 @@ test("the Next moves card keeps an open wrap-up question after its moves stop be
   expect(cardView(ready, state, "a1")).toBe("moves");
   expect(cardView(ready, { moves: null } as never, "a1")).toBe("hidden");
   expect(cardView({ status: "dismissed" }, state, "a1")).toBe("hidden");
+  // Once the next turn started the row keeps its moves, disabled; a set the user hid stays hidden.
+  const past = { status: "past" as const, eventId: "ev-past", moves: ready.moves };
+  expect(cardView(past, null, "a1")).toBe("past");
+  expect(cardView(past, { moves: null } as never, "a1")).toBe("past");
+  const { hideMoves } = await import("./hidden-moves");
+  hideMoves("ev-past");
+  expect(cardView(past, null, "a1")).toBe("hidden");
   setWrapPending("a1", "ev1", { need: "ask", state: {} as never });
   expect(cardView(ready, { moves: null } as never, "a1")).toBe("wrap");
   expect(cardView(ready, null, "a1")).toBe("wrap");

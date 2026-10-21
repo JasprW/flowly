@@ -46,8 +46,9 @@ export function summaryRow(entry: SummaryEntry, workspaceId: string) {
 /**
  * The session's suggested next steps as a card under the agent's last reply
  * (NATIVE-SESSION-SPEC §6). Written `ready` when a turn ends and rewritten
- * `dismissed` (same id, so it keeps its place and renders nothing) when the next
- * turn starts.
+ * `past` (same id, so it keeps its place; the same moves, shown disabled) when the
+ * next turn starts. `dismissed` is the older rewrite that kept nothing and renders
+ * nothing; rows written that way before `past` existed stay in memory until restart.
  */
 export const nextRowKind = "flowly-next-moves";
 export const nextRowVersion = 1;
@@ -58,6 +59,11 @@ export const nextRowSchema = z.discriminatedUnion("status", [
     taskId: z.string().min(1).optional(),
     workspaceId: z.string().min(1).optional(),
     /** The `next_moves_suggested` event the card shows; the card hides once it is no longer current. */
+    eventId: z.string().min(1),
+    moves: z.array(nextMoveSchema).min(1).max(nextMoveLimits.count),
+  }),
+  z.object({
+    status: z.literal("past"),
     eventId: z.string().min(1),
     moves: z.array(nextMoveSchema).min(1).max(nextMoveLimits.count),
   }),
