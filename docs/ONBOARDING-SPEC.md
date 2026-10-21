@@ -17,45 +17,50 @@ Success: a new user can say what a project, a card and a session are, who decide
 - Settings loading, error or invalid never show the tour (fail quiet). The tour never opens over another modal, over an open card, or while a shortcut dialog is open.
 - Closing it in any way (Skip, Esc, scrim, finishing) sets `welcomeSeen=true`. It is not shown again automatically.
 
-### 2. The tour: a modal sheet, four pages, skippable
+### 2. The tour: a modal sheet, three pages, skippable
 
 Uses the plugin `Modal` (host-owned open/close; content has the shared rise from `client/modal.tsx`). Same component on desktop and phone: single column, max width ~480, scrolls if the viewport is short. Footer: step dots, **Skip** (text button, all pages except the last), **Back** (from page 2), **Next** / final primary button. Page changes use `MotionReveal` (short, interruptible, Reduce Motion honoured, no delay before the action). The modal title carries the Flowly mark as its icon (`FlowlyMark` in `client/brand-icons.tsx`): the small-size mark from `docs/brand/logo/` (a solid start dot and an open end ring joined by one S curve), inlined as 20, 40 and 60 px PNGs per theme (ink on light surfaces, paper on dark; about 3 KB of source together) that `docs/brand/export-logo.mjs` generates into `client/flowly-mark-data.ts`. The one matching the screen's pixel ratio is shown, so the 20 pt icon is never resampled. It is decorative: the title already reads "Welcome to Flowly". No tip announces it (a visual change, no new capability).
 
-**Page 1: Three things, one map** — "How Ultra Kanban maps to Paseo"
+**Page 1: How Flowly works** — "Everything on the board is a real Paseo object, so you can always open it in Paseo." The former map and loop pages are merged (user decision 2026-10-21: three pages instead of four). Two parts, each under a small muted heading:
 
-A vertical (compact) / horizontal (desktop) chain drawn with React Native views and `Icon`s, no images:
+*Three things* — a horizontal chain of three equal bordered boxes joined by chevrons, drawn with React Native views and `Icon`s, no images. Each box: icon tile, name, one short line, the Paseo object in muted text.
 
-| Kanban | Is a Paseo… | In one line |
+| Kanban | Short line | Is a Paseo… |
 | --- | --- | --- |
-| **Project** | project root (a folder) | One board = one folder. Put several repos under one folder, or let us link them for you. |
-| **Card** | workspace | One task = one workspace (a worktree or a directory). Never two cards on one workspace. |
-| **Session** | agent session | One conversation with an agent, inside the card's workspace. A card can have many; you pick who gets your next message. |
+| **Project** | One folder | project |
+| **Card** | One task | workspace |
+| **Session** | A chat with an agent | agent session |
 
-Footer line under the chain: "Card status and session status are separate. A finished turn never completes a card; only you mark Done." Each row is tappable? No: static text, to keep the page quiet.
+*The loop* — a lane strip `Todo › Design › Development › Test › In review › Done` (wraps when narrow): Todo and Done are tinted in the accent colour (yours), the middle lanes are neutral (the agent moves them). Below it three steps, each with a role badge:
+1. **You** — Make a project from a folder, add a task and start an agent.
+2. **Agent** — Moves the card through the lanes. When it needs you, the card says Needs you.
+3. **You** — Review the result and move the card to Done.
 
-**Page 2: The loop** — "Hand out work, make the calls, review"
+The old footer "card status and session status are separate" is dropped; the strip's accent Done makes the same point with less text.
 
-Five numbered steps, one line each, with the lane names the user will actually see:
-1. Create a project from a folder.
-2. Add a task and start an agent with it (the card gets its own workspace).
-3. Watch the card move Design → Development → Test → In review by itself.
-4. When an agent needs you, the card says **Needs you**. Reply from the card.
-5. Review, then move it to Done yourself.
-
-**Page 3: What makes it different** — five feature rows (icon, name, one sentence), the same five as the README so promo and product agree:
+**Page 2: What makes it different** — the page stays short: four headline features as bordered tiles (icon, name, one short sentence; two per row, one per row when narrow), in the README's highlight order so promo and product agree, then every other feature folded under a collapsed **More features (n)** disclosure (small icon, name and sentence per row; collapsed each time the tour opens).
 The page title has the detail line "Anything marked with the sparkle was written or suggested by AI." ([AI-MARK-SPEC](AI-MARK-SPEC.md)).
+
+Headline tiles:
 - *Automatic status*: cards follow the agent's work through the lanes. Done stays yours.
-- *Needs-you reminders*: questions, approvals and errors light the card, the Attention menu and the sidebar badge; questions and approvals are answered right on the card or in the session.
+- *Needs-you reminders*: questions, approvals and errors light up the card; answer them right there.
 - *Run summaries*: after every turn a cheap model keeps state / target / recap / next on the card.
+- *Suggested next steps*: tap one to fill in the message box; nothing is sent until you send it.
+
+Under More features (a new feature normally goes here; promote it to a tile only by replacing one):
 - *Workpad*: agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks (passed, failed or not run on a named commit) and confusions; delivering without them needs a note ([WORKPAD-SPEC](WORKPAD-SPEC.md), [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md) §4). No new tip: the change is agent behavior with no new screen moment.
 - *Follow-up ideas*: work an agent finds on the way lands in the Ideas inbox; Good idea or Dismiss.
 - *Inputs and outputs*: each card lists the files and links it worked from and delivered, added by agents or by you ([CARD-ARTIFACTS-SPEC](CARD-ARTIFACTS-SPEC.md)).
+- *Tickets, docs and PRs as inputs*: start a card from a Jira ticket, Confluence page, or GitHub/GitLab issue or pull request; agents read it every turn and Flowly never changes it.
+- *Tags*: tag cards by module or direction; agents tag their own cards too; filter and search by #tag.
 - *Project insights*: today's cards, turns, agent time, commits, tokens and what is waiting on you.
 - *Workflow insights*: optional; on a schedule you choose, a model reads the commands agents ran and suggests scripts, tools and rules worth keeping (WORKFLOW-INSIGHTS-SPEC).
+- *Saved with your project*: each project's board is also kept in its folder (`.flowly`, ignored by git); adding the folder again restores it.
 
-**Page 4: Get started**
+**Page 3: Ready when you are**
 
-Primary **Create project** (opens the existing project form after the tour closes); secondary **Not now**. Small text link "Show these tips again any time: board menu → Welcome tour". No project, workspace, card or session is created by the tour itself (no sample data).
+Title with detail "Your first three steps." (plus "Nothing is created until you confirm." when there is no project yet), then one bordered checklist of three rows (empty circle, text, small accent icon): *Pick a folder to make a project.* / *Add your first task and start an agent.* / *Reply when a card says Needs you.* The rows are static, not tracked progress. Then the reopen hint. Primary **Create project** (opens the existing project form after the tour closes) with secondary **Not now**, or **Done** when a project exists. No project, workspace, card or session is created by the tour itself (no sample data).
+
 
 ### 3. Better empty states (always visible, not one-time)
 

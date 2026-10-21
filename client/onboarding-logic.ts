@@ -1,6 +1,6 @@
 /** Pure decisions for first-run guidance (ONBOARDING-SPEC). No React, no storage. */
 
-export const welcomePageCount = 4;
+export const welcomePageCount = 3;
 
 /** Page index after a Back/Next step, kept inside the tour. */
 export function stepPage(page: number, direction: 1 | -1): number {
