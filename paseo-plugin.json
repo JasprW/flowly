@@ -2,6 +2,15 @@
   "id": "flowly",
   "name": "Flowly",
   "description": "The agent-native workflow for Paseo: cards that move by themselves, with reminders, summaries, ideas and insights",
+  "icon": "assets/icon.png",
+  "media": [
+    "assets/screenshots/01-board.png",
+    "assets/screenshots/02-needs-you.png",
+    "assets/screenshots/03-summary.png",
+    "assets/screenshots/04-ideas.png",
+    "assets/screenshots/05-insights.png",
+    "assets/screenshots/06-next-moves.png"
+  ],
   "requirements": {
     "paseo": ">=0.11.2"
   },

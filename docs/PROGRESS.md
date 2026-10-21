@@ -1,5 +1,11 @@
 # Implementation progress
 
+## Registry listing art (card "发布v1.5.0") — 2026-10-21
+
+- [x] Researched the Paseo registry (getpaseo/plugins README, PROTOCOL, REVIEW, publishing guide): icon and screenshots come from `icon`/`media` in `paseo-plugin.json` (package-relative PNG icon; PNG/JPG/WebP/GIF/MP4/WebM media; first image is the thumbnail; SVG rejected), or from `listing.*` overrides a reviewer adds. The two screenshots in the previous listing were reviewer-added overrides.
+- [x] `assets/icon.png` (light 512 app icon) and six screenshots (board, Needs you, summary, ideas, insights, next moves, resized from `docs/promo/screenshots`) declared in the manifest and added to `files`; `ci:package` fails when a declared asset is not in the tarball.
+- [ ] UNRUN: the Insights screenshot predates Workflow insights and the welcome tour pages; retake with `docs/promo/shots.mjs` for a later release. Onboarding: no tour or tip change (packaging only).
+
 ## AI output language (card "AI output language setting for all AI features") — 2026-10-21
 
 Spec: [AI-LANGUAGE-SPEC](AI-LANGUAGE-SPEC.md). A Workflow insights Run now wrote all suggestions in German because each prompt guessed the language from its material; one setting now decides and every prompt states it.

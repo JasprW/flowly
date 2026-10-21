@@ -41,6 +41,13 @@ References: [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/)
    a draft until uploads finish. The Paseo registry pins a commit and requires
    its own [submission](https://github.com/getpaseo/plugins/issues/new/choose).
 
+Registry listing art lives in `assets/` (`icon.png`, `screenshots/*.png`, resized
+from `docs/promo/screenshots` and `docs/brand/logo/png`) and is declared by
+`icon` and `media` in `paseo-plugin.json`, so the registry reads it from the pinned
+artifact (first image is the card thumbnail; PNG/JPG/WebP/GIF/MP4/WebM, no SVG).
+`assets/` is in package `files` and `ci:package` fails if a declared file is not
+in the tarball. Retake the shots with `docs/promo/shots.mjs` when the UI changes.
+
 To rehearse, run Release manually on main with `dry_run=true` (default). It runs
 source checks and CI/package validation, downloads the artifact, verifies its
 checksum and runs npm publish --dry-run; it skips the publishing job. It does

@@ -33,6 +33,7 @@
     "server/",
     "shared/",
     "skills/",
+    "assets/",
     "!**/*.test.ts",
     "!**/*.test.tsx",
     "!shared/i18n-keys.ts",

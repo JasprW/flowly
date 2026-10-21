@@ -20,6 +20,10 @@ const paths = packed.files.map(({ path }) => path);
 for (const required of ['package.json', 'npm-shrinkwrap.json', 'paseo-plugin.json', 'index.client.tsx', 'index.server.ts', 'OVERVIEW.md', 'LICENSE', 'skills/flowly/SKILL.md']) {
   assert(paths.includes(required), `Package missing ${required}`);
 }
+const listing = json('paseo-plugin.json');
+for (const asset of [listing.icon, ...(listing.media ?? [])].filter((entry) => entry && !/^https:/.test(entry))) {
+  assert(paths.includes(asset), `Package missing listing asset ${asset}`);
+}
 for (const path of paths) {
   assert(!/(^|\/)(?:\.env(?:\..*)?|\.npmrc|node_modules|docs|scripts|\.github|coverage)(\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path), `Unexpected private/development file: ${path}`);
 }
