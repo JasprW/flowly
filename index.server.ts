@@ -433,6 +433,10 @@ export default function contribute(server: PluginServerContext) {
         );
       return;
     }
+    // This turn's suggested next steps as a card under the reply in Paseo's timeline. First thing, before the
+    // settings read, the model lookup (up to 2 s) and the board write: the suggestion is already in the board's
+    // events and none of those steps changes it, so the card waits for nothing. Never blocks the hook.
+    if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
     const auto = await autoStatusOn();
     // Agent habits (WORKFLOW-INSIGHTS-SPEC §12.4): the model this turn ran on, and whether the user's message took one of the suggestions that were open.
     const model = await sessionModel(paseo, event.agent);
@@ -445,8 +449,6 @@ export default function contribute(server: PluginServerContext) {
     void workpads.recordTurn(identity, event.timeline, paseo).catch((e) =>
       console.error("Kanban workpad plan not recorded:", e instanceof Error ? e.message : String(e)),
     );
-    // This turn's suggested next steps as a card under the reply in Paseo's timeline; never blocks the hook.
-    if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
     // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
     if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
       void summaries.enqueue(identity.taskId, identity.agentId, event.timeline, paseo, endedAt);

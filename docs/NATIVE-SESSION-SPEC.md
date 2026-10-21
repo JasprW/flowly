@@ -169,6 +169,18 @@ P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工�
 - 清理：插件卸载或 session 不再满足条件时移除全部自有 chip；卸载后迟到的读取或操作结果不注册、不导航。
 - timeline 渲染器 bundle 小、无网络；不引入新依赖。
 
+### 8.1 手机上的 Next moves 卡片延迟（2026-10-21 性能修订）
+
+用户反馈：手机上 Progress 卡片很快，Next moves 卡片要等很久。原因（实测，本机 1251 个 agent 的 host）：Progress 行自带全部数据，一到就渲染；Next moves 卡片要等客户端 chip 刷新算出“当前建议”，而旧的一轮刷新是 **board 读取 → 全量列出 live agent（233 KB）→ 全量扫描含归档的所有 agent（3.1 MB，其中 386 个是 summarizer 残留）→ native-chips → 才算 Next/Ideas 状态**。每次 board 变化都触发一次 3 MB 扫描，而回合开始/结束、建议事件都是 board 变化；手机在 JS 线程上解码每个字节。再叠加最长 5 s 的轮询间隔，以及 daemon 侧卡片写入排在设置读取、模型查询（最长 2 s）和 board 写入之后。修订：
+
+- **先算后扫**：一轮刷新先读 board（etag/增量）、必要时读 native-chips 与 insights，立刻算出 Next/Ideas 状态并同步 chip；归档扫描移到这一轮**之后**在后台进行，从不阻塞，也不再因 board 变化而触发，只在“有 chip 的 session 离开了 live 列表”或每分钟一次时进行（取代 SESSION-CHIP-SPEC 2026-10-18 的“board 变化时重扫”；已缓存的归档 session 仍会随 board 变化更新标题，只有“新归档的 session”最多晚一分钟拿到 chip）。归档缓存只保存 `{id, workspaceId}`。
+- **live 列表走推送**：与看板相同，用 agent 流（`agents.subscribe`）维护 live agent，开流后再完整列一次，之后每分钟对账；无流时（旧 host）退回每轮列出。
+- **推送触发刷新**：session 的状态、`lastUserMessageAt`、待答权限、attention 或 workspace 变化（`relevantChange`，标题、用量等不算）在约 150 ms 内触发一轮刷新（合并），所以回合结束（running → idle）后卡片几乎立刻就绪，不再等下一个 5 s 周期。
+- **行到即拉**：Next moves 行先于状态到达客户端时，渲染器请求一轮刷新（每行一次，`requestRowRefresh`）。
+- **daemon 侧**：管理 session 的卡片写入提前到 `turn_ended` 钩子最前面（建议事件已在 board 中，不依赖后面的设置读取、模型查询与 board 写入）。
+- **不做无谓的重渲染**：每轮重算的 chip 状态内容未变时不通知订阅者。
+- 开发者计时日志增加 `chips.round`、`chips.archived`。
+
 ## 9. 文案、引导与文档
 
 - 所有界面文字 `t()`/`tn()`，新文案加入全部语言目录。

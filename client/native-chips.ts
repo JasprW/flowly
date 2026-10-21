@@ -32,9 +32,17 @@ export type OutsideState = {
   nextMoveTap: "fill" | "copy";
 };
 const outside = new Map<string, OutsideState>();
+const outsideSignatures = new Map<string, string>();
 export function setOutsideState(agentId: string, state: OutsideState | null) {
-  if (state) outside.set(agentId, state);
-  else if (!outside.delete(agentId)) return;
+  if (state) {
+    const signature = outsideSignature(state);
+    if (outsideSignatures.get(agentId) === signature && outside.has(agentId)) return;
+    outsideSignatures.set(agentId, signature);
+    outside.set(agentId, state);
+  } else {
+    outsideSignatures.delete(agentId);
+    if (!outside.delete(agentId)) return;
+  }
   listeners.forEach((listener) => listener());
 }
 export function outsideStateIds() {
@@ -59,9 +67,24 @@ export function chipClient() {
   return client;
 }
 
+/** What a card or popover shows of a managed session: equal signatures need no re-render. */
+const chipSignature = (s: ChipState) =>
+  JSON.stringify([s.task.id, s.task.workspaceId, s.task.status, s.task.revision, s.project.id, s.project.revision, s.moves, s.ideas.map((i) => [i.id, i.updatedAt]), s.autoWrapup, s.nextMoveTap]);
+const outsideSignature = (s: OutsideState) =>
+  JSON.stringify([s.workspaceId, s.moves, s.ideas.map((i) => [i.id, i.updatedAt]), s.nextMoveTap]);
+const signatures = new Map<string, string>();
+
 export function setChipState(agentId: string, state: ChipState | null) {
-  if (state) states.set(agentId, state);
-  else if (!states.delete(agentId)) return;
+  if (state) {
+    // Every round recomputes this; only a real change may wake the cards and popovers that read it.
+    const signature = chipSignature(state);
+    if (signatures.get(agentId) === signature && states.has(agentId)) return;
+    signatures.set(agentId, signature);
+    states.set(agentId, state);
+  } else {
+    signatures.delete(agentId);
+    if (!states.delete(agentId)) return;
+  }
   listeners.forEach((listener) => listener());
 }
 export function chipStateIds() {
@@ -75,6 +98,8 @@ export function clearChipStates() {
   states.clear();
   pending.clear();
   outside.clear();
+  signatures.clear();
+  outsideSignatures.clear();
   listeners.forEach((listener) => listener());
 }
 
@@ -105,6 +130,8 @@ export function cardView(row: NextRowData, state: Pick<ChipState, "moves"> | nul
   const current = row.taskId ? state?.moves : outsideState(agentId)?.moves;
   return current?.eventId === row.eventId ? "moves" : "hidden";
 }
+/** For tests: the listener set `useChipState` and friends subscribe to. */
+export const subscribeForTest = (listener: () => void) => subscribe(listener);
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => void listeners.delete(listener);
@@ -120,6 +147,20 @@ export function setChipRefresher(next: (() => void) | null) {
 }
 /** After an action changed what the chips show (an idea dismissed, a card moved): refresh now, not at the next round. */
 export function refreshChipsNow() {
+  refresher?.();
+}
+
+const askedRows = new Map<string, number>();
+/**
+ * A Flowly timeline row reached Paseo's view before the chip refresh knew it as current (the row comes by push, the
+ * state by the next round): ask for one round now, once per row, instead of waiting for the next tick.
+ */
+export function requestRowRefresh(agentId: string, eventId: string) {
+  const key = `${agentId}:${eventId}`;
+  if (askedRows.has(key)) return;
+  // Bounded: only recent rows matter.
+  if (askedRows.size >= 200) askedRows.delete(askedRows.keys().next().value!);
+  askedRows.set(key, Date.now());
   refresher?.();
 }
 

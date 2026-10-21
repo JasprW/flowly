@@ -47,12 +47,13 @@ test("an unchanged board is not re-downloaded, chips are not re-pushed, archived
   expect(calls.board.slice(1).every((input) => (input as { etag?: string }).etag === "e1")).toBe(true);
   expect(calls.updates).toBe(0);
   expect(calls.archivedScans).toBe(1);
-  // A renamed card: the board changes, the pills update once.
+  // A renamed card: the board changes, both chips (the live and the archived session) update once, from what is
+  // held: a board change alone does not download every agent on the host again (NATIVE-SESSION-SPEC §8).
   state.boardEtag = "e2";
   state.title = "Renamed";
   await vi.advanceTimersByTimeAsync(1000);
   expect(calls.updates).toBe(2);
-  expect(calls.archivedScans).toBe(2);
+  expect(calls.archivedScans).toBe(1);
   await vi.advanceTimersByTimeAsync(2000);
   expect(calls.updates).toBe(2);
   stop();
@@ -363,5 +364,161 @@ describe("sessions Flowly does not manage (NATIVE-SESSION-SPEC §12)", () => {
     expect(calls.filter((c) => c === "sessions.insights").length).toBeGreaterThanOrEqual(2);
     stop();
     expect(outsideState("o1")).toBeNull();
+  });
+});
+
+describe("chip state notifications and row-triggered refresh (NATIVE-SESSION-SPEC §8)", () => {
+  const card = (extra: object = {}) =>
+    ({ task: { id: "t1", workspaceId: "w1", status: "development", revision: 3 }, project: { id: "p", revision: 1 }, agentId: "a1", moves: { eventId: "e1", moves: [{ label: "Go", prompt: "Go" }] }, ideas: [], autoWrapup: false, nextMoveTap: "fill", ...extra }) as never;
+
+  test("a round that recomputes identical state wakes no subscriber; a real change does", async () => {
+    const { setChipState, chipState } = await import("./native-chips");
+    const seen: unknown[] = [];
+    const store = await import("./native-chips");
+    // Subscribe through the store's own hook surface: setChipState notifies the same listeners as useChipState.
+    let notified = 0;
+    const unsubscribe = (store as unknown as { subscribeForTest(l: () => void): () => void }).subscribeForTest(() => void notified++);
+    setChipState("a-perf", card());
+    expect(notified).toBe(1);
+    setChipState("a-perf", card());
+    setChipState("a-perf", card({ ideas: [] }));
+    expect(notified).toBe(1);
+    setChipState("a-perf", card({ moves: null }));
+    expect(notified).toBe(2);
+    expect(chipState("a-perf")?.moves).toBeNull();
+    setChipState("a-perf", null);
+    expect(notified).toBe(3);
+    unsubscribe();
+    expect(seen).toEqual([]);
+  });
+
+  test("a row that arrives before its state asks for one round, once per row", async () => {
+    const { setChipRefresher, requestRowRefresh } = await import("./native-chips");
+    const refresh = vi.fn();
+    setChipRefresher(refresh);
+    requestRowRefresh("a1", "ev-1");
+    requestRowRefresh("a1", "ev-1");
+    requestRowRefresh("a1", "ev-2");
+    expect(refresh).toHaveBeenCalledTimes(2);
+    setChipRefresher(null);
+    requestRowRefresh("a1", "ev-3");
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
+  const popovers = { ideas: () => null };
+  const live = (id: string, extra: Record<string, unknown> = {}) => ({
+    id, workspaceId: "w1", archivedAt: null, title: id, labels: {}, status: "idle", updatedAt: "2026-10-21T00:00:01.000Z", pendingPermissions: [], attentionReason: null, lastUserMessageAt: "2026-10-21T00:00:00Z", ...extra,
+  });
+  function fake(options: { stream: boolean; scanGate?: Promise<void> }) {
+    const calls = { live: 0, archived: 0, board: 0, native: 0 };
+    const state = {
+      etag: "e1",
+      agents: [live("a1")] as ReturnType<typeof live>[],
+      events: [{ id: "evp1", taskId: "t1", actor: "agent", action: "next_moves_suggested", agentId: "a1", at: "2026-10-21T00:00:05Z", moves: [{ label: "Verify", prompt: "Verify it" }] }] as unknown[],
+    };
+    let push: ((u: unknown) => void) | null = null;
+    let released = 0;
+    const client = {
+      rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
+        if (def.name === "sessions.native-chips") {
+          calls.native++;
+          return { managed: [{ agentId: "a1", taskId: "t1", workspaceId: "w1" }], ideas: true, autoWrapup: false, nextMoveTap: "fill", outside: { enabled: false, progress: false, nextMoves: false, ideas: false } };
+        }
+        calls.board++;
+        if (input.etag === state.etag) return { etag: state.etag };
+        return { etag: state.etag, value: { projects: [project], tasks: [{ ...task("Card"), status: "development", archivedAt: null }], events: state.events, ideas: [] } };
+      }),
+      paseo: {
+        agents: {
+          list: vi.fn(async (o: { filter: { includeArchived: boolean }; subscribe?: object }) => {
+            if (o.subscribe) return { subscription: { release: async () => void released++ } };
+            if (o.filter.includeArchived) {
+              calls.archived++;
+              await options.scanGate;
+              return { entries: [...state.agents, live("old", { archivedAt: "2026-10-01T00:00:00Z" })].map((agent) => ({ agent })), pageInfo: { nextCursor: null } };
+            }
+            calls.live++;
+            return { entries: state.agents.map((agent) => ({ agent })), pageInfo: { nextCursor: null } };
+          }),
+          ...(options.stream ? { subscribe: (h: (u: unknown) => void) => ((push = h), () => void (push = null)) } : {}),
+        },
+      },
+      addComposerPill: vi.fn(() => ({ update: () => undefined, remove: () => undefined })),
+      openScreen: vi.fn(),
+    };
+    return { client, calls, state, push: (u: unknown) => push?.(u), released: () => released };
+  }
+
+  test("the card's state is ready while the archived scan is still running", async () => {
+    const { chipState } = await import("./native-chips");
+    let release!: () => void;
+    const x = fake({ stream: false, scanGate: new Promise<void>((r) => (release = r)) });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(x.calls.archived).toBe(1);
+    expect(chipState("a1")?.moves?.eventId).toBe("evp1");
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+  });
+
+  test("with the stream, live sessions are listed once more after it starts and then not every round", async () => {
+    const x = fake({ stream: true });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(x.calls.live).toBe(1);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(x.calls.live).toBe(2); // the one reconcile after the subscription started
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(x.calls.live).toBe(2);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(x.calls.live).toBe(3); // the minute's reconcile
+    stop();
+    expect(x.released()).toBe(1);
+  });
+
+  test("a session going idle (pushed) brings its card state within a moment, not at the next tick", async () => {
+    const { chipState } = await import("./native-chips");
+    const x = fake({ stream: true });
+    x.state.agents = [live("a1", { status: "running" })];
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(chipState("a1")?.moves).toBeNull(); // working: no card yet
+    const boardCallsBefore = x.calls.board;
+    x.push({ kind: "upsert", agent: live("a1", { status: "idle", updatedAt: "2026-10-21T00:00:09.000Z" }) });
+    await vi.advanceTimersByTimeAsync(400); // far less than the 5 s tick
+    expect(chipState("a1")?.moves?.eventId).toBe("evp1");
+    expect(x.calls.board).toBeGreaterThan(boardCallsBefore);
+    stop();
+  });
+
+  test("pushed churn that cannot change a card (a title) causes no round", async () => {
+    const x = fake({ stream: true });
+    const stop = registerSessionChips(x.client as never, 60_000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(100);
+    const before = x.calls.board;
+    x.push({ kind: "upsert", agent: live("a1", { title: "renamed", updatedAt: "2026-10-21T00:00:09.000Z" }) });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(x.calls.board).toBe(before);
+    stop();
+  });
+
+  test("a row request runs one round now, and none once the chips are torn down", async () => {
+    const { requestRowRefresh, chipState } = await import("./native-chips");
+    const x = fake({ stream: false });
+    const stop = registerSessionChips(x.client as never, 60_000, 0, popovers);
+    await vi.advanceTimersByTimeAsync(100);
+    const before = x.calls.board;
+    requestRowRefresh("a1", "ev-row-now");
+    await vi.advanceTimersByTimeAsync(50);
+    expect(x.calls.board).toBeGreaterThan(before);
+    stop();
+    const after = x.calls.board;
+    requestRowRefresh("a1", "ev-row-later");
+    await vi.advanceTimersByTimeAsync(50);
+    expect(x.calls.board).toBe(after);
+    expect(chipState("a1")).toBeNull();
   });
 });

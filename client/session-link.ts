@@ -14,6 +14,8 @@ import { parentOf } from "../shared/subagents";
 import { isSummarizer } from "../shared/summary";
 import { chipMoves, sessionChipMoves } from "../shared/next-moves";
 import { movesHidden, onMovesHidden } from "./hidden-moves";
+import { applyLiveUpdate, relevantChange } from "./live-agents";
+import { perfEnd, perfStart } from "./perf";
 import {
   chipStateIds,
   clearChipStates,
@@ -152,21 +154,35 @@ export function registerSessionChips(
   let outsideEtag = "",
     outsideViews = new Map<string, SessionInsightView>();
   if (popovers) setChipClient(client);
-  let lastRound: { current: LinkBoard; live: PaseoAgent[]; tasks: Map<string, LinkBoard["tasks"][number]> } | null = null;
+  let lastRound: { current: LinkBoard; tasks: Map<string, LinkBoard["tasks"][number]> } | null = null;
   // Hiding a set on the Next moves card takes it away at once, not at the next round.
   const stopHidden = onMovesHidden(() => {
-    if (!disposed && lastRound) syncExtras(lastRound.current, lastRound.live, lastRound.tasks);
+    if (!disposed && lastRound) syncExtras(lastRound.current, [...live.values()], lastRound.tasks);
   });
   // This poll runs on every client, phones included, where each response is
   // decoded on the JS thread while the user may be typing in a composer
-  // (PERFORMANCE-SPEC). So: the board is re-read only when its etag changed,
-  // live sessions are listed each round, and the archived scan (every agent on
-  // the host) only when the board changed or once a minute.
+  // (PERFORMANCE-SPEC). So: the board is re-read only when its etag changed;
+  // live sessions come from the agent stream (listed once, then every minute to
+  // reconcile; every round only where there is no stream); and the archived scan
+  // (every agent on the host, megabytes) runs after the round, never inside it,
+  // when a chipped session left the live list or once a minute (NATIVE-SESSION-SPEC §8).
   let board: LinkBoard | null = null,
     etag = "",
-    archived: PaseoAgent[] = [],
-    archivedAt = 0;
+    // Only what the Task chip needs of an archived session.
+    archived: { id: string; workspaceId: string | null }[] = [],
+    archivedAt = 0,
+    scanning = false;
   const archivedEvery = 60_000;
+  const liveEvery = 60_000;
+  // A pushed change of one session asks for a round soon; the wait gathers the updates of one transition.
+  const nudgeAfter = 150;
+  const live = new Map<string, PaseoAgent>();
+  let liveAt = 0,
+    streamReady = false,
+    // Set when the stream starts: a list that began earlier may have missed updates, so list once more.
+    relist = false,
+    stopStream: (() => void) | null = null,
+    releaseStream: (() => Promise<void>) | null = null;
   const opening = new Set<string>();
   let disposed = false,
     timer: ReturnType<typeof setTimeout> | undefined,
@@ -181,6 +197,43 @@ export function registerSessionChips(
     registrations.clear();
     clearExtras();
     lastRound = null;
+  }
+  /** The full list of live sessions replaces what is held (a newer pushed copy of a session wins). */
+  function reconcileLive(list: readonly PaseoAgent[]) {
+    const ids = new Set(list.map((a) => a.id));
+    for (const id of [...live.keys()]) if (!ids.has(id)) live.delete(id);
+    // The list is the host's own answer for live sessions: trust it, but never go back in time on a pushed copy.
+    for (const agent of list) {
+      const held = live.get(agent.id);
+      if (!held || !(held.updatedAt > agent.updatedAt)) live.set(agent.id, agent);
+    }
+    liveAt = Date.now();
+  }
+  /** Follows the sessions by push, as the board does (`openAgentStream` in queries.ts); a phone then lists them rarely. */
+  function openStream() {
+    const agents = client.paseo.agents;
+    if (stopStream || typeof agents.subscribe !== "function") return;
+    let nudge: ReturnType<typeof setTimeout> | undefined;
+    const stopListening = agents.subscribe((update) => {
+      if (disposed) return;
+      const { changed, before, after } = applyLiveUpdate(live, update);
+      if (!changed || !relevantChange(before, after)) return;
+      clearTimeout(nudge);
+      nudge = setTimeout(refreshNow, nudgeAfter);
+    });
+    stopStream = () => {
+      stopListening();
+      clearTimeout(nudge);
+    };
+    void agents
+      .list({ filter: { includeArchived: false }, page: { limit: 1 }, subscribe: {} })
+      .then((result) => {
+        releaseStream = () => result.subscription.release();
+        if (disposed) return void releaseStream().catch(() => undefined);
+        streamReady = true;
+        relist = true;
+      })
+      .catch(() => undefined);
   }
   // Adds, updates in place, or removes one Next/Ideas pill; `button` is null to remove.
   function syncPill(
@@ -312,13 +365,87 @@ export function registerSessionChips(
     void refresh();
   }
   if (popovers) setChipRefresher(refreshNow);
+  /** The Task chip: one per session in a card's workspace, live or archived. */
+  function syncTaskChips(
+    current: LinkBoard,
+    agents: readonly { id: string; workspaceId?: string | null }[],
+    tasks: Map<string, LinkBoard["tasks"][number]>,
+  ) {
+    const found = new Set<string>();
+    for (const actor of agents) {
+      const task = actor.workspaceId ? tasks.get(actor.workspaceId) : undefined;
+      if (!task) continue;
+      found.add(actor.id);
+      const binding = JSON.stringify([task.id, task.workspaceId]);
+      let existing = registrations.get(actor.id);
+      if (existing && existing.binding !== binding) {
+        existing.chip.remove();
+        registrations.delete(actor.id);
+        existing = undefined;
+      }
+      const button = chipButton(task, actor.id);
+      // Updating a pill re-renders the host composer next to the user's input: only when its text changed.
+      const label = `${button.label}\n${button.title}`;
+      if (existing) {
+        if (existing.label !== label) {
+          existing.chip.update(button);
+          existing.label = label;
+        }
+      } else
+        registrations.set(actor.id, {
+          binding,
+          label,
+          chip: client.addComposerPill({
+            id: "kanban-task",
+            workspaceId: task.workspaceId,
+            agentId: actor.id,
+            button,
+          }),
+        });
+    }
+    for (const [agentId, registration] of registrations) {
+      if (!found.has(agentId)) {
+        registration.chip.remove();
+        registrations.delete(agentId);
+      }
+    }
+  }
+  const taskMap = (current: LinkBoard) =>
+    new Map(
+      current.tasks
+        .filter((t) => current.projects.some((p) => p.id === t.projectId))
+        .map((t) => [t.workspaceId, t] as const),
+    );
+  /** Every agent on the host, archived ones included: megabytes, so never inside a round (see above). */
+  async function scanArchived() {
+    const start = perfStart();
+    try {
+      const all = await listAgents(client.paseo, undefined, true);
+      if (disposed) return;
+      archived = all.filter((a) => !!a.archivedAt).map((a) => ({ id: a.id, workspaceId: a.workspaceId ?? null }));
+      archivedAt = Date.now();
+      perfEnd("chips.archived", start);
+      // New archived sessions of a card get their chip now; the cards themselves were synced by the round.
+      if (board) syncTaskChips(board, [...live.values(), ...archived.filter((a) => !live.has(a.id))], taskMap(board));
+    } catch {
+      // Try again soon, not every round.
+      archivedAt = Date.now() - archivedEvery + 15_000;
+    } finally {
+      scanning = false;
+    }
+  }
   async function refresh() {
     running = true;
+    const roundStart = perfStart();
     try {
+      openStream();
+      const needLive = !streamReady || relist || Date.now() - liveAt >= liveEvery;
+      // Only a list that began after the stream was up counts as complete.
+      if (needLive && streamReady) relist = false;
       const [boardResult, liveResult] = await Promise.allSettled([
         // The daemon may answer an etag with a patch of what changed, which readBoardDelta applies to the board held here.
         readBoardDelta((input) => client.rpc(readBoardChanged, input), board ?? undefined, etag && board ? etag : undefined),
-        listAgents(client.paseo, undefined, false),
+        needLive ? listAgents(client.paseo, undefined, false) : Promise.resolve(null),
       ]);
       if (disposed) return;
       if (boardResult.status !== "fulfilled" || liveResult.status !== "fulfilled" || (!boardResult.value.value && !board)) {
@@ -330,23 +457,14 @@ export function registerSessionChips(
       const changed = !!boardResult.value.value;
       if (boardResult.value.value) board = boardResult.value.value;
       etag = boardResult.value.etag;
-      const live = liveResult.value;
-      const liveIds = new Set(live.map((a) => a.id));
-      const archivedIds = new Set(archived.map((a) => a.id));
-      // A chipped session that left the live list was probably just archived.
-      const vanished = [...registrations.keys()].some((id) => !liveIds.has(id) && !archivedIds.has(id));
-      if (changed || vanished || Date.now() - archivedAt >= archivedEvery) {
-        const all = await listAgents(client.paseo, undefined, true);
-        if (disposed) return;
-        archived = all.filter((a) => !!a.archivedAt);
-        archivedAt = Date.now();
-      }
+      if (liveResult.value) reconcileLive(liveResult.value);
+      const liveAgents = [...live.values()];
       // Managed sessions and the Ideas switch: when the board changed, else once a minute (a setting change alone).
       // A session in a card's workspace that is not known as managed yet may just have been prepared: check sooner.
       const unknown =
         !!chipInfo &&
         Date.now() - chipInfoAt >= 15_000 &&
-        live.some((a) => !chipInfo!.managed.has(a.id) && !!a.workspaceId && board!.tasks.some((x) => x.workspaceId === a.workspaceId));
+        liveAgents.some((a) => !chipInfo!.managed.has(a.id) && !!a.workspaceId && board!.tasks.some((x) => x.workspaceId === a.workspaceId));
       if (popovers && (changed || unknown || !chipInfo || Date.now() - chipInfoAt >= archivedEvery)) {
         const info = await client.rpc(nativeChips, {}).catch(() => null);
         if (disposed) return;
@@ -367,59 +485,25 @@ export function registerSessionChips(
         outsideEtag = "";
         outsideViews = new Map();
       }
-      const agents = [...live, ...archived.filter((a) => !liveIds.has(a.id))];
       const current = board!;
-      const tasks = new Map(
-        current.tasks
-          .filter((t) => current.projects.some((p) => p.id === t.projectId))
-          .map((t) => [t.workspaceId, t]),
-      );
-      const found = new Set<string>();
-      for (const actor of agents) {
-        const task = actor.workspaceId
-          ? tasks.get(actor.workspaceId)
-          : undefined;
-        if (!task) continue;
-        found.add(actor.id);
-        const binding = JSON.stringify([task.id, task.workspaceId]);
-        let existing = registrations.get(actor.id);
-        if (existing && existing.binding !== binding) {
-          existing.chip.remove();
-          registrations.delete(actor.id);
-          existing = undefined;
-        }
-        const button = chipButton(task, actor.id);
-        // Updating a pill re-renders the host composer next to the user's input: only when its text changed.
-        const label = `${button.label}\n${button.title}`;
-        if (existing) {
-          if (existing.label !== label) {
-            existing.chip.update(button);
-            existing.label = label;
-          }
-        } else
-          registrations.set(actor.id, {
-            binding,
-            label,
-            chip: client.addComposerPill({
-              id: "kanban-task",
-              workspaceId: task.workspaceId,
-              agentId: actor.id,
-              button,
-            }),
-          });
+      const tasks = taskMap(current);
+      // The cards and chips first (what a person is waiting for), the archived scan after.
+      lastRound = { current, tasks };
+      syncExtras(current, liveAgents, tasks);
+      const liveIds = new Set(live.keys());
+      const archivedIds = new Set(archived.map((a) => a.id));
+      syncTaskChips(current, [...liveAgents, ...archived.filter((a) => !liveIds.has(a.id))], tasks);
+      // A chipped session that left the live list was probably just archived.
+      const vanished = [...registrations.keys()].some((id) => !liveIds.has(id) && !archivedIds.has(id));
+      if (!scanning && (vanished || Date.now() - archivedAt >= archivedEvery)) {
+        scanning = true;
+        void scanArchived();
       }
-      for (const [agentId, registration] of registrations) {
-        if (!found.has(agentId)) {
-          registration.chip.remove();
-          registrations.delete(agentId);
-        }
-      }
-      lastRound = { current, live, tasks };
-      syncExtras(current, live, tasks);
     } catch {
       if (!disposed) clear();
     } finally {
       running = false;
+      perfEnd("chips.round", roundStart);
       if (!disposed) {
         if (again) {
           again = false;
@@ -441,6 +525,8 @@ export function registerSessionChips(
     latestClick++;
     clearTimeout(timer);
     stopHidden();
+    stopStream?.();
+    void releaseStream?.().catch(() => undefined);
     clear();
     lastRound = null;
     if (popovers) {

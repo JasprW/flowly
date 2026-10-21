@@ -1,10 +1,10 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { copyText, Icon, useToast } from "@getpaseo/plugin/client/react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import type { NextMove } from "../shared/model";
 import type { NextRowData } from "../shared/native-session";
-import { cardView, chipClient, refreshChipsNow, setWrapPending, useChipState, useOutsideState, useWrapPending, type ChipState } from "./native-chips";
+import { cardView, chipClient, refreshChipsNow, requestRowRefresh, setWrapPending, useChipState, useOutsideState, useWrapPending, type ChipState } from "./native-chips";
 import { hideMoves } from "./hidden-moves";
 import { moveToDone, wrapupNeed } from "./native-actions";
 import { fillComposer } from "./web-composer";
@@ -43,6 +43,12 @@ export function NativeNextMovesItem(
   const eventId = data.status === "ready" ? data.eventId : "";
   const wrap = useWrapPending(props.agentId, eventId);
   const view = cardView(data, state, props.agentId);
+  // The row arrives by push; its state by the chip refresh. When the row is here first, ask for a round now rather
+  // than at the next tick (once per row). A stale row asks once and stays hidden (NATIVE-SESSION-SPEC §8).
+  const unknown = data.status === "ready" && view === "hidden";
+  useEffect(() => {
+    if (unknown) requestRowRefresh(props.agentId, eventId);
+  }, [unknown, props.agentId, eventId]);
   if (view === "hidden" || data.status !== "ready") return null;
   return (
     <Theme.Provider value={props.theme}>
