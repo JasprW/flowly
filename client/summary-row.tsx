@@ -6,36 +6,32 @@ import type { SummaryRowData } from "../shared/native-session";
 import { CardFootnote, ContentCard } from "./content-card";
 import { SummaryBody } from "./task-progress";
 import { Button, Theme, relativeTime, space } from "./ui";
-import { NativeCardHeader } from "./native-card";
+import { NativeCardHeading } from "./native-card";
 import { openCardFromRow } from "./native-chips";
 import { SharedMotionProvider } from "./motion";
 import { t } from "../shared/i18n";
 
 /**
  * A summary version as a timeline row (NATIVE-SESSION-SPEC §5.3): the drawer's
- * Progress card with the shared native card header, in Paseo's own timeline only
+ * Progress card under a "Progress" heading, in Paseo's own timeline only
  * (Flowly's session view leaves it out; the sidebar has Progress).
  */
 export const SummaryRow = memo(function SummaryRow({ data, onOpenCard }: { data: SummaryRowData; onOpenCard?: () => void }) {
   return (
-    <View testID="session-summary-row">
+    <View testID="session-summary-row" style={{ gap: space[1.5] }}>
+      <NativeCardHeading title={t("Progress")} />
       <ContentCard
-        header={
-          <NativeCardHeader
-            title={t("Progress")}
-            trailing={
-              onOpenCard ? (
-                <Button quiet small icon="PanelsTopLeft" onPress={onOpenCard}>
-                  {t("Open card")}
-                </Button>
-              ) : undefined
-            }
-          />
-        }
         footer={
-          <CardFootnote>
-            {t("Updated {time}", { time: relativeTime(data.at) })} · {modelLabel(data.model)}
-          </CardFootnote>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+            <CardFootnote>
+              {t("Updated {time}", { time: relativeTime(data.at) })} · {modelLabel(data.model)}
+            </CardFootnote>
+            {onOpenCard && (
+              <Button quiet small icon="PanelsTopLeft" onPress={onOpenCard}>
+                {t("Open card")}
+              </Button>
+            )}
+          </View>
         }
       >
         <SummaryBody entry={data} />

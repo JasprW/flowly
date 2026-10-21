@@ -15,15 +15,13 @@ export const cardFrameStyle = (colors: { border: string; surface1: string }) =>
  * padding, a body clamped to about five lines with a fade, and one footer row
  * with Show more / Show less on the left and `footer` (a timestamp or the
  * card's actions) on the right. `after` renders below the padded area, full
- * width (e.g. the Ideas page's source line). `header` (optional, nothing without it) sits inside the card above the
- * body: Paseo's own timeline cards put their title and action there (NATIVE-SESSION-SPEC §5.3, §6.3).
+ * width (e.g. the Ideas page's source line).
  */
-export function ContentCard({ header, footer, after, children }: { header?: ReactNode; footer?: ReactNode; after?: ReactNode; children: ReactNode }) {
+export function ContentCard({ footer, after, children }: { footer?: ReactNode; after?: ReactNode; children: ReactNode }) {
   const { colors } = useTheme();
   return (
     <View style={cardFrameStyle(colors)}>
-      <View style={{ padding: space[3], paddingBottom: after ? space[1] : space[3], ...(header ? { gap: space[2] } : null) }}>
-        {header}
+      <View style={{ padding: space[3], paddingBottom: after ? space[1] : space[3] }}>
         <Clamped background={colors.surface1} footer={footer}>
           {children}
         </Clamped>

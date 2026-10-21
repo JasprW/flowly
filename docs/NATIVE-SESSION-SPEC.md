@@ -78,7 +78,7 @@ P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工�
 
 ### 5.3 渲染（`addTimelineRenderer`）
 
-- 外观与侧栏 Progress 一致（共用 `ContentCard` 的框与正文）。**两张原生卡片共用同一个框与头部**（2026-10-21 样式统一，`client/native-card.tsx`）：边框/圆角/底色/12 pt 内边距相同（`cardFrameStyle`）；头部在卡片**内部**，左侧 `AiMark` + 标题（灰色、中等字重、`font.sm`），右侧是该卡唯一的动作，头部定高（桌面 28、触屏 32），所以两张卡对得齐。Progress：标题 “Progress”，右侧 “Open card”（有卡片时）；正文 `state`（强调）、Target / Recap / Next；脚注左边 Show more / Show less，右边 “Updated 5m ago · Haiku 5.5”，不再和 Open card 挤在一行（手机上原来会把时间戳折成两行、把按钮截成 “Open ca…”）。`ContentCard` 的 `header` 是可选槽，不传时侧栏的 Progress 与 Ideas 完全不变。
+- 外观与侧栏 Progress 一致（共用 `ContentCard` 的框与正文）：卡片**外面**上方一行小标题（`AiMark` + “Progress”，灰色、中等字重、`font.sm`），卡片里是 `state`（强调）、Target / Recap / Next，脚注一行：左边 Show more / Show less，右边 “Updated 5m ago · Haiku 5.5” 和 “Open card” 小按钮。**两张原生卡片的版式相同**（2026-10-21 用户决定：保持 Progress 原来的样子，Next steps 向它对齐；曾试过把标题和 Open card 放进卡片头部，用户更喜欢原来的）：小标题在卡外（`client/native-card.tsx` 的 `NativeCardHeading`），框与 12 pt 内边距相同（`cardFrameStyle`）。已知代价：手机宽度下 Progress 的脚注较挤，时间戳可能折成两行、按钮被截成 “Open ca…”（原版就如此，用户知情后仍选择保留原样）。
 - 超过约 5 行时收起，Show more / Show less，规则同 TASK-SUMMARY-SPEC §7（动画、Reduce Motion、首次测量不播放）。
   - Paseo 在 Flowly 的组件树之外渲染 timeline 行，没有 `MotionProvider` 时动画钩子默认按“减少动态效果”处理、直接跳变（2026-10-20 用户反馈）。原生 timeline 行、Next moves 卡片与 Ideas 弹层都包在 `SharedMotionProvider` 里：所有行共用一个系统 Reduce Motion 查询与监听（`client/reduce-motion.ts`），系统回答前按减少动态效果处理。
 - 头部右侧的 “Open card” 小按钮，打开 Flowly 并定位到该卡概览（复用 Task chip 的 `openScreen("board", …)` 路径与校验）。
@@ -122,13 +122,13 @@ P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工�
 
 ```
   Agent: …typecheck 与测试都通过了。
+  ✦ Progress                                                ← 小标题在卡外
  ┌──────────────────────────────────────────────────────┐
- │ ✦ Progress                              [Open card]  │   ← 同一个框、同一个头部
  │ 实现完成，等待验证                                     │
- │ ⌄ Show more               Updated 1m ago · Haiku 5.5 │
+ │ ⌄ Show more      Updated 1m ago · Haiku 5.5 [Open card] │
  └──────────────────────────────────────────────────────┘
+  ✦ Suggested next steps                                 ×  ← 同样的小标题，× 在标题行右端
  ┌──────────────────────────────────────────────────────┐
- │ ✦ Suggested next steps                            ×  │
  │ [ Verify with Luna ] [ Commit and push ] [✓ Move to Done] │
  └──────────────────────────────────────────────────────┘
 ```
