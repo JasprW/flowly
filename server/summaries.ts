@@ -22,6 +22,7 @@ import {
   type SummarySettings,
   type SummaryState,
 } from "../shared/summary";
+import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { summaryRow } from "../shared/native-session";
 
 /** `summaries.json`: serialized writes, backup, atomic replacement; invalid data is preserved. */
@@ -164,6 +165,7 @@ export class SummaryService {
     readonly language: () => Promise<LocaleCode>,
     private timeoutMs = SUMMARY_TIMEOUT_MS,
     private rowTimeoutMs = SUMMARY_ROW_TIMEOUT_MS,
+    private remove: RemoveAgent = daemonRemoveAgent(),
   ) {}
 
   running() {
@@ -271,7 +273,7 @@ export class SummaryService {
         );
       output = parseModelOutput(result.lastMessage);
     } finally {
-      await agent.archive().catch(() => undefined);
+      await this.remove(agent);
     }
     if (!output.update && previous) {
       await this.store.clearError(taskId);

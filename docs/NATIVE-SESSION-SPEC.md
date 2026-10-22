@@ -230,7 +230,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 
 - 触发：外部 session 的 `agent.turn_ended`，`outcome=completed`，且设置总开关开、三项中至少一项开。回合文本同 TASK-SUMMARY-SPEC §2（`turnText`，忽略插件行），为空则跳过。
 - 单飞与合并：每个 session 同时最多一个生成；运行中又结束的回合合并为下一次（同卡片 summary）。
-- 运行：在该 session 的 workspace 里创建它的**子 session**（`parent` = 该 session），模型 = Summary model 设置（Auto 同卡片），标题 `Flowly insights · <session 标题>`，标签 `{flowly: "summarizer", "flowly-session": <agentId>}`，`outputSchema`，`waitForFinish(120 s)`，`finally` 中归档。会在 Paseo 里留下一个已归档子 session（用户已知并接受）。
+- 运行：在该 session 的 workspace 里创建它的**子 session**（`parent` = 该 session），模型 = Summary model 设置（Auto 同卡片），标题 `Flowly insights · <session 标题>`，标签 `{flowly: "summarizer", "flowly-session": <agentId>}`，`outputSchema`，`waitForFinish(120 s)`，`finally` 中**硬删除**（`server/summarizer-remove.ts`，本地 `DaemonClient.deleteAgent`，用户 2026-10-22 批准，见 AGENTS.md 例外；只删本次刚创建的 id）；删除失败则回退归档并记日志。运行的几十秒内子 session 仍短暂可见，结束后列表与归档都不留痕。
 - 一次调用同时产出三项（关掉的项不在提示里要求、输出被忽略）：
   - `update/state/target/recap/next`：同卡片 summary，但以 session 标题与工作目录代替卡片标题/描述/泳道；上一版作为输入。
   - `moves`：0–3 条“用户最可能发的下一条消息”（`label` ≤60 字、`prompt` ≤2000 字，与对话同语言）；没有明确下一步时为空。外部 session 没有 Move to Done。

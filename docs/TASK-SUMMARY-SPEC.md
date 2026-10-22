@@ -95,11 +95,11 @@ Auto：`claude/claude-haiku-5-5`；Claude provider 不可用或无此模型时�
 
 ## 10. 已知风险
 
-- 插件 SDK 未开放 `internal`：summarizer 在卡片 workspace 中短暂可见（Paseo 原生 workspace 视图里是父 session 的子 session），完成后即归档。Paseo 可能为它发一次 finished 通知，尚未实测。
+- 插件 SDK 未开放 `internal`：summarizer 在卡片 workspace 中短暂可见（Paseo 原生 workspace 视图里是父 session 的子 session），完成后**硬删除**（`server/summarizer-remove.ts`，本地 `DaemonClient.deleteAgent`，用户 2026-10-22 批准；失败回退归档并记日志），不再留在归档。Paseo 可能为它发一次 finished 通知，尚未实测。
 - 手动 Refresh 若判断无新进展（`update=false`）不会新增版本。
 
 ## 11. 验收
 
 - 单元：回合文本转换与截断、输出解析容错、模型 Auto 解析、单飞与合并、`update=false` 不写、50 版本上限、错误记录与清除、项目移除备份、不改 board/task revision。
-- 集成（fake SDK）：只有看板管理 session 触发；出错/超时也归档 summarizer session；失败回合不触发。
+- 集成（fake SDK）：只有看板管理 session 触发；出错/超时也移除（硬删除，失败回退归档）summarizer session；失败回合不触发。
 - typecheck、全量测试；reload 本插件；Luna 6 全权限测试 session 用 fixture 卡片实测并清理。

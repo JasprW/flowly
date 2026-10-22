@@ -70,7 +70,7 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
     },
   } as unknown as PaseoApi;
   let settings: InsightSettings = { enabled: true, parts: { progress: true, nextMoves: true, ideas: true }, model: "", ...options.settings };
-  const service = new SessionInsightService(store, rows, async () => settings, async () => "en", 1000, 1000);
+  const service = new SessionInsightService(store, rows, async () => settings, async () => "en", 1000, 1000, async (a) => { await a.archive(); });
   const agent: OutsideAgent = { id: "a1", workspaceId: "w1", parentAgentId: null, title: "Fix login", cwd: "/repo" };
   const json = (o: object) => JSON.stringify({ update: true, state: "S", target: "T", recap: "- r", next: "N", moves: [], ideas: [], ...o });
   return { store, service, paseo, replies, created, appended, sent, workspacesCreated, archived: () => archived, agent, json, set: (s: Partial<InsightSettings>) => (settings = { ...settings, ...s }) };

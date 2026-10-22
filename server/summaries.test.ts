@@ -78,7 +78,7 @@ async function setup(options: { claude?: boolean } = {}) {
   } as unknown as PaseoApi;
   let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true };
   const store = new SummaryStore(board.directory);
-  const service = new SummaryService(board, store, async () => settings, async () => "en", undefined, 50);
+  const service = new SummaryService(board, store, async () => settings, async () => "en", undefined, 50, async (a) => { await a.archive(); });
   const turn = (text: string) => [{ type: "user_message", text }, { type: "assistant_message", text: "ok " + text }];
   const json = (state: string, update = true) => JSON.stringify({ update, state, target: "Goal: g", recap: "r", next: "n" });
   return {
