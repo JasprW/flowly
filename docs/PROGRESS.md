@@ -414,6 +414,13 @@ Spec: [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md). Analysis of the board showed the mi
 - [x] Sidebar polls board/agents/read receipts every 10 s with host-scoped query keys through plugin `useRpc`/`usePaseo` only; observers end on unmount. Board/agent failure hides the badge.
 - [x] PASS: `npm run typecheck`; `npm test` 95 passed / 56 renderer-only skipped (2 new focused tests in `client/attention.test.ts`).
 - [ ] UNRUN: plugin install/reload, real desktop/compact sidebar rendering, pill press and modal opening in the app, screen-reader focus of the pill. Not permitted in this card (no install/reload, no UI driving).
+
+### Paseo theme color — 2026-10-22
+
+- [x] Sidebar and board header Attention pills share `CountPill`, now using the active Paseo theme's `accent` background and `accentForeground` text. Updated [sidebar badge spec](SIDEBAR-BADGE-SPEC.md). No onboarding tip or tour change is warranted for this visual-only adjustment.
+- [x] The old runtime bundle was identified from plugin logs and refreshed with `paseo plugin reload flowly`; no daemon restart. The user confirmed both desktop markers display green after reload.
+- [x] Prior Luna run: `npm run typecheck` and `npm test` 114 files passed / 13 skipped, 921 passed / 65 skipped; `git diff --check`. Exact commit verification is recorded on the Flowly workpad before PR creation.
+- [ ] UNRUN: compact rendering, a theme switch and pill activation were not separately checked.
 ## Card latest agent output (F1) — 2026-10-15
 
 - [x] Wrote [card output spec](CARD-OUTPUT-SPEC.md) before code. Agent snapshot has no assistant-text field, so cards use a bounded 20-entry projected tail fetch keyed by session ID + `updatedAt`, only for mounted cards, at most 3 concurrent, no polling/retry.

@@ -584,7 +584,7 @@ export function Badge({ children, color }: { children: string; color?: string })
   );
 }
 
-/** Solid warning count pill used by the board Attention button and the sidebar badge. */
+/** Solid Paseo theme count pill shared by the board Attention button and sidebar badge. */
 export function CountPill({ text }: { text: string }) {
   const { colors } = useTheme();
   return (
@@ -596,10 +596,10 @@ export function CountPill({ text }: { text: string }) {
         borderRadius: 8,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.statusWarning,
+        backgroundColor: colors.accent,
       }}
     >
-      <Label size={font.xs} bold color={colors.surface0} selectable={false}>
+      <Label size={font.xs} bold color={colors.accentForeground} selectable={false}>
         {text}
       </Label>
     </View>

@@ -41,7 +41,7 @@
 2026-10-15 移除 project：统一的 Remove 入口（取代 Archive），确认时选择仅从看板移除，或同时从 Paseo 移除原生 project（Paseo 无 project 归档；其移除不删除磁盘上的目录、worktree 与分支，有运行中 session 时不可选）；看板记录先备份。[增量 spec](PROJECT-REMOVE-SPEC.md)和[验证](verification/project-remove.md)。
 2026-10-15 桌面 project tab：看板顶栏以 tab 一键切换 project；回到 Ultra Kanban 时打开本次运行中最后查看的 project，冷启动打开第一个。[增量 spec](PROJECT-TABS-SPEC.md)和[验证](verification/project-tabs.md)。
 2026-10-15 project 目录选择与多 repo：新建 project 时可在应用内浏览目录或打开 Paseo 所在电脑的 Finder/Explorer 选择；新增“Multiple repositories”来源，插件在固定目录下新建空目录，以软链接加入所选 repo/目录，并以该目录注册原生 Paseo project。[增量 spec](PROJECT-PICKER-SPEC.md)和[验证](verification/project-picker.md)。
-2026-10-15 侧边栏入口待处理数：Ultra Kanban 侧边栏行显示与看板 Attention 同口径的数量角标（0 不显示），点角标直接打开 Needs attention；10 秒轮询。[增量 spec](SIDEBAR-BADGE-SPEC.md)。
+2026-10-15 侧边栏入口待处理数：Ultra Kanban 侧边栏行显示与看板 Attention 同口径的数量角标（0 不显示），点角标直接打开 Needs attention；10 秒轮询。2026-10-22 起侧栏和 header 的 Attention 数字标记都使用 Paseo 当前主题强调色。[增量 spec](SIDEBAR-BADGE-SPEC.md)。
 2026-10-15 卡片最近 agent 输出：卡片标题下单行显示所在 workspace 最近活跃 session 的最新 assistant 文本摘要与相对时间；仅可见卡片按 session updatedAt 限量 tail 拉取，并发 ≤3，异常时安静。[增量 spec](CARD-OUTPUT-SPEC.md)和[验证](verification/card-output.md)。
 2026-10-15 F3 列内拖拽排序：桌面拖拽显示插入线，同列重排或跨列定点放置，经 `tasks.place` 单次 CAS 写入；手机仍用菜单。[增量 spec](DRAG-REORDER-SPEC.md)。
 2026-10-15 手机/平板内联输入框：去掉点击后弹窗输入，原生端与 web 同样在 session 底部内联输入，按键盘实际遮挡高度上推；运行中显示发送方式选择。[增量 spec](SESSION-UX-SPEC.md#10-inline-native-composer--2026-10-15)。

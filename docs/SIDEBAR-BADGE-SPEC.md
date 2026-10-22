@@ -2,6 +2,8 @@
 
 Incremental spec for card F2. Extends the board Attention entry in [MULTITASK-SPEC](MULTITASK-SPEC.md) to the Paseo left sidebar row registered by `index.client.tsx`.
 
+2026-10-22 amendment: both the Paseo sidebar notification pill and the board header's Attention count pill use the current theme accent background and paired accent foreground. Their count and click behavior stay unchanged.
+
 ## Host capability (0.11.2, confirmed)
 
 - Public `SidebarRowProps` has `trailing?: ReactNode` ("Right slot. Renders beside the row's pressable, so a button here presses on its own.").
@@ -12,7 +14,8 @@ Incremental spec for card F2. Extends the board Attention entry in [MULTITASK-SP
 ## Observable behavior
 
 - The row keeps its icon, title and active state. Pressing the row (or empty trailing area) opens the board exactly as before.
-- When the attention count is > 0, a small pill shows the count on the row's right (`99+` above 99), using the same warning color/contrast as the board Attention button badge. Count 0 renders no trailing content.
+- When the attention count is > 0, a small pill shows the count on the row's right (`99+` above 99), using the current host theme's accent background and paired accent foreground. It updates with the active Paseo theme. Count 0 renders no trailing content.
+- The board header's Attention button keeps its existing count and click behavior; its visible count pill uses the same active theme accent background and paired accent foreground.
 - Pressing the pill opens the board screen and opens its **Needs attention** modal (params `view=attention`, `open=<unique token>`). Each press uses a new token, so repeat presses reopen the modal even when the board is already showing. A board mounted with the same token applies it once; unrelated params (session links) are unaffected.
 - Accessibility: the pill is a button labelled `Open needs attention, N cards`.
 
@@ -31,5 +34,6 @@ Incremental spec for card F2. Extends the board Attention entry in [MULTITASK-SP
 ## Acceptance
 
 - Pure tests: board and sidebar counts derive from one function; unavailable board/agents → hidden; 0 → hidden; `99+` cap; read-unavailable keeps permissions only; attention-open params produce a unique token and the board recognises only `view=attention` tokens.
+- Theme: the sidebar and board header pills both use `colors.accent` and `colors.accentForeground` from the active Paseo theme.
 - `npm run typecheck`, `npm test` pass.
-- Real UI (desktop row pill, compact drawer, pill press opening the modal, Reduce Motion unaffected) is UNRUN in this card: install/reload and UI driving were out of scope.
+- Real UI for the original F2 card (compact drawer, pill press opening the modal, Reduce Motion) remains UNRUN. After the 2026-10-22 plugin reload, the user visually confirmed the sidebar and header count pills show the theme green. Compact rendering, a theme switch, and pill activation were not separately checked; see [verification](verification/sidebar-badge-theme-2026-10-22.md).
