@@ -24,7 +24,7 @@ import { Modal } from "./modal";
 import { Enter } from "./motion";
 import { memoryCountsKey, memoryKey, useMemoryQuery } from "./queries";
 import { StatusIcon } from "./status";
-import { IdeaRow, useExitList } from "./task-ideas";
+import { IdeaRow, useExitList, useHeld } from "./task-ideas";
 import { Actions, AiMark, Button, Choices, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg, tn } from "../shared/i18n";
 
@@ -464,6 +464,8 @@ export const MemoryPage = memo(function MemoryPage({
   const candidates = entries.filter((e) => e.status === "candidate").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const active = entries.filter((e) => e.status === "active");
   const closed = entries.filter((e) => e.status === "dismissed" || e.status === "archived").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // The section outlives its last row's exit.
+  const closedCount = useHeld(closed.length);
   const stale = active.filter((e) => isStale(e, now));
   const needle = search.trim().toLowerCase();
   const shown = active
@@ -566,11 +568,11 @@ export const MemoryPage = memo(function MemoryPage({
               </View>
             </Enter>
           </View>
-          {!!closed.length && (
+          {!!closedCount && (
             <View style={{ gap: space[2] }}>
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: closedOpen }} onPress={() => setClosedOpen(!closedOpen)} style={{ ...noFocusRing, flexDirection: "row", alignItems: "center", gap: space[1.5], minHeight: touch ? 40 : 28 }}>
                 <Chevron open={closedOpen} title="closed-memory" color={colors.foregroundMuted} size={14} />
-                <Label muted medium size={font.sm} selectable={false}>{t("Archived & dismissed · {n}", { n: closed.length })}</Label>
+                <Label muted medium size={font.sm} selectable={false}>{t("Archived & dismissed · {n}", { n: closedCount })}</Label>
               </Pressable>
               <Collapse open={closedOpen} id="closed-memory">
                 <MemoryRows entries={closed} actions={actions} render={card} />
@@ -631,13 +633,14 @@ export function TaskMemorySection({ task, project, onOpenPage }: { task: Task; p
   const query = useMemoryQuery(project.id, true);
   const view = query.data;
   const actions = useMemoryActions(project.id, view);
-  if (!view || !view.enabled) return null;
-  const own = view.entries.filter((e) => e.source.taskId === task.id);
+  const own = view?.entries.filter((e) => e.source.taskId === task.id) ?? [];
   const candidates = own.filter((e) => e.status === "candidate");
   const kept = own.filter((e) => e.status === "active").length;
+  // The section outlives its last candidate's exit.
+  const present = useHeld(view?.enabled && (candidates.length > 0 || kept > 0 || finished) ? 1 : 0);
+  if (!view || !view.enabled || !present) return null;
   const running = view.running.includes(task.id);
   const error = view.errors.find((e) => e.taskId === task.id);
-  if (!candidates.length && !kept && !finished) return null;
   const now = Date.now();
   return (
     <Section

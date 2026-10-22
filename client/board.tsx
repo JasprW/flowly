@@ -56,7 +56,7 @@ import {
 } from "./attention";
 import { relativeTime } from "./ui";
 import { Chevron, Collapse } from "./disclosure";
-import { IdeaRow, useExitList } from "./task-ideas";
+import { IdeaRow, useExitList, useHeld } from "./task-ideas";
 import { currentWrapup } from "../shared/wrapup-state";
 import { ProjectForm, TaskForm, type TaskSeed } from "./forms";
 import { ideaDescription } from "../shared/ideas";
@@ -618,6 +618,8 @@ function BoardContent(
   const dismissedAttention = useMemo(() => allAttention.filter((i) => i.dismissed), [allAttention]);
   const attentionByTask = useMemo(() => new Map(allAttention.map((i) => [i.task.id, i])), [allAttention]);
   const [dismissedOpen, setDismissedOpen] = useState(false);
+  // The section outlives its last row's exit.
+  const dismissedCount = useHeld(dismissedAttention.length);
   // The project's default model wins over the global one; with neither, the latest session's settings (MODEL-DEFAULTS-SPEC).
   const modelPrefs = useSettings(modelSettings);
   const globalModel = agentModelFromValues(modelPrefs.status === "ready" ? modelSettingsValues(modelPrefs.values) : null);
@@ -1361,10 +1363,10 @@ function BoardContent(
           </View>
         }
       />
-      {dismissedAttention.length > 0 && (
+      {!!dismissedCount && (
         <View style={{ paddingTop: space[2], borderTopWidth: 1, borderTopColor: colors.border, marginTop: space[2] }}>
           <Row
-            title={t("Dismissed · {n}", { n: dismissedAttention.length })}
+            title={t("Dismissed · {n}", { n: dismissedCount })}
             label={dismissedOpen ? t("Hide dismissed cards") : t("Show dismissed cards")}
             leading={<Chevron open={dismissedOpen} title="dismissed-attention" size={16} color={colors.foregroundMuted} />}
             onPress={() => setDismissedOpen((open) => !open)}

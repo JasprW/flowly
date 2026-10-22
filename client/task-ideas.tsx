@@ -292,6 +292,24 @@ export function useExitList<T extends { id: string }>(items: readonly T[]) {
 const rowExitMs = motionDuration.reverse;
 
 /**
+ * `value` while it is truthy; once it turns falsy, the last truthy value for a
+ * row exit longer. A container uses it to outlive its last row's exit instead
+ * of unmounting the row while it is still collapsing.
+ */
+export function useHeld<T>(value: T, ms: number = rowExitMs + 40): T | undefined {
+  const [held, setHeld] = useState<T | undefined>(value || undefined);
+  useEffect(() => {
+    if (value) {
+      setHeld(value);
+      return;
+    }
+    const timer = setTimeout(() => setHeld(undefined), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return value || held;
+}
+
+/**
  * Holds one idea's slot (also each memory's). Arriving (or `restored`) rows
  * open their slot, then the card rises in. Leaving rows fade and collapse.
  */
