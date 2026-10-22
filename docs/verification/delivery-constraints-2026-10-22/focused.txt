@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /Users/bofan.wang/Developer/personal/paseo-utlra-kanban
+
+
+ Test Files  3 passed (3)
+      Tests  59 passed (59)
+   Start at  19:50:18
+   Duration  11.31s (transform 474ms, setup 0ms, import 838ms, tests 15.14s, environment 0ms)
+

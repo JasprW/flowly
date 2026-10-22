@@ -43,8 +43,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "dev": "vitest",
+    "test": "vitest run --exclude 'docs/verification/**'",
+    "dev": "vitest --exclude 'docs/verification/**'",
     "test:ci": "node --test server/ci/release.checks.mjs",
     "ci:package": "node server/ci/package.mjs"
   },

@@ -1,0 +1,23 @@
+{
+  "check": {
+    "taskId": "e4bf0bf8-2e4e-48db-b6b8-74a3086818b3",
+    "revision": 7,
+    "workspace": {
+      "id": "wks_4db5ada5210e53bf",
+      "kind": "worktree",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/test-delivery-codex-r2-036d"
+    },
+    "archiveWorkspace": true,
+    "sessions": 1,
+    "git": {
+      "branch": "test/delivery-codex-r2-036d",
+      "uncommitted": 1,
+      "unpushed": 0
+    },
+    "blockers": [],
+    "warnings": [
+      "1 uncommitted change in the worktree will be lost if Paseo removes it."
+    ]
+  },
+  "changes": "?? docs/flowly-delivery-codex-r2-036d.txt"
+}

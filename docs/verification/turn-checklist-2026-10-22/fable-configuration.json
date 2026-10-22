@@ -1,0 +1,8 @@
+{
+  "agentId": "058cab0b-0961-4b40-962c-258555c435f9",
+  "provider": "claude",
+  "model": "claude-fable-5-1",
+  "modeId": "bypassPermissions",
+  "thinkingOptionId": "high",
+  "parent": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f"
+}

@@ -1,5 +1,9 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-10-22 回合清单与统计校准：最小版建议 1+3，共用六项动作清单生成 skill 和 get_task.turnChecklist；旧会话读卡即可取得最新规则。审计脚本改为回合时间窗口、成功回执与实际 output 匹配、确认重试分类和显式样本分组；不加 hooks。[spec](TURN-CHECKLIST-SPEC.md)。
+
+2026-10-22 交付约束（已实现，Sonnet/GPT 真实验证通过；4 个本地测试分支待权限清理）：交付与结果调用支持 `outputs`（文件/PR/MR）原子登记，省略提醒、`[]` 显式无产物；`acknowledgeOpen` 先拒后放，绑定 session 与当前 card/workpad/HEAD，回合切换和服务重载后重新拒绝。MCP、CLI、skill 同步。[spec](DELIVERY-CONSTRAINTS-SPEC.md)。
+
 2026-10-22 项目记忆（已实现，待验收）：人确认后生效的跨卡记忆（决策、约定、坑、联系人），存在 daemon 的 `memory.json`。来源有两个：agent 用 `flowly_remember` 提候选，卡片 Done 时复盘提炼（默认开）。新 session 的初始指令里按相关度注入（8 条 / 2400 字），`flowly_recall` 按需查询。与 AGENTS.md 分工：每个任务都要遵守的规则放 AGENTS.md，只和部分任务有关或不适合进仓库的知识放记忆；常用条目可以晋升为 pinned 或转进 AGENTS.md，active 条目从不自动淘汰。[PROJECT-MEMORY-SPEC](PROJECT-MEMORY-SPEC.md)。
 2026-10-21 卡片开工设置（已实现）：近期违规集中在无描述小卡 + Sonnet medium/auto，原因是 skill 里 type/tags/workpad 靠后且时机含糊、缺项静默、反馈只在收尾、无 workpad 反而不被拦。现在 `flowly_get_task` 带 `setup`，首条任务上下文写明缺项，所有写入结果带设置提醒，交付缺项返回 `SETUP_INCOMPLETE`（含无 workpad，推翻 WORKPAD-SPEC §5.3 旧决定，`acknowledgeOpen` 放行），skill 以“Start of every turn”清单开头。[CARD-SETUP-SPEC](CARD-SETUP-SPEC.md)。
 2026-10-20 侧栏 session 区优化（已实现，待手机验证；用户决定 1、2 按推荐，3 直接上 FlatList）：① 历史只显示 35 条 tail 中的最后 18 条，长 turn 被工具调用挤满——改为打开即加载当前 turn（上限 300 条，daemon 用 SDK 的 `before` 游标一次分页完成）并提供 Load earlier；② 手机键盘弹起时 transcript 只在动画结束后加 padding、且只有贴底时才滚动——改为在键盘开始事件时按位移量原生滚动（底部锚定）；③ 手机滚动卡顿——增量刷新（`after` 游标）、transcript 独立组件、手机改用与 Paseo 原生一致的倒置虚拟化 FlatList（web 仍为普通滚动）；倒置列表与输入框用同一个原生驱动位移，键盘弹起时内容同步上移。[设计 spec](SESSION-PANE-SPEC.md)。

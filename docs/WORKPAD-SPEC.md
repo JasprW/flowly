@@ -190,8 +190,10 @@ agent 调 `flowly_update_status(status=in_review)` 时（只在 agent 路径；�
 
 1. 先刷新 `head`，计算 `openItems`。
 2. `total = 0`：照常提交。没有 workpad（项目开启时）：2026-10-21 用户决定改为软卡，返回 `SETUP_INCOMPLETE`，见 [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md) §3.4（已实现）；此前的“没有 workpad 照常提交”作废。
-3. `total > 0` 且输入没有 `acknowledgeOpen: true`：返回 `WORKPAD_OPEN`，不提交任何内容（不写回执，同一 request 可以带确认后重试）。消息列出未完成项：“{n} workpad items are still open: … Deliver anyway only if the note explains each one (failed, not run, or out of date), with acknowledgeOpen=true.”
-4. `total > 0` 且 `acknowledgeOpen: true`：提交；`status_changed` 事件带交付快照 `workpad: { unchecked, failed, unrun, stale, total, revision }`。
+3. `total > 0` 且本 session 尚未收到对当前状态的拒绝，或输入没有 `acknowledgeOpen: true`：返回 `WORKPAD_OPEN`，不提交任何内容（不写回执，同一 request 可以带确认后重试）。消息列出未完成项：“{n} workpad items are still open: … Deliver anyway only if the note explains each one (failed, not run, or out of date), with acknowledgeOpen=true.”
+4. `total > 0`、本 session 已收到当前状态的拒绝，且 `acknowledgeOpen: true`：提交；`status_changed` 事件带交付快照 `workpad: { unchecked, failed, unrun, stale, total, revision }`。
+
+2026-10-22 修订：首次预带 `acknowledgeOpen=true` 也拒绝；确认只对同 session/card/workspace、同 card/project/workpad revision 和 HEAD 状态有效，最多 15 分钟。回合开始 hook 清空确认记录，不依赖每卡截断事件；服务重载后重新拒绝。详见 [DELIVERY-CONSTRAINTS-SPEC](DELIVERY-CONSTRAINTS-SPEC.md) §2。
 
 `flowly_update_status` 输入新增可选 `acknowledgeOpen: boolean`（默认 false），CLI 加 `--acknowledge-open`。门槛不检查 note 的内容（系统无法判断），只保证 agent 看过清单并主动确认。
 

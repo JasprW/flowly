@@ -1,0 +1,52 @@
+{
+  "at": "2026-10-22T12:03:18.449Z",
+  "remainingTasks": [],
+  "remainingWorkspaces": [],
+  "permanentCardsPreserved": true,
+  "originalWorkspacesPresent": false,
+  "sessions": [
+    {
+      "id": "77ce54fc-6bcb-4ee7-9c7a-cc6b7373140e",
+      "status": "closed",
+      "archivedAt": "2026-10-22T12:02:32.066Z"
+    },
+    {
+      "id": "34b72383-58a6-454b-b22e-e768a27be6ac",
+      "status": "closed",
+      "archivedAt": "2026-10-22T12:02:33.604Z"
+    },
+    {
+      "id": "7d43e887-4108-4e7f-ae9e-14c418c48a83",
+      "status": "closed",
+      "archivedAt": "2026-10-22T12:02:35.193Z"
+    },
+    {
+      "id": "6a79016f-dca4-40eb-9af1-3498e1624be2",
+      "status": "closed",
+      "archivedAt": "2026-10-22T12:03:16.733Z"
+    },
+    {
+      "id": "c06c0037-1486-4597-ae67-75c2c1490255",
+      "status": "closed",
+      "archivedAt": "2026-10-22T12:03:17.667Z"
+    }
+  ],
+  "nativePage": {
+    "nextCursor": null,
+    "prevCursor": null,
+    "hasMore": false
+  },
+  "retainedRepo": "JasprW/flowly-delivery-fixture-20261022-036d",
+  "originalWorkspaceNote": "5 original workspaces and 3 original Haiku sessions resolve and remain unarchived. The original Done demo card references wks_a4e7f5a7a51ef2fc, which does not resolve; this test never archived that id. The 2026-10-20 delivery-reminders report already listed only 5 permanent workspaces. No resource was restored to hide this legacy inconsistency.",
+  "localBranchCleanup": {
+    "state": "unrun",
+    "reason": "Sandbox refused Git ref lock writes outside task root; escalation did not complete. Four explicitly owned local test refs are preserved.",
+    "branches": [
+      "test/delivery-sonnet-036d",
+      "test/delivery-codex-036d",
+      "test/delivery-sonnet-r2-036d",
+      "test/delivery-codex-r2-036d"
+    ]
+  },
+  "remoteBranchCleanup": "PASS: only main remains in retained private GitHub repo"
+}

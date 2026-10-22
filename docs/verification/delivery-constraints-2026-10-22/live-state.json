@@ -1,0 +1,253 @@
+{
+  "startedAt": "2026-10-22T11:46:42.588Z",
+  "repo": "JasprW/flowly-delivery-fixture-20261022-036d",
+  "retainRepo": true,
+  "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+  "sessions": [
+    {
+      "id": "77ce54fc-6bcb-4ee7-9c7a-cc6b7373140e",
+      "key": "sonnet",
+      "provider": "claude/claude-sonnet-5-5",
+      "mode": "bypassPermissions",
+      "cardId": "f08fa850-f3f1-4e36-945a-b467dd96ff81",
+      "workspaceId": "wks_a642d5a0b1a21410",
+      "branch": "test/delivery-sonnet-036d",
+      "filename": "docs/flowly-delivery-sonnet-036d.txt",
+      "followupAt": "2026-10-22T11:47:48.477Z"
+    },
+    {
+      "id": "34b72383-58a6-454b-b22e-e768a27be6ac",
+      "key": "codex",
+      "provider": "codex/gpt-6-luna",
+      "mode": "full-access",
+      "cardId": "7f8ec7bc-4de3-4a9a-9307-f005dcaef4c1",
+      "workspaceId": "wks_465957f35b46485b",
+      "branch": "test/delivery-codex-036d",
+      "filename": "docs/flowly-delivery-codex-036d.txt",
+      "followupAt": "2026-10-22T11:48:10.528Z"
+    },
+    {
+      "id": "7d43e887-4108-4e7f-ae9e-14c418c48a83",
+      "key": "sonnet-r2",
+      "provider": "claude/claude-sonnet-5-5",
+      "mode": "bypassPermissions",
+      "cardId": "952637b9-43a2-48c3-beb1-11b6c078cd85",
+      "workspaceId": "wks_c9607d46e8dba3ed",
+      "branch": "test/delivery-sonnet-r2-036d",
+      "filename": "docs/flowly-delivery-sonnet-r2-036d.txt",
+      "followupAt": "2026-10-22T11:54:58.446Z"
+    },
+    {
+      "id": "6a79016f-dca4-40eb-9af1-3498e1624be2",
+      "key": "codex-r2",
+      "provider": "codex/gpt-6-luna",
+      "mode": "full-access",
+      "cardId": "e4bf0bf8-2e4e-48db-b6b8-74a3086818b3",
+      "workspaceId": "wks_4db5ada5210e53bf",
+      "branch": "test/delivery-codex-r2-036d",
+      "filename": "docs/flowly-delivery-codex-r2-036d.txt",
+      "followupAt": "2026-10-22T11:55:58.043Z"
+    }
+  ],
+  "cards": [
+    {
+      "id": "f08fa850-f3f1-4e36-945a-b467dd96ff81",
+      "workspaceId": "wks_a642d5a0b1a21410",
+      "branch": "test/delivery-sonnet-036d",
+      "filename": "docs/flowly-delivery-sonnet-036d.txt",
+      "key": "sonnet"
+    },
+    {
+      "id": "7f8ec7bc-4de3-4a9a-9307-f005dcaef4c1",
+      "workspaceId": "wks_465957f35b46485b",
+      "branch": "test/delivery-codex-036d",
+      "filename": "docs/flowly-delivery-codex-036d.txt",
+      "key": "codex"
+    },
+    {
+      "id": "952637b9-43a2-48c3-beb1-11b6c078cd85",
+      "workspaceId": "wks_c9607d46e8dba3ed",
+      "branch": "test/delivery-sonnet-r2-036d",
+      "filename": "docs/flowly-delivery-sonnet-r2-036d.txt",
+      "key": "sonnet-r2"
+    },
+    {
+      "id": "e4bf0bf8-2e4e-48db-b6b8-74a3086818b3",
+      "workspaceId": "wks_4db5ada5210e53bf",
+      "branch": "test/delivery-codex-r2-036d",
+      "filename": "docs/flowly-delivery-codex-r2-036d.txt",
+      "key": "codex-r2"
+    }
+  ],
+  "before": [
+    {
+      "id": "918e5a87-c6b8-45b5-a11c-326bd5c2957c",
+      "revision": 8,
+      "status": "in_review",
+      "workspaceId": "wks_ba6ff18c509f409e"
+    },
+    {
+      "id": "f0e55983-8064-4c1c-9319-a9de794ffe4d",
+      "revision": 2,
+      "status": "design",
+      "workspaceId": "wks_7d81d4dbcaf9dd67"
+    },
+    {
+      "id": "af077ae5-9a44-47da-9ede-80dd7964669e",
+      "revision": 5,
+      "status": "in_review",
+      "workspaceId": "wks_6fd42afc21d656dc"
+    },
+    {
+      "id": "0e9cf956-03cc-4549-8dfe-f9175ad6268f",
+      "revision": 1,
+      "status": "todo",
+      "workspaceId": "wks_35118905f34253ec"
+    },
+    {
+      "id": "ed8b1a84-40a9-47a3-9fcb-efc9d5c98d54",
+      "revision": 1,
+      "status": "backlog",
+      "workspaceId": "wks_37d6bd4cab89da78"
+    },
+    {
+      "id": "eabc3d51-508e-4c1d-b10f-37b0d95c1d79",
+      "revision": 4,
+      "status": "done",
+      "workspaceId": "wks_a4e7f5a7a51ef2fc"
+    }
+  ],
+  "sourceHead": "47899f7286df26700d4235800825b2ecbcee12bb",
+  "audit": {
+    "id": "c06c0037-1486-4597-ae67-75c2c1490255",
+    "provider": "codex/gpt-6-luna",
+    "mode": "full-access",
+    "workspaceId": "wks_e56a74f6e1bc6cd6"
+  },
+  "cleanup": [
+    {
+      "key": "sonnet",
+      "check": {
+        "taskId": "f08fa850-f3f1-4e36-945a-b467dd96ff81",
+        "revision": 5,
+        "workspace": {
+          "id": "wks_a642d5a0b1a21410",
+          "kind": "worktree",
+          "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/test-delivery-sonnet-036d"
+        },
+        "archiveWorkspace": true,
+        "sessions": 1,
+        "git": {
+          "branch": "test/delivery-sonnet-036d",
+          "uncommitted": 0,
+          "unpushed": 1
+        },
+        "blockers": [],
+        "warnings": [
+          "1 commit exists only on test/delivery-sonnet-036d (not merged or pushed elsewhere). The branch is kept."
+        ]
+      },
+      "result": {
+        "id": "f08fa850-f3f1-4e36-945a-b467dd96ff81",
+        "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-f08fa850-f3f1-4e36-945a-b467dd96ff81-2026-10-22T12-02-33-392Z.json",
+        "archived": {
+          "sessions": 1,
+          "workspace": true
+        }
+      }
+    },
+    {
+      "key": "codex",
+      "check": {
+        "taskId": "7f8ec7bc-4de3-4a9a-9307-f005dcaef4c1",
+        "revision": 6,
+        "workspace": {
+          "id": "wks_465957f35b46485b",
+          "kind": "worktree",
+          "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/test-delivery-codex-036d"
+        },
+        "archiveWorkspace": true,
+        "sessions": 1,
+        "git": {
+          "branch": "test/delivery-codex-036d",
+          "uncommitted": 0,
+          "unpushed": 2
+        },
+        "blockers": [],
+        "warnings": [
+          "2 commits exist only on test/delivery-codex-036d (not merged or pushed elsewhere). The branch is kept."
+        ]
+      },
+      "result": {
+        "id": "7f8ec7bc-4de3-4a9a-9307-f005dcaef4c1",
+        "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-7f8ec7bc-4de3-4a9a-9307-f005dcaef4c1-2026-10-22T12-02-34-989Z.json",
+        "archived": {
+          "sessions": 1,
+          "workspace": true
+        }
+      }
+    },
+    {
+      "key": "sonnet-r2",
+      "check": {
+        "taskId": "952637b9-43a2-48c3-beb1-11b6c078cd85",
+        "revision": 4,
+        "workspace": {
+          "id": "wks_c9607d46e8dba3ed",
+          "kind": "worktree",
+          "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/test-delivery-sonnet-r2-036d"
+        },
+        "archiveWorkspace": true,
+        "sessions": 1,
+        "git": {
+          "branch": "test/delivery-sonnet-r2-036d",
+          "uncommitted": 0,
+          "unpushed": 1
+        },
+        "blockers": [],
+        "warnings": [
+          "1 commit exists only on test/delivery-sonnet-r2-036d (not merged or pushed elsewhere). The branch is kept."
+        ]
+      },
+      "result": {
+        "id": "952637b9-43a2-48c3-beb1-11b6c078cd85",
+        "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-952637b9-43a2-48c3-beb1-11b6c078cd85-2026-10-22T12-02-36-226Z.json",
+        "archived": {
+          "sessions": 1,
+          "workspace": true
+        }
+      }
+    },
+    {
+      "key": "codex-r2",
+      "check": {
+        "taskId": "e4bf0bf8-2e4e-48db-b6b8-74a3086818b3",
+        "revision": 7,
+        "workspace": {
+          "id": "wks_4db5ada5210e53bf",
+          "kind": "worktree",
+          "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/test-delivery-codex-r2-036d"
+        },
+        "archiveWorkspace": true,
+        "sessions": 1,
+        "git": {
+          "branch": "test/delivery-codex-r2-036d",
+          "uncommitted": 1,
+          "unpushed": 0
+        },
+        "blockers": [],
+        "warnings": [
+          "1 uncommitted change in the worktree will be lost if Paseo removes it."
+        ]
+      },
+      "result": {
+        "id": "e4bf0bf8-2e4e-48db-b6b8-74a3086818b3",
+        "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-e4bf0bf8-2e4e-48db-b6b8-74a3086818b3-2026-10-22T12-03-17-624Z.json",
+        "archived": {
+          "sessions": 1,
+          "workspace": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,220 @@
+
+ RUN  v4.1.11 /Users/bofan.wang/Developer/personal/paseo-utlra-kanban
+
+stderr | server/tool-server.test.ts > MCP initialize/list can precede actor creation; live calls require SDK context
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+
+stderr | server/tool-server.test.ts > CLI runs a complete scoped flow; replay, wrong env, snapshots and flags
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+
+ ❯ server/tool-server.test.ts (7 tests | 2 failed) 1282ms
+   × MCP initialize/list can precede actor creation; live calls require SDK context 193ms
+   × CLI runs a complete scoped flow; replay, wrong env, snapshots and flags 778ms
+ ❯ server/agent-service.test.ts (40 tests | 7 failed) 6192ms
+   × workpad: delivering with open items needs acknowledgeOpen; the snapshot marks the delivery 128ms
+   × a delivery with no next moves and no ideas gets both reminders ahead of current, also on a replay 93ms
+   × reminders are absent when the call was made already: moves this turn, Ideas off, ideas proposed, moves on the call 130ms
+   × a new turn starts over: last turn's moves do not count, this turn's none does 119ms
+   × only a delivery, an ask or a result reminds: stage changes and plain progress stay quiet 340ms
+   × a refused call or a finished card carries no reminders 189ms
+   × setup: the reminder follows the delivery reminders, also on a replay, and never on a finished card 58ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  server/agent-service.test.ts > workpad: delivering with open items needs acknowledgeOpen; the snapshot marks the delivery
+AssertionError: expected '2 workpad items are still open:\n- ch…' to match /check not run: E2E[\s\S]*out of date/
+
+- Expected:
+/check not run: E2E[\s\S]*out of date/
+
++ Received:
+"2 workpad items are still open:
+- check out of date (ran on aaaaaaaaaaaa, HEAD is now cccccccccccc): Unit tests
+- check not run: E2E
+The first attempt is always refused, even with acknowledgeOpen=true. Review this list, rerun out-of-date checks and finish what you can. Then retry with acknowledgeOpen=true and a note explaining every remaining item. A changed card/workpad/HEAD or a new turn requires a new refusal."
+
+ ❯ server/agent-service.test.ts:544:35
+    542|   const refused = await x.service.write(x.identity, "status", { ...inp…
+    543|   expect(refused).toMatchObject({ code: "WORKPAD_OPEN" });
+    544|   expect(String(refused.message)).toMatch(/check not run: E2E[\s\S]*ou…
+       |                                   ^
+    545|   expect((await x.store.read()).tasks[0]!.status).toBe("development");
+    546|   // Same request, now acknowledged: nothing was committed, so it is n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  server/agent-service.test.ts > a delivery with no next moves and no ideas gets both reminders ahead of current, also on a replay
+AssertionError: expected [ …(3) ] to deeply equal [ …(2) ]
+
+- Expected
++ Received
+
+  [
+    "No next moves suggested this turn. Before you end the turn, call flowly_suggest_next_moves with the 1-3 messages the user is most likely to send you next (recommended first), or with moves=[] if nothing needs the user. This write already succeeded.",
+    "You have proposed no ideas on this card. Consider 0-3 ideas (flowly_propose_idea) for worthwhile follow-ups you noticed: bugs, refactors, next features. Zero is fine; decide on purpose.",
++   "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.",
+  ]
+
+ ❯ server/agent-service.test.ts:782:25
+    780|   const call = { ...input(ctx, "Delivered"), status: "in_review" };
+    781|   const res = await x.service.write(x.identity, "status", call);
+    782|   expect(res.reminders).toEqual([movesReminder, ideasReminder]);
+       |                         ^
+    783|   // The reminders sit right after the receipt, before the card's whol…
+    784|   expect(Object.keys(res)).toEqual(["receipt", "replayed", "reminders"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  server/agent-service.test.ts > reminders are absent when the call was made already: moves this turn, Ideas off, ideas proposed, moves on the call
+AssertionError: expected [ …(2) ] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+  [
+    "You have proposed no ideas on this card. Consider 0-3 ideas (flowly_propose_idea) for worthwhile follow-ups you noticed: bugs, refactors, next features. Zero is fine; decide on purpose.",
++   "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.",
+  ]
+
+ ❯ server/agent-service.test.ts:798:40
+    796|   let x = await setup();
+    797|   await suggest(x, [commitMove]);
+    798|   expect((await deliver(x)).reminders).toEqual([ideasReminder]);
+       |                                        ^
+    799|   // Moves carried by the delivery itself, including an explicit none.
+    800|   for (const nextMoves of [[commitMove], []]) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  server/agent-service.test.ts > a new turn starts over: last turn's moves do not count, this turn's none does
+AssertionError: expected [ Array(1) ] to be undefined
+
+- Expected:
+undefined
+
++ Received:
+[
+  "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.",
+]
+
+ ❯ server/agent-service.test.ts:834:53
+    832|   await turnStarted(x);
+    833|   await suggest(x, [commitMove]);
+    834|   expect((await reportKind(x, "result")).reminders).toBeUndefined();
+       |                                                     ^
+    835|   await turnStarted(x);
+    836|   expect((await reportKind(x, "result")).reminders).toEqual([movesRemi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  server/agent-service.test.ts > only a delivery, an ask or a result reminds: stage changes and plain progress stay quiet
+AssertionError: expected [ …(2) ] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+  [
+    "No next moves suggested this turn. Before you end the turn, call flowly_suggest_next_moves with the 1-3 messages the user is most likely to send you next (recommended first), or with moves=[] if nothing needs the user. This write already succeeded.",
++   "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.",
+  ]
+
+ ❯ server/agent-service.test.ts:852:53
+    850|   for (const to of ["design", "development", "test"]) expect(await sta…
+    851|   for (const kind of ["progress", "blocker"]) expect(await reportKind(…
+    852|   expect((await reportKind(x, "result")).reminders).toEqual([movesRemi…
+       |                                                     ^
+    853|   // A question asks for answers; the question itself stays kind=quest…
+    854|   expect((await reportKind(x, "question")).reminders).toEqual([answers…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  server/agent-service.test.ts > a refused call or a finished card carries no reminders
+AssertionError: expected [ …(3) ] to have a length of 2 but got 3
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ server/agent-service.test.ts:873:27
+    871|   const call = { ...input(await x.service.get(x.identity), "Delivered"…
+    872|   const first = await x.service.write(x.identity, "status", call);
+    873|   expect(first.reminders).toHaveLength(2);
+       |                           ^
+    874|   // The person moved the card to Done: its replay still returns the r…
+    875|   const task = (await x.store.read()).tasks[0];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  server/agent-service.test.ts > setup: the reminder follows the delivery reminders, also on a replay, and never on a finished card
+AssertionError: expected [ …(3) ] to deeply equal [ …(2) ]
+
+- Expected
++ Received
+
+  [
+    "No next moves suggested this turn. Before you end the turn, call flowly_suggest_next_moves with the 1-3 messages the user is most likely to send you next (recommended first), or with moves=[] if nothing needs the user. This write already succeeded.",
++   "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.",
+    "This card's setup is incomplete: no tags (flowly_set_tags: 1-4 module or direction tags, reuse projectTags). Make these calls now, before more work; they take seconds. This write already succeeded.",
+  ]
+
+ ❯ server/agent-service.test.ts:941:27
+    939|   const call = { ...input(await x.service.get(x.identity), "Result"), …
+    940|   const first = await x.service.write(x.identity, "progress", call);
+    941|   expect(first.reminders).toEqual([movesReminder, setupReminder(["tags…
+       |                           ^
+    942|   expect(await x.service.write(x.identity, "progress", call)).toMatchO…
+    943|   const task = (await x.store.read()).tasks[0]!;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  server/tool-server.test.ts > MCP initialize/list can precede actor creation; live calls require SDK context
+AssertionError: expected [ …(2) ] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+  [
+    "No next moves suggested this turn. Before you end the turn, call flowly_suggest_next_moves with the 1-3 messages the user is most likely to send you next (recommended first), or with moves=[] if nothing needs the user. This write already succeeded.",
++   "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.",
+  ]
+
+ ❯ server/tool-server.test.ts:168:55
+    166|   });
+    167|   expect(reminded.result.isError).toBeUndefined();
+    168|   expect(reminded.result.structuredContent.reminders).toEqual([movesRe…
+       |                                                       ^
+    169|   expect(Object.keys(JSON.parse(reminded.result.content[0].text)).slic…
+    170|   const proposed = await mcp("tools/call", {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  server/tool-server.test.ts > CLI runs a complete scoped flow; replay, wrong env, snapshots and flags
+AssertionError: expected [ …(3) ] to deeply equal [ …(2) ]
+
+- Expected
++ Received
+
+  [
+    "No next moves suggested this turn. Before you end the turn, call flowly_suggest_next_moves with the 1-3 messages the user is most likely to send you next (recommended first), or with moves=[] if nothing needs the user. This write already succeeded.",
+    "You have proposed no ideas on this card. Consider 0-3 ideas (flowly_propose_idea) for worthwhile follow-ups you noticed: bugs, refactors, next features. Zero is fine; decide on purpose.",
++   "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.",
+  ]
+
+ ❯ server/tool-server.test.ts:363:30
+    361|   // The CLI prints the whole result, so the reminders follow the rece…
+    362|   expect(Object.keys(finished).slice(0, 3)).toEqual(["receipt", "repla…
+    363|   expect(finished.reminders).toEqual([movesReminder, ideasReminder]);
+       |                              ^
+    364|   await cli("current", "--save-request", snapshot);
+    365|   const tagged = await cli("tags", "--request-file", snapshot, "--add"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  9 failed | 38 passed (47)
+   Start at  19:40:23
+   Duration  6.68s (transform 405ms, setup 0ms, import 812ms, tests 7.47s, environment 0ms)
+

@@ -1,0 +1,18 @@
+{
+  "ownedBranches": [
+    "test/delivery-sonnet-036d",
+    "test/delivery-codex-036d",
+    "test/delivery-sonnet-r2-036d",
+    "test/delivery-codex-r2-036d"
+  ],
+  "deletedRemoteBranches": [
+    "test/delivery-sonnet-036d",
+    "test/delivery-codex-036d",
+    "test/delivery-sonnet-r2-036d",
+    "test/delivery-codex-r2-036d"
+  ],
+  "exitCode": 0,
+  "output": "To https://github.com/JasprW/flowly-delivery-fixture-20261022-036d.git\n - [deleted]         test/delivery-codex-036d\n - [deleted]         test/delivery-codex-r2-036d\n - [deleted]         test/delivery-sonnet-036d\n - [deleted]         test/delivery-sonnet-r2-036d\n",
+  "remainingRemoteRefs": "4bc39c979a8b174cb419254e47ce4d9c9b8d7c70\trefs/heads/main\n",
+  "localBranches": "pending filesystem approval; preserved after sandbox refusal"
+}

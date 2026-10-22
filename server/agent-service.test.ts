@@ -6,8 +6,12 @@ import { ToolSecrets, digest } from "./tool-context";
 import { toolFailure } from "./tool-error";
 import { agentFixture } from "./agent-fixture";
 import { openNextMoves } from "../shared/next-moves";
-import { answersReminder, ideasReminder, movesReminder } from "./reminders";
+import { answersReminder, ideasReminder, movesReminder, outputsReminder } from "./reminders";
 import { setupReminder } from "../shared/card-setup";
+import { putArtifact } from "./artifacts";
+import { ExternalError } from "./connectors/http";
+import { turnChecklist } from "../shared/turn-checklist";
+import { toolContextSchema } from "../shared/tools";
 
 const roots: string[] = [];
 async function setup(seed?: Parameters<typeof agentFixture>[0]) {
@@ -32,6 +36,12 @@ test("reads live scope and foreign native owner; read telemetry does not write b
   expect(ctx.scope.repoPaths).toEqual([x.a, x.b]);
   expect(ctx.workspace.nativeOwner).toBe("Foreign owner");
   expect(ctx.sessions.entries).toHaveLength(2);
+  expect(ctx.turnChecklist).toEqual(turnChecklist);
+  // An old server result remains valid; a caller cannot mutate the next live checklist.
+  const { turnChecklist: rules, ...legacyContext } = ctx;
+  expect(toolContextSchema.safeParse(legacyContext).success).toBe(true);
+  rules!.push("caller-local mutation");
+  expect((await x.service.get(x.identity)).turnChecklist).toEqual(turnChecklist);
   expect(await readFile(x.store.path, "utf8")).toBe(before);
   await x.store.editTask({
     id: "t",
@@ -541,7 +551,8 @@ test("workpad: delivering with open items needs acknowledgeOpen; the snapshot ma
   ctx = await x.service.get(x.identity);
   const refused = await x.service.write(x.identity, "status", { ...input(ctx, "Delivered"), status: "in_review" }).catch((e) => e);
   expect(refused).toMatchObject({ code: "WORKPAD_OPEN" });
-  expect(String(refused.message)).toMatch(/check not run: E2E[\s\S]*out of date/);
+  expect(String(refused.message)).toContain("check not run: E2E");
+  expect(String(refused.message)).toContain("out of date");
   expect((await x.store.read()).tasks[0]!.status).toBe("development");
   // Same request, now acknowledged: nothing was committed, so it is not a reuse.
   const ok = await x.service.write(x.identity, "status", { ...input(ctx, "Delivered; E2E not run, unit tests predate the last commit"), status: "in_review", acknowledgeOpen: true });
@@ -757,9 +768,9 @@ const turnStarted = (x: Rig, agentId = x.identity.agentId) =>
     x.store.event(board, { taskId: "t", agentId, actor: "system", action: "agent.turn_started" });
   });
 const deliver = async (x: Rig, extra: Record<string, unknown> = {}) =>
-  x.service.write(x.identity, "status", { ...input(await x.service.get(x.identity), "Delivered"), status: "in_review", ...extra });
+  x.service.write(x.identity, "status", { ...input(await x.service.get(x.identity), "Delivered"), status: "in_review", outputs: [], ...extra });
 const reportKind = async (x: Rig, kind: string, extra: Record<string, unknown> = {}) =>
-  x.service.write(x.identity, "progress", { ...input(await x.service.get(x.identity), kind), kind, ...extra });
+  x.service.write(x.identity, "progress", { ...input(await x.service.get(x.identity), kind), kind, ...(kind === "result" ? { outputs: [] } : {}), ...extra });
 const suggest = async (x: Rig, moves: unknown[]) =>
   x.service.write(x.identity, "next_moves", { ...(({ expectedRevision, request }) => ({ expectedRevision, request }))(input(await x.service.get(x.identity))), moves });
 const proposeIdea = async (x: Rig, agentId = x.identity.agentId) => {
@@ -779,16 +790,16 @@ test("a delivery with no next moves and no ideas gets both reminders ahead of cu
   const ctx = await x.service.get(x.identity);
   const call = { ...input(ctx, "Delivered"), status: "in_review" };
   const res = await x.service.write(x.identity, "status", call);
-  expect(res.reminders).toEqual([movesReminder, ideasReminder]);
+  expect(res.reminders).toEqual([movesReminder, ideasReminder, outputsReminder]);
   // The reminders sit right after the receipt, before the card's whole context.
   expect(Object.keys(res)).toEqual(["receipt", "replayed", "reminders", "current"]);
   expect((await x.store.read()).tasks[0].status).toBe("in_review");
   // A replay (the first response may have been lost) is judged on the board as it is now.
-  expect(await x.service.write(x.identity, "status", call)).toMatchObject({ replayed: true, reminders: [movesReminder, ideasReminder] });
+  expect(await x.service.write(x.identity, "status", call)).toMatchObject({ replayed: true, reminders: [movesReminder, ideasReminder, outputsReminder] });
   await suggest(x, []);
   const again = await x.service.write(x.identity, "status", call);
   expect(again.replayed).toBe(true);
-  expect(again.reminders).toEqual([ideasReminder]);
+  expect(again.reminders).toEqual([ideasReminder, outputsReminder]);
 });
 
 test("reminders are absent when the call was made already: moves this turn, Ideas off, ideas proposed, moves on the call", async () => {
@@ -846,7 +857,7 @@ test("a new turn starts over: last turn's moves do not count, this turn's none d
 
 test("only a delivery, an ask or a result reminds: stage changes and plain progress stay quiet", async () => {
   const x = await setup();
-  const status = async (to: string) => x.service.write(x.identity, "status", { ...input(await x.service.get(x.identity)), status: to });
+  const status = async (to: string) => x.service.write(x.identity, "status", { ...input(await x.service.get(x.identity)), status: to, ...(to === "in_review" ? { outputs: [] } : {}) });
   for (const to of ["design", "development", "test"]) expect(await status(to), to).not.toHaveProperty("reminders");
   for (const kind of ["progress", "blocker"]) expect(await reportKind(x, kind), kind).not.toHaveProperty("reminders");
   expect((await reportKind(x, "result")).reminders).toEqual([movesReminder]);
@@ -870,7 +881,7 @@ test("a refused call or a finished card carries no reminders", async () => {
   await expect(x.service.write(x.identity, "status", stale)).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
   const call = { ...input(await x.service.get(x.identity), "Delivered"), status: "in_review" };
   const first = await x.service.write(x.identity, "status", call);
-  expect(first.reminders).toHaveLength(2);
+  expect(first.reminders).toEqual([movesReminder, ideasReminder, outputsReminder]);
   // The person moved the card to Done: its replay still returns the receipt, with nothing to remind.
   const task = (await x.store.read()).tasks[0];
   await x.store.editTask({ id: "t", revision: task.revision, status: "done", actor: "human" });
@@ -938,8 +949,8 @@ test("setup: the reminder follows the delivery reminders, also on a replay, and 
   const x = await setup({ tags: false });
   const call = { ...input(await x.service.get(x.identity), "Result"), kind: "result" };
   const first = await x.service.write(x.identity, "progress", call);
-  expect(first.reminders).toEqual([movesReminder, setupReminder(["tags"])]);
-  expect(await x.service.write(x.identity, "progress", call)).toMatchObject({ replayed: true, reminders: [movesReminder, setupReminder(["tags"])] });
+  expect(first.reminders).toEqual([movesReminder, outputsReminder, setupReminder(["tags"])]);
+  expect(await x.service.write(x.identity, "progress", call)).toMatchObject({ replayed: true, reminders: [movesReminder, outputsReminder, setupReminder(["tags"])] });
   const task = (await x.store.read()).tasks[0]!;
   await x.store.editTask({ id: "t", revision: task.revision, status: "done", actor: "human" });
   expect(await x.service.write(x.identity, "progress", call)).not.toHaveProperty("reminders");
@@ -982,4 +993,158 @@ test("setup: open workpad items and missing setup come back in one WORKPAD_OPEN 
   const ok = await deliver(x, { acknowledgeOpen: true, note: "Delivered; E2E not run; type left to the user" });
   const event = (await x.store.read()).events.find((e) => e.id === ok.receipt.eventId)!;
   expect(event).toMatchObject({ setup: { missing: ["type"] }, workpad: { unrun: 1 } });
+});
+
+test("outputs: delivery and result atomically register files and PR/MR links, deduplicate, preserve receipts across reload", async () => {
+  const x = await setup();
+  await writeFile(`${x.a}/report.md`, "evidence");
+  const outputs = [{ target: "./report.md", title: "Report", note: "verified" }, { target: "https://github.com/fixture/repo/pull/12" }, { target: "https://gitlab.example/fixture/repo/-/merge_requests/13" }, { target: "./report.md" }];
+  const call = { ...input(await x.service.get(x.identity)), status: "in_review", outputs, nextMoves: [] };
+  const result = await x.service.write(x.identity, "status", call);
+  expect(result.receipt.artifactIds).toHaveLength(3);
+  expect(result.reminders).not.toContain(outputsReminder);
+  const board = await x.store.read();
+  expect(board.artifacts.map((a) => a.role)).toEqual(["output", "output", "output"]);
+  expect(board.artifacts[0]).toMatchObject({ target: "./report.md", title: "Report", note: "verified" });
+  expect(board.events.map((e) => e.action)).toEqual(["artifact_added", "artifact_added", "artifact_added", "status_changed", "next_moves_suggested"]);
+  expect(result.receipt.eventId).toBe(board.events[3].id);
+  await rm(`${x.a}/report.md`);
+  const service = new AgentService(new BoardStore(x.store.directory), x.secrets);
+  service.attach(x.paseo);
+  service.artifactsOn = async () => false;
+  const before = await readFile(x.store.path, "utf8");
+  expect(await service.write(x.identity, "status", call)).toMatchObject({ replayed: true, receipt: result.receipt });
+  expect(await readFile(x.store.path, "utf8")).toBe(before);
+  await expect(service.write(x.identity, "status", { ...call, outputs: [] })).rejects.toMatchObject({ code: "REQUEST_REUSED" });
+  const reported = await reportKind(x, "result", { outputs: [{ target: "https://example.com/result", title: "Result" }] });
+  expect(reported.receipt).toMatchObject({ status: "in_review", taskRevision: result.receipt.taskRevision, artifactIds: [expect.any(String)] });
+});
+
+test("outputs: omission reminds per call, [] declares none without deleting artifacts; disabled allows []", async () => {
+  const x = await setup();
+  await deliver(x, { outputs: [{ target: "https://example.com/report" }] });
+  expect((await reportKind(x, "result", { outputs: undefined, nextMoves: [] })).reminders).toEqual([outputsReminder]);
+  const none = await reportKind(x, "result", { outputs: [], nextMoves: [] });
+  expect(none.receipt.artifactIds).toEqual([]);
+  expect(none).not.toHaveProperty("reminders");
+  expect((await x.store.read()).artifacts).toHaveLength(1);
+  x.service.artifactsOn = async () => false;
+  expect(await reportKind(x, "result", { outputs: undefined, nextMoves: [] })).not.toHaveProperty("reminders");
+  expect((await reportKind(x, "result", { nextMoves: [] })).receipt.artifactIds).toEqual([]);
+  const before = await readFile(x.store.path, "utf8");
+  await expect(reportKind(x, "result", { outputs: [{ target: "https://example.com/other" }] })).rejects.toMatchObject({ code: "ARTIFACTS_DISABLED" });
+  expect(await readFile(x.store.path, "utf8")).toBe(before);
+});
+
+test("outputs: invalid target, capacity, stale revision and gate refusal roll back the whole delivery", async () => {
+  const x = await setup();
+  for (const target of ["./missing.md", "../missing.md", "ftp://example.com/data"]) {
+    const before = await readFile(x.store.path, "utf8");
+    await expect(deliver(x, { outputs: [{ target: "https://example.com/good" }, { target }], nextMoves: [] })).rejects.toMatchObject({ code: "ARTIFACT_INVALID" });
+    expect(await readFile(x.store.path, "utf8")).toBe(before);
+  }
+  await x.store.mutate((board) => {
+    for (let i = 0; i < 99; i++) putArtifact(x.store, board, { taskId: "t", createdBy: "human", role: "input", kind: "url", target: `https://example.com/${i}` });
+  });
+  const before = await readFile(x.store.path, "utf8");
+  await expect(deliver(x, { outputs: [{ target: "https://example.com/new1" }, { target: "https://example.com/new2" }], nextMoves: [] })).rejects.toMatchObject({ code: "ARTIFACT_INVALID" });
+  expect(await readFile(x.store.path, "utf8")).toBe(before);
+  const stale = await x.service.get(x.identity);
+  await x.store.editTask({ id: "t", revision: stale.revision.task, title: "Changed", actor: "human" });
+  const afterEdit = await readFile(x.store.path, "utf8");
+  await expect(x.service.write(x.identity, "status", { ...input(stale), status: "in_review", outputs: [{ target: "https://example.com/new" }] })).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+  expect(await readFile(x.store.path, "utf8")).toBe(afterEdit);
+  const y = await setup({ tags: false });
+  const beforeGate = await readFile(y.store.path, "utf8");
+  await expect(deliver(y, { acknowledgeOpen: true, outputs: [{ target: "https://example.com/new" }] })).rejects.toMatchObject({ code: "SETUP_INCOMPLETE" });
+  expect(await readFile(y.store.path, "utf8")).toBe(beforeGate);
+});
+
+test("outputs: user-owned input stays unchanged and notice identifies its target", async () => {
+  const x = await setup();
+  await x.store.mutate((board) => putArtifact(x.store, board, { taskId: "t", createdBy: "human", role: "input", kind: "url", target: "https://example.com/input", title: "User title" }));
+  const before = (await x.store.read()).artifacts[0];
+  const result = await deliver(x, { outputs: [{ target: before.target, title: "Agent title" }] });
+  expect((await x.store.read()).artifacts[0]).toEqual(before);
+  expect(result.notice).toContain(before.target);
+  expect(result.notice).toContain("role not changed");
+  expect(result.receipt.artifactIds).toEqual([before.id]);
+});
+
+test("outputs: inappropriate action/kind and malformed lists refuse without writes", async () => {
+  const x = await setup();
+  const before = await readFile(x.store.path, "utf8");
+  for (const status of ["design", "development", "test", "blocked"]) await expect(x.service.write(x.identity, "status", { ...input(await x.service.get(x.identity)), status, outputs: [] })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  for (const kind of ["progress", "question", "blocker"]) await expect(reportKind(x, kind, { outputs: [] })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  for (const outputs of [null, {}, ["x"], [{ target: "" }], [{ target: "https://example.com", role: "input" }], Array.from({ length: 21 }, () => ({ target: "https://example.com" }))]) {
+    await expect(deliver(x, { outputs })).rejects.toThrow();
+  }
+  expect(await readFile(x.store.path, "utf8")).toBe(before);
+});
+
+test("outputs: recognized external keeps output role; unreadable private metadata still saves the explicit URL", async () => {
+  const x = await setup();
+  const target = "https://github.com/o/r/pull/5";
+  const external = { connectionId: "c1", provider: "github", key: "o/r#5", remoteId: "5", itemType: "pull" } as const;
+  let failure: Error | undefined;
+  x.service.connectors = {
+    recognize: async () => { if (failure) throw failure; return { url: target, external, title: "PR #5" }; },
+    locate: async () => new Map(),
+  } as unknown as NonNullable<AgentService["connectors"]>;
+  const registered = await deliver(x, { outputs: [{ target }] });
+  expect(registered.current?.artifacts[0]).toMatchObject({ role: "output", target });
+  expect((await x.store.read()).artifacts[0]).toMatchObject({ role: "output", external });
+  for (const code of ["EXTERNAL_AUTH", "EXTERNAL_NOT_FOUND", "EXTERNAL_UNAVAILABLE", "EXTERNAL_INVALID"] as const) {
+    failure = new ExternalError(code, "Metadata inaccessible");
+    const url = `https://github.com/o/private/pull/${code.length}`;
+    const result = await reportKind(x, "result", { outputs: [{ target: url }] });
+    expect(result.notice).toContain("no external status or content was verified");
+    const artifact = (await x.store.read()).artifacts.find(a => a.id === result.receipt.artifactIds?.[0]);
+    expect(artifact).toMatchObject({ role: "output", kind: "url", target: url });
+    expect(artifact).not.toHaveProperty("external");
+  }
+  const before = await readFile(x.store.path, "utf8");
+  await expect(reportKind(x, "result", { outputs: [{ target: "o/r#5" }] })).rejects.toMatchObject({ code: "ARTIFACT_INVALID" });
+  failure = new TypeError("Programmer error");
+  await expect(reportKind(x, "result", { outputs: [{ target }] })).rejects.toMatchObject({ code: "ARTIFACT_INVALID" });
+  expect(await readFile(x.store.path, "utf8")).toBe(before);
+});
+
+test("gate: pre-acknowledgement refuses, same-state retry succeeds; pad/HEAD/revision/turn/expiry/reload/session invalidate it", async () => {
+  for (const change of ["none", "pad", "head", "dirty", "task", "project", "turn", "expiry", "reload", "session"] as const) {
+    const x = await setup({ tags: false });
+    const repo = { head: "aaaaaaaaaaaa", dirty: false };
+    x.service.git = fakeGit(repo);
+    const before = await readFile(x.store.path, "utf8");
+    await expect(deliver(x, { acknowledgeOpen: true })).rejects.toMatchObject({ code: "SETUP_INCOMPLETE", message: expect.stringContaining("first attempt is always refused") });
+    expect(await readFile(x.store.path, "utf8")).toBe(before);
+    if (change === "pad") await pad(x, { acceptance: [{ text: "New criterion", done: true }] });
+    if (change === "head") repo.head = "bbbbbbbbbbbb";
+    if (change === "dirty") repo.dirty = true;
+    if (change === "task") await x.store.editTask({ id: "t", revision: 1, title: "new", actor: "human" });
+    if (change === "project") await x.store.updateProject({ id: "p", revision: 1, title: "new" });
+    if (change === "turn") {
+      x.service.turnStarted(x.identity);
+      // No board history is needed to invalidate a turn, even when its lifecycle event was truncated.
+      await x.store.mutate((board) => { board.events = []; });
+    }
+    if (change === "expiry") x.advance(15 * 60 * 1000 + 1);
+    if (change === "reload") {
+      const next = new AgentService(x.store, x.secrets);
+      next.attach(x.paseo); next.git = fakeGit(repo);
+      Object.assign(x, { service: next });
+    }
+    if (change === "session") Object.assign(x, { identity: { ...x.identity, agentId: "second" } });
+    if (change !== "none") await expect(deliver(x, { acknowledgeOpen: true })).rejects.toMatchObject({ code: "SETUP_INCOMPLETE" });
+    const result = await deliver(x, { acknowledgeOpen: true, note: "No tags: intentionally omitted for this controlled gate check" });
+    expect(result.receipt.status, change).toBe("in_review");
+  }
+});
+
+test("gate: initial acknowledgeOpen also refuses open checks, fixing them needs no override", async () => {
+  const x = await setup();
+  await pad(x, { validation: [{ text: "E2E", state: "unrun" }] });
+  await expect(deliver(x, { acknowledgeOpen: true })).rejects.toMatchObject({ code: "WORKPAD_OPEN" });
+  await pad(x, { validation: [{ text: "E2E", state: "pass" }] });
+  expect((await deliver(x)).receipt.status).toBe("in_review");
 });

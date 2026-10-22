@@ -1,5 +1,7 @@
 # 卡片开工设置：type / tags / workpad 的提醒与软卡（CARD-SETUP-SPEC）
 
+2026-10-22：Start of every turn 改为共享六项动作清单，实时 get_task 返回相同的 `turnChecklist`；仍先补 setup.missing，小卡不例外。现有缺项校验、提醒和权限不变。见 [TURN-CHECKLIST-SPEC](TURN-CHECKLIST-SPEC.md)。
+
 状态：2026-10-21 用户审阅通过并要求实现；已实现，Luna 6 验证通过（[报告](verification/card-setup-2026-10-21.md)：Sonnet 5.5 medium 与 Luna 都在首次改文件前补齐了三项；真实 session 的 `SETUP_INCOMPLETE` 拒绝未触发，仅单测覆盖）。卡片 `ee717828`（“Flowly 流程约束强化”，“发布v1.5.0”的跟进）。
 用户决定（2026-10-21）：
 - 没有 workpad 的卡交付也要软卡（`acknowledgeOpen` 加说明放行）。这**推翻** [WORKPAD-SPEC](WORKPAD-SPEC.md) §5.3 第 2 步“没有 workpad 照常提交”的旧决定，理由见 §2 R4。
@@ -90,13 +92,15 @@ agent 调 `flowly_update_status(status=in_review)` 且状态确实变化时（�
 - `missing`（§3 定义，含“没有 workpad”）；
 - 有 workpad 时的 `openItems`（WORKPAD-SPEC §5.3）。
 
-任一非空且没有 `acknowledgeOpen: true`：返回错误，不提交、不写回执（同一 request 可带确认后重试）。一个错误列出全部问题，避免 agent 连撞两次：
+任一非空且未在本 session 对当前状态拒绝过，或没有 `acknowledgeOpen: true`：返回错误，不提交、不写回执（同一 request 可带确认后重试）。一个错误列出全部问题，避免 agent 连撞两次：
 
 - 有未完成的 workpad 项：错误码仍为 `WORKPAD_OPEN`（兼容现有 agent 与测试），消息在原清单前加设置缺项一行（若有）。
 - 只有设置缺项：新错误码 `SETUP_INCOMPLETE`，消息：
   `Card setup is incomplete: {items}. Set them now and deliver again. Deliver anyway only with acknowledgeOpen=true and a note that explains why each one is missing.`
 
-带 `acknowledgeOpen: true`：照常提交；`status_changed` 事件新增可选 `setup: { missing }` 快照（与现有 `workpad` 快照并列），供以后的 Insights 统计。卡面“Delivered with {n} open items”的计数**不**含设置缺项（本卡不改 UI）。
+本 session 已收到当前状态的拒绝后，再带 `acknowledgeOpen: true`：照常提交；`status_changed` 事件新增可选 `setup: { missing }` 快照（与现有 `workpad` 快照并列），供以后的 Insights 统计。卡面“Delivered with {n} open items”的计数**不**含设置缺项（本卡不改 UI）。
+
+2026-10-22 修订：预带 `acknowledgeOpen=true` 不再绕过首次拒绝。状态指纹、过期、回合切换和重载规则见 [DELIVERY-CONSTRAINTS-SPEC](DELIVERY-CONSTRAINTS-SPEC.md) §2。
 
 CLI 已有 `--acknowledge-open`，不变。`flowly_update_status` 的 `acknowledgeOpen` 描述改为“…still open workpad items or missing card setup (WORKPAD_OPEN, SETUP_INCOMPLETE)…”。
 

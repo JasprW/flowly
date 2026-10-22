@@ -1,0 +1,12 @@
+{
+  "agentId": "6698b422-7a2f-4b1e-b58e-5739bf2a485d",
+  "provider": "codex",
+  "model": "gpt-6-luna",
+  "modeId": "full-access",
+  "mode": null,
+  "settings": {
+    "modeId": "full-access",
+    "thinkingOptionId": "high"
+  },
+  "parent": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f"
+}

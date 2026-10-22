@@ -1,0 +1,97 @@
+{
+  "method": "v2: turn-time window; command attempts are heuristic; registration requires a receipt and matching output artifact",
+  "provider": "codex",
+  "project": "154c66d4-9d96-4ff1-b810-205a5d016330",
+  "since": "2026-10-22T11:52:00.000Z",
+  "until": "2026-10-22T12:23:00.000Z",
+  "sessionsRead": 6,
+  "sessionsInWindow": 1,
+  "summary": {
+    "turns": 1,
+    "first": 0,
+    "later": 1,
+    "laterNoFlowly": 0,
+    "editedLater": 1,
+    "editedLaterNoFlowly": 0,
+    "prAttemptTurns": 0,
+    "confirmedPrTurns": 0,
+    "allPrsRegistered": 0,
+    "unknownPrTurns": 0,
+    "missingPrTurns": 0,
+    "deliveries": 1,
+    "acknowledgements": {}
+  },
+  "groups": [
+    {
+      "model": "gpt-6.1-sol",
+      "sample": "real",
+      "age": "old",
+      "turns": 1,
+      "first": 0,
+      "later": 1,
+      "laterNoFlowly": 0,
+      "editedLater": 1,
+      "editedLaterNoFlowly": 0,
+      "prAttemptTurns": 0,
+      "confirmedPrTurns": 0,
+      "allPrsRegistered": 0,
+      "unknownPrTurns": 0,
+      "missingPrTurns": 0,
+      "deliveries": 1,
+      "acknowledgements": {}
+    }
+  ],
+  "diagnostics": [],
+  "turns": [
+    {
+      "session": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f",
+      "taskId": "08a37039-643c-4354-9062-0fefdf2eec21",
+      "model": "gpt-6.1-sol",
+      "provider": "codex",
+      "at": "2026-10-22T12:17:23.512Z",
+      "first": false,
+      "age": "old",
+      "sample": "real",
+      "flowly": [
+        "cli:current"
+      ],
+      "edits": 1,
+      "prAttempts": 0,
+      "openedPrUrls": [],
+      "registeredPrUrls": [],
+      "unknownArtifactIds": [],
+      "errors": [
+        "INVALID_INPUT"
+      ],
+      "acknowledgements": [],
+      "receipts": [
+        {
+          "eventId": "9db67be6-35bf-44c2-8117-44674763b7ec",
+          "action": "workpad",
+          "status": "design",
+          "at": "2026-10-22T12:22:08.654Z"
+        },
+        {
+          "eventId": "cc6d46b0-3781-42e8-b318-8b1fa2169d85",
+          "action": "status",
+          "status": "design",
+          "at": "2026-10-22T12:18:46.900Z"
+        },
+        {
+          "eventId": "741c3ab1-417d-4d29-8b5a-25f0538ad1ff",
+          "action": "workpad",
+          "status": "design",
+          "at": "2026-10-22T12:21:18.479Z"
+        },
+        {
+          "eventId": "9519ad7a-3616-448c-84ce-ff9549e2a768",
+          "action": "status",
+          "status": "in_review",
+          "at": "2026-10-22T12:22:25.777Z"
+        }
+      ],
+      "prRegistration": "not-applicable",
+      "missingPrUrls": []
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "at": "2026-10-22T12:03:50.364Z",
+  "workspaces": [
+    {
+      "id": "wks_ba6ff18c509f409e",
+      "exists": true,
+      "projectId": "prj_63a70119e68a1973",
+      "status": "done",
+      "archivingAt": null,
+      "name": "Add rate limiting to POST /shorten"
+    },
+    {
+      "id": "wks_7d81d4dbcaf9dd67",
+      "exists": true,
+      "projectId": "prj_63a70119e68a1973",
+      "status": "done",
+      "archivingAt": null,
+      "name": "Expired links crash the server instead of returning an error"
+    },
+    {
+      "id": "wks_6fd42afc21d656dc",
+      "exists": true,
+      "projectId": "prj_63a70119e68a1973",
+      "status": "done",
+      "archivingAt": null,
+      "name": "Add click counter and GET /stats/:code"
+    },
+    {
+      "id": "wks_35118905f34253ec",
+      "exists": true,
+      "projectId": "prj_63a70119e68a1973",
+      "status": "done",
+      "archivingAt": null,
+      "name": "Custom aliases for short links"
+    },
+    {
+      "id": "wks_37d6bd4cab89da78",
+      "exists": true,
+      "projectId": "prj_63a70119e68a1973",
+      "status": "done",
+      "archivingAt": null,
+      "name": "Add Dockerfile and GitHub Actions workflow"
+    },
+    {
+      "id": "wks_a4e7f5a7a51ef2fc",
+      "exists": false
+    }
+  ],
+  "sessions": [
+    {
+      "id": "402bf42e-3ec3-4ec8-ab0a-c1e987ebfda1",
+      "exists": true,
+      "status": "idle",
+      "archivedAt": null
+    },
+    {
+      "id": "86170ea8-80af-422f-8bf5-a72df91a860e",
+      "exists": true,
+      "status": "idle",
+      "archivedAt": null
+    },
+    {
+      "id": "5272e754-f462-47d8-a152-24cb9fe8ee92",
+      "exists": true,
+      "status": "idle",
+      "archivedAt": null
+    }
+  ]
+}

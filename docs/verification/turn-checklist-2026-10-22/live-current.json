@@ -1,0 +1,21 @@
+{
+  "sessionId": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f",
+  "sessionPredatesReload": true,
+  "toolVersion": 1,
+  "turnChecklist": [
+    "Every turn, including commit/merge/rework/verification follow-ups: read flowly_get_task, handle unread inputs and fix setup.missing before work.",
+    "Before changing code: set development and write workpad acceptance criteria and checks. For research or verification, use design or test to match the current work.",
+    "After running checks: record the actual pass/fail/unrun results, exact commands and tested commit in workpad; use dirty=true for uncommitted changes.",
+    "After opening a PR/MR: register every PR/MR URL as an output this turn, even if an earlier turn already delivered.",
+    "Before ending a work turn, including commit/merge-only turns: update workpad, then deliver the overall work with flowly_update_status(in_review) or report your result with flowly_report_progress(kind=result). Include outputs and nextMoves; use [] when none.",
+    "On WORKPAD_OPEN or SETUP_INCOMPLETE: review and resolve the gaps, then retry with acknowledgeOpen=true only if needed, explaining every remaining gap. Session completion never proves card completion."
+  ],
+  "boardUnchangedDuringRead": true,
+  "revision": {
+    "task": 25,
+    "project": 7
+  },
+  "matchesSharedSource": true,
+  "finalReloadSkillMatches": true,
+  "finalReadBoardUnchanged": true
+}

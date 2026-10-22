@@ -1,0 +1,38 @@
+[
+  {
+    "sequence": 1420,
+    "timestamp": "2026-10-22T11:53:09.775Z",
+    "stream": "stderr",
+    "message": "(node:39669) [DEP0093] DeprecationWarning: The crypto.fips is deprecated. Please use crypto.getFips()"
+  },
+  {
+    "sequence": 1421,
+    "timestamp": "2026-10-22T11:53:09.775Z",
+    "stream": "stderr",
+    "message": "(Use `Paseo Helper --trace-deprecation ...` to show where the warning was created)"
+  },
+  {
+    "sequence": 1422,
+    "timestamp": "2026-10-22T11:53:09.781Z",
+    "stream": "stdout",
+    "message": "Flowly store ready: /Users/bofan.wang/.paseo/plugin-data/flowly"
+  },
+  {
+    "sequence": 1423,
+    "timestamp": "2026-10-22T11:53:09.781Z",
+    "stream": "stdout",
+    "message": "[paseo] Plugin ready"
+  },
+  {
+    "sequence": 1424,
+    "timestamp": "2026-10-22T11:53:10.061Z",
+    "stream": "stdout",
+    "message": "Flowly project folders: 0 written, 5 current, 0 failed."
+  },
+  {
+    "sequence": 1425,
+    "timestamp": "2026-10-22T11:53:10.061Z",
+    "stream": "stderr",
+    "message": "responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped."
+  }
+]

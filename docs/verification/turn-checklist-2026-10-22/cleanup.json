@@ -1,0 +1,23 @@
+{
+  "sessionId": "6698b422-7a2f-4b1e-b58e-5739bf2a485d",
+  "archivedAt": "2026-10-22T12:47:05.439Z",
+  "workspaceId": "wks_e56a74f6e1bc6cd6",
+  "newProjects": 0,
+  "newCards": 0,
+  "newWorkspaces": 0,
+  "nativeFixtureDirectories": 0,
+  "nodeFixtureCleanup": "finally in audit.test.mjs",
+  "retainedPreviousRefs": 4,
+  "sessions": [
+    {
+      "id": "6698b422-7a2f-4b1e-b58e-5739bf2a485d",
+      "archivedAt": "2026-10-22T12:47:05.439Z",
+      "workspaceId": "wks_e56a74f6e1bc6cd6"
+    },
+    {
+      "id": "058cab0b-0961-4b40-962c-258555c435f9",
+      "archivedAt": "2026-10-22T13:12:36.893Z",
+      "workspaceId": "wks_e56a74f6e1bc6cd6"
+    }
+  ]
+}

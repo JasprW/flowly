@@ -1,0 +1,38 @@
+[
+  {
+    "key": "sonnet-r2",
+    "session": "7d43e887-4108-4e7f-ae9e-14c418c48a83",
+    "pass": true,
+    "prUrls": [
+      "https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/3"
+    ],
+    "receiptIds": [
+      "b6e2f886-7326-460d-a2b6-edf6621da692"
+    ],
+    "followupAt": "2026-10-22T11:54:58.446Z",
+    "deliveryAt": [
+      "2026-10-22T11:56:04.109Z"
+    ],
+    "notices": [
+      "https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/3: External details could not be read; no external status or content was verified."
+    ]
+  },
+  {
+    "key": "codex-r2",
+    "session": "6a79016f-dca4-40eb-9af1-3498e1624be2",
+    "pass": true,
+    "prUrls": [
+      "https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/4"
+    ],
+    "receiptIds": [
+      "48ad72fb-4363-4782-b9eb-8096fd61ebba"
+    ],
+    "followupAt": "2026-10-22T11:55:58.043Z",
+    "deliveryAt": [
+      "2026-10-22T12:02:17.255Z"
+    ],
+    "notices": [
+      "https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/4: External details could not be read; no external status or content was verified."
+    ]
+  }
+]

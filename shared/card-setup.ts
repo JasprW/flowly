@@ -46,7 +46,7 @@ export const setupReminder = (missing: readonly SetupItem[]) =>
 
 /** The delivery refusal's setup line (§3.4). */
 export const setupIncompleteMessage = (missing: readonly SetupItem[]) =>
-  `Card setup is incomplete: ${itemsText(missing)}. Set them now and deliver again. Deliver anyway only with acknowledgeOpen=true and a note that explains why each one is missing.`;
+  `Card setup is incomplete: ${itemsText(missing)}. The first attempt is always refused, even with acknowledgeOpen=true. Set them now and deliver again. Only after reviewing this refusal, retry with acknowledgeOpen=true and a note that explains why each one is still missing. A changed card/workpad/HEAD or a new turn requires a new refusal.`;
 
 /** The first-context line (§3.2); empty when nothing is missing. */
 export const setupContextLine = (missing: readonly SetupItem[]) =>

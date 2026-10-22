@@ -8,6 +8,8 @@ export const answersReminder =
   "No answers suggested for your question. If the user is likely to reply with one of a few options, call flowly_suggest_next_moves with those replies (1-3, recommended first) before you end the turn, or with moves=[] if the reply is free-form. This write already succeeded.";
 export const ideasReminder =
   "You have proposed no ideas on this card. Consider 0-3 ideas (flowly_propose_idea) for worthwhile follow-ups you noticed: bugs, refactors, next features. Zero is fine; decide on purpose.";
+export const outputsReminder =
+  "This delivery omitted outputs. Before you end the turn, register its deliverables (especially PR/MR links, reports and evidence) with flowly_add_artifact role=output. On deliveries (status=in_review or kind=result), pass outputs=[{target,title,note}], or outputs=[] when there are none. This write already succeeded; do not repeat it just to add outputs.";
 
 /** The write a reminder can ride on: a status change or a progress report, as the agent sent it. */
 export type DeliveryCall = { action: "status"; status: string } | { action: "progress"; kind: string };

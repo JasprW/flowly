@@ -2,8 +2,8 @@ export const cliSource = String.raw`#!/usr/bin/env node
 import {readFile, writeFile} from 'node:fs/promises';
 
 const args=process.argv.slice(2), opts={}, positional=[];
-const allowed=new Set(['context-file','save-request','request-file','task-revision','project-revision','note','kind','title','detail','rationale','context','type','priority','scope','role','target','id','add','remove','tags','moves','workpad','workpad-file','workpad-revision','acknowledge-open','no-moves','body','keywords','supersedes','query']);
-const booleanFlags=new Set(['acknowledge-open','no-moves']);
+const allowed=new Set(['context-file','save-request','request-file','task-revision','project-revision','note','kind','title','detail','rationale','context','type','priority','scope','role','target','id','add','remove','tags','moves','workpad','workpad-file','workpad-revision','acknowledge-open','no-moves','body','keywords','supersedes','query','outputs','no-outputs']);
+const booleanFlags=new Set(['acknowledge-open','no-moves','no-outputs']);
 const workpadFlags=['workpad','workpad-file','workpad-revision'];
 const ideaFlags=['detail','rationale','context','type','priority','scope','tags'];
 const tagFlags=['add','remove'];
@@ -17,7 +17,7 @@ try {
     if(arg.startsWith('--')) {const key=arg.slice(2);if(!allowed.has(key)||Object.hasOwn(opts,key))fail('Unknown or duplicate flag: '+arg); if(booleanFlags.has(key)){opts[key]=true;continue;} const value=args[++i];if(value===undefined||value.startsWith('--'))fail('Missing value for '+arg);opts[key]=value;}
     else positional.push(arg);
   }
-  const command=positional[0];if(!['current','get','status','note','idea','remember','recall','artifact','artifact-remove','tags','set-type','next-moves','workpad','external','ticket'].includes(command))fail('Usage: current [--save-request path] | external --id <artifact id> (read an external input: Jira ticket, Confluence page, GitHub/GitLab issue or PR/MR; ticket is an alias) | status <design|development|test|blocked|in_review> | note (status and note also take --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> or --no-moves: the next steps for the user, recorded with the call) | idea --title --detail --rationale [--context --type --priority --scope here|new] | remember --kind decision|convention|pitfall|contact --title [--body --tags a,b --keywords x,y --supersedes <memory id>] (a project memory candidate the user confirms) | recall [--query words --kind k] (search confirmed project memory; no request file) | artifact --role input|output --target <path or link> [--title --note] | artifact-remove --id <artifact id> | tags [--add a,b] [--remove c] | set-type <feature|bugfix|research|refactor|docs|chore> (only when the card has no type) | next-moves --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> | workpad --workpad-revision <n> (--workpad <JSON> | --workpad-file <path>) with {acceptance, validation, confusions}; status in_review [--acknowledge-open] delivers despite open workpad items or missing card setup (type, tags, workpad), with --context-file and --request-file.');
+  const command=positional[0];if(!['current','get','status','note','idea','remember','recall','artifact','artifact-remove','tags','set-type','next-moves','workpad','external','ticket'].includes(command))fail('Usage: current [--save-request path] | external --id <artifact id> (read an external input: Jira ticket, Confluence page, GitHub/GitLab issue or PR/MR; ticket is an alias) | status <design|development|test|blocked|in_review> | note (status and note also take --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> or --no-moves: the next steps for the user, recorded with the call) | idea --title --detail --rationale [--context --type --priority --scope here|new] | remember --kind decision|convention|pitfall|contact --title [--body --tags a,b --keywords x,y --supersedes <memory id>] (a project memory candidate the user confirms) | recall [--query words --kind k] (search confirmed project memory; no request file) | artifact --role input|output --target <path or link> [--title --note] | artifact-remove --id <artifact id> | tags [--add a,b] [--remove c] | set-type <feature|bugfix|research|refactor|docs|chore> (only when the card has no type) | next-moves --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> | workpad --workpad-revision <n> (--workpad <JSON> | --workpad-file <path>) with {acceptance, validation, confusions}; status in_review / note --kind result take --outputs <JSON array of {target,title?,note?}> or --no-outputs; omission returns a reminder. status in_review [--acknowledge-open] confirms open workpad items or missing card setup only after a prior refusal for the current state, with --context-file and --request-file.');
   if(positional.length!==(['status','set-type'].includes(command)?2:1))fail('Unexpected positional arguments.');
   const path=opts['context-file']||process.env.FLOWLY_CONTEXT_FILE||process.env.ULTRA_KANBAN_CONTEXT_FILE;if(!path)fail('No session context. Use the command supplied by the card drawer.');
   const context=JSON.parse(await readFile(path,'utf8'));
@@ -34,6 +34,10 @@ try {
   if(!['artifact','artifact-remove','external','ticket'].includes(command)&&artifactFlags.some(k=>opts[k]!==undefined))fail('--'+artifactFlags.find(k=>opts[k]!==undefined)+' is only valid for artifact commands.');
   if(!['status','note','next-moves'].includes(command)&&(opts.moves!==undefined||opts['no-moves']!==undefined))fail('--'+(opts.moves!==undefined?'moves':'no-moves')+' is only valid for status, note and next-moves.');
   if(opts.moves!==undefined&&opts['no-moves']!==undefined)fail('--moves and --no-moves cannot be combined; use one.');
+  if(opts.outputs!==undefined&&opts['no-outputs']!==undefined)fail('--outputs and --no-outputs cannot be combined; use one.');
+  if(opts.outputs!==undefined||opts['no-outputs']!==undefined){
+    if(!((command==='status'&&positional[1]==='in_review')||(command==='note'&&opts.kind==='result')))fail('--outputs and --no-outputs are only valid for status in_review or note --kind result.');
+  }
   if(command==='next-moves'&&opts['no-moves']!==undefined)fail('--no-moves is not valid for next-moves; pass --moves with a JSON array (it may be empty).');
   if(command!=='workpad'&&workpadFlags.some(k=>opts[k]!==undefined))fail('--'+workpadFlags.find(k=>opts[k]!==undefined)+' is only valid for workpad.');
   if(command!=='status'&&opts['acknowledge-open']!==undefined)fail('--acknowledge-open is only valid for status.');
@@ -73,6 +77,8 @@ try {
     else if(command==='status'){if(opts.kind)fail('--kind is only valid for note.');action='status';input.status=positional[1];if(opts['acknowledge-open'])input.acknowledgeOpen=true;}
     else {action='progress';input.kind=opts.kind||'progress';}
     if(carried!==undefined)input.nextMoves=carried;
+    if(opts['no-outputs'])input.outputs=[];
+    else if(opts.outputs!==undefined){let outputs;try{outputs=JSON.parse(opts.outputs);}catch{fail('--outputs must be a JSON array of {target,title?,note?}; use --no-outputs when there are none.');}if(!Array.isArray(outputs))fail('--outputs must be a JSON array of {target,title?,note?}.');input.outputs=outputs;}
   }
   const response=await fetch(new URL('api',url),{method:'POST',headers:{Authorization:'Bearer '+context.credential,'Content-Type':'application/json'},body:JSON.stringify({action,input}),signal:AbortSignal.timeout(20000)});
   const body=await response.json();if(!response.ok||!body.ok){process.stderr.write(JSON.stringify(body.error||{code:'HTTP_ERROR',message:'HTTP '+response.status})+'\n');process.exitCode=1;}

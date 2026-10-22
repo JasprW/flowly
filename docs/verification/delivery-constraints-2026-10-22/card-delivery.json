@@ -1,0 +1,27 @@
+{
+  "receipt": {
+    "agentId": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f",
+    "taskId": "08a37039-643c-4354-9062-0fefdf2eec21",
+    "action": "status",
+    "eventId": "fec1410e-5a18-4aa3-99f1-15ee0e25eac2",
+    "artifactIds": [
+      "2f831063-361b-402a-aaf6-e8d8ff87e5d0",
+      "cd5e9360-fff9-4960-8841-604b92a937d3",
+      "b8145275-3cf9-470f-bdca-22d26935beaf",
+      "779541fa-d01b-4892-bb2f-c2cb6b6c5a0e",
+      "4bfe380c-77d6-4bb6-b980-d83deaad0cc7",
+      "720e6f9d-7194-4642-8846-c1b10557362d",
+      "2d595ba5-f04a-4d8b-9003-8ff2227f0b72",
+      "4c8e4fcd-cf9d-4504-91a0-6f8f77f01673"
+    ],
+    "taskRevision": 18,
+    "projectRevision": 7,
+    "status": "in_review",
+    "at": "2026-10-22T12:10:41.560Z"
+  },
+  "notice": "https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/1: External details could not be read; no external status or content was verified.\nhttps://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/2: External details could not be read; no external status or content was verified.\nhttps://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/3: External details could not be read; no external status or content was verified.\nhttps://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/4: External details could not be read; no external status or content was verified.",
+  "reminders": [
+    "You have proposed no ideas on this card. Consider 0-3 ideas (flowly_propose_idea) for worthwhile follow-ups you noticed: bugs, refactors, next features. Zero is fine; decide on purpose."
+  ],
+  "replayed": false
+}

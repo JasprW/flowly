@@ -8,10 +8,11 @@ import { ideaTitleKey } from "../shared/ideas";
 import { nextMovesAction, noMovesNote } from "../shared/next-moves";
 import { isResolved, linksOf } from "../shared/links";
 import { absoluteTarget, artifactsOf } from "../shared/artifacts";
+import { turnChecklist } from "../shared/turn-checklist";
 import { changeTags, normalizeTags, projectTagStats, tagChangeNote } from "../shared/tags";
 import { setTags } from "./store";
 import { fingerprintChanged } from "./connectors/fingerprint";
-import { artifactRoots, dropArtifact, externalArtifact, missingArtifacts, normalizeTarget, putArtifact } from "./artifacts";
+import { artifactRoots, dropArtifact, externalArtifact, missingArtifacts, normalizeTarget, putArtifact, type NewArtifact } from "./artifacts";
 import { ArtifactReadStore } from "./artifact-reads";
 import { ExternalError } from "./connectors/http";
 import { ExternalReadStore, refKey, type ConnectorService } from "./connectors/service";
@@ -22,7 +23,8 @@ import type { Artifact, GitHead, NextMove, Workpad } from "../shared/model";
 import { projectScripts } from "./workflow-insights";
 import { mergeWorkpad, openItemLines, openItems, plansOf, validationFreshness, workpadEnabled, workpadNote, workpadOf, workpadUpdatedAction } from "../shared/workpad";
 import { defaultGit, readHead, resolveCommit, type Git } from "./workpad";
-import { deliveryReminders, type DeliveryCall } from "./reminders";
+import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
+import { DeliveryGate } from "./delivery-gate";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
   agentStatuses,
@@ -69,6 +71,11 @@ function memoryToolError(e: unknown): unknown {
 
 export class AgentService {
   private paseo?: PaseoApi;
+  private deliveryGate = new DeliveryGate();
+  /** Lifecycle reset, independent of the board's truncated event history. */
+  turnStarted(identity: ToolIdentity) {
+    this.deliveryGate.clear(`${identity.agentId}:${identity.taskId}:${identity.workspaceId}`);
+  }
   readonly accesses = new Map<string, { at: string; action: string }>();
   /** The Ideas setting; off refuses new proposals (IDEAS-INBOX-SPEC §10). Set by the plugin entry. */
   ideasOn: () => Promise<boolean> = async () => true;
@@ -291,6 +298,7 @@ export class AgentService {
     let setup: ToolContext["setup"];
     const built: ToolContext = {
       identity,
+      turnChecklist: [...turnChecklist],
       task: r.task,
       project: r.project,
       revision,
@@ -441,8 +449,43 @@ export class AgentService {
     // Read for a proposal, and for a delivery whose result may remind of ideas (IDEAS-SPEC §4.1).
     const ideasOn =
       action === "idea" || (action === "status" && (input as StatusInput).status === "in_review") ? await this.ideasOn() : true;
+    const outputDelivery =
+      (action === "status" && (input as StatusInput).status === "in_review") ||
+      (action === "progress" && (input as ProgressInput).kind === "result");
+    const outputs = action === "status" || action === "progress" ? (input as StatusInput | ProgressInput).outputs : undefined;
+    if (outputs !== undefined && !outputDelivery)
+      throw new ToolError("INVALID_INPUT", "outputs is only valid for status=in_review or kind=result.");
     const artifactWrite = action === "artifact" || action === "artifact_remove";
-    const artifactsOn = artifactWrite ? await this.artifactsOn() : true;
+    const artifactsOn = artifactWrite || outputDelivery ? await this.artifactsOn() : true;
+    const key = `${identity.agentId}:${digest(input.request.id)}`,
+      payloadHash = digest(JSON.stringify({ action, input }));
+    // Exact replays must survive a missing file, disconnected connector or a changed artifacts setting.
+    const priorReceipt = outputs?.length ? (await this.store.read()).agentReceipts.find((r) => r.key === key) : undefined;
+    if (priorReceipt && priorReceipt.payloadHash !== payloadHash)
+      throw new ToolError("REQUEST_REUSED", "Request already committed with different parameters.");
+    const outputTargets: (Omit<NewArtifact, "taskId" | "role" | "createdBy" | "agentId"> & { notice?: string })[] = [];
+    if (outputs?.length && !priorReceipt) {
+      if (!artifactsOn)
+        throw new ToolError("ARTIFACTS_DISABLED", "Agent artifacts are turned off in Flowly settings. List your deliverables in your reply and deliver with outputs=[] instead.");
+      for (const output of outputs) {
+        try {
+          let external;
+          let notice: string | undefined;
+          try {
+            external = await externalArtifact(this.connectors, output.target);
+          } catch (e) {
+            // Saving an explicit link does not require permission to read its private metadata.
+            // Bare keys still require recognition; invalid URLs and programmer errors still refuse.
+            if (!(e instanceof ExternalError) || !/^https?:\/\//i.test(output.target)) throw e;
+            notice = "External details could not be read; no external status or content was verified.";
+          }
+          const target = external ?? await normalizeTarget(output.target, artifactRoots(resources.task, resources.project, resources.workspace.workspaceDirectory));
+          outputTargets.push({ ...output, ...target, title: output.title || external?.title, ...(notice ? { notice } : {}) });
+        } catch (e) {
+          throw new ToolError("ARTIFACT_INVALID", e instanceof Error ? e.message : String(e));
+        }
+      }
+    }
     // Paths are checked before the write; the transaction only records the result.
     // An item link or key of a configured connection becomes an external input (CONNECTORS-SPEC §3.1).
     const externalTarget =
@@ -493,8 +536,6 @@ export class AgentService {
           throw memoryToolError(e);
         });
     }
-    const key = `${identity.agentId}:${digest(input.request.id)}`,
-      payloadHash = digest(JSON.stringify({ action, input }));
     // What this call left out (NEXT-MOVES-SPEC §9): read from the board as it is after the write, also on a replay
     // (the first response may have been lost), and only while the card still takes writes.
     const call: DeliveryCall | undefined =
@@ -510,6 +551,7 @@ export class AgentService {
       const project = board.projects.find((p) => p.id === task.projectId);
       if (project?.archivedAt) return [];
       const out = call ? deliveryReminders(board, { taskId: task.id, agentId: identity.agentId }, call, ideasOn) : [];
+      if (outputDelivery && outputs === undefined && artifactsOn) out.push(outputsReminder);
       const missing = setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project));
       if (missing.length) out.push(setupReminder(missing));
       return out;
@@ -602,11 +644,20 @@ export class AgentService {
       // Missing card setup is part of the same soft gate (CARD-SETUP-SPEC §3.4): one refusal lists everything.
       const setupGap: SetupItem[] =
         next === "in_review" && next !== previous ? setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project)) : [];
-      const acknowledged = !!(input as StatusInput).acknowledgeOpen;
+      const binding = `${identity.agentId}:${identity.taskId}:${identity.workspaceId}`;
+      const hasOpen = !!delivered?.total || setupGap.length > 0;
+      const fingerprint = digest(JSON.stringify({
+        revision: input.expectedRevision,
+        pad: deliveryPad?.revision,
+        open: delivered,
+        setupGap,
+        head: head ? { sha: head.sha, branch: head.branch, dirty: head.dirty } : null,
+      }));
+      const acknowledged = hasOpen && this.deliveryGate.acknowledge(binding, fingerprint, !!(input as StatusInput).acknowledgeOpen, this.clock());
       if (deliveryPad && delivered!.total > 0 && !acknowledged)
         throw new ToolError(
           "WORKPAD_OPEN",
-          `${setupGap.length ? `${setupIncompleteMessage(setupGap)}\n` : ""}${delivered!.total} workpad item${delivered!.total === 1 ? " is" : "s are"} still open:\n${openItemLines(deliveryPad).join("\n")}\nRerun out-of-date checks and finish what you can. Deliver anyway only with acknowledgeOpen=true and a note that explains every open item (failed, not run, out of date or not met).`,
+          `${setupGap.length ? `${setupIncompleteMessage(setupGap)}\n` : ""}${delivered!.total} workpad item${delivered!.total === 1 ? " is" : "s are"} still open:\n${openItemLines(deliveryPad).join("\n")}\nThe first attempt is always refused, even with acknowledgeOpen=true. Review this list, rerun out-of-date checks and finish what you can. Then retry with acknowledgeOpen=true and a note explaining every remaining item. A changed card/workpad/HEAD or a new turn requires a new refusal.`,
         );
       if (setupGap.length && !acknowledged) throw new ToolError("SETUP_INCOMPLETE", setupIncompleteMessage(setupGap));
       if (next !== previous) {
@@ -616,6 +667,21 @@ export class AgentService {
       }
       let artifactId: string | undefined;
       let notice: string | undefined;
+      const artifactIds: string[] = [];
+      for (const output of outputTargets) {
+        try {
+          const put = putArtifact(this.store, board, {
+            taskId: task.id, role: "output", kind: output.kind, target: output.target,
+            title: output.title, note: output.note, createdBy: "agent", agentId: identity.agentId,
+            ...("external" in output ? { external: output.external } : {}),
+          }, new Date(this.clock()).toISOString());
+          if (!artifactIds.includes(put.artifact.id)) artifactIds.push(put.artifact.id);
+          if (output.notice) notice = [notice, `${output.target}: ${output.notice}`].filter(Boolean).join("\n");
+          if (put.notice) notice = [notice, `${output.target}: ${put.notice}`].filter(Boolean).join("\n");
+        } catch (e) {
+          throw new ToolError("ARTIFACT_INVALID", e instanceof Error ? e.message : String(e));
+        }
+      }
       const artifactEvent = artifactWrite
         ? (() => {
             try {
@@ -822,6 +888,7 @@ export class AgentService {
         action,
         eventId: event.id,
         ...(artifactId ? { artifactId } : {}),
+        ...(outputs !== undefined ? { artifactIds } : {}),
         ...(notice ? { notice } : {}),
         ...(workpadRevision ? { workpadRevision } : {}),
         taskRevision: task.revision,
@@ -833,6 +900,7 @@ export class AgentService {
       board.agentReceipts.push(receipt);
       return { value: { receipt, replayed: false, ideaId, artifactId, reminders: reminders(board) }, changed: true };
     });
+    if (delivering && !result.replayed) this.deliveryGate.clear(`${identity.agentId}:${identity.taskId}:${identity.workspaceId}`);
     const {
       key: _key,
       payloadHash: _hash,

@@ -195,3 +195,7 @@
 - 客户端：分组顺序与折叠、来源标记、表单默认值。
 - i18n 所有新文案进全部 catalog；onboarding：新增 tip `artifacts`（首次打开有产物的卡片抽屉时提示 “Artifacts collect a card's inputs and deliverables. Agents add them as they work; you can add files or links too.”），README 与欢迎页功能列表加一行。
 - typecheck、全量测试；安装并 reload；用 Luna 6（`codex/gpt-6-luna`，`full-access`）测试 session 在 fixture 项目上走通：人工添加 file/url/目录、scope 外拒绝、编辑与冲突、移除、agent 通过 MCP 与 CLI 添加/更新/移除、删人添加的被拒、设置关闭后的错误、预览图片/markdown/大文件、Missing 显示、删卡级联；桌面与紧凑布局按 AGENTS.md 绑定非全屏窗口，无法绑定时标 UNRUN。结束后清理 fixture，证据存 `docs/verification/card-artifacts.md`。
+
+## 2026-10-22 增量：交付时原子登记产物
+
+`flowly_update_status(in_review)` 与 `flowly_report_progress(result)` 的 `outputs?: {target,title?,note?}[]` 在同一事务登记 output；`[]` 表示本次无产物，省略则成功后提醒。复用本规范的路径边界、目标去重和用户条目保护。回执 `artifactIds` 持久化，精确重放不会再校验已消失文件或重新访问 connector。完整契约、开关行为和 CLI 参数见 [DELIVERY-CONSTRAINTS-SPEC](DELIVERY-CONSTRAINTS-SPEC.md) §1。

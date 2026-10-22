@@ -1,0 +1,22 @@
+# Flowly constraint audit, sessions created since 2026-10-21T06:00:00Z
+card sessions: 19 (18 Claude transcripts read; other providers counted on the board only)
+user turns: 93; first turns 18; later turns 75
+first turns that read get_task: 18/18 (100%); wrote the workpad: 17/18 (94%)
+later turns with no Flowly call: 39/75 (52%)
+  claude-sonnet-5-5: later turns no Flowly call 37/48 (77%); later turns that changed files with no Flowly call 17/25 (68%); PR turns with no Flowly call 11/14 (79%); deliveries with acknowledgeOpen up front 8/16 (50%)
+  claude-opus-5-5: later turns no Flowly call 2/27 (7%); later turns that changed files with no Flowly call 1/23 (4%); PR turns with no Flowly call 0/3 (0%); deliveries with acknowledgeOpen up front 11/11 (100%)
+turns that ran gh pr create: 17
+  registered the PR as an output in the same turn: 3/17 (18%)
+  ... when the turn also delivered (in_review): 2/4 (50%)
+  ... when it did not deliver: 1/13 (8%)
+  made no Flowly call at all: 11/17 (65%)
+  came after a compaction: 1/17 (6%)
+compaction: 2 sessions compacted; later turns with no Flowly call before 38/71 (54%) vs after 1/4 (25%)
+deliveries (in_review): 27; with nextMoves 27/27 (100%); acknowledgeOpen up front 19/27 (70%) (with open items 17); WORKPAD_OPEN refusals 1
+reminder "setup: tags": shown 11, the call it names followed in the same turn 11/11 (100%)
+reminder "setup: workpad": shown 24, the call it names followed in the same turn 23/24 (96%)
+reminder "ideas": shown 16, the call it names followed in the same turn 0/16 (0%)
+A1r restores ("No work was reported in that turn"): 36; the turn had changed files or opened a PR: 18 (opened a PR: 10)
+next moves written: 102; about committing or a PR: 43; of those, mention registering the PR on the card: 1
+cards: 19; type set 19/19 (100%); tags 19/19 (100%); workpad 19/19 (100%); agent set a work stage 12/19 (63%); any idea 5/19 (26%); any output artifact 8/19 (42%)
+PRs opened since 2026-10-21T06:00:00Z: 23; registered as an output artifact on some card: 6/23 (26%); missing: #11, #13, #14, #17, #18, #19, #21, #22, #23, #24, #25, #26, #27, #28, #30, #31, #32

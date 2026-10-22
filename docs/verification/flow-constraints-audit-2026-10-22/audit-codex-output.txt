@@ -1,0 +1,54 @@
+## run at 2026-10-22T10:21:43Z
+# Codex card sessions since 2026-10-19T00:00:00Z: 18; turns 38 (first 18, later 20)
+first turns with get_task: 12/18 (67%)
+later turns with no Flowly call: 1/20 (5%)
+later turns that changed files with no Flowly call: 0/9 (0%)
+turns that opened a PR: 2; registered it in the same turn: 2/2 (100%)
+turns that delivered (in_review): 18
+
+# Codex card sessions since 2026-10-21T06:00:00Z: 3; turns 8 (first 3, later 5)
+first turns with get_task: 3/3 (100%)
+later turns with no Flowly call: 0/5 (0%)
+later turns that changed files with no Flowly call: 0/3 (0%)
+turns that opened a PR: 1; registered it in the same turn: 1/1 (100%)
+turns that delivered (in_review): 5
+
+## per-turn rows, --since 2026-10-19 (verification fixture sessions included)
+10-21T05:23 b8070701 gpt-6-luna edits 2 pr 0 | get_task,set_type,get_task,set_tags,get_task,update_workpad,get_task,update_status:design,get_task,update_workpad,get_task,update_status:development,get_task,update_status:test,get_task,update_workpad,get_task,report_progress | Please fix expired-link requests so they return a proper HTTP error instead of c
+10-21T00:37 079c4a6e gpt-6-luna edits 0 pr 0 | - | Describe the attached image in one sentence. Do not change files.<image name=[Im
+10-21T00:35 09ed0e34 gpt-6-luna edits 0 pr 0 | - | Describe the attached image in one sentence. Do not change files.<image name=[Im
+10-21T00:25 1c1b7ef2 gpt-6-luna edits 0 pr 0 | - | Describe the attached image in one sentence. Do not change files.<image name=[Im
+10-20T08:56 00560906 gpt-6-luna edits 0 pr 0 | - | This is a temporary verification card; do NOT edit, create or delete any file in
+10-20T08:58 1ac54164 gpt-6-luna edits 0 pr 0 | get_task,update_status:test,update_status:in_review,update_status:in_review | This is a temporary verification card; do NOT edit, create or delete any file in
+10-21T16:59 1b78f53e gpt-6-luna edits 0 pr 0 | get_task,get_task,set_type,get_task,set_tags,get_task,update_workpad,get_task,remember,get_task,get_task,remember,get_task,remember,get_task,remember | Acceptance test only. Do not edit files, do not write workpads except if require
+10-21T17:01 33790375 gpt-6-luna edits 0 pr 0 | get_task,recall | Acceptance test only. Do not edit files, change card fields, create workpads, or
+10-20T03:04 43f91c69 gpt-6-luna edits 0 pr 0 | - | This is a verification run of a Flowly feature. The Flowly MCP tools are NOT con
+10-20T03:09 43f91c69 gpt-6-luna edits 0 pr 0 | - | Second part of the verification run. Flowly MCP tools are still not connected; u
+10-20T09:03 5a7adaad gpt-6-luna edits 0 pr 0 | get_task,update_status:test,update_status:in_review | This is a temporary verification card; do NOT edit, create or delete any file in
+10-20T09:01 5d8f03e3 gpt-6-luna edits 0 pr 0 | - | This is a temporary verification card; do NOT edit, create or delete any file in
+10-20T10:37 660f3541 gpt-6-luna edits 0 pr 0 | get_task,read_external,get_task,read_external,get_task,read_external,get_task | Read every external input attached to this card. Call flowly_get_task, then call
+10-20T08:59 66dc5721 gpt-6-luna edits 0 pr 0 | get_task,update_status:test,update_status:in_review,suggest_next_moves,get_task,update_status:in_review | This is a temporary verification card; do NOT edit, create or delete any file in
+10-20T03:03 991f26a9 gpt-6-luna edits 0 pr 0 | get_task,update_status:test,get_task,update_status:in_review | This is a verification run of a Flowly feature. Do NOT edit, create or delete an
+10-20T03:08 991f26a9 gpt-6-luna edits 0 pr 0 | get_task,report_progress | Second part of the verification run. Do NOT edit, create or delete any file. Use
+10-20T16:24 0bfafa83 gpt-6.1-sol edits 7 pr 1 | get_task,update_status:design,get_task,set_type,get_task,set_tags,get_task,update_workpad,get_task,update_status:development,get_task,update_status:test,get_task,update_status:development,get_task,update_status:test,get_task,report_progress,get_task,update_status:development,get_task,update_status:test,get_task,get_task,add_artifact:pr,get_task,report_progress | 在 github 对这个项目搭建完整的 CI/CD
+10-20T16:43 0bfafa83 gpt-6.1-sol edits 0 pr 0 | get_task,report_progress,get_task,add_artifact,get_task,get_task,add_artifact,get_task,update_workpad,get_task,update_status:in_review | Answers to your questions: 请在已打开的 npm「Two-Factor Authentication」页面完成安全密钥验证，以便我为
+10-21T02:59 0bfafa83 gpt-6.1-sol edits 0 pr 0 | get_task,update_status:test,get_task,update_status:in_review | 确认下当前分支的工作是不是都已经push到main了
+10-21T03:00 0bfafa83 gpt-6.1-sol edits 0 pr 0 | get_task,update_status:test,get_task,update_status:in_review | 只看当前卡片的
+10-21T03:04 0bfafa83 gpt-6.1-sol edits 0 pr 0 | get_task,update_status:design,get_task,update_status:in_review | 还有哪些不属于活跃卡片的变更？
+10-20T16:25 6f6d30ff gpt-6.1-sol edits 0 pr 0 | get_task,get_task,add_artifact,get_task,report_progress | 检查当前工作区有哪些变更，是否均归属于活跃的卡片。是否存在孤儿变更
+10-20T16:30 6f6d30ff gpt-6.1-sol edits 0 pr 0 | get_task,report_progress,get_task,report_progress,get_task,report_progress | 按审计报告，将三张 Done 卡片遗留的 15 项变更逐项核对并分别提交，不要混入活跃卡片或其他会话的修改。
+10-22T02:27 aced5490 gpt-6-luna edits 5 pr 0 | get_task,get_task,set_type,get_task,set_tags,get_task,update_workpad,get_task,update_status:design,get_task,update_status:development,get_task,update_workpad,get_task,update_status:test,get_task,update_workpad,get_task,report_progress,get_task,get_task,update_workpad,get_task,add_artifact,get_task,update_status:in_review,get_task | 插件通知标识使用paseo主题色背景
+10-22T02:55 aced5490 gpt-6-luna edits 4 pr 0 | get_task,get_task,update_status:design,get_task,update_workpad,get_task,update_status:development,get_task,update_workpad,get_task,update_status:test,get_task,report_progress,get_task,get_task,update_workpad,get_task,add_artifact,get_task,update_status:in_review,get_task | header上的attention数字标记也使用主题色
+10-22T03:01 aced5490 gpt-6-luna edits 0 pr 0 | get_task,get_task,update_status:test | 请在非全屏的 Paseo 窗口中检查侧栏和 header 的 Attention 数字标记，并切换主题确认两者都跟随主题色。
+10-22T03:04 aced5490 gpt-6-luna edits 0 pr 0 | get_task,update_status:in_review | Answers to your questions: CUA 只列出 Paseo 应用，未返回窗口 ID、标题或边界尺寸，无法区分非全屏窗口。请提供该窗口的 
+10-22T03:06 aced5490 gpt-6-luna edits 1 pr 0 | get_task,get_task,update_workpad,get_task,update_status:test,get_task,update_workpad,get_task,add_artifact,get_task,update_status:in_review,get_task | 仍然是褐色的，不是主题色绿色<image name=[Image #1] path="/var/folders/0b/f1crzdg95g5fwbq49s_3p
+10-22T03:18 aced5490 gpt-6-luna edits 2 pr 1 | get_task,get_task,update_workpad,get_task,update_workpad,get_task,update_status:test,get_task,update_workpad,get_task,add_artifact:pr,get_task,update_workpad,get_task,update_status:in_review | 正常了，创建PR并合入
+10-20T04:42 f822eb23 gpt-6.1-sol edits 1 pr 0 | get_task,update_status:design,get_task,get_task,get_task,update_workpad,get_task,add_artifact,get_task,update_status:in_review | 之前在Discord上介绍了这个插件的基本信息和当时的特色功能。我想在follow up一个新的宣传。用于介绍插件的AI功能，以及他们如何和为什么能帮助构建一个
+10-20T04:44 f822eb23 gpt-6.1-sol edits 1 pr 0 | get_task,update_status:design,get_task,update_workpad,get_task,update_status:in_review | 顺便介绍下相比上次介绍新增的功能
+10-20T04:51 f822eb23 gpt-6.1-sol edits 1 pr 0 | get_task,update_status:design,get_task,update_status:design,get_task,update_status:in_review | 给我一个完整的
+10-20T05:13 f822eb23 gpt-6.1-sol edits 1 pr 0 | get_task,update_status:design,get_task,update_status:design | Since my last post, I’ve also added **Jira inputs and task artifacts**, **Workpa
+10-20T05:19 f822eb23 gpt-6.1-sol edits 0 pr 0 | get_task,update_status:design,get_task,update_status:design | 给我完整的！
+10-20T05:19 f822eb23 gpt-6.1-sol edits 1 pr 0 | get_task,update_status:design,get_task,update_status:design | 还有性能提升也写进去
+10-20T05:20 f822eb23 gpt-6.1-sol edits 1 pr 0 | get_task,update_status:design,get_task,update_workpad,get_task,update_status:test,get_task,update_workpad,get_task,update_workpad,get_task,add_artifact,get_task,update_status:in_review | 再给我准备下几个截图：summary、next move、ideas、workpad
+10-20T05:27 f822eb23 gpt-6.1-sol edits 0 pr 0 | get_task,update_status:design,get_task,update_status:test,get_task,update_workpad,get_task,add_artifact,get_task,update_status:test | 我要在任务卡片上的ideas卡片截图
+10-20T05:28 f822eb23 gpt-6.1-sol edits 3 pr 0 | get_task,update_status:design,get_task,update_workpad,get_task,get_task,update_status:test,get_task,update_workpad,get_task,remove_artifact,get_task,add_artifact,get_task,update_status:in_review | 用测试项目改排拍workpad的截图

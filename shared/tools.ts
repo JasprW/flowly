@@ -87,6 +87,15 @@ const base = {
   request: requestSchema,
   note: z.string().trim().min(1).max(10000),
 };
+/** Deliverables recorded atomically with a delivery (DELIVERY-CONSTRAINTS-SPEC §1). */
+export const outputArtifactSchema = z.strictObject({
+  target: z.string().trim().min(1).max(artifactLimits.target).describe("A PR/MR or other http(s) link, or an existing file/directory inside this card's directories."),
+  title: z.string().trim().max(artifactLimits.title).optional(),
+  note: z.string().trim().max(artifactLimits.note).optional(),
+});
+const deliveryOutputs = z.array(outputArtifactSchema).max(20).optional().describe(
+  "Deliverables from this call, recorded as output artifacts in the same transaction. Include PR/MR links, reports and evidence; pass [] when there are none. Omitting this field records nothing and returns a reminder. Only for status=in_review or kind=result.",
+);
 export const statusInputSchema = z.strictObject({
   ...base,
   status: z
@@ -98,14 +107,16 @@ export const statusInputSchema = z.strictObject({
     .boolean()
     .optional()
     .describe(
-      "Deliver to in_review although workpad items are still open or the card setup is missing (WORKPAD_OPEN, SETUP_INCOMPLETE). Only with a note that explains every open item and why each setup item is missing.",
+      "Only after this session has received WORKPAD_OPEN or SETUP_INCOMPLETE for the current card/workpad/HEAD: review the list, finish what you can, then retry with true and a note explaining every remaining item. Pre-setting true on the first attempt never bypasses the gate.",
     ),
   nextMoves: deliveryMoves,
+  outputs: deliveryOutputs,
 });
 export const progressInputSchema = z.strictObject({
   ...base,
   kind: z.enum(["progress", "blocker", "result", "question"]).default("progress"),
   nextMoves: deliveryMoves,
+  outputs: deliveryOutputs,
 });
 /** flowly_propose_idea (IDEAS-SPEC §3): a follow-up outside this card's scope. */
 export const ideaInputSchema = z.strictObject({
@@ -316,6 +327,8 @@ export const identitySchema = z.strictObject({
 export type ToolIdentity = z.infer<typeof identitySchema>;
 export const toolContextSchema = z.object({
   identity: identitySchema,
+  /** Latest action checklist, including for sessions created with an older skill. Optional for older servers. */
+  turnChecklist: z.array(z.string()).max(8).optional(),
   /** What the card still needs before work starts (CARD-SETUP-SPEC §3.1); fix `missing` first. */
   setup: z
     .object({

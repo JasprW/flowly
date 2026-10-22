@@ -1,5 +1,16 @@
 # Implementation progress
 
+## Turn checklist and audit calibration — 2026-10-22
+
+Spec first: [TURN-CHECKLIST-SPEC](TURN-CHECKLIST-SPEC.md). User authorized the minimal combined recommendations 1+3 after calibrating the audit; no hooks.
+
+- [x] Shared six-action checklist in `shared/turn-checklist.ts`, rendered at the start of the generated skill and returned by live `get_task` / CLI current; additive optional schema for old-server compatibility, no new write gate.
+- [x] Both audit entrypoints share turn-time filtering, full-URL matching against successful receipt artifact IDs, failure/unknown evidence and explicit real/test/unclassified + old/new groups. Codex source is inspected with TypeScript AST, never executed.
+- [x] Focused checklist checks: 3 files / 57 tests; audit fixtures finally 25 tests. Luna found 4 boundaries, fixed and rechecked; user-designated Fable `058cab0b` found 5 issues plus dynamic-command R1, all fixed and independently rechecked PASS.
+- [x] Typecheck, full suite (110 files / 933 tests after Fable fixes), reload and live old-session CLI read (six rules exactly match source, runtime skill matches generated file, board hash unchanged). Final R1 only changed offline audit, checked with 25 Node regressions. [Report](verification/turn-checklist-2026-10-22.md).
+- [x] Onboarding not changed: no new UI, setting or user action; these are agent instruction/API and offline audit changes.
+
+
 ## Welcome tour redesign: explain and set the basics (card "重设计onboarding流程") — 2026-10-22
 
 Spec: [ONBOARDING-SETUP-SPEC](ONBOARDING-SETUP-SPEC.md) (design confirmed by the user before implementation). The tour now also sets the interface and AI output language, the progress model, outside-session progress / next steps / ideas, and Project memory / Insights.
@@ -789,3 +800,12 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - Follow-up (same day, user feedback): the exit looked like a stall before sliding away because `useExitList` dropped the row for one commit and re-added it as leaving (list jumped, card remounted). The leaving rows are now added in the same render and every row keeps one wrapper (`RowOut`), so nothing remounts. The user preferred Memory's fade-and-collapse, so Ideas (page and drawer) and Memory share it: no desktop swipe-out, no slide-in on restore. Dismissing a memory candidate also leaves at once, before the save returns.
 - Scan (same day): Links and Artifacts lists already shared `IdeaRow`, so they follow the new exit automatically. The Needs attention sheet (dismiss / restore a card) had no motion; its rows now use the same fade-and-collapse (`AttentionRows` in `client/board.tsx`). The Dismissed chevron in that sheet now turns like the other disclosures (`Chevron`), and the drawer's Closed ideas rows collapse out on Restore (and rise in when an idea is closed).
 - Second scan (same day): disclosures that still opened and closed instantly now use `Collapse` and a turning chevron (`TurnChevron` in `client/ui.tsx`): the Progress card's earlier versions, the workpad check "Show output", the idea detail in the native chip popover, the agent activity block in the session transcript, and the chevron in `SectionHeader`. Not changed on purpose: the subagents chip (its tray already has its own presence) and the Show more / Show less toggle on content cards (its height already animates).
+
+## 2026-10-22 Delivery constraints (card “流程约束不足”)
+
+- Implemented [DELIVERY-CONSTRAINTS-SPEC](DELIVERY-CONSTRAINTS-SPEC.md): `outputs` on In review/result atomically registers artifacts with the delivery, moves and receipt; omitted outputs remind, `[]` explicitly declares none. Persisted receipt IDs survive exact replay without revalidating missing files or private metadata. MCP, CLI and both skill copies agree.
+- `acknowledgeOpen` now requires a prior refusal for the same session/card/workpad/HEAD. The first pre-acknowledged attempt still refuses; new turns clear the bounded ephemeral record through the lifecycle hook, independently of truncated board history.
+- A real Sonnet run exposed private GitHub metadata lookup blocking an otherwise valid output URL. Fixed: ExternalError on an explicit valid http(s) output saves a plain URL with a notice; bare keys and programmer errors still refuse. No connection credentials or settings changed.
+- PASS: focused checks (3 files / 59 tests), `npm run typecheck`, `npm test` (109 files / 932 tests), plugin reload. Verification directories are excluded from product TS/Vitest discovery so third-party research fixtures are preserved without entering product checks.
+- Live PASS after the fix: fresh Sonnet and GPT sessions received only “创建 PR 并合入”, merged PR #3/#4, atomically registered the PR via outputs and delivered again. First-round private-metadata failures are retained. Evidence: [verification/delivery-constraints-2026-10-22.md](verification/delivery-constraints-2026-10-22.md). Four cards/worktrees and five test sessions are cleaned; remote fixture branches removed. UNRUN: deleting four local Tinylink test refs requires filesystem access outside the task root; sandbox refused and escalation did not complete. The user asked to retain the private GitHub repository and PR history for reuse.
+- Onboarding: no new UI, setting or entry point; existing Inputs and outputs and Workpad guidance covers the behavior. No tour, tip or What's new change.

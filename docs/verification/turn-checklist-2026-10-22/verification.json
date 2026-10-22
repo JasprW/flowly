@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-22T13:12:11.196571+00:00",
+  "sha": "7f98f021867e",
+  "dirty": true,
+  "auditTests": 25,
+  "focusedTests": 57,
+  "fullTestFiles": 110,
+  "fullTests": 933,
+  "typecheck": "pass",
+  "liveOldSessionRead": "pass",
+  "lunaRecheck": "pass",
+  "sourceHashes": {
+    "shared/turn-checklist.ts": "982231e5460fe139f883e22a059a6beb88ec45bf0de2e8144cbcced6018696a4",
+    "server/skill-source.ts": "bca39875cd2d476a883befb826aab7902f860fe27cc638272441743339b1b6a9",
+    "server/agent-service.ts": "ebf35207e44a3f8c5a8f4bbe6bb941aef993493eb880696d4875964572081d79",
+    "shared/tools.ts": "1a1109fc10b99773c18d9711d2dd7d027b58bee788b6d8255fb5fac5001321dd",
+    "docs/verification/flow-constraints-audit-2026-10-22/audit-core.mjs": "de2af97964273612b06a8bc6d43e2dcde09b411897d3cb98b95baac7a36b8340",
+    "docs/verification/flow-constraints-audit-2026-10-22/audit.test.mjs": "70f76ec85e8043f1ec70dcbec156693f6571ada2242a6df157d61436dfcb60b9"
+  },
+  "baselineSha": "05de1691ff16",
+  "headEvidence": "git reflog: main updated 2026-10-22T20:23:41+08:00, before focused/type/full tests; no later HEAD move",
+  "fableReview": "pass",
+  "fableSession": "058cab0b-0961-4b40-962c-258555c435f9",
+  "finalFullSuite": "pass:110 files/933 tests after Fable F1-F5; final R1 changed only offline audit"
+}

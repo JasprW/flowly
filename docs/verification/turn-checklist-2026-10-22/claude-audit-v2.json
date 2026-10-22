@@ -1,0 +1,140 @@
+{
+  "method": "v2: turn-time window; shell commands and Codex call expressions are source observations, not execution proof; registration requires a receipt and matching output artifact",
+  "provider": "claude",
+  "project": "154c66d4-9d96-4ff1-b810-205a5d016330",
+  "since": "2026-10-22T11:52:00.000Z",
+  "until": "2026-10-22T12:23:00.000Z",
+  "sessionsRead": 34,
+  "sessionsInWindow": 1,
+  "summary": {
+    "turns": 2,
+    "first": 0,
+    "later": 2,
+    "laterObservable": 2,
+    "laterNoFlowly": 0,
+    "laterUnknownFlowly": 0,
+    "laterUnknownShell": 0,
+    "editedLater": 2,
+    "editedLaterNoFlowly": 0,
+    "prAttemptTurns": 1,
+    "confirmedPrTurns": 1,
+    "allPrsRegistered": 0,
+    "unknownPrTurns": 0,
+    "missingPrTurns": 1,
+    "deliveries": 1,
+    "acknowledgements": {
+      "upfront": 2,
+      "after-refusal": 2
+    }
+  },
+  "groups": [
+    {
+      "model": "claude-opus-5-5",
+      "sample": "unclassified",
+      "age": "old",
+      "turns": 2,
+      "first": 0,
+      "later": 2,
+      "laterObservable": 2,
+      "laterNoFlowly": 0,
+      "laterUnknownFlowly": 0,
+      "laterUnknownShell": 0,
+      "editedLater": 2,
+      "editedLaterNoFlowly": 0,
+      "prAttemptTurns": 1,
+      "confirmedPrTurns": 1,
+      "allPrsRegistered": 0,
+      "unknownPrTurns": 0,
+      "missingPrTurns": 1,
+      "deliveries": 1,
+      "acknowledgements": {
+        "upfront": 2,
+        "after-refusal": 2
+      }
+    }
+  ],
+  "diagnostics": [],
+  "turns": [
+    {
+      "session": "d633c8ab-b593-4594-bd54-cf25a591a27d",
+      "taskId": "39c50853-852f-4e78-b890-719125c9f21b",
+      "model": "claude-opus-5-5",
+      "provider": "claude",
+      "at": "2026-10-22T12:04:27.229Z",
+      "first": false,
+      "age": "old",
+      "sample": "unclassified",
+      "flowly": [
+        "get_task",
+        "update_status",
+        "update_status"
+      ],
+      "edits": 1,
+      "unknownShellCalls": 0,
+      "prAttempts": 0,
+      "openedPrUrls": [],
+      "registeredPrUrls": [],
+      "unknownArtifactIds": [],
+      "errors": [
+        "WORKPAD_OPEN"
+      ],
+      "acknowledgements": [
+        {
+          "kind": "upfront"
+        },
+        {
+          "kind": "after-refusal"
+        }
+      ],
+      "receipts": [
+        {
+          "eventId": "9cef793c-2ddf-410a-9bf3-68420ded5bc3",
+          "action": "status",
+          "status": "in_review",
+          "at": "2026-10-22T12:06:18.956Z"
+        }
+      ],
+      "prRegistration": "not-applicable",
+      "missingPrUrls": []
+    },
+    {
+      "session": "d633c8ab-b593-4594-bd54-cf25a591a27d",
+      "taskId": "39c50853-852f-4e78-b890-719125c9f21b",
+      "model": "claude-opus-5-5",
+      "provider": "claude",
+      "at": "2026-10-22T12:08:26.967Z",
+      "first": false,
+      "age": "old",
+      "sample": "unclassified",
+      "flowly": [
+        "get_task",
+        "update_status",
+        "update_status"
+      ],
+      "edits": 5,
+      "unknownShellCalls": 0,
+      "prAttempts": 1,
+      "openedPrUrls": [
+        "https://github.com/JasprW/flowly/pull/34"
+      ],
+      "registeredPrUrls": [],
+      "unknownArtifactIds": [],
+      "errors": [
+        "WORKPAD_OPEN"
+      ],
+      "acknowledgements": [
+        {
+          "kind": "upfront"
+        },
+        {
+          "kind": "after-refusal"
+        }
+      ],
+      "receipts": [],
+      "prRegistration": "missing",
+      "missingPrUrls": [
+        "https://github.com/JasprW/flowly/pull/34"
+      ]
+    }
+  ]
+}

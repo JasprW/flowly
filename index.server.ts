@@ -523,6 +523,7 @@ export default function contribute(server: PluginServerContext) {
       return;
     }
     // The previous turn's Next moves card goes (in place) as this turn starts; never blocks the hook.
+    tools.agents.turnStarted(identity);
     void nextRows.turnStarted(identity.agentId, paseo);
     const auto = await autoStatusOn();
     await store.mutate((board) => {
