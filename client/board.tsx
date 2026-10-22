@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Animated, Platform, Pressable, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
-import { Modal } from "./modal";
+import { Modal, useAfterModalClose } from "./modal";
 import {
   usePaseo,
   useRpc,
@@ -659,16 +659,11 @@ function BoardContent(
   useEffect(() => {
     if (dropdownOpen.current) setMenu(null);
   }, [surfaceWidth]);
-  // On phones the Needs attention sheet is a Modal: opening the card (and its session) in the same frame
-  // the Modal closes freezes Paseo, so let the Modal finish closing first (the host Modal has no closed callback).
-  const attentionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (attentionTimer.current) clearTimeout(attentionTimer.current);
-  }, []);
+  // Phones: the Needs attention sheet is a Modal; the card and session open once it has closed.
+  const afterModalClose = useAfterModalClose();
   const openAttention = (item: AttentionItem) => {
     setMenu(null);
     const go = () => {
-      attentionTimer.current = null;
       setProject(item.project.id);
       setTask(item.task.id);
       setMobileStatus(item.task.status);
@@ -679,8 +674,7 @@ function BoardContent(
           requestId: `attention-${Date.now()}`,
         });
     };
-    if (attentionTimer.current) clearTimeout(attentionTimer.current);
-    if (compact) attentionTimer.current = setTimeout(go, 450);
+    if (compact) afterModalClose(go);
     else go();
   };
   // The project's tag vocabulary, plus prefix options for hierarchical tags (CARD-TAGS-SPEC §6.4).
@@ -1829,7 +1823,7 @@ function BoardContent(
                     icon="Pencil"
                     onPress={() => {
                       projectMenuClose();
-                      setProjectForm("edit");
+                      afterModalClose(() => setProjectForm("edit"));
                     }}
                   />
                   {project.archivedAt && (
@@ -1851,7 +1845,7 @@ function BoardContent(
                     disabled={pending}
                     onPress={() => {
                       projectMenuClose();
-                      setRemoving(project);
+                      afterModalClose(() => setRemoving(project));
                     }}
                   />
                 </>
@@ -1861,7 +1855,7 @@ function BoardContent(
                 icon="Plus"
                 onPress={() => {
                   projectMenuClose();
-                  setProjectForm("new");
+                  afterModalClose(() => setProjectForm("new"));
                 }}
               />
             </Theme.Provider>

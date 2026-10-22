@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { Animated, Pressable, View, type GestureResponderEvent } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { Modal } from "./modal";
+import { Modal, useAfterModalClose } from "./modal";
 import { Label, Row, Theme, font, noFocusRing, radius, space, touch, useTheme } from "./ui";
 import { useMotionPresence, lerp } from "./motion";
 import { t } from "../shared/i18n";
@@ -72,9 +72,13 @@ export function ContextMenuProvider({ compact, children }: { compact: boolean; c
     setMenu({ at, title, entries, key: ++seq.current });
   }, []);
   const close = () => setMenu(null);
+  const afterClose = useAfterModalClose();
   const run = (entry: MenuEntry) => {
     close();
-    if (entry.kind !== "separator" && entry.kind !== "label") entry.onPress();
+    if (entry.kind === "separator" || entry.kind === "label") return;
+    // Phones show the menu in a Modal; what the entry opens (a dialog, a card) waits for it to close.
+    if (compactRef.current) afterClose(entry.onPress);
+    else entry.onPress();
   };
   const shown = presence.item;
   const width = 232;
