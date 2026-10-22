@@ -1,0 +1,31 @@
+{
+  "startedAt": "2026-10-22T07:23:23.370Z",
+  "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+  "title": "[e2e] retro cleanup 1792653803481",
+  "card": {
+    "id": "d4b74427-60e0-4ff9-a33d-4fa5656eb2c8",
+    "workspaceId": "wks_17f70022ec81f8dd"
+  },
+  "cardSession": "10ce707d-edde-4eb7-ae1d-a1d0d5388317",
+  "cardSessionFinish": "idle",
+  "beforeCount": 1459,
+  "movedToDoneAt": "2026-10-22T07:23:53.073Z",
+  "doneStatus": "done",
+  "children": {
+    "a85a3642-11a7-4263-8ec3-92b8b3f94e7b": {
+      "name": "Kanban summary · [e2e] retro cleanup 1792653803481",
+      "status": "running",
+      "archived": false,
+      "lastSeen": "2026-10-22T07:24:01.448Z"
+    },
+    "3217b6d5-5401-4e61-ac95-69b12837684f": {
+      "name": "Flowly memory review · [e2e] retro cleanup 1792653803481",
+      "status": "running",
+      "archived": false,
+      "lastSeen": "2026-10-22T07:24:27.741Z"
+    }
+  },
+  "stillListed": [],
+  "reviewObservedAndGone": true,
+  "finishedAt": "2026-10-22T07:24:31.487Z"
+}
