@@ -28,18 +28,18 @@ export type BoardIntent = Extract<
 >;
 
 export const shortcutHelp: readonly { keys: string[]; title: string }[] = [
-  { keys: ["N"], title: "New task" },
-  { keys: ["P"], title: "Switch project" },
-  { keys: ["/", "F"], title: "Search and filter" },
-  { keys: ["A"], title: "Needs attention" },
-  { keys: ["I"], title: "Project insights" },
-  { keys: ["B"], title: "Project ideas" },
-  { keys: ["J", "K"], title: "Next / previous card in column" },
-  { keys: ["H", "L"], title: "Card in left / right column" },
-  { keys: ["⇧H", "⇧L"], title: "Move the open card to the left / right column" },
-  { keys: ["E"], title: "Edit the open card" },
-  { keys: ["Esc"], title: "Back from session, then close sidebar, then leave Insights or Ideas" },
-  { keys: ["?"], title: "Show keyboard shortcuts" },
+  { keys: ["N"], title: msg("New task") },
+  { keys: ["P"], title: msg("Switch project") },
+  { keys: ["/", "F"], title: msg("Search and filter") },
+  { keys: ["A"], title: msg("Needs attention") },
+  { keys: ["I"], title: msg("Project insights") },
+  { keys: ["B"], title: msg("Project ideas") },
+  { keys: ["J", "K"], title: msg("Next / previous card in column") },
+  { keys: ["H", "L"], title: msg("Card in left / right column") },
+  { keys: ["⇧H", "⇧L"], title: msg("Move the open card to the left / right column") },
+  { keys: ["E"], title: msg("Edit the open card") },
+  { keys: ["Esc"], title: msg("Back from session, then close sidebar, then leave Insights or Ideas") },
+  { keys: ["?"], title: msg("Show keyboard shortcuts") },
 ];
 
 const letters: Record<string, ShortcutAction> = {

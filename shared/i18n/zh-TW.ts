@@ -1223,5 +1223,14 @@ const catalog: Catalog = {
   "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "AI 所寫文字的語言：卡片摘要、每日摘要、工作流程洞察、工作階段洞察，以及 agent 建議的下一步和想法。你自己的標題和備註不會被翻譯。",
   "AI output language": "AI 輸出語言",
   "Applies from the next run; text already written stays as it is.": "從下一次執行起生效；已寫好的文字保持原樣。",
+  "Switch project": "切換專案",
+  "Search and filter": "搜尋和篩選",
+  "Project ideas": "專案想法",
+  "Next / previous card in column": "欄內下一張 / 上一張卡片",
+  "Card in left / right column": "左 / 右欄的卡片",
+  "Move the open card to the left / right column": "將開啟的卡片移到左 / 右欄",
+  "Edit the open card": "編輯開啟的卡片",
+  "Back from session, then close sidebar, then leave Insights or Ideas": "從工作階段返回，然後關閉側邊欄，再離開洞察或想法",
+  "Show keyboard shortcuts": "顯示鍵盤快速鍵",
 };
 export default catalog;

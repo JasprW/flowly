@@ -1223,5 +1223,14 @@ const catalog: Catalog = {
   "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "Язык текста, который пишет ИИ: сводки карточек, ежедневный дайджест, аналитика рабочих процессов, аналитика сессий, а также следующие шаги и идеи, которые предлагают агенты. Ваши собственные заголовки и заметки не переводятся.",
   "AI output language": "Язык вывода ИИ",
   "Applies from the next run; text already written stays as it is.": "Действует со следующего запуска; уже написанный текст остаётся как есть.",
+  "Switch project": "Сменить проект",
+  "Search and filter": "Поиск и фильтр",
+  "Project ideas": "Идеи проекта",
+  "Next / previous card in column": "Следующая / предыдущая карточка в колонке",
+  "Card in left / right column": "Карточка в левой / правой колонке",
+  "Move the open card to the left / right column": "Переместить открытую карточку в левую / правую колонку",
+  "Edit the open card": "Редактировать открытую карточку",
+  "Back from session, then close sidebar, then leave Insights or Ideas": "Выйти из сессии, затем закрыть боковую панель, затем выйти из Аналитики или Идей",
+  "Show keyboard shortcuts": "Показать горячие клавиши",
 };
 export default catalog;

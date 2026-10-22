@@ -1223,5 +1223,14 @@ const catalog: Catalog = {
   "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "AI が書くテキストの言語：カードの要約、日次ダイジェスト、ワークフローインサイト、セッションインサイト、エージェントが提案する次のステップとアイデア。あなた自身のタイトルやメモは翻訳されません。",
   "AI output language": "AI の出力言語",
   "Applies from the next run; text already written stays as it is.": "次回の実行から反映されます。すでに書かれたテキストはそのままです。",
+  "Switch project": "プロジェクトを切り替え",
+  "Search and filter": "検索とフィルター",
+  "Project ideas": "プロジェクトのアイデア",
+  "Next / previous card in column": "列内の次 / 前のカード",
+  "Card in left / right column": "左 / 右の列のカード",
+  "Move the open card to the left / right column": "開いているカードを左 / 右の列に移動",
+  "Edit the open card": "開いているカードを編集",
+  "Back from session, then close sidebar, then leave Insights or Ideas": "セッションから戻り、サイドバーを閉じ、インサイトまたはアイデアを閉じる",
+  "Show keyboard shortcuts": "キーボードショートカットを表示",
 };
 export default catalog;

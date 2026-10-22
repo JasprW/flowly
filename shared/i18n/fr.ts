@@ -1223,5 +1223,14 @@ const catalog: Catalog = {
   "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "La langue du texte que l'IA écrit : résumés de cartes, résumé quotidien, analyses de workflow, analyses de session, et les prochaines étapes et idées que suggèrent les agents. Vos propres titres et notes ne sont jamais traduits.",
   "AI output language": "Langue de sortie de l'IA",
   "Applies from the next run; text already written stays as it is.": "S'applique dès la prochaine exécution ; le texte déjà écrit reste tel quel.",
+  "Switch project": "Changer de projet",
+  "Search and filter": "Rechercher et filtrer",
+  "Project ideas": "Idées du projet",
+  "Next / previous card in column": "Carte suivante / précédente de la colonne",
+  "Card in left / right column": "Carte de la colonne de gauche / droite",
+  "Move the open card to the left / right column": "Déplacer la carte ouverte vers la colonne de gauche / droite",
+  "Edit the open card": "Modifier la carte ouverte",
+  "Back from session, then close sidebar, then leave Insights or Ideas": "Quitter la session, puis fermer la barre latérale, puis quitter Insights ou Idées",
+  "Show keyboard shortcuts": "Afficher les raccourcis clavier",
 };
 export default catalog;

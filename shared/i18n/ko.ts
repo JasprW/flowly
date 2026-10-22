@@ -1223,5 +1223,14 @@ const catalog: Catalog = {
   "The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.": "AI가 쓰는 글의 언어: 카드 요약, 일일 다이제스트, 워크플로 인사이트, 세션 인사이트, 에이전트가 제안하는 다음 단계와 아이디어. 직접 쓴 제목과 메모는 번역되지 않습니다.",
   "AI output language": "AI 출력 언어",
   "Applies from the next run; text already written stays as it is.": "다음 실행부터 적용됩니다. 이미 작성된 글은 그대로 유지됩니다.",
+  "Switch project": "프로젝트 전환",
+  "Search and filter": "검색 및 필터",
+  "Project ideas": "프로젝트 아이디어",
+  "Next / previous card in column": "열의 다음 / 이전 카드",
+  "Card in left / right column": "왼쪽 / 오른쪽 열의 카드",
+  "Move the open card to the left / right column": "열린 카드를 왼쪽 / 오른쪽 열로 이동",
+  "Edit the open card": "열린 카드 편집",
+  "Back from session, then close sidebar, then leave Insights or Ideas": "세션에서 나가고, 사이드바를 닫고, 인사이트 또는 아이디어에서 나가기",
+  "Show keyboard shortcuts": "키보드 단축키 표시",
 };
 export default catalog;
