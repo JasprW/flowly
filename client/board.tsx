@@ -659,17 +659,29 @@ function BoardContent(
   useEffect(() => {
     if (dropdownOpen.current) setMenu(null);
   }, [surfaceWidth]);
+  // On phones the Needs attention sheet is a Modal: opening the card (and its session) in the same frame
+  // the Modal closes freezes Paseo, so let the Modal finish closing first (the host Modal has no closed callback).
+  const attentionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (attentionTimer.current) clearTimeout(attentionTimer.current);
+  }, []);
   const openAttention = (item: AttentionItem) => {
     setMenu(null);
-    setProject(item.project.id);
-    setTask(item.task.id);
-    setMobileStatus(item.task.status);
-    if (item.sessionId)
-      setSessionEntry({
-        taskId: item.task.id,
-        sessionId: item.sessionId,
-        requestId: `attention-${Date.now()}`,
-      });
+    const go = () => {
+      attentionTimer.current = null;
+      setProject(item.project.id);
+      setTask(item.task.id);
+      setMobileStatus(item.task.status);
+      if (item.sessionId)
+        setSessionEntry({
+          taskId: item.task.id,
+          sessionId: item.sessionId,
+          requestId: `attention-${Date.now()}`,
+        });
+    };
+    if (attentionTimer.current) clearTimeout(attentionTimer.current);
+    if (compact) attentionTimer.current = setTimeout(go, 450);
+    else go();
   };
   // The project's tag vocabulary, plus prefix options for hierarchical tags (CARD-TAGS-SPEC §6.4).
   const projectTags = useMemo(
