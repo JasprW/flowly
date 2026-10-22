@@ -26,8 +26,8 @@ The baseline/list-count delta was exactly one session, the fixture worker. Archi
 
 - First summary stored at `2026-10-22T02:02:37.449Z`; RPC reported enabled, no running summaries/errors, and the expected Haiku model.
 - Second summary stored at `2026-10-22T02:04:27.358Z`; RPC again reported no running summaries/errors and the expected Haiku model.
-- Poll JSONL: [summarizer-hard-delete-poll.jsonl](summarizer-hard-delete-poll.jsonl). Across 34 `paseo ls -a --json` samples (about 1–2 seconds apart), only the worker appeared. Its rows did not expose labels, attention, unread, `requiresAttention`, or `needsAttention`. `paseo inspect` likewise did not expose those fields.
-- Child appearance/disappearance: **not directly observed**. Both summaries completed between polling samples; the summarized output and the absence of any extra session/archive entry are observed, but the transient child lifecycle is not.
+- Poll JSONL: [summarizer-hard-delete-poll.jsonl](summarizer-hard-delete-poll.jsonl). Polling started at 02:04:16Z, after the first summary was already stored (02:02:37Z), so the 34 `paseo ls -a --json` samples (about 1–2 seconds apart, 02:04:16Z–02:05:14Z) cover only the second summary (stored 02:04:27Z); only the worker appeared. Its rows did not expose labels, attention, unread, `requiresAttention`, or `needsAttention`. `paseo inspect` likewise did not expose those fields.
+- Child appearance/disappearance: **not directly observed**. The first summary finished before polling began and the second completed between polling samples, so neither child lifecycle was captured; the summarized output and the absence of any extra session/archive entry are observed, but the transient child lifecycle is not.
 - Completion notification/attention signal: **could not determine**. No signal was observed in available CLI output; these commands omit attention fields, so this is not evidence that Paseo emitted no notification.
 - `paseo plugin logs flowly` contained no `could not delete a summarizer session` fallback message.
 
