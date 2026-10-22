@@ -11,6 +11,7 @@ import { extractImages } from "../shared/images";
 import { SessionImage } from "./session-image";
 import { sentImages } from "./sent-images";
 import { SessionMarkdown } from "./session-content";
+import { Collapse } from "./disclosure";
 import { Enter, PulseDot, motionDuration, useMotionPresence, useMotionValue, lerp } from "./motion";
 import { useStableCallback } from "./stable";
 import { t } from "../shared/i18n";
@@ -454,8 +455,8 @@ const ActivityBlock = memo(function ActivityBlock({ block, live }: { block: Extr
           <Icon name="ChevronRight" size={12} color={colors.foregroundMuted} />
         </Animated.View>
       </Pressable>
-      {open && (
-        <Enter distance={4} style={{ marginTop: space[1], marginLeft: 5, paddingLeft: space[3], borderLeftWidth: 1, borderColor: colors.border, gap: space[1.5] }}>
+      <Collapse open={open} id="activity">
+        <View style={{ marginTop: space[1], marginLeft: 5, paddingLeft: space[3], borderLeftWidth: 1, borderColor: colors.border, gap: space[1.5] }}>
           {block.items.map((item) =>
             item.author === "Tool" ? (
               <View key={item.key} accessibilityLabel={t("Tool")} style={{ flexDirection: "row", alignItems: "center", gap: space[2], minWidth: 0 }}>
@@ -475,8 +476,8 @@ const ActivityBlock = memo(function ActivityBlock({ block, live }: { block: Extr
               </View>
             ),
           )}
-        </Enter>
-      )}
+        </View>
+      </Collapse>
     </View>
   );
 }, (a, b) =>

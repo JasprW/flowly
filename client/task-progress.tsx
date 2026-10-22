@@ -6,10 +6,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import { modelLabel, targetText, type SummaryEntry, type SummaryOverview } from "../shared/summary";
 import { CardBody, CardField, CardFootnote, CardHeadline, ContentCard } from "./content-card";
-import { Disclosure, Section, type SectionState } from "./disclosure";
+import { Collapse, Disclosure, Section, type SectionState } from "./disclosure";
 import { summariesKey, useBoardQuery, useSummariesQuery } from "./queries";
 import { workpadEnabled, workpadOf } from "../shared/workpad";
-import { Button, Label, font, message, radius, relativeTime, space, useTheme, noFocusRing } from "./ui";
+import { Button, Label, TurnChevron, font, message, radius, relativeTime, space, useTheme, noFocusRing } from "./ui";
 import { formatLocale, t, tn } from "../shared/i18n";
 import { compactDateTime } from "../shared/compact-time";
 
@@ -146,7 +146,7 @@ function HistoryItem({ entry }: { entry: SummaryEntry }) {
           opacity: pressed ? 0.7 : 1,
         })}
       >
-        <Icon name={open ? "ChevronDown" : "ChevronRight"} size={14} color={colors.foregroundMuted} />
+        <TurnChevron open={open} size={14} color={colors.foregroundMuted} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Label size={font.md} selectable={false}>
             {entry.state}
@@ -156,12 +156,10 @@ function HistoryItem({ entry }: { entry: SummaryEntry }) {
           {compactDateTime(entry.at, formatLocale())}
         </Label>
       </Pressable>
-      {open && (
-        // Under the version's title, past the chevron, so the fields line up with it.
-        <View style={{ paddingLeft: space[2] + 14 + space[2], paddingRight: space[2], paddingBottom: space[3] }}>
-          <SummaryBody entry={{ state: "", target: entry.target, recap: entry.recap, next: entry.next }} />
-        </View>
-      )}
+      {/* Under the version's title, past the chevron, so the fields line up with it. */}
+      <Collapse open={open} id="version" style={{ paddingLeft: space[2] + 14 + space[2], paddingRight: space[2], paddingBottom: space[3] }}>
+        <SummaryBody entry={{ state: "", target: entry.target, recap: entry.recap, next: entry.next }} />
+      </Collapse>
     </View>
   );
 }

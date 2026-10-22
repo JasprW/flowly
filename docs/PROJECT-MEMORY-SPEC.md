@@ -515,7 +515,7 @@ memory: {
   - 顶部 **Add memory**。
 - **Archived & dismissed · N**：默认折叠，提供 Restore 和 Delete。
 - 空状态：“Nothing remembered yet. Agents suggest decisions and pitfalls as they work, and finished cards are reviewed for them. You confirm what stays.”
-- 动效、文本输入、无障碍遵守 AGENTS.md 的通用规则：确认、忽略的收起动效与 Ideas 一致（`client/motion.tsx`），输入框用 `TextBox` / `Field`，所有字符串走 `t()`。成功的瞬时操作用原生 toast。
+- 动效、文本输入、无障碍遵守 AGENTS.md 的通用规则：确认、忽略、归档、恢复、删除的收起动效与 Ideas 一致（Memory 页与卡片侧栏的卡片行都复用 `useExitList` + `IdeaRow`，新到达的行上浮淡入；搜索框输入时整个列表重建，不逐行收起）；Archived & dismissed 区和 Add memory 编辑器用 `Collapse` 展开收起，箭头随之旋转；编辑卡片时编辑器与卡片互换带淡入（`client/motion.tsx`），输入框用 `TextBox` / `Field`，所有字符串走 `t()`。成功的瞬时操作用原生 toast。
 
 ### 8.2 卡片侧栏
 

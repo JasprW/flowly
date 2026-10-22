@@ -92,7 +92,7 @@ Done/Cancelled 是人的决定；把 idea 发回这类卡的 session，agent 会
 - Dismissed 分段：**Restore**，规则同 IDEAS-SPEC §7（同卡同标题、10 个上限）。
 - “Do it in a new session”：打开来源卡的侧栏（叠在 Ideas 页上）并直接弹出同一个预填的 Start session 弹窗，成功后 `ideas.adopt … send:false`，与侧栏相同。
 - “Start a new task”：打开同一个预填的新建表单（`createFromIdea`），建卡后的新卡出现在看板上；Ideas 页保持打开，该行收起离开 Open。
-- 动效与乐观更新与侧栏相同（收起 160 ms、新到达上浮淡入、Reduce Motion）。分段切换只交叉淡入列表，不播放每行进场。
+- 动效与乐观更新与侧栏相同（收起 160 ms、新到达上浮淡入、Reduce Motion）。分段切换只交叉淡入列表，不播放每行进场。Accepted / Dismissed 分段里的行同样会在被 Restore 后收起离开（不做进场，避免“Show more”一次动画几十行）；改变搜索或筛选时整个列表重建，不逐行收起。
 
 ### 4.3 数据
 

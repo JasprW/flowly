@@ -93,7 +93,7 @@ export const IdeasPage = memo(function IdeasPage({
   const cardTitle = (id: string) => cards.get(id)?.title;
   const renderOpen = (rows: ExitRows) =>
     rows.map((row) => (
-      <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} swipe={actions.swiped.has(row.item.id)} restored={actions.restored.has(row.item.id)} spacing={space[3]}>
+      <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} restored={actions.restored.has(row.item.id)} spacing={space[3]}>
         <IdeaCard
           idea={row.item}
           disabled={!!project.archivedAt || row.leaving}
@@ -103,19 +103,22 @@ export const IdeasPage = memo(function IdeasPage({
         />
       </IdeaRow>
     ));
-  const renderClosed = (rows: readonly Idea[]) =>
-    rows.map((idea) => (
-      <View key={idea.id} style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, paddingHorizontal: space[3], marginBottom: space[2] }}>
-        <ClosedIdea
-          idea={idea}
-          acceptedTitle={idea.acceptedTaskId ? cardTitle(idea.acceptedTaskId) : undefined}
-          sentTo={idea.acceptedAgentId ? sessionName(sessionsOf(idea.taskId), idea.acceptedAgentId) : undefined}
-          disabled={!!project.archivedAt || !!actions.restoring}
-          onOpenTask={onOpenTask}
-          onRestore={actions.restore}
-        />
-        {!grouped && <View style={{ marginHorizontal: -space[3] }}>{source(idea.taskId)}</View>}
-      </View>
+  // A restored idea collapses out of the closed list; rows never rise in here, so "Show more" does not animate dozens at once.
+  const renderClosed = (rows: ExitRows) =>
+    rows.map((row) => (
+      <IdeaRow key={row.item.id} leaving={row.leaving} entering={false} spacing={space[2]}>
+        <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, paddingHorizontal: space[3] }}>
+          <ClosedIdea
+            idea={row.item}
+            acceptedTitle={row.item.acceptedTaskId ? cardTitle(row.item.acceptedTaskId) : undefined}
+            sentTo={row.item.acceptedAgentId ? sessionName(sessionsOf(row.item.taskId), row.item.acceptedAgentId) : undefined}
+            disabled={!!project.archivedAt || !!actions.restoring || row.leaving}
+            onOpenTask={onOpenTask}
+            onRestore={actions.restore}
+          />
+          {!grouped && <View style={{ marginHorizontal: -space[3] }}>{source(row.item.taskId)}</View>}
+        </View>
+      </IdeaRow>
     ));
   const closedRows = tab === "open" ? noIdeas : list.slice(0, shown);
   const renderGroups = <T extends { taskId: string }>(rows: readonly T[], render: (rows: T[]) => ReactNode) =>
@@ -250,12 +253,16 @@ export const IdeasPage = memo(function IdeasPage({
                     grouped ? renderGroups(rows.map((r) => ({ ...r, taskId: r.item.taskId })), renderOpen) : renderOpen(rows)
                   }
                 />
-              ) : !list.length ? (
-                emptyState
-              ) : grouped ? (
-                renderGroups(closedRows, renderClosed)
               ) : (
-                renderClosed(closedRows)
+                // Changing a filter starts a fresh list instead of collapsing every row that stops matching.
+                <OpenList
+                  key={`${search}|${[...scopes].join()}|${finishedOnly}|${cardFilter}|${sort}|${grouped}`}
+                  list={closedRows}
+                  empty={emptyState}
+                  render={(rows) =>
+                    grouped ? renderGroups(rows.map((r) => ({ ...r, taskId: r.item.taskId })), renderClosed) : renderClosed(rows)
+                  }
+                />
               )}
               {tab !== "open" && list.length > shown && (
                 <View style={{ alignItems: "center" }}>

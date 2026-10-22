@@ -7,8 +7,9 @@ import type { SessionIdea } from "../shared/session-insights";
 import { chipClient, refreshChipsNow, useChipState, useOutsideState, type ChipState } from "./native-chips";
 import { continueIdea, dismissIdea, dismissSessionIdea, newCardFromIdea, openCard, runSessionIdea, wrapupNow } from "./native-actions";
 import { CardField } from "./content-card";
+import { Collapse } from "./disclosure";
 import { SharedMotionProvider } from "./motion";
-import { AiMark, Button, Label, Notice, Theme, font, message, noFocusRing, radius, space, useTheme, verticalScroll } from "./ui";
+import { AiMark, Button, Label, Notice, Theme, TurnChevron, font, message, noFocusRing, radius, space, useTheme, verticalScroll } from "./ui";
 import { t } from "../shared/i18n";
 
 /**
@@ -142,7 +143,7 @@ function IdeaShell({ idea, expanded, onToggle, footer, children }: { idea: Pick<
         onPress={onToggle}
         style={{ ...noFocusRing, flexDirection: "row", alignItems: "flex-start", gap: space[1.5] }}
       >
-        <Icon name={expanded ? "ChevronDown" : "ChevronRight"} size={14} color={colors.foregroundMuted} />
+        <TurnChevron open={expanded} size={14} color={colors.foregroundMuted} />
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Label medium size={font.md} selectable={false}>
             {idea.title}
@@ -152,12 +153,10 @@ function IdeaShell({ idea, expanded, onToggle, footer, children }: { idea: Pick<
           </Label>
         </View>
       </Pressable>
-      {expanded && (
-        <View style={{ gap: space[2] }}>
-          {!!idea.detail && <CardField title={t("What to do")} text={idea.detail} />}
-          {!!idea.rationale && <CardField title={t("Why")} text={idea.rationale} />}
-        </View>
-      )}
+      <Collapse open={expanded} id="idea-detail" style={{ gap: space[2] }}>
+        {!!idea.detail && <CardField title={t("What to do")} text={idea.detail} />}
+        {!!idea.rationale && <CardField title={t("Why")} text={idea.rationale} />}
+      </Collapse>
       {footer}
       <View style={{ flexDirection: "row", gap: space[2], flexWrap: "wrap", justifyContent: "flex-end" }}>{children}</View>
     </View>

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Animated, Platform, Pressable, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { Modal, useAfterModalClose } from "./modal";
@@ -55,7 +55,8 @@ import {
   type AttentionItem,
 } from "./attention";
 import { relativeTime } from "./ui";
-import { Collapse } from "./disclosure";
+import { Chevron, Collapse } from "./disclosure";
+import { IdeaRow, useExitList } from "./task-ideas";
 import { currentWrapup } from "../shared/wrapup-state";
 import { ProjectForm, TaskForm, type TaskSeed } from "./forms";
 import { ideaDescription } from "../shared/ideas";
@@ -1350,24 +1351,26 @@ function BoardContent(
             {t("Read state is unavailable, so finished-but-unread sessions are not listed. Approvals and errors still are.")}</Notice>
         </View>
       )}
-      {!attention.length ? (
-        <View style={{ paddingVertical: space[6], alignItems: "center", gap: space[2] }}>
-          <Icon name="BellOff" size={20} color={colors.foregroundMuted} />
-          <Label muted>{dismissedAttention.length ? t("Nothing new needs your attention.") : t("Nothing needs your attention.")}</Label>
-        </View>
-      ) : (
-        attention.map((item) => attentionRow(item))
-      )}
+      <AttentionRows
+        items={attention}
+        render={attentionRow}
+        empty={
+          <View style={{ paddingVertical: space[6], alignItems: "center", gap: space[2] }}>
+            <Icon name="BellOff" size={20} color={colors.foregroundMuted} />
+            <Label muted>{dismissedAttention.length ? t("Nothing new needs your attention.") : t("Nothing needs your attention.")}</Label>
+          </View>
+        }
+      />
       {dismissedAttention.length > 0 && (
         <View style={{ paddingTop: space[2], borderTopWidth: 1, borderTopColor: colors.border, marginTop: space[2] }}>
           <Row
             title={t("Dismissed · {n}", { n: dismissedAttention.length })}
             label={dismissedOpen ? t("Hide dismissed cards") : t("Show dismissed cards")}
-            icon={dismissedOpen ? "ChevronDown" : "ChevronRight"}
+            leading={<Chevron open={dismissedOpen} title="dismissed-attention" size={16} color={colors.foregroundMuted} />}
             onPress={() => setDismissedOpen((open) => !open)}
           />
           <Collapse open={dismissedOpen} id="dismissed-attention">
-            {dismissedAttention.map((item) => attentionRow(item))}
+            <AttentionRows items={dismissedAttention} render={attentionRow} />
           </Collapse>
         </View>
       )}
@@ -2301,6 +2304,22 @@ function BoardContent(
       </View>
     </Theme.Provider>
     </SettingsOpenerContext.Provider>
+  );
+}
+
+/** Attention rows that fade and collapse when a card is dismissed or restored, like the Ideas and Memory lists. */
+function AttentionRows({ items, render, empty }: { items: readonly AttentionItem[]; render(item: AttentionItem): ReactNode; empty?: ReactNode }) {
+  const keyed = useMemo(() => items.map((item) => ({ item, id: item.task.id })), [items]);
+  const rows = useExitList(keyed);
+  if (!rows.length) return <>{empty}</>;
+  return (
+    <>
+      {rows.map((row) => (
+        <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} spacing={0}>
+          {render(row.item.item)}
+        </IdeaRow>
+      ))}
+    </>
   );
 }
 

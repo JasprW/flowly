@@ -685,6 +685,16 @@ export function Row({
   );
 }
 
+/** A right-pointing chevron that turns down as `open` becomes true, in step with the `Collapse` it controls. */
+export function TurnChevron({ open, size = 14, color }: { open: boolean; size?: number; color: string }) {
+  const turn = useMotionValue(open ? 1 : 0, open ? motionDuration.forward : motionDuration.reverse);
+  return (
+    <Animated.View style={{ transform: [{ rotate: lerp(turn, ["0deg", "90deg"]) }] }}>
+      <Icon name="ChevronRight" size={size} color={color} />
+    </Animated.View>
+  );
+}
+
 /**
  * The mark of content an AI wrote or suggested (summaries, digests, ideas,
  * next steps, agent-added artifacts and tags): the Sparkles icon in the accent
@@ -733,7 +743,7 @@ export function SectionHeader({
           {count}
         </Label>
       )}
-      {onToggle && <Icon name={open ? "ChevronDown" : "ChevronRight"} size={14} color={colors.foregroundMuted} />}
+      {onToggle && <TurnChevron open={!!open} size={14} color={colors.foregroundMuted} />}
     </>
   );
   const row = { flexDirection: "row", alignItems: "center", gap: space[1.5] } as const;

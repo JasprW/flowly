@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import { copyText, Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
@@ -19,11 +19,12 @@ import {
 } from "../shared/memory";
 import { ContentCard, CardBody, CardHeadline, CardMeta, CardMetaRow, CardText } from "./content-card";
 import { eventPoint, useMenuOpener } from "./context-menu";
-import { Section } from "./disclosure";
+import { Chevron, Collapse, Section } from "./disclosure";
 import { Modal } from "./modal";
 import { Enter } from "./motion";
 import { memoryCountsKey, memoryKey, useMemoryQuery } from "./queries";
 import { StatusIcon } from "./status";
+import { IdeaRow, useExitList } from "./task-ideas";
 import { Actions, AiMark, Button, Choices, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg, tn } from "../shared/i18n";
 
@@ -59,6 +60,14 @@ export function useMemoryActions(projectId: string, view: MemoryView | undefined
     deleteRpc = useRpc(rpc.deleteMemory),
     retroRpc = useRpc(rpc.reviewForMemory);
   const [busy, setBusy] = useState("");
+  // A dismissed candidate leaves at once, before the save returns; `hidden` holds those the project's memory does not show as closed yet.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const entries = view?.entries;
+  useEffect(() => {
+    if (!hidden.size) return;
+    const settled = [...hidden].filter((id) => !entries?.some((e) => e.id === id && e.status === "candidate"));
+    if (settled.length) setHidden((current) => new Set([...current].filter((id) => !settled.includes(id))));
+  }, [entries, hidden]);
   /** Make room (§6.5): the action waiting for an archived entry. */
   const [room, setRoom] = useState<null | (() => Promise<boolean>)>(null);
   const refresh = () => {
@@ -88,6 +97,7 @@ export function useMemoryActions(projectId: string, view: MemoryView | undefined
   };
   return {
     busy,
+    hidden: hidden as ReadonlySet<string>,
     room,
     closeRoom: () => setRoom(null),
     refresh,
@@ -96,8 +106,16 @@ export function useMemoryActions(projectId: string, view: MemoryView | undefined
     save: (e: MemoryEntry, draft: Draft) => run(e.id, () => updateRpc({ id: e.id, revision: e.revision, ...editsOf(draft), pinned: draft.pinned })),
     create: (draft: Draft) => withRoom(() => run("new", () => createRpc({ projectId, ...editsOf(draft), pinned: draft.pinned }), t("Remembered. New sessions on this project will see it."))),
     pin: (e: MemoryEntry, pinned: boolean) => run(e.id, () => updateRpc({ id: e.id, revision: e.revision, pinned })),
-    dismiss: (e: MemoryEntry) => run(e.id, () => dismissRpc({ id: e.id, revision: e.revision })),
-    restore: (e: MemoryEntry) => (e.status === "archived" ? withRoom(() => run(e.id, () => restoreRpc({ id: e.id, revision: e.revision }))) : run(e.id, () => restoreRpc({ id: e.id, revision: e.revision }))),
+    dismiss: async (e: MemoryEntry) => {
+      setHidden((current) => new Set(current).add(e.id));
+      const saved = await run(e.id, () => dismissRpc({ id: e.id, revision: e.revision }));
+      if (!saved) setHidden((current) => new Set([...current].filter((id) => id !== e.id)));
+      return saved;
+    },
+    restore: (e: MemoryEntry) => {
+      const save = () => run(e.id, () => restoreRpc({ id: e.id, revision: e.revision }));
+      return e.status === "archived" ? withRoom(save) : save();
+    },
     archive: (e: MemoryEntry, reason: "retired" | "promoted" = "retired") => run(e.id, () => archiveRpc({ id: e.id, revision: e.revision, reason })),
     archiveStale: (entries: readonly MemoryEntry[]) =>
       run("stale", () => archiveManyRpc({ projectId, ids: entries.map((e) => ({ id: e.id, revision: e.revision })) }), tn(entries.length, "Archived {n} memory.", "Archived {n} memories.")),
@@ -141,6 +159,8 @@ export const MemoryCard = memo(function MemoryCard({
   const { colors } = useTheme();
   const openMenu = useMenuOpener();
   const [editing, setEditing] = useState(false);
+  // Once edited, the card rises back in when the editor closes; on first render it just sits there.
+  const [edited, setEdited] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const busy = actions.busy === entry.id;
@@ -148,16 +168,24 @@ export const MemoryCard = memo(function MemoryCard({
   const candidate = entry.status === "candidate";
   if (editing)
     return (
-      <MemoryEditor
-        initial={draftOf(entry)}
-        title={candidate ? t("Edit before confirming") : t("Edit memory")}
-        submit={candidate ? t("Save and confirm") : t("Save")}
-        allowPin={!candidate}
-        onCancel={() => setEditing(false)}
-        onSubmit={async (draft) => {
-          if (await (candidate ? actions.confirm(entry, draft) : actions.save(entry, draft))) setEditing(false);
-        }}
-      />
+      <Enter key="editor">
+        <MemoryEditor
+          initial={draftOf(entry)}
+          title={candidate ? t("Edit before confirming") : t("Edit memory")}
+          submit={candidate ? t("Save and confirm") : t("Save")}
+          allowPin={!candidate}
+          onCancel={() => {
+            setEdited(true);
+            setEditing(false);
+          }}
+          onSubmit={async (draft) => {
+            if (await (candidate ? actions.confirm(entry, draft) : actions.save(entry, draft))) {
+              setEdited(true);
+              setEditing(false);
+            }
+          }}
+        />
+      </Enter>
     );
   const widely = isWidelyUsed(entry, now);
   const stale = isStale(entry, now);
@@ -210,39 +238,42 @@ export const MemoryCard = memo(function MemoryCard({
         {t("Delete…")}</Button>
     </View>
   );
+  const content = (
+    <ContentCard footer={footer} after={source}>
+      <CardBody>
+        <CardMetaRow>
+          <CardMeta icon={<Icon name={kindIcons[entry.kind]} size={12} color={colors.foregroundMuted} />} text={t(kindLabels[entry.kind])} />
+          {entry.pinned && <CardMeta icon={<Icon name="Pin" size={12} color={colors.accent} />} text={t("Pinned")} />}
+          {candidate && <CardMeta text={entry.source.by === "retro" ? t("Suggested by the finished-card review") : t("Suggested by an agent")} />}
+          {entry.status === "archived" && <CardMeta text={entry.archivedReason === "promoted" ? t("Moved to AGENTS.md") : entry.archivedReason === "superseded" ? t("Replaced") : t("Archived")} />}
+          {entry.status === "dismissed" && <CardMeta text={t("Dismissed")} />}
+          {stale && <CardMeta icon={<Icon name="Clock" size={12} color={colors.statusWarning} />} text={t("Stale")} />}
+          {widely && <CardMeta icon={<Icon name="Flame" size={12} color={colors.accent} />} text={tn(cards, "Used by {n} card", "Used by {n} cards")} />}
+          {!!used && !widely && <CardMeta text={used} />}
+        </CardMetaRow>
+        <CardHeadline>{entry.title}</CardHeadline>
+        {!!entry.body && <CardText>{entry.body}</CardText>}
+        {!!entry.tags.length && <Label muted size={font.xs}>{entry.tags.map((tag) => `#${tag}`).join("  ")}</Label>}
+        {replaced && (
+          <View style={{ gap: space[1], paddingLeft: space[2], borderLeftWidth: 2, borderColor: colors.border }}>
+            <Label muted size={font.xs}>{t("Replaces: {title}", { title: replaced.title })}</Label>
+            {!!replaced.body && <Label muted size={font.sm}>{replaced.body}</Label>}
+          </View>
+        )}
+        {!!entry.evidence && (
+          <View style={{ paddingLeft: space[2], borderLeftWidth: 2, borderColor: tint(colors.accent, 0.4) }}>
+            <Label muted italic size={font.sm}>“{entry.evidence}”</Label>
+          </View>
+        )}
+        {entry.pinned && entry.status === "active" && (
+          <Label muted size={font.xs}>{t("Pinned memories reach every new session, like AGENTS.md. If this is a rule for the code, move it there.")}</Label>
+        )}
+      </CardBody>
+    </ContentCard>
+  );
   return (
     <>
-      <ContentCard footer={footer} after={source}>
-        <CardBody>
-          <CardMetaRow>
-            <CardMeta icon={<Icon name={kindIcons[entry.kind]} size={12} color={colors.foregroundMuted} />} text={t(kindLabels[entry.kind])} />
-            {entry.pinned && <CardMeta icon={<Icon name="Pin" size={12} color={colors.accent} />} text={t("Pinned")} />}
-            {candidate && <CardMeta text={entry.source.by === "retro" ? t("Suggested by the finished-card review") : t("Suggested by an agent")} />}
-            {entry.status === "archived" && <CardMeta text={entry.archivedReason === "promoted" ? t("Moved to AGENTS.md") : entry.archivedReason === "superseded" ? t("Replaced") : t("Archived")} />}
-            {entry.status === "dismissed" && <CardMeta text={t("Dismissed")} />}
-            {stale && <CardMeta icon={<Icon name="Clock" size={12} color={colors.statusWarning} />} text={t("Stale")} />}
-            {widely && <CardMeta icon={<Icon name="Flame" size={12} color={colors.accent} />} text={tn(cards, "Used by {n} card", "Used by {n} cards")} />}
-            {!!used && !widely && <CardMeta text={used} />}
-          </CardMetaRow>
-          <CardHeadline>{entry.title}</CardHeadline>
-          {!!entry.body && <CardText>{entry.body}</CardText>}
-          {!!entry.tags.length && <Label muted size={font.xs}>{entry.tags.map((tag) => `#${tag}`).join("  ")}</Label>}
-          {replaced && (
-            <View style={{ gap: space[1], paddingLeft: space[2], borderLeftWidth: 2, borderColor: colors.border }}>
-              <Label muted size={font.xs}>{t("Replaces: {title}", { title: replaced.title })}</Label>
-              {!!replaced.body && <Label muted size={font.sm}>{replaced.body}</Label>}
-            </View>
-          )}
-          {!!entry.evidence && (
-            <View style={{ paddingLeft: space[2], borderLeftWidth: 2, borderColor: tint(colors.accent, 0.4) }}>
-              <Label muted italic size={font.sm}>“{entry.evidence}”</Label>
-            </View>
-          )}
-          {entry.pinned && entry.status === "active" && (
-            <Label muted size={font.xs}>{t("Pinned memories reach every new session, like AGENTS.md. If this is a rule for the code, move it there.")}</Label>
-          )}
-        </CardBody>
-      </ContentCard>
+      {edited ? <Enter key="card">{content}</Enter> : content}
       {promoting && <PromoteDialog entry={entry} actions={actions} onClose={() => setPromoting(false)} />}
       {deleting && (
         <ConfirmDialog
@@ -440,11 +471,12 @@ export const MemoryPage = memo(function MemoryPage({
     .filter((e) => !needle || `${e.title}\n${e.body}\n${e.tags.join(" ")}\n${e.keywords.join(" ")}`.toLowerCase().includes(needle))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.confirmedAt || b.createdAt).localeCompare(a.confirmedAt || a.createdAt));
   const source = (e: MemoryEntry) => (e.source.taskId ? <SourceLine task={cards.get(e.source.taskId)} nameOf={nameOf} onOpenTask={onOpenTask} /> : undefined);
-  const card = (e: MemoryEntry) => (
-    <View key={e.id} style={{ marginBottom: space[2] }}>
-      <MemoryCard entry={e} entries={entries} actions={actions} disabled={disabled} source={source(e)} now={now} />
-    </View>
+  const card = (e: MemoryEntry, leaving: boolean) => (
+    <MemoryCard entry={e} entries={entries} actions={actions} disabled={disabled || leaving} source={source(e)} now={now} />
   );
+  // The title outlives the last card's exit, so keep its count until the card has gone.
+  const reviewCount = useRef(0);
+  if (candidates.length) reviewCount.current = candidates.length;
   const counts = (k: MemoryKind) => active.filter((e) => e.kind === k).length;
   return (
     <View style={{ flex: 1, minHeight: 0 }}>
@@ -465,12 +497,7 @@ export const MemoryPage = memo(function MemoryPage({
           {active.length >= memoryLimits.warnAt && (
             <Notice tone="warning">{t("{n} of {max} memories. Archive stale ones to keep room.", { n: active.length, max: memoryLimits.activePerProject })}</Notice>
           )}
-          {!!candidates.length && (
-            <View style={{ gap: space[2] }}>
-              <SectionTitle icon="Inbox" title={t("To review · {n}", { n: candidates.length })} ai />
-              {candidates.map(card)}
-            </View>
-          )}
+          <MemoryRows entries={candidates} actions={actions} render={card} before={<SectionTitle icon="Inbox" title={t("To review · {n}", { n: reviewCount.current })} ai />} />
           <View style={{ gap: space[2] }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
               <SectionTitle icon="BookMarked" title={t("Memory · {n}", { n: active.length })} />
@@ -480,7 +507,7 @@ export const MemoryPage = memo(function MemoryPage({
                   {t("Add memory")}</Button>
               )}
             </View>
-            {adding && (
+            <Collapse open={adding} id="add-memory">
               <MemoryEditor
                 initial={draftOf()}
                 title={t("Add memory")}
@@ -491,7 +518,7 @@ export const MemoryPage = memo(function MemoryPage({
                   if (await actions.create(draft)) setAdding(false);
                 }}
               />
-            )}
+            </Collapse>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1.5] }}>
               <FilterChip on={filter === "all"} label={t("All")} onPress={() => setFilter("all")} />
               {memoryKinds.map((k) => (
@@ -519,28 +546,35 @@ export const MemoryPage = memo(function MemoryPage({
             )}
             <Enter key={filter} distance={0}>
               <View>
-                {shown.length ? (
-                  shown.map(card)
-                ) : (
-                  <View style={{ alignItems: "center", gap: space[2], paddingVertical: space[6] }}>
-                    <Icon name="BookMarked" size={22} color={colors.foregroundMuted} />
-                    <Label muted size={font.md}>
-                      {!entries.length
-                        ? t("Nothing remembered yet. Agents suggest decisions and pitfalls as they work, and finished cards are reviewed for them. You confirm what stays.")
-                        : t("No matching memories.")}
-                    </Label>
-                  </View>
-                )}
+                {/* Typing in the search box starts a fresh list instead of collapsing every row that stops matching. */}
+                <MemoryRows
+                  key={needle}
+                  entries={shown}
+                  actions={actions}
+                  render={card}
+                  empty={
+                    <View style={{ alignItems: "center", gap: space[2], paddingVertical: space[6] }}>
+                      <Icon name="BookMarked" size={22} color={colors.foregroundMuted} />
+                      <Label muted size={font.md}>
+                        {!entries.length
+                          ? t("Nothing remembered yet. Agents suggest decisions and pitfalls as they work, and finished cards are reviewed for them. You confirm what stays.")
+                          : t("No matching memories.")}
+                      </Label>
+                    </View>
+                  }
+                />
               </View>
             </Enter>
           </View>
           {!!closed.length && (
             <View style={{ gap: space[2] }}>
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: closedOpen }} onPress={() => setClosedOpen(!closedOpen)} style={{ ...noFocusRing, flexDirection: "row", alignItems: "center", gap: space[1.5], minHeight: touch ? 40 : 28 }}>
-                <Icon name={closedOpen ? "ChevronDown" : "ChevronRight"} size={14} color={colors.foregroundMuted} />
+                <Chevron open={closedOpen} title="closed-memory" color={colors.foregroundMuted} size={14} />
                 <Label muted medium size={font.sm} selectable={false}>{t("Archived & dismissed · {n}", { n: closed.length })}</Label>
               </Pressable>
-              {closedOpen && closed.map(card)}
+              <Collapse open={closedOpen} id="closed-memory">
+                <MemoryRows entries={closed} actions={actions} render={card} />
+              </Collapse>
             </View>
           )}
           {!!view && view.recall.queries > 0 && (
@@ -566,6 +600,25 @@ export const MemoryPage = memo(function MemoryPage({
   );
 });
 const noEntries: MemoryEntry[] = [];
+
+/**
+ * A list of memory cards that behaves like the Ideas list: a card that leaves
+ * it (confirmed, dismissed, archived, restored, deleted) collapses away in
+ * place, and one that arrives rises in. Cards present on first render just sit
+ * there. `before` (a title) shows while any row is still on screen.
+ */
+function MemoryRows({ entries, actions, render, before, empty }: { entries: readonly MemoryEntry[]; actions: MemoryActions; render(entry: MemoryEntry, leaving: boolean): ReactNode; before?: ReactNode; empty?: ReactNode }) {
+  const { hidden } = actions;
+  const shown = useMemo(() => (hidden.size ? entries.filter((e) => !hidden.has(e.id)) : entries), [entries, hidden]);
+  const rows = useExitList(shown);
+  if (!rows.length) return <>{empty}</>;
+  const body = rows.map((row) => (
+    <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering}>
+      {render(row.item, row.leaving)}
+    </IdeaRow>
+  ));
+  return before ? <View style={{ gap: space[2] }}>{before}{body}</View> : <>{body}</>;
+}
 
 /**
  * The drawer's Memory section (§8.2): candidates from this card with the page's
@@ -601,9 +654,7 @@ export function TaskMemorySection({ task, project, onOpenPage }: { task: Task; p
         ) : undefined
       }
     >
-      {candidates.map((e) => (
-        <MemoryCard key={e.id} entry={e} entries={view.entries} actions={actions} disabled={!!project.archivedAt} now={now} />
-      ))}
+      <MemoryRows entries={candidates} actions={actions} render={(e, leaving) => <MemoryCard entry={e} entries={view.entries} actions={actions} disabled={!!project.archivedAt || leaving} now={now} />} />
       {!!kept && (
         <Pressable accessibilityRole="link" onPress={onOpenPage} style={{ ...noFocusRing, flexDirection: "row", alignItems: "center", gap: space[1] }}>
           <Label muted size={font.sm}>{tn(kept, "Remembered from this card: {n}", "Remembered from this card: {n}")}</Label>

@@ -9,7 +9,7 @@ import { continuesInCard } from "../shared/ideas";
 import { eventPoint, useMenuOpener, type MenuEntry, type Point } from "./context-menu";
 import { CardBody, CardField, CardHeadline, CardMeta, CardMetaRow, CardText, ContentCard } from "./content-card";
 import { Disclosure, Section, type SectionState } from "./disclosure";
-import { lerp, motionDuration, useMotionPresence, useReducedMotion } from "./motion";
+import { lerp, motionDuration, useReducedMotion } from "./motion";
 import { exitRows } from "./idea-rows";
 import { boardKey, useBoardQuery } from "./queries";
 import { useStableCallback } from "./stable";
@@ -56,6 +56,7 @@ export function TaskIdeas({
   const open = useMemo(() => ideas.filter((i) => i.status === "open" && !hidden.has(i.id)), [ideas, hidden]);
   const closed = ideas.filter((i) => i.status !== "open" || hidden.has(i.id)).reverse();
   const rows = useExitList(open);
+  const closedRows = useExitList(closed);
   if (!ideas.length) return null;
   const titleOf = (id: string) => board.data?.tasks.find((t) => t.id === id)?.title;
   return (
@@ -76,7 +77,7 @@ export function TaskIdeas({
       {rows.length ? (
         <View>
           {rows.map((row) => (
-            <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} swipe={actions.swiped.has(row.item.id)} restored={actions.restored.has(row.item.id)}>
+            <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} restored={actions.restored.has(row.item.id)}>
               <IdeaCard idea={row.item} disabled={disabled || row.leaving} onGood={actions.choose} onDismiss={actions.dismiss} />
             </IdeaRow>
           ))}
@@ -84,19 +85,20 @@ export function TaskIdeas({
       ) : (
         <Label muted size={font.sm}>{t("No open ideas. Agents add them when they see a worthwhile next step.")}</Label>
       )}
-      {closed.length > 0 && (
+      {closedRows.length > 0 && (
         <Disclosure title={t("Closed · {n}", { n: closed.length })} open={closedOpen} onChange={setClosedOpen}>
-          <View style={{ gap: space[1] }}>
-            {closed.map((idea) => (
-              <ClosedIdea
-                key={idea.id}
-                idea={idea}
-                acceptedTitle={idea.acceptedTaskId ? titleOf(idea.acceptedTaskId) : undefined}
-                sentTo={idea.acceptedAgentId ? sessionName(sessions, idea.acceptedAgentId) : undefined}
-                disabled={disabled || !!restoring || hidden.has(idea.id)}
-                onOpenTask={onOpenTask}
-                onRestore={actions.restore}
-              />
+          <View>
+            {closedRows.map((row) => (
+              <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} spacing={space[1]}>
+                <ClosedIdea
+                  idea={row.item}
+                  acceptedTitle={row.item.acceptedTaskId ? titleOf(row.item.acceptedTaskId) : undefined}
+                  sentTo={row.item.acceptedAgentId ? sessionName(sessions, row.item.acceptedAgentId) : undefined}
+                  disabled={disabled || !!restoring || hidden.has(row.item.id) || row.leaving}
+                  onOpenTask={onOpenTask}
+                  onRestore={actions.restore}
+                />
+              </IdeaRow>
             ))}
           </View>
         </Disclosure>
@@ -130,8 +132,6 @@ export function useIdeaActions({
   const adoptIdea = useRpc(rpc.adoptIdea);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [restoring, setRestoring] = useState("");
-  // Ideas dismissed here on desktop: their row swipes out instead of collapsing in place.
-  const swiped = useRef(new Set<string>()).current;
   // Ideas restored here: their row opens its slot and the card comes back in, even if it was on the list at first render.
   const restored = useRef(new Set<string>()).current;
   const ideas = board.data?.ideas;
@@ -198,20 +198,17 @@ export function useIdeaActions({
     openMenu(at, t("Good idea"), here ? [...continueEntries, divider, cardEntry] : [cardEntry, divider, ...continueEntries]);
   });
   const dismiss = useStableCallback(async (idea: Idea) => {
-    if (!touch) swiped.add(idea.id);
     restored.delete(idea.id);
     setHidden((current) => new Set(current).add(idea.id));
     try {
       await updateIdea({ id: idea.id, status: "dismissed" });
       await queryClient.invalidateQueries({ queryKey: boardKey });
     } catch (e) {
-      swiped.delete(idea.id);
       setHidden((current) => without(current, [idea.id]));
       toast.show(message(e), { variant: "error" });
     }
   });
   const restore = useStableCallback(async (idea: Idea) => {
-    swiped.delete(idea.id);
     restored.add(idea.id);
     setRestoring(idea.id);
     try {
@@ -226,7 +223,7 @@ export function useIdeaActions({
       setRestoring("");
     }
   });
-  return { hidden, restoring, swiped: swiped as ReadonlySet<string>, restored: restored as ReadonlySet<string>, choose, dismiss, restore };
+  return { hidden, restoring, restored: restored as ReadonlySet<string>, choose, dismiss, restore };
 }
 
 const without = (set: ReadonlySet<string>, ids: readonly string[]) => {
@@ -237,7 +234,9 @@ const without = (set: ReadonlySet<string>, ids: readonly string[]) => {
 
 /**
  * The open list plus rows that just left it, held in place for their exit.
- * Rows present on first render never animate in; later arrivals do.
+ * Rows present on first render never animate in; later arrivals do. A row that
+ * just left is added back in the same render that dropped it (not after an
+ * effect), so it never unmounts and its card keeps its state and size.
  */
 export function useExitList<T extends { id: string }>(items: readonly T[]) {
   const [leaving, setLeaving] = useState<ReadonlyMap<string, { item: T; index: number }>>(() => new Map());
@@ -278,32 +277,33 @@ export function useExitList<T extends { id: string }>(items: readonly T[]) {
     // `leaving` is read, not tracked: only a change of the open list starts or cancels exits.
   }, [items]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
-  return useMemo(() => exitRows(items, [...leaving.values()], initial.current), [items, leaving]);
+  return useMemo(() => {
+    // Dropped since the last commit: the effect above has not registered them yet.
+    const ids = new Set(items.map((i) => i.id));
+    const dropped = previous.current
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => !ids.has(item.id) && !leaving.has(item.id));
+    return exitRows(items, [...leaving.values(), ...dropped], initial.current);
+  }, [items, leaving]);
 }
 
 
-/** Dismiss on desktop: the card slides out to the right, then its slot closes. */
-const swipeMs = 180;
-/** The longest row exit (swipe, then collapse); rows that left are held this long. */
-const rowExitMs = swipeMs + motionDuration.reverse;
+/** A row that left is held this long: its exit (fade and collapse). */
+const rowExitMs = motionDuration.reverse;
 
 /**
- * Holds one idea's slot. Arriving (or `restored`) rows open their slot, then
- * the card rises in (on desktop a restored card slides back in from the right,
- * mirroring the dismiss). Leaving rows collapse and fade, or with `swipe` (a
- * desktop dismiss) slide out to the right first.
+ * Holds one idea's slot (also each memory's). Arriving (or `restored`) rows
+ * open their slot, then the card rises in. Leaving rows fade and collapse.
  */
 export function IdeaRow({
   leaving,
   entering,
-  swipe = false,
   restored = false,
   spacing = space[2],
   children,
 }: {
   leaving: boolean;
   entering: boolean;
-  swipe?: boolean;
   /** Restored while the list was showing: animate it in even if it was there at first render. */
   restored?: boolean;
   /** Space below the row, inside the collapsing slot. */
@@ -311,40 +311,26 @@ export function IdeaRow({
   children: ReactNode;
 }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
-  // Height is a layout property, so this value runs on the JS driver.
-  const presence = useMotionPresence(leaving ? undefined : true, leaving ? "" : "row", false);
   const body = (
     <View onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} style={{ paddingBottom: spacing }}>
       {children}
     </View>
   );
-  if (leaving && swipe) return <SwipeOut width={size.width} height={size.height}>{body}</SwipeOut>;
-  if (leaving)
-    return (
-      <Animated.View
-        pointerEvents="none"
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={{
-          overflow: "hidden",
-          height: size.height ? lerp(presence.progress, [0, size.height]) : undefined,
-          opacity: presence.progress,
-          transform: [{ scale: lerp(presence.progress, [0.97, 1]) }],
-        }}
-      >
-        {body}
-      </Animated.View>
-    );
-  return entering || restored ? <InsertIn slide={restored && !touch}>{body}</InsertIn> : body;
+  // The same wrapper whether the row is arriving, resting or leaving, so the card is not remounted when it starts to leave.
+  return (
+    <RowOut leaving={leaving} height={size.height}>
+      {entering || restored ? <InsertIn>{body}</InsertIn> : body}
+    </RowOut>
+  );
 }
 
 /**
- * Opens a slot for its child (height from 0), then brings the child in: from
- * the right with `slide`, otherwise rising a few points; both fade in. Once in,
+ * Opens a slot for its child (height from 0), then brings the child in,
+ * rising a few points while it fades in. Once in,
  * the same views lay out normally so the card can still grow (Show more).
  * JS driver: height is layout.
  */
-function InsertIn({ slide, children }: { slide: boolean; children: ReactNode }) {
+function InsertIn({ children }: { children: ReactNode }) {
   const reduced = useReducedMotion();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [open] = useState(() => new Animated.Value(0));
@@ -373,7 +359,7 @@ function InsertIn({ slide, children }: { slide: boolean; children: ReactNode }) 
                 left: 0,
                 right: 0,
                 opacity: show,
-                transform: slide ? [{ translateX: lerp(show, [Math.max(size.width, 1), 0]) }] : [{ translateY: lerp(show, [8, 0]) }],
+                transform: [{ translateY: lerp(show, [8, 0]) }],
               }
         }
       >
@@ -383,32 +369,34 @@ function InsertIn({ slide, children }: { slide: boolean; children: ReactNode }) 
   );
 }
 
-/** Slides its child out to the right while fading, then closes the slot. JS driver: desktop only, and height is layout. */
-function SwipeOut({ width, height, children }: { width: number; height: number; children: ReactNode }) {
+/**
+ * A row's exit. At rest it is a plain pass-through. Leaving, the card fades and
+ * shrinks slightly while its slot closes. JS driver: height is layout.
+ */
+function RowOut({ leaving, height, children }: { leaving: boolean; height: number; children: ReactNode }) {
   const reduced = useReducedMotion();
-  const [slide] = useState(() => new Animated.Value(0));
   const [close] = useState(() => new Animated.Value(0));
   useEffect(() => {
+    if (!leaving) {
+      close.setValue(0);
+      return;
+    }
     if (reduced) {
-      slide.setValue(1);
       close.setValue(1);
       return;
     }
-    const animation = Animated.sequence([
-      Animated.timing(slide, { toValue: 1, duration: swipeMs, easing: Easing.in(Easing.cubic), useNativeDriver: false }),
-      Animated.timing(close, { toValue: 1, duration: motionDuration.reverse, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
-    ]);
+    const animation = Animated.timing(close, { toValue: 1, duration: motionDuration.reverse, easing: Easing.inOut(Easing.quad), useNativeDriver: false });
     animation.start();
     return () => animation.stop();
-  }, [slide, close, reduced]);
+  }, [leaving, reduced, close]);
   return (
     <Animated.View
-      pointerEvents="none"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{ overflow: "hidden", height: height ? lerp(close, [height, 0]) : undefined }}
+      pointerEvents={leaving ? "none" : undefined}
+      accessibilityElementsHidden={leaving || undefined}
+      importantForAccessibility={leaving ? "no-hide-descendants" : undefined}
+      style={leaving ? { overflow: "hidden", height: height ? lerp(close, [height, 0]) : undefined } : undefined}
     >
-      <Animated.View style={{ opacity: lerp(slide, [1, 0]), transform: [{ translateX: lerp(slide, [0, Math.max(width, 1)]) }] }}>
+      <Animated.View style={leaving ? { opacity: lerp(close, [1, 0]), transform: [{ scale: lerp(close, [1, 0.97]) }] } : undefined}>
         {children}
       </Animated.View>
     </Animated.View>

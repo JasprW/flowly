@@ -7,7 +7,7 @@ import * as rpc from "../shared/rpc";
 import type { AcceptanceItem, CheckState, ConfusionItem, PlanSnapshot, Task, ValidationItem, Workpad } from "../shared/model";
 import { plansOf, validationFreshness, workpadOf } from "../shared/workpad";
 import { boardKey, useBoardQuery, useLiveAgents } from "./queries";
-import { PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
+import { Collapse, PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
 import { AiMark, IconButton, Label, font, message, radius, relativeTime, space, touch, useTheme, noFocusRing } from "./ui";
 import { t } from "../shared/i18n";
 
@@ -320,11 +320,11 @@ function CheckRow({ item, workpad, disabled, onCycle }: { item: ValidationItem; 
                 {open ? t("Hide output") : t("Show output")}
               </Label>
             </Pressable>
-            {open && (
+            <Collapse open={open} id="output">
               <Label size={font.sm} muted mono selectable>
                 {item.evidence}
               </Label>
-            )}
+            </Collapse>
           </>
         )}
       </View>
