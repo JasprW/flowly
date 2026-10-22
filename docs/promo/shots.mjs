@@ -1,46 +1,16 @@
-// Release screenshots of the Tinylink demo project. Crops away the host sidebar (personal workspaces)
-// and hides every other project's tab (any element whose text is exactly one of HIDE).
+// Release screenshots of the Tinylink demo project, via the shared shot-lib.mjs (crops the host sidebar, hides other projects' tabs).
 // Usage: node docs/promo/shots.mjs [names…]   (no names = all)
 import { mkdir } from 'node:fs/promises';
-import { chromium } from '/Users/bofan.wang/.npm/_npx/6bcb61ec6d5aea22/node_modules/playwright/index.mjs';
+import { launch, open as openPage, shot as shotTo } from './shot-lib.mjs';
 const out = new URL('./screenshots/', import.meta.url).pathname;
 await mkdir(out + 'i18n/', { recursive: true });
 await mkdir(out + 'settings/', { recursive: true });
-const HIDE = ['Ultra Kanban'];
 const only = process.argv.slice(2).length ? new Set(process.argv.slice(2)) : null;
 const want = (n) => !only || only.has(n);
-const browser = await chromium.launch({ headless: true });
+const browser = await launch();
 
-async function hidePrivate(page) {
-  await page.evaluate((hide) => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
-    const hits = [];
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const el = n;
-      if (!el.children.length && hide.includes(el.textContent.trim()) && el.getBoundingClientRect().x > 300) hits.push(el);
-    }
-    for (const el of hits) {
-      let top = el;
-      while (top.parentElement && top.parentElement.textContent.trim() === el.textContent.trim()) top = top.parentElement;
-      top.style.display = 'none';
-    }
-  }, HIDE);
-}
-async function open({ w, h, scheme = 'light', locale = 'en-US' }) {
-  const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, colorScheme: scheme, locale });
-  await context.grantPermissions(['local-network-access'], { origin: 'https://app.paseo.sh' });
-  const page = await context.newPage();
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
-  await page.goto('https://app.paseo.sh', { waitUntil: 'networkidle', timeout: 45000 });
-  await page.getByText('Flowly', { exact: true }).first().click();
-  await page.getByText('Tinylink', { exact: true }).first().click();
-  if (locale.startsWith('en')) await page.getByRole('button', { name: /Open task/ }).first().waitFor();
-  await page.waitForTimeout(3500);
-  await hidePrivate(page);
-  return { page, context, errors, clip: { x: 320, y: 0, width: w - 320, height: h } };
-}
-const shot = async (s, name, clip = s.clip) => { await hidePrivate(s.page); await s.page.screenshot({ path: out + name + '.png', clip }); };
+const open = (opts) => openPage(browser, opts);
+const shot = (s, name, clip) => shotTo(s, out + name + '.png', clip);
 const button = (p, re) => p.getByRole('button', { name: re }).first();
 
 if (want('board')) {
