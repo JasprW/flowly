@@ -25,7 +25,7 @@ import { Enter } from "./motion";
 import { memoryCountsKey, memoryKey, useMemoryQuery } from "./queries";
 import { StatusIcon } from "./status";
 import { IdeaRow, useExitList, useHeld } from "./task-ideas";
-import { Actions, AiMark, Button, Choices, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
+import { Actions, AiMark, Button, Choices, CueRing, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg, tn } from "../shared/i18n";
 
 /** Project memory UI (PROJECT-MEMORY-SPEC §8): the Memory page, the drawer section and their shared cards. */
@@ -147,6 +147,8 @@ export const MemoryCard = memo(function MemoryCard({
   disabled,
   source,
   now,
+  cueConfirm = false,
+  onEdit,
 }: {
   entry: MemoryEntry;
   /** The project's entries, for "Replaces" (§8.1). */
@@ -155,6 +157,10 @@ export const MemoryCard = memo(function MemoryCard({
   disabled: boolean;
   source?: ReactNode;
   now: number;
+  /** Ring Confirm (the welcome tour's autoplay). */
+  cueConfirm?: boolean;
+  /** Edit was pressed on a candidate (the welcome tour stops its autoplay). */
+  onEdit?(): void;
 }) {
   const { colors } = useTheme();
   const openMenu = useMenuOpener();
@@ -209,10 +215,21 @@ export const MemoryCard = memo(function MemoryCard({
     <View style={{ flexDirection: "row", gap: space[2] }}>
       <Button quiet disabled={disabled || busy} label={t("Dismiss {title}", { title: entry.title })} onPress={() => void actions.dismiss(entry)}>
         {t("Dismiss")}</Button>
-      <Button quiet icon="Pencil" disabled={disabled || busy} onPress={() => setEditing(true)}>
+      <Button
+        quiet
+        icon="Pencil"
+        disabled={disabled || busy}
+        onPress={() => {
+          onEdit?.();
+          setEditing(true);
+        }}
+      >
         {t("Edit")}</Button>
-      <Button primary icon="Check" disabled={disabled || busy} label={t("Confirm {title}: new sessions on this project will see it", { title: entry.title })} onPress={() => void actions.confirm(entry)}>
-        {t("Confirm")}</Button>
+      <View>
+        <Button primary icon="Check" disabled={disabled || busy} label={t("Confirm {title}: new sessions on this project will see it", { title: entry.title })} onPress={() => void actions.confirm(entry)}>
+          {t("Confirm")}</Button>
+        <CueRing on={cueConfirm} radius={radius.md} inset={3} />
+      </View>
     </View>
   ) : entry.status === "active" ? (
     <View style={{ flexDirection: "row", gap: space[2] }}>
@@ -684,7 +701,8 @@ function SectionTitle({ icon, title, ai }: { icon: string; title: string; ai?: b
   );
 }
 
-function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefined; nameOf(status: Status): string; onOpenTask(id: string): void }) {
+/** "From <card> · <lane>" under a memory; also the welcome tour's demo. */
+export function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefined; nameOf(status: Status): string; onOpenTask(id: string): void }) {
   const { colors } = useTheme();
   if (!task)
     return (
@@ -703,6 +721,7 @@ function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefined; name
         alignItems: "center",
         gap: space[1.5],
         marginHorizontal: space[3],
+        marginTop: space[3],
         marginBottom: space[1.5],
         paddingHorizontal: space[2],
         minHeight: touch ? 36 : 28,

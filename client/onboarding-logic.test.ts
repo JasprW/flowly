@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { TIPS_SEEN_MAX, nextTip, stepPage, tipIds, welcomeDecision, welcomePageCount, withTipSeen, type TipFacts } from "./onboarding-logic";
-import { onboardingSettingsValues } from "../shared/settings";
+import { TIPS_SEEN_MAX, firstRunOutside, loopAutoStep, memoryAutoStep, nextTip, outsidePatch, outsideShown, settingsHintDue, stepPage, tipIds, tourKey, welcomeDecision, welcomePageCount, withTipSeen, type TipFacts } from "./onboarding-logic";
+import { featureSettingsValues, nativeSessionSettingsValues, onboardingSettingsValues } from "../shared/settings";
 
 const base = { settingsStatus: "ready", welcomeSeen: false, boardLoaded: true, projectCount: 0, blocked: false };
 
@@ -168,4 +168,94 @@ test("stored onboarding settings tolerate missing or invalid fields", () => {
   expect(onboardingSettingsValues(undefined)).toEqual({ welcomeSeen: false, tipsSeen: [] });
   expect(onboardingSettingsValues({ welcomeSeen: true })).toEqual({ welcomeSeen: true, tipsSeen: [] });
   expect(onboardingSettingsValues({ welcomeSeen: "yes" }).welcomeSeen).toBe(false);
+});
+
+describe("tour setup (ONBOARDING-SETUP-SPEC)", () => {
+  test("five pages: how it works, built in, memory, insights, ready", () => {
+    expect(welcomePageCount).toBe(5);
+    expect(stepPage(3, 1)).toBe(4);
+  });
+  test("an installed user who never finished the tour keeps sessions outside Flowly off", () => {
+    expect(outsideShown(nativeSessionSettingsValues({}))).toEqual({ progress: false, nextMoves: false, ideas: false });
+  });
+  test("the first run stores all three parts on, with the master switch", () => {
+    expect(outsidePatch(firstRunOutside)).toEqual({ outside: true, outsideProgress: true, outsideNextMoves: true, outsideIdeas: true });
+  });
+  test("all parts off turns the master switch off", () => {
+    expect(outsidePatch({ progress: false, nextMoves: false, ideas: false }).outside).toBe(false);
+  });
+  test("turning one part on never wakes the parts that only looked off because the master was", () => {
+    // Stored defaults: master off, every part on.
+    const shown = outsideShown(nativeSessionSettingsValues({}));
+    expect(outsidePatch({ ...shown, progress: true })).toEqual({ outside: true, outsideProgress: true, outsideNextMoves: false, outsideIdeas: false });
+  });
+  test("a part shows on only while the master switch is on", () => {
+    expect(outsideShown({ outside: true, outsideProgress: true, outsideNextMoves: false, outsideIdeas: true })).toEqual({ progress: true, nextMoves: false, ideas: true });
+  });
+  test("the settings callout shows once, after the tour closed, when nothing else is open", () => {
+    expect(settingsHintDue({ tipsSeen: [], tourClosed: false, blocked: false })).toBe(false);
+    expect(settingsHintDue({ tipsSeen: [], tourClosed: true, blocked: false })).toBe(true);
+    expect(settingsHintDue({ tipsSeen: [], tourClosed: true, blocked: true })).toBe(false);
+    expect(settingsHintDue({ tipsSeen: ["settings-entry"], tourClosed: true, blocked: false })).toBe(false);
+  });
+  test("the settings callout is never a banner tip", () => {
+    const facts: Array<keyof TipFacts> = ["hasCard", "needsYou", "openIdea", "movedToFinished", "hasArtifact", "hasAgentTag", "agentQuestion", "olderHidden", "nextMove", "hasTicket", "noConnection", "projectTabs", "hasWorkpad", "busyBoard", "hasSubagent", "workflowSuggestion", "crowdedAttention", "fullSidebar", "cardOpen", "cardWithSession", "hasSummary", "memoryCandidate"];
+    const all = Object.fromEntries(facts.map((k) => [k, true])) as unknown as TipFacts;
+    const seen: string[] = [];
+    for (let tip = nextTip({ tipsSeen: seen, facts: all, blocked: false }); tip; tip = nextTip({ tipsSeen: seen, facts: all, blocked: false })) seen.push(tip);
+    expect(seen).not.toContain("settings-entry");
+    expect(seen).toHaveLength(tipIds.length - 1);
+  });
+  test("memory and Insights are on until turned off", () => {
+    expect(featureSettingsValues(undefined)).toEqual({ memory: true, insights: true });
+    expect(featureSettingsValues({ insights: false })).toEqual({ memory: true, insights: false });
+  });
+});
+
+describe("tour keyboard (ONBOARDING-SETUP-SPEC §3.2)", () => {
+  test("Enter on the tour goes to the next page and finishes on the last", () => {
+    expect(tourKey({ key: "Enter" }, { page: 0, onTour: true })).toBe("next");
+    expect(tourKey({ key: "Enter" }, { page: welcomePageCount - 1, onTour: true })).toBe("finish");
+  });
+  test("Enter on a focused control keeps its own meaning", () => {
+    expect(tourKey({ key: "Enter" }, { page: 1, onTour: false })).toBeNull();
+  });
+  test("arrows page within the tour and stop at its ends", () => {
+    expect(tourKey({ key: "ArrowRight" }, { page: 0, onTour: false })).toBe("next");
+    expect(tourKey({ key: "ArrowRight" }, { page: welcomePageCount - 1, onTour: true })).toBeNull();
+    expect(tourKey({ key: "ArrowLeft" }, { page: 2, onTour: true })).toBe("back");
+    expect(tourKey({ key: "ArrowLeft" }, { page: 0, onTour: true })).toBeNull();
+  });
+  test("modifiers, repeats, composition and other keys do nothing", () => {
+    for (const mod of [{ metaKey: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }, { repeat: true }, { isComposing: true }])
+      expect(tourKey({ key: "Enter", ...mod }, { page: 0, onTour: true })).toBeNull();
+    expect(tourKey({ key: "a" }, { page: 0, onTour: true })).toBeNull();
+  });
+});
+
+describe("Built in demo autoplay (ONBOARDING-SETUP-SPEC §3)", () => {
+  const at = { turn: 0, draft: false, working: false, updating: false, idea: "none" as const };
+  test("plays the case in order: pick the step, send it, take the idea, then start over", () => {
+    expect(loopAutoStep(at)?.cue).toBe("move");
+    expect(loopAutoStep({ ...at, draft: true })?.cue).toBe("send");
+    expect(loopAutoStep({ ...at, turn: 1, idea: "open" })?.cue).toBe("idea");
+    expect(loopAutoStep({ ...at, turn: 1, idea: "task" })?.cue).toBe("restart");
+  });
+  test("waits while the agent works or Progress updates", () => {
+    expect(loopAutoStep({ ...at, draft: false, working: true })).toBeNull();
+    expect(loopAutoStep({ ...at, turn: 1, updating: true })).toBeNull();
+  });
+  test("a turn without an idea has nothing more to play", () => {
+    expect(loopAutoStep({ ...at, turn: 2 })).toBeNull();
+  });
+});
+
+describe("Project memory demo autoplay (ONBOARDING-SETUP-SPEC §3)", () => {
+  test("confirms the suggestion, waits for the new card's session, then starts over", () => {
+    expect(memoryAutoStep("suggested")?.cue).toBe("confirm");
+    expect(memoryAutoStep("confirmed")).toBeNull();
+    expect(memoryAutoStep("working")).toBeNull();
+    expect(memoryAutoStep("used")?.cue).toBe("restart");
+    expect(memoryAutoStep("dismissed")?.cue).toBe("restart");
+  });
 });

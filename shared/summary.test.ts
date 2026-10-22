@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { isSummarizer, lastTurn, targetText, parseModelOutput, resolveModel, summaryPrompt, summarySettingsValues, truncateTranscript, turnText } from "./summary";
+import { isSummarizer, modelLabel, lastTurn, targetText, parseModelOutput, resolveModel, summaryPrompt, summarySettingsValues, truncateTranscript, turnText } from "./summary";
 
 test("turn text keeps dialogue, reduces tools to names and drops reasoning", () => {
   const text = turnText([
@@ -103,4 +103,11 @@ test("target drops a leading goal label", () => {
 test("turnText ignores plugin rows, so a summary row is never summarized again (NATIVE-SESSION-SPEC §5.5 #6)", () => {
   const row = { type: "plugin", kind: "flowly-summary", data: { state: "S" } };
   expect(turnText([{ type: "assistant_message", text: "A" }, row])).toBe("Assistant: A");
+});
+
+test("model labels name Claude models by family and version", () => {
+  expect(modelLabel("claude/claude-haiku-5-5")).toBe("Haiku 5.5");
+  expect(modelLabel("claude/claude-sonnet-5")).toBe("Sonnet 5");
+  expect(modelLabel("codex/gpt-6-luna")).toBe("GPT-6-Luna");
+  expect(modelLabel("claude/claude-haiku-4-5-20251001")).toBe("claude-haiku-4-5-20251001");
 });

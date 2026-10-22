@@ -209,6 +209,26 @@ export function onboardingSettingsValues(values: unknown): OnboardingSettings {
   return parsed.success ? parsed.data : onboardingSettings.schema.parse({});
 }
 
+/**
+ * Advanced features as a whole (ONBOARDING-SETUP-SPEC §6). Off: memory is off in every project
+ * (each project's own switch still applies when on); Insights is hidden and its digest and
+ * Workflow insights do not run. Host-scoped.
+ */
+export const featureSettings = defineSettings({
+  id: "features",
+  scope: "host",
+  version: 1,
+  schema: z.object({
+    memory: z.boolean().default(true),
+    insights: z.boolean().default(true),
+  }),
+});
+export type FeatureSettings = z.infer<typeof featureSettings.schema>;
+export function featureSettingsValues(values: unknown): FeatureSettings {
+  const parsed = featureSettings.schema.safeParse(values ?? {});
+  return parsed.success ? parsed.data : featureSettings.schema.parse({});
+}
+
 /** Global default model for new sessions (MODEL-DEFAULTS-SPEC). Empty strings mean "none": new sessions follow the latest session. */
 export const modelSettings = defineSettings({
   id: "models",

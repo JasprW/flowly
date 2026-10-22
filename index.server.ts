@@ -4,7 +4,7 @@ import { BoardStore, columnOrder } from "./server/store";
 import { BoardService, dataDirectory, migrateLegacyPluginData } from "./server/service";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
-import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues } from "./shared/settings";
+import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { WrapupService } from "./server/wrapup";
@@ -42,7 +42,7 @@ import { WorkflowInsightsService, WorkflowStore } from "./server/workflow-insigh
 import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workflow-insights";
 import { sessionModel } from "./server/agent-model";
 import { turnPick, userTexts } from "./shared/agent-habits";
-import { MemoryService } from "./server/memory";
+import { MemoryService, setMemoryEverywhere } from "./server/memory";
 
 export default function contribute(server: PluginServerContext) {
   server.registerSettings(boardViewSettings);
@@ -58,6 +58,16 @@ export default function contribute(server: PluginServerContext) {
   const nativePrefs = server.registerSettings(nativeSessionSettings);
   const workflowPrefs = server.registerSettings(workflowInsightsSettings);
   const perfPrefs = server.registerSettings(performanceSettings);
+  // Project memory and Insights as a whole (ONBOARDING-SETUP-SPEC §6); unreadable settings keep the defaults (on).
+  const featurePrefs = server.registerSettings(featureSettings);
+  const featureValues = async () => {
+    const state = await featurePrefs.read().catch(() => null);
+    return featureSettingsValues(state?.status === "ready" ? state.values : {});
+  };
+  const stopFeaturePrefs = featurePrefs.subscribe((state) => {
+    if (state.status === "ready") setMemoryEverywhere(featureSettingsValues(state.values).memory);
+  });
+  void featureValues().then((v) => setMemoryEverywhere(v.memory));
   // The global switch for rules A1/A1r; unreadable settings keep the default (on).
   const autoStatusOn = async () => {
     const state = await statusPrefs.read().catch(() => null);
@@ -102,7 +112,12 @@ export default function contribute(server: PluginServerContext) {
   // Untrimmed event log + project insights (PROJECT-INSIGHTS-SPEC).
   const flow = new FlowLog(store.directory);
   store.flow = flow;
-  const insights = new InsightsService(store, flow, new GitStats(), summaries.store, new DigestStore(store.directory), summaries.settings, aiLanguage);
+  // With Insights off, no daily digest is written (ONBOARDING-SETUP-SPEC §6).
+  const insightsSummarySettings = async () => {
+    const [summary, features] = await Promise.all([summaries.settings(), featureValues()]);
+    return { ...summary, digestEnabled: summary.digestEnabled && features.insights };
+  };
+  const insights = new InsightsService(store, flow, new GitStats(), summaries.store, new DigestStore(store.directory), insightsSummarySettings, aiLanguage);
   void insights.reconcile().catch((e) => console.error("Kanban flow log backfill failed:", e instanceof Error ? e.message : String(e)));
   server.handle(rpc.projectInsights, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.project(input, paseo), etag));
   server.handle(rpc.projectDigest, (input, { paseo }) => insights.digest(input, paseo));
@@ -116,8 +131,10 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.summaryHistory, (input) => summaries.store.history(input.taskId));
   // Workflow insights (WORKFLOW-INSIGHTS-SPEC): command log, scheduled analysis, suggestions.
   const workflowValues = async () => {
-    const state = await workflowPrefs.read().catch(() => null);
-    return workflowSettingsValues(state?.status === "ready" ? state.values : {});
+    const [state, features] = await Promise.all([workflowPrefs.read().catch(() => null), featureValues()]);
+    const values = workflowSettingsValues(state?.status === "ready" ? state.values : {});
+    // With Insights off, Workflow insights neither collects nor runs (ONBOARDING-SETUP-SPEC §6).
+    return { ...values, enabled: values.enabled && features.insights };
   };
   const commands = new CommandLog(store.directory);
   const workflow = new WorkflowInsightsService(store, commands, new WorkflowStore(store.directory), flow, workflowValues, summaries.settings, aiLanguage);
@@ -599,6 +616,7 @@ export default function contribute(server: PluginServerContext) {
   return () => {
     workflow.stop();
     stopWorkflowPrefs();
+    stopFeaturePrefs();
     folders.stop();
     tools.stop();
   };

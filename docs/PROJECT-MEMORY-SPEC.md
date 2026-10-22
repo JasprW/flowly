@@ -530,6 +530,8 @@ memory: {
 
 ## 9. 设置
 
+- 2026-10-22（ONBOARDING-SETUP-SPEC §6）：新增 host 设置 `features.memory`（默认开），在 Settings → AI features → **Project memory** 和欢迎导览第 3 页。关闭时所有项目都按 `Project.memory === false` 处理（`server/memory.ts` 的 `memoryOn` 由插件的设置订阅保持最新）；项目菜单、概览栏的 Memory 入口和卡片侧栏的 Memory 区隐藏。开启时仍由每个项目自己的开关决定。
+
 - 项目设置新增 `Project.memory?: boolean`，缺省视为开（同 `Project.workpad`）。开关文案 **Project memory**，说明 “Share confirmed decisions and pitfalls with new sessions on this project.”。关闭后：
   - 不再注入；
   - `flowly_remember` 返回 `MEMORY_DISABLED`；

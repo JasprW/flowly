@@ -347,7 +347,8 @@ type OutputEntry = ReturnType<typeof recentSessionOutput>[number];
 const sameEntry = (a: OutputEntry, b: OutputEntry) =>
   a === b || (a.key === b.key && a.text === b.text && a.author === b.author && a.messageId === b.messageId);
 
-const TranscriptEntry = memo(function TranscriptEntry({
+/** One transcript entry: your message as a bubble, the agent's reply as markdown. Also the welcome tour's sample session. */
+export const TranscriptEntry = memo(function TranscriptEntry({
   entry,
   taskId,
   agentId,
@@ -407,7 +408,7 @@ const TranscriptEntry = memo(function TranscriptEntry({
  * line. Expanded, each step shows a short preview (thinking is clipped; the
  * full transcript lives in Paseo).
  */
-const ActivityBlock = memo(function ActivityBlock({ block, live }: { block: Extract<TranscriptBlock, { kind: "activity" }>; live: boolean }) {
+export const ActivityBlock = memo(function ActivityBlock({ block, live }: { block: Extract<TranscriptBlock, { kind: "activity" }>; live: boolean }) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const turn = useMotionValue(open ? 1 : 0, motionDuration.feedback);

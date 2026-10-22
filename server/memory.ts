@@ -116,7 +116,13 @@ export async function memoryContext(directory: string, task: Task, project: Proj
   return { lines: memoryContextLines(selection, titleOf), ids: selection.entries.map((e) => e.id) };
 }
 
-export const memoryOn = (project: Pick<Project, "memory"> | undefined) => !!project && project.memory !== false;
+/** Settings → AI features → Project memory (ONBOARDING-SETUP-SPEC §6); kept current by the plugin's settings subscription. */
+let memoryEverywhere = true;
+export function setMemoryEverywhere(on: boolean) {
+  memoryEverywhere = on;
+}
+
+export const memoryOn = (project: Pick<Project, "memory"> | undefined) => memoryEverywhere && !!project && project.memory !== false;
 
 /** A refusal an agent tool turns into its error code (§4.1). */
 export class MemoryError extends Error {

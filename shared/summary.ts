@@ -258,6 +258,9 @@ export function resolveModel(configured: string, providers: ModelList): string {
 /** "claude/claude-haiku-5-5" → "Haiku 5.5"-style short label for footers. */
 export function modelLabel(id: string): string {
   const model = id.slice(id.indexOf("/") + 1);
-  const known: Record<string, string> = { "claude-haiku-5-5": "Haiku 5.5", "gpt-6-luna": "GPT-6-Luna" };
+  const known: Record<string, string> = { "gpt-6-luna": "GPT-6-Luna" };
+  // "claude-sonnet-5-5" → "Sonnet 5.5"; dated or unknown ids stay as they are.
+  const claude = /^claude-(haiku|sonnet|opus|fable)-(\d+)(?:-(\d))?$/.exec(model);
+  if (claude) return `${claude[1][0].toUpperCase()}${claude[1].slice(1)} ${claude[2]}${claude[3] ? `.${claude[3]}` : ""}`;
   return known[model] || model;
 }

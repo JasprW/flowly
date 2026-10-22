@@ -274,6 +274,8 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 
 ### 12.6 设置
 
+> 2026-10-22 用户决定（ONBOARDING-SETUP-SPEC D2/D3）：改为“默认开”，但由欢迎导览写入：新用户首次导览以任何方式关闭时，按导览里三个 “Also in sessions outside Flowly” 开关（默认全开）写入 `outside` 与三项；schema 默认值仍为 `outside=false`，所以没完成导览的已安装用户保持关。导览写入时总是同时写四个字段（`outside` = 三项任一为开），避免开一项时把只因总开关关着而“看起来关”的其他项一并打开。
+
 host 设置 `native-session` 增加字段（默认值保证旧存储可读）：`outside`（默认 **false**）、`outsideProgress` / `outsideNextMoves` / `outsideIdeas`（默认 true，仅在 `outside` 开时生效）。Flowly 设置 → AI features → “Paseo's session view” 新增总开关与三个子开关，并说明：开启后，每个外部 session 每完成一轮会用 Summary 模型跑一次（读取最近对话，发送给该模型的 provider），并留下一个已归档的子 session。
 
 ### 12.7 客户端注册与性能

@@ -685,6 +685,21 @@ export function Row({
   );
 }
 
+/**
+ * An accent ring drawn over its parent's edge (`inset` points outside it), fading in while `on`.
+ * The welcome tour's autoplay uses it to show which control it is about to press.
+ */
+export function CueRing({ on, radius: round, inset = 0 }: { on: boolean; radius: number; inset?: number }) {
+  const { colors } = useTheme();
+  const opacity = useMotionValue(on ? 1 : 0, motionDuration.forward);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{ position: "absolute", top: -inset, left: -inset, right: -inset, bottom: -inset, borderRadius: round + inset, borderWidth: 2, borderColor: colors.accent, opacity }}
+    />
+  );
+}
+
 /** A right-pointing chevron that turns down as `open` becomes true, in step with the `Collapse` it controls. */
 export function TurnChevron({ open, size = 14, color }: { open: boolean; size?: number; color: string }) {
   const turn = useMotionValue(open ? 1 : 0, open ? motionDuration.forward : motionDuration.reverse);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
@@ -8,6 +8,8 @@ import {
   aiLanguageSettingsValues,
   boardViewSettings,
   boardViewValues,
+  featureSettings,
+  featureSettingsValues,
   ideasSettings,
   ideasSettingsValues,
   nativeSessionSettings,
@@ -27,33 +29,34 @@ import { hideFinishedChoices } from "./finished-cards";
 import { modelOptions, providerOptions } from "./options";
 import { ModelDefaultGroup } from "./model-default";
 import { SettingRow, SettingSelect, SettingSwitch, SettingsGroup, SettingsPage } from "./settings-ui";
-import { useOnboarding } from "./onboarding";
+import { useOnboarding } from "./onboarding-state";
+import { useStored } from "./stored-settings";
 import { Notice, useTheme } from "./ui";
 import { compactNumber } from "../shared/usage";
+import { dollars, roundTokens, runCost, runTokens, type AiRun } from "../shared/ai-cost";
 import * as rpc from "../shared/rpc";
 import { localZone } from "./queries";
 import { INTERVALS, WORKFLOW_AUTO_MODELS, usageIn, windowDays, workflowInsightsSettings, workflowSettingsValues } from "../shared/workflow-insights";
 
-const AUTO = "";
-
-/** Stored values and a patch-and-save that reloads when another writer got there first. */
-// The SDK's settings state is generic in the definition; the pages only need this shape.
-type Stored<T> = { status: string; values?: unknown; revision?: number; saving: boolean; error?: string; saveError?: string; save(values: T, revision: never): Promise<unknown>; reload(): Promise<unknown> | void };
-function useStored<T extends object>(settings: unknown, parse: (values: unknown) => T) {
-  const s = settings as Stored<T>;
-  const values = s.status === "ready" ? parse(s.values) : null;
-  return {
-    values,
-    busy: !values || s.saving,
-    problem: s.status === "error" || s.status === "invalid" ? s.error : s.saveError,
-    save(patch: Partial<T>) {
-      if (!values || s.saving) return;
-      void (s.save as (v: T, r: unknown) => Promise<unknown>)({ ...values, ...patch }, s.revision).then((saved) => {
-        if (!saved) void s.reload();
-      });
-    },
-  };
+/** A Flowly AI run's estimated size and price (shared/ai-cost.ts): with a price for Claude models, tokens only otherwise. */
+const costTexts: Record<AiRun, readonly [string, string]> = {
+  progress: [msg("About {tokens} tokens per agent turn: {cost} with {model} at API prices, {hundred} for 100 turns."), msg("About {tokens} tokens per agent turn.")],
+  outside: [msg("About {tokens} tokens per agent turn: {cost} with {model} at API prices, {hundred} for 100 turns."), msg("About {tokens} tokens per agent turn.")],
+  memoryReview: [msg("About {tokens} tokens per finished card: {cost} with {model} at API prices."), msg("About {tokens} tokens per finished card.")],
+  digest: [msg("About {tokens} tokens per digest: {cost} with {model} at API prices."), msg("About {tokens} tokens per digest.")],
+  workflow: [msg("About {tokens} tokens per run: {cost} with {model} at API prices."), msg("About {tokens} tokens per run.")],
+};
+export function aiCostText(run: AiRun, model: string): string {
+  const cost = runCost(run, model);
+  const tokens = roundTokens(runTokens(run));
+  return cost === null
+    ? t(costTexts[run][1], { tokens })
+    : t(costTexts[run][0], { tokens, cost: dollars(cost), hundred: dollars(cost * 100), model: modelLabel(model) });
 }
+/** The model a summary-model run uses: the chosen one, or Auto's first. */
+export const summaryModelOf = (stored: string | undefined) => stored || AUTO_MODELS[0];
+
+const AUTO = "";
 
 function Problem({ text }: { text?: string }) {
   return text ? <Notice>{text}</Notice> : null;
@@ -64,8 +67,6 @@ export function GeneralPage({ onTour }: { onTour(): void }) {
   const language = useStored(useSettings(languageSettings), languageSettingsValues);
   const onboarding = useOnboarding();
   const [reset, setReset] = useState(false);
-  const deviceName = locales.find((l) => l.code === deviceLocale())?.name ?? "English";
-  const autoLabel = t("Device ({language})", { language: deviceName });
   return (
     <SettingsPage title={t("General")} description={t("Language and the welcome tour.")}>
       <Problem text={language.problem} />
@@ -73,14 +74,7 @@ export function GeneralPage({ onTour }: { onTour(): void }) {
         title={t("Language")}
         description={t("The language of Flowly's buttons and messages. Agent instructions, error details from the daemon and AI-written summaries are not affected.")}
       >
-        <SettingSelect
-          title={t("Interface language")}
-          value={language.values?.language ?? "auto"}
-          placeholder={autoLabel}
-          disabled={language.busy}
-          options={[{ value: "auto", label: autoLabel }, ...locales.map((l) => ({ value: l.code as string, label: l.name }))]}
-          onChange={(next) => language.save({ language: next as NonNullable<typeof language.values>["language"] })}
-        />
+        <InterfaceLanguageRow />
       </SettingsGroup>
       <SettingsGroup
         title={t("Welcome tour")}
@@ -99,6 +93,41 @@ export function GeneralPage({ onTour }: { onTour(): void }) {
         />
       </SettingsGroup>
     </SettingsPage>
+  );
+}
+
+/** Interface language (Settings → General and the welcome tour's first page). */
+export function InterfaceLanguageRow() {
+  const language = useStored(useSettings(languageSettings), languageSettingsValues);
+  const deviceName = locales.find((l) => l.code === deviceLocale())?.name ?? "English";
+  const autoLabel = t("Device ({language})", { language: deviceName });
+  return (
+    <SettingSelect
+      title={t("Interface language")}
+      value={language.values?.language ?? "auto"}
+      placeholder={autoLabel}
+      disabled={language.busy}
+      options={[{ value: "auto", label: autoLabel }, ...locales.map((l) => ({ value: l.code as string, label: l.name }))]}
+      onChange={(next) => language.save({ language: next as NonNullable<typeof language.values>["language"] })}
+    />
+  );
+}
+
+/** AI output language (Settings → AI features and the welcome tour's Built in page). */
+export function AiLanguageRow({ detail }: { detail?: string }) {
+  const aiLanguage = useStored(useSettings(aiLanguageSettings), aiLanguageSettingsValues);
+  const interfaceName = locales.find((l) => l.code === getLocale())?.name ?? "English";
+  const sameAsInterface = t("Same as interface language ({language})", { language: interfaceName });
+  return (
+    <SettingSelect
+      title={t("AI output language")}
+      detail={detail}
+      value={aiLanguage.values?.aiLanguage ?? "interface"}
+      placeholder={sameAsInterface}
+      disabled={aiLanguage.busy}
+      options={[{ value: "interface", label: sameAsInterface }, ...locales.map((l) => ({ value: l.code as string, label: l.name }))]}
+      onChange={(next) => aiLanguage.save({ aiLanguage: next as NonNullable<typeof aiLanguage.values>["aiLanguage"] })}
+    />
   );
 }
 
@@ -129,7 +158,7 @@ export function ModelsPage({ active }: { active: boolean }) {
 }
 
 /** Provider and model of the summarizer (TASK-SUMMARY-SPEC §4); "Auto" prefers Claude's cheap model, then Codex's. */
-function SummaryModelGroup({ active }: { active: boolean }) {
+export function SummaryModelGroup({ active, bare = false, extra }: { active: boolean; /** No title (the welcome tour's Progress block). */ bare?: boolean; /** Rows after the model rows. */ extra?: ReactNode }) {
   const paseo = usePaseo();
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const stored = summary.values?.summaryModel || AUTO;
@@ -153,9 +182,10 @@ function SummaryModelGroup({ active }: { active: boolean }) {
   return (
     <>
       <Problem text={summary.problem} />
-      <SettingsGroup title={t("Summary model")} description={t("Writes the task progress summaries and the daily digest. A cheap, fast model is enough.")}>
+      <SettingsGroup title={bare ? undefined : t("Summary model")} description={bare ? undefined : t("Writes the task progress summaries and the daily digest. A cheap, fast model is enough.")}>
         <SettingSelect
-          title={t("Provider")}
+          title={bare ? t("Progress model") : t("Provider")}
+          detail={aiCostText("progress", summaryModelOf(summary.values?.summaryModel))}
           value={provider}
           placeholder={autoLabel}
           disabled={summary.busy}
@@ -177,6 +207,7 @@ function SummaryModelGroup({ active }: { active: boolean }) {
             onChange={(model) => summary.save({ summaryModel: `${provider}/${model}` })}
           />
         )}
+        {extra}
       </SettingsGroup>
       {provider !== AUTO && !storedModel && (
         <Notice tone="info">{t("Pick a model to use this provider. Until then the stored choice stays: {choice}.", { choice: stored ? stored : autoLabel })}</Notice>
@@ -242,29 +273,19 @@ export function AiPage() {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const ideas = useStored(useSettings(ideasSettings), ideasSettingsValues);
   const native = useStored(useSettings(nativeSessionSettings), nativeSessionSettingsValues);
-  const aiLanguage = useStored(useSettings(aiLanguageSettings), aiLanguageSettingsValues);
-  const interfaceName = locales.find((l) => l.code === getLocale())?.name ?? "English";
-  const sameAsInterface = t("Same as interface language ({language})", { language: interfaceName });
+  const features = useStored(useSettings(featureSettings), featureSettingsValues);
   const tapOptions = [
     { value: "fill", label: t("Fill the message box") },
     { value: "copy", label: t("Copy") },
   ];
   return (
     <SettingsPage title={t("AI features")} description={t("What the board writes and suggests for you. The model is chosen under Models.")}>
-      <Problem text={summary.problem || ideas.problem || native.problem || aiLanguage.problem} />
+      <Problem text={summary.problem || ideas.problem || native.problem || features.problem} />
       <SettingsGroup
         title={t("Output language")}
         description={t("The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.")}
       >
-        <SettingSelect
-          title={t("AI output language")}
-          detail={t("Applies from the next run; text already written stays as it is.")}
-          value={aiLanguage.values?.aiLanguage ?? "interface"}
-          placeholder={sameAsInterface}
-          disabled={aiLanguage.busy}
-          options={[{ value: "interface", label: sameAsInterface }, ...locales.map((l) => ({ value: l.code as string, label: l.name }))]}
-          onChange={(next) => aiLanguage.save({ aiLanguage: next as NonNullable<typeof aiLanguage.values>["aiLanguage"] })}
-        />
+        <AiLanguageRow detail={t("Applies from the next run; text already written stays as it is.")} />
       </SettingsGroup>
       <SettingsGroup
         title={t("Task progress summary")}
@@ -277,22 +298,10 @@ export function AiPage() {
           disabled={summary.busy}
           onChange={(summaryEnabled) => summary.save({ summaryEnabled })}
         />
-        <SettingSwitch
-          title={t("Daily digest")}
-          detail={t("Write a past day's project summary when Insights opens it. Refresh in Insights always works.")}
-          value={summary.values?.digestEnabled ?? true}
-          disabled={summary.busy}
-          onChange={(digestEnabled) => summary.save({ digestEnabled })}
-        />
-        <SettingSwitch
-          title={t("Find memories in finished cards")}
-          detail={t("When a card moves to Done, the summary model suggests at most one thing worth remembering for the project's later cards, and usually none. You confirm it. Uses a few tokens per card.")}
-          value={summary.values?.retroEnabled ?? true}
-          disabled={summary.busy}
-          onChange={(retroEnabled) => summary.save({ retroEnabled })}
-        />
       </SettingsGroup>
-      <WorkflowInsightsGroup />
+      <MemoryFeatureGroup />
+      <InsightsFeatureGroup />
+      {(features.values?.insights ?? true) && <WorkflowInsightsGroup />}
       <SettingsGroup title={t("Ideas")} description={t("Agents suggest worthwhile next steps as ideas on their cards; you turn them into new tasks or dismiss them.")}>
         <SettingSwitch
           title={t("Ideas")}
@@ -317,7 +326,7 @@ export function AiPage() {
         />
         <SettingSwitch
           title={t("Sessions outside Flowly")}
-          detail={t("Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.")}
+          detail={`${t("Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.")} ${aiCostText("outside", summaryModelOf(summary.values?.summaryModel))}`}
           value={native.values?.outside ?? false}
           disabled={native.busy}
           onChange={(outside) => native.save({ outside })}
@@ -354,6 +363,78 @@ export function AiPage() {
         />
       </SettingsGroup>
     </SettingsPage>
+  );
+}
+
+/** Project memory as a whole and its finished-card review (Settings → AI features and the welcome tour). */
+export function MemoryFeatureGroup({ bare = false, brief = false }: { bare?: boolean; /** Without the detail lines (the welcome tour). */ brief?: boolean }) {
+  const summary = useStored(useSettings(summarySettings), summarySettingsValues);
+  const features = useStored(useSettings(featureSettings), featureSettingsValues);
+  const on = features.values?.memory ?? true;
+  return (
+    <SettingsGroup
+      title={bare ? undefined : t("Project memory")}
+      description={bare ? undefined : t("Decisions and pitfalls you confirm are shared with new sessions on the same project.")}
+    >
+      <SettingSwitch
+        title={t("Project memory")}
+        detail={brief ? undefined : t("Off in every project when off. Each project can still turn it off on its own. Entries are kept.")}
+        value={on}
+        disabled={features.busy}
+        onChange={(memory) => features.save({ memory })}
+      />
+      <SettingSwitch
+        title={t("Find memories in finished cards")}
+        detail={[brief ? "" : t("When a card moves to Done, the summary model suggests at most one thing worth remembering for the project's later cards, and usually none. You confirm it."), aiCostText("memoryReview", summaryModelOf(summary.values?.summaryModel))].filter(Boolean).join(" ")}
+        value={on && (summary.values?.retroEnabled ?? true)}
+        disabled={summary.busy || !on}
+        onChange={(retroEnabled) => summary.save({ retroEnabled })}
+      />
+    </SettingsGroup>
+  );
+}
+
+/** Insights as a whole, its daily digest and, in the welcome tour, the Workflow insights switch. */
+export function InsightsFeatureGroup({ bare = false, workflow = false, brief = false }: { bare?: boolean; workflow?: boolean; /** Without the detail lines (the welcome tour). */ brief?: boolean }) {
+  const summary = useStored(useSettings(summarySettings), summarySettingsValues);
+  const features = useStored(useSettings(featureSettings), featureSettingsValues);
+  const on = features.values?.insights ?? true;
+  return (
+    <SettingsGroup
+      title={bare ? undefined : t("Insights")}
+      description={bare ? undefined : t("Each project's Insights page: how much of your attention cards take, review rounds, where time and cost go, by week.")}
+    >
+      <SettingSwitch
+        title={t("Insights")}
+        detail={brief ? undefined : t("Off: the Insights page and its chip are hidden, and no digest or Workflow insights run. Activity is still recorded.")}
+        value={on}
+        disabled={features.busy}
+        onChange={(insights) => features.save({ insights })}
+      />
+      <SettingSwitch
+        title={t("Daily digest")}
+        detail={[brief ? "" : t("Write a past day's project summary when Insights opens it. Refresh in Insights always works."), aiCostText("digest", summaryModelOf(summary.values?.summaryModel))].filter(Boolean).join(" ")}
+        value={on && (summary.values?.digestEnabled ?? true)}
+        disabled={summary.busy || !on}
+        onChange={(digestEnabled) => summary.save({ digestEnabled })}
+      />
+      {workflow && <WorkflowSwitch disabled={!on} />}
+    </SettingsGroup>
+  );
+}
+
+/** Just the Workflow insights switch; its model and cadence stay in Settings. */
+function WorkflowSwitch({ disabled }: { disabled: boolean }) {
+  const prefs = useStored(useSettings(workflowInsightsSettings), workflowSettingsValues);
+  const on = !disabled && !!prefs.values?.enabled;
+  return (
+    <SettingSwitch
+      title={t("Workflow insights")}
+      detail={`${t("Off by default: every few days a model reads the commands agents ran and suggests scripts and rules. Spends tokens and keeps a log of commands. Model and schedule are in Settings.")} ${aiCostText("workflow", prefs.values?.model || WORKFLOW_AUTO_MODELS[0])}`}
+      value={on}
+      disabled={prefs.busy || disabled}
+      onChange={(enabled) => prefs.save({ enabled, timeZone: localZone() || "" })}
+    />
   );
 }
 
@@ -415,7 +496,7 @@ function WorkflowInsightsGroup() {
       >
         <SettingSwitch
           title={t("Workflow insights")}
-          detail={on ? t("Collecting commands. Suggestions appear in each project's Insights.") : t("Collecting starts when you turn this on; the last 7 days are read once from the sessions' history.")}
+          detail={`${on ? t("Collecting commands. Suggestions appear in each project's Insights.") : t("Collecting starts when you turn this on; the last 7 days are read once from the sessions' history.")} ${aiCostText("workflow", values?.model || WORKFLOW_AUTO_MODELS[0])}`}
           value={on}
           disabled={prefs.busy}
           onChange={(enabled) => save({ enabled })}

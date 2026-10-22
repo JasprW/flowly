@@ -1,5 +1,19 @@
 # Implementation progress
 
+## Welcome tour redesign: explain and set the basics (card "重设计onboarding流程") — 2026-10-22
+
+Spec: [ONBOARDING-SETUP-SPEC](ONBOARDING-SETUP-SPEC.md) (design confirmed by the user before implementation). The tour now also sets the interface and AI output language, the progress model, outside-session progress / next steps / ideas, and Project memory / Insights.
+
+- [x] Five pages: How Flowly works (+ interface language), Built in (Always on; progress model; *Also in sessions outside Flowly* ×3; cost note), Project memory and Insights (drawn sketches, switches and sub-switches), Ready (+ More features).
+- [x] First run: the outside-session switches are a draft stored only when the tour closes (any way), all on by default; installed users who never finished it keep their stored values (off). Manual opens show and store the real values.
+- [x] New host setting `features` (`memory`, `insights`): memory off everywhere (`memoryOn`), Insights hidden with no digest or Workflow insights; Settings → AI features gained both groups. Existing switches kept (user decision).
+- [x] Settings-button callout `settings-entry` after the tour closes.
+- [x] Old users are not shown the tour (unchanged); "What's new after an update" proposed as an idea instead.
+- [x] `npm run typecheck`, `npm test`; desktop light/dark screenshots in `docs/verification/onboarding-setup-2026-10-22/`.
+- [ ] UNRUN: first-run path on a real empty board (needs a fixture host), phone, Luna session.
+- [x] Onboarding: this is the tour; new tip `settings-entry`; README (both) quick start; ONBOARDING-SPEC §2/§5.
+
+
 ## Registry listing art (card "发布v1.5.0") — 2026-10-21
 
 - [x] Researched the Paseo registry (getpaseo/plugins README, PROTOCOL, REVIEW, publishing guide): icon and screenshots come from `icon`/`media` in `paseo-plugin.json` (package-relative PNG icon; PNG/JPG/WebP/GIF/MP4/WebM media; first image is the thumbnail; SVG rejected), or from `listing.*` overrides a reviewer adds. The two screenshots in the previous listing were reviewer-added overrides.

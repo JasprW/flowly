@@ -102,6 +102,8 @@ agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型
 
 ## 快速上手
 
+第一次打开 Flowly 时，一个简短的欢迎导览会讲清 project、卡片和 session，并完成基础设置：界面语言和 AI 输出语言、进展模型、进展 / 下一步 / 想法是否也用于 Flowly 之外的 session（默认开；这些 session 每完成一轮会运行一次摘要模型），以及项目记忆和 Insights 是否开启。Skip 即保留默认值。之后可以在左下角的齿轮里随时修改。
+
 1. **New project**：选择一个目录（或多个仓库），把它注册为原生 Paseo project。
 2. **New task**：描述要做的事，可以同时启动第一个 agent。
 3. 看卡片自己移动。回答 **Needs you** 的问题，验收 **In review** 的卡片，处理 **Ideas**，一天结束时打开 **Insights**。

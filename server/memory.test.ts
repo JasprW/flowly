@@ -5,7 +5,7 @@ import type { PaseoApi } from "@getpaseo/client";
 import { agentFixture } from "./agent-fixture";
 import { BoardService } from "./service";
 import { SummaryStore } from "./summaries";
-import { MemoryError, MemoryService, memoryContext, memoryStore } from "./memory";
+import { MemoryError, MemoryService, memoryContext, memoryOn, memoryStore, setMemoryEverywhere } from "./memory";
 import type { SummarySettings } from "../shared/summary";
 import type { MemoryEntry } from "../shared/memory";
 
@@ -350,4 +350,17 @@ test("invalid memory data is preserved, not reset", async () => {
   const board = await x.store.read();
   expect((await memoryContext(x.store.directory, board.tasks[0], board.projects[0], board)).lines).toEqual([]);
   expect(new MemoryError("MEMORY_FULL", "x").code).toBe("MEMORY_FULL");
+});
+
+test("the Settings switch turns memory off in every project; on, each project's own switch decides (ONBOARDING-SETUP-SPEC §6)", () => {
+  try {
+    expect(memoryOn({})).toBe(true);
+    expect(memoryOn({ memory: false })).toBe(false);
+    setMemoryEverywhere(false);
+    expect(memoryOn({})).toBe(false);
+    expect(memoryOn({ memory: true })).toBe(false);
+  } finally {
+    setMemoryEverywhere(true);
+  }
+  expect(memoryOn({ memory: true })).toBe(true);
 });

@@ -7,7 +7,7 @@ import { useShortcutBlock } from "./shortcuts";
 import { AiPage, GeneralPage, ModelsPage, WorkflowPage } from "./settings-pages";
 import { CardsPage } from "./card-settings";
 import { ConnectionsPage } from "./connectors";
-import { IconButton, Label, Theme, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
+import { Button, IconButton, Label, Theme, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
 import { msg, t } from "../shared/i18n";
 
 /** The settings window is wider than the host modal (about 520 px) so the two columns have room. */
@@ -17,7 +17,18 @@ const modalMaxWidth = 900;
  * Floating bottom-left settings button: a rounded square that rises in on mount,
  * lifts on hover, presses in, and stays highlighted while its modal is open.
  */
-export function SettingsFab({ open = false, onPress }: { open?: boolean; onPress(): void }) {
+export function SettingsFab({
+  open = false,
+  hint,
+  onHintDismiss,
+  onPress,
+}: {
+  open?: boolean;
+  /** One-time callout above the button (ONBOARDING-SETUP-SPEC §5); the button is outlined while it shows. */
+  hint?: string;
+  onHintDismiss?(): void;
+  onPress(): void;
+}) {
   const { colors } = useTheme();
   const [hovered, setHovered] = useState(false),
     [pressed, setPressed] = useState(false),
@@ -28,6 +39,44 @@ export function SettingsFab({ open = false, onPress }: { open?: boolean; onPress
   const turn = useMotionValue(open ? 1 : hovered ? 0.5 : 0, motionDuration.forward);
   const size = touch ? 44 : 36;
   return (
+    <>
+    {!!hint && (
+      // A sibling, not a child: the button's box would clip it on Android.
+      <Enter
+        distance={6}
+        style={{
+          position: "absolute",
+          left: space[3],
+          bottom: space[3] + size + space[2],
+          width: 280,
+          maxWidth: "80%",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space[2],
+          paddingLeft: space[3],
+          paddingRight: space[1.5],
+          paddingVertical: space[2],
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: tint(colors.accent, 0.45),
+          backgroundColor: colors.surface2,
+          shadowColor: "#000",
+          shadowOpacity: 0.16,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 4,
+        }}
+      >
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Label size={font.md}>{hint}</Label>
+        </View>
+        <View style={{ flexShrink: 0 }}>
+          <Button small quiet onPress={() => onHintDismiss?.()}>
+            {t("Got it")}
+          </Button>
+        </View>
+      </Enter>
+    )}
     <Animated.View
       style={{
         position: "absolute",
@@ -59,7 +108,7 @@ export function SettingsFab({ open = false, onPress }: { open?: boolean; onPress
           alignItems: "center",
           justifyContent: "center",
           borderWidth: 1,
-          borderColor: open || focused ? colors.accent : hovered ? tint(colors.foregroundMuted, 0.45) : colors.border,
+          borderColor: open || focused || hint ? colors.accent : hovered ? tint(colors.foregroundMuted, 0.45) : colors.border,
           backgroundColor: lit ? colors.surface2 : colors.surface1,
           shadowColor: "#000",
           shadowOpacity: lit ? 0.16 : 0.08,
@@ -71,8 +120,13 @@ export function SettingsFab({ open = false, onPress }: { open?: boolean; onPress
         <Animated.View style={{ transform: [{ rotate: lerp(turn, ["0deg", "90deg"]) }] }}>
           <Icon name="Settings" size={17} color={lit ? colors.foreground : colors.foregroundMuted} />
         </Animated.View>
+        {!!hint && (
+          // Outline that says "here", drawn outside the button so its size does not change.
+          <View pointerEvents="none" style={{ position: "absolute", top: -4, left: -4, right: -4, bottom: -4, borderRadius: radius.lg + 4, borderWidth: 2, borderColor: tint(colors.accent, 0.5) }} />
+        )}
       </Pressable>
     </Animated.View>
+    </>
   );
 }
 

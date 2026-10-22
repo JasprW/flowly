@@ -14,7 +14,7 @@ import { exitRows } from "./idea-rows";
 import { boardKey, useBoardQuery } from "./queries";
 import { useStableCallback } from "./stable";
 import { PriorityIcon, TypeIcon, priorityLabels } from "./status";
-import { Button, Label, font, message, relativeTime, space, touch, useTheme, noFocusRing } from "./ui";
+import { Button, CueRing, Label, font, message, radius, relativeTime, space, touch, useTheme, noFocusRing } from "./ui";
 import { t } from "../shared/i18n";
 
 export type IdeaSession = { id: string; title?: string | null; archivedAt?: string | null };
@@ -427,11 +427,14 @@ export const IdeaCard = memo(function IdeaCard({
   source,
   onGood,
   onDismiss,
+  cueGood = false,
 }: {
   idea: Idea;
   disabled: boolean;
   /** The source card line on the Ideas page (IDEAS-INBOX-SPEC §4.2). */
   source?: ReactNode;
+  /** Ring Good idea (the welcome tour's autoplay). */
+  cueGood?: boolean;
   onGood(idea: Idea, at: Point): void;
   onDismiss(idea: Idea): void;
 }) {
@@ -461,6 +464,7 @@ export const IdeaCard = memo(function IdeaCard({
         <View style={{ flexShrink: 1, flexDirection: "row", justifyContent: "flex-end", gap: space[2] }}>
           <Button quiet disabled={disabled} label={t("Dismiss {title}", { title: idea.title })} onPress={() => onDismiss(idea)}>
             {t("Dismiss")}</Button>
+          <View>
           <Button
             primary
             icon="ThumbsUp"
@@ -469,6 +473,8 @@ export const IdeaCard = memo(function IdeaCard({
             onPress={(event) => onGood(idea, eventPoint(event))}
           >
             {t("Good idea")}</Button>
+          <CueRing on={cueGood} radius={radius.md} inset={3} />
+          </View>
         </View>
       }
     >

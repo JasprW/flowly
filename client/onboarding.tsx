@@ -1,77 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import { View } from "react-native";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Animated, Modal as RNModal, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useSettings } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
-import { onboardingSettings, onboardingSettingsValues, type OnboardingSettings } from "../shared/settings";
+import { nativeSessionSettings, nativeSessionSettingsValues } from "../shared/settings";
 import { FlowlyMark } from "./brand-icons";
-import { Modal } from "./modal";
-import { Disclosure } from "./disclosure";
-import { MotionReveal } from "./motion";
-import { stepPage, tipIds, welcomePageCount, withTipSeen, type TipId } from "./onboarding-logic";
-import { Button, Label, Theme, font, radius, space, tint, useTheme } from "./ui";
+import { MotionReveal, motionDuration, useMotionValue } from "./motion";
+import { firstRunOutside, outsidePatch, outsideShown, stepPage, tourKey, welcomePageCount, type OutsideChoice } from "./onboarding-logic";
+import { AiLanguageRow, InsightsFeatureGroup, InterfaceLanguageRow, MemoryFeatureGroup, SummaryModelGroup, aiCostText, summaryModelOf } from "./settings-pages";
+import { summarySettings, summarySettingsValues } from "../shared/summary";
+import { SettingSwitch, SettingsGroup } from "./settings-ui";
+import { useStored } from "./stored-settings";
+export { useOnboarding } from "./onboarding-state";
+import { Button, IconButton, Label, Theme, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
+import { useShortcutBlock } from "./shortcuts";
+import { AttentionDemo, DemoControls, DemoFrame, LoopDemo, MemoryDemo, Sample, SideTitle } from "./tour-demos";
 import { t } from "../shared/i18n";
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Host-scoped onboarding state with safe writes: a save against a stale
- * revision is merged into the latest values and retried, and a change shows at
- * once (optimistic) until the stored values agree.
- */
-export function useOnboarding() {
-  const settings = useSettings(onboardingSettings);
-  const latest = useRef(settings);
-  latest.current = settings;
-  const stored = settings.status === "ready" ? onboardingSettingsValues(settings.values) : null;
-  const [overlay, setOverlay] = useState<Partial<OnboardingSettings>>({});
-  useEffect(() => {
-    if (!stored) return;
-    setOverlay((current) => {
-      const left = Object.fromEntries(
-        Object.entries(current).filter(([key, value]) => JSON.stringify(stored[key as keyof OnboardingSettings]) !== JSON.stringify(value)),
-      );
-      return Object.keys(left).length === Object.keys(current).length ? current : left;
-    });
-  }, [settings.status === "ready" ? settings.revision : ""]);
-  const values: OnboardingSettings | null = stored ? { ...stored, ...overlay } : null;
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
-
-  async function update(change: (current: OnboardingSettings) => Partial<OnboardingSettings>) {
-    if (valuesRef.current) {
-      const patch = change(valuesRef.current);
-      setOverlay((current) => ({ ...current, ...patch }));
-    }
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const current = latest.current;
-      if (current.status !== "ready" || current.revision === undefined) {
-        await wait(150);
-        continue;
-      }
-      const base = onboardingSettingsValues(current.values);
-      const next = { ...base, ...change(base) };
-      if (JSON.stringify(next) === JSON.stringify(base)) return true;
-      if (await current.save(next, current.revision)) return true;
-      await current.reload();
-      await wait(50 * (attempt + 1));
-    }
-    // Give up visibly rather than show a value that was not stored.
-    setOverlay({});
-    return false;
-  }
-
-  return {
-    status: settings.status,
-    values,
-    markWelcomeSeen: () => update(() => ({ welcomeSeen: true })),
-    /** Someone who already uses the board: no tour and no first-time tips. */
-    markExistingUserSeen: () => update(() => ({ welcomeSeen: true, tipsSeen: [...tipIds] })),
-    markTipSeen: (id: TipId) => update((current) => ({ tipsSeen: withTipSeen(current.tipsSeen, id) })),
-    /** Show every one-time tip again. The welcome tour is reopened by hand; resetting it would only make the board re-mark existing users. */
-    resetTips: () => update(() => ({ tipsSeen: [] })),
-  };
-}
 
 /** The three Kanban objects and the Paseo object each one is (page 1 and the empty-board strip). */
 const objects = [
@@ -80,90 +24,191 @@ const objects = [
   { icon: "MessagesSquare", name: () => t("Session"), paseo: () => t("Paseo agent session"), note: () => t("A chat with an agent") },
 ] as const;
 
+/*
+ * The welcome tour (ONBOARDING-SETUP-SPEC §3): a window of its own, wide enough for Flowly's real
+ * components with sample data: live demos on the first two pages (client/tour-demos.tsx), still
+ * samples after. One text scale: title lg bold · heading base bold · body md · caption sm muted.
+ */
+
 function IconTile({ name, color }: { name: string; color?: string }) {
   const { colors } = useTheme();
   const c = color || colors.accent;
   return (
-    <View
-      style={{
-        width: 32,
-        height: 32,
-        borderRadius: radius.lg,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: tint(c, 0.12),
-      }}
-    >
-      <Icon name={name} size={17} color={c} />
+    <View style={{ width: 28, height: 28, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: tint(c, 0.12) }}>
+      <Icon name={name} size={15} color={c} />
     </View>
   );
 }
 
-function PageTitle({ title, detail }: { title: string; detail?: string }) {
+function PageTitle({ title, detail, aside }: { title: string; detail?: string; aside?: ReactNode }) {
   return (
     <View style={{ gap: space[1] }}>
-      <Label bold size={font.lg} selectable={false}>{title}</Label>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+        <Label bold size={font.lg} selectable={false}>{title}</Label>
+        {aside}
+      </View>
       {!!detail && <Label muted size={font.md}>{detail}</Label>}
     </View>
   );
 }
 
-/** Small caps-like heading that splits page 1 into its two parts. */
-function Eyebrow({ children }: { children: string }) {
-  return <Label bold muted size={font.sm} selectable={false}>{children}</Label>;
-}
-
-/** Who does a step: you (accent) or the agent (neutral). */
-function RoleBadge({ agent }: { agent: boolean }) {
+/** The one bordered surface of the tour. */
+function Panel({ children, style }: { children: ReactNode; style?: object }) {
   const { colors } = useTheme();
-  const c = agent ? colors.foregroundMuted : colors.accent;
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        width: 72,
-        height: 22,
-        paddingHorizontal: space[1.5],
-        borderRadius: radius.full,
-        backgroundColor: tint(c, 0.14),
-      }}
-    >
-      <Icon name={agent ? "Bot" : "User"} size={12} color={c} />
-      <Label bold size={font.sm} color={c} selectable={false}>{agent ? t("Agent") : t("You")}</Label>
+    <View style={{ gap: space[2], padding: space[3], borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface1, ...style }}>
+      {children}
     </View>
   );
 }
 
-/** Todo → … → Done: the middle lanes are moved by the agent, the ends are yours. */
-function LaneStrip() {
+/** Columns of exactly equal width (any separators are fixed-width); stacked on narrow windows. */
+function Columns({ children, separator }: { children: ReactNode[]; separator?: ReactNode }) {
+  const stacked = useNarrow();
+  return (
+    <View style={{ flexDirection: stacked ? "column" : "row", alignItems: "stretch", gap: space[2] }}>
+      {children.flatMap((child, index) => [
+        ...(index > 0 && separator && !stacked
+          ? [<View key={`s${index}`} style={{ width: 12, alignItems: "center", justifyContent: "center" }}>{separator}</View>]
+          : []),
+        <View key={index} style={stacked ? undefined : { flex: 1, flexBasis: 0, minWidth: 0 }}>
+          {child}
+        </View>,
+      ])}
+    </View>
+  );
+}
+
+const tourMaxWidth = 780;
+/** Columns stack when the tour window is narrower than this (phones). */
+function useNarrow() {
+  const { width } = useWindowDimensions();
+  return Math.min(tourMaxWidth, width - 32) < 600;
+}
+
+/** Page 1: what the board is made of, and how cards ask for you (the Attention list). */
+function HowPage() {
   const { colors } = useTheme();
-  const lanes = [
-    { name: t("Todo"), agent: false },
-    { name: t("Design"), agent: true },
-    { name: t("Development"), agent: true },
-    { name: t("Test"), agent: true },
-    { name: t("In review"), agent: true },
-    { name: t("Done"), agent: false },
+  return (
+    <View style={{ gap: space[5] }}>
+      <PageTitle title={t("How Flowly works")} detail={t("Everything on the board is a real Paseo object, so you can always open it in Paseo.")} />
+      <SettingsGroup>
+        <InterfaceLanguageRow />
+      </SettingsGroup>
+      <Columns separator={<Icon name="ChevronRight" size={14} color={colors.foregroundMuted} />}>
+        {objects.map((item) => (
+          <Panel key={item.icon} style={{ flex: 1 }}>
+            <IconTile name={item.icon} />
+            <View style={{ gap: 2 }}>
+              <Label bold size={font.base} lines={1} selectable={false}>{item.name()}</Label>
+              <Label size={font.sm}>{item.note()}</Label>
+              <Label muted size={font.sm}>{item.paseo()}</Label>
+            </View>
+          </Panel>
+        ))}
+      </Columns>
+      <AttentionDemo />
+      <Columns>
+        {[
+          <Legend key="n" title={t("Needs you")} text={t("When an agent asks, waits for approval or fails, its card says so.")} />,
+          <Legend key="b" title={t("The bell")} text={t("Counts every card that needs you.")} />,
+          <Legend key="o" title={t("Open or dismiss")} text={t("Open a card to answer it, or dismiss it from the list.")} />,
+        ]}
+      </Columns>
+    </View>
+  );
+}
+
+/** "Always on" in place of a switch: built-in features are tuned in the tour, not turned off (ONBOARDING-SETUP-SPEC D1). */
+function AlwaysOn() {
+  const { colors } = useTheme();
+  return (
+    <View style={{ height: 20, justifyContent: "center", paddingHorizontal: space[1.5], borderRadius: radius.full, backgroundColor: tint(colors.statusSuccess, 0.14) }}>
+      <Label medium size={font.xs} color={colors.statusSuccess} lines={1} selectable={false}>{t("Always on")}</Label>
+    </View>
+  );
+}
+
+/** One built-in feature under the demo: its name and one line. */
+function Legend({ title, text }: { title: string; text: string }) {
+  return (
+    <View style={{ gap: 2 }}>
+      <Label bold size={font.base} lines={1} selectable={false}>{title}</Label>
+      <Label muted size={font.sm}>{text}</Label>
+    </View>
+  );
+}
+
+/** Page 2: Progress, Next steps and Ideas run on every card; only their options are set here. */
+function BuiltInPage({ active, outside, onOutside }: { active: boolean; outside: OutsideChoice; onOutside(next: OutsideChoice): void }) {
+  const summary = useStored(useSettings(summarySettings), summarySettingsValues);
+  const part = (key: keyof OutsideChoice, title: string) => (
+    <SettingSwitch title={title} value={outside[key]} onChange={(value) => onOutside({ ...outside, [key]: value })} />
+  );
+  return (
+    <View style={{ gap: space[5] }}>
+      <PageTitle title={t("Built in")} aside={<AlwaysOn />} detail={t("These run on every card. You can tune them here, not turn them off.")} />
+      <LoopDemo />
+      <Columns>
+        {[
+          <Legend key="p" title={t("Progress")} text={t("Rewritten after every agent turn.")} />,
+          <Legend key="n" title={t("Next steps")} text={t("Your likely next message, one tap away.")} />,
+          <Legend key="i" title={t("Ideas")} text={t("Follow-ups the agent found, yours to decide.")} />,
+        ]}
+      </Columns>
+      <SummaryModelGroup active={active} bare extra={<AiLanguageRow />} />
+      <SettingsGroup
+        title={t("Also in sessions outside Flowly")}
+        description={`${t("For sessions Flowly doesn't manage, the summary model runs once after each of their turns and reads the recent conversation (sent to that model's provider).")} ${aiCostText("outside", summaryModelOf(summary.values?.summaryModel))}`}
+      >
+        {part("progress", t("Progress"))}
+        {part("nextMoves", t("Next steps"))}
+        {part("ideas", t("Ideas"))}
+      </SettingsGroup>
+    </View>
+  );
+}
+
+/** Page 3: Project memory. */
+function MemoryPage() {
+  return (
+    <View style={{ gap: space[5] }}>
+      <PageTitle title={t("Project memory")} detail={t("Later cards start knowing what earlier ones learned.")} />
+      <MemoryFeatureGroup bare brief />
+      <MemoryDemo />
+      <Columns>
+        {[
+          <Legend key="s" title={t("Agents suggest")} text={t("Agents, and a review of each finished card, propose what is worth keeping.")} />,
+          <Legend key="c" title={t("You confirm")} text={t("Nothing reaches a session until you confirm it.")} />,
+          <Legend key="u" title={t("Later cards use it")} text={t("New sessions on the project start with what you confirmed.")} />,
+        ]}
+      </Columns>
+    </View>
+  );
+}
+
+/** Insights' own metric rows (client/insights.tsx StatRow), with sample numbers. */
+function InsightsSample() {
+  const { colors } = useTheme();
+  const rows = [
+    { label: t("Interventions"), value: "2", note: t("{messages} messages · {permissions} permissions · {moves} moves", { messages: 1, permissions: 1, moves: 0 }) },
+    { label: t("Review rounds"), value: "1", note: t("{n} in one pass", { n: 4 }) },
+    { label: t("Questions from the agent"), value: "0.5" },
   ];
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", rowGap: space[1.5], columnGap: 4 }}>
-      {lanes.map((lane, index) => (
-        <View key={lane.name} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          {index > 0 && <Icon name="ChevronRight" size={12} color={colors.foregroundMuted} />}
-          <View
-            style={{
-              height: 24,
-              justifyContent: "center",
-              paddingHorizontal: space[2],
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: lane.agent ? colors.border : tint(colors.accent, 0.45),
-              backgroundColor: lane.agent ? colors.surface1 : tint(colors.accent, 0.1),
-            }}
-          >
-            <Label size={font.sm} color={lane.agent ? undefined : colors.accent} selectable={false}>{lane.name}</Label>
+    <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, overflow: "hidden" }}>
+      {rows.map((row, index) => (
+        <View key={row.label} style={{ flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[3], minHeight: 36, borderTopWidth: index ? 1 : 0, borderColor: colors.border }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Label size={font.md} lines={1} selectable={false}>{row.label}</Label>
+          </View>
+          {!!row.note && (
+            <View style={{ flexShrink: 1 }}>
+              <Label muted size={font.sm} lines={1} selectable={false}>{row.note}</Label>
+            </View>
+          )}
+          <View style={{ minWidth: 48, alignItems: "flex-end" }}>
+            <Label medium size={font.md} selectable={false}>{row.value}</Label>
           </View>
         </View>
       ))}
@@ -171,131 +216,71 @@ function LaneStrip() {
   );
 }
 
-function HowPage() {
-  const { colors } = useTheme();
-  const steps = [
-    { agent: false, text: t("Make a project from a folder, add a task and start an agent.") },
-    { agent: true, text: t("Moves the card through the lanes. When it needs you, the card says Needs you.") },
-    { agent: false, text: t("Review the result and move the card to Done.") },
-  ];
+/** Page 4: Insights. */
+function InsightsPage() {
   return (
-    <View style={{ gap: space[4] }}>
-      <PageTitle
-        title={t("How Flowly works")}
-        detail={t("Everything on the board is a real Paseo object, so you can always open it in Paseo.")}
-      />
+    <View style={{ gap: space[5] }}>
+      <PageTitle title={t("Insights")} detail={t("See where your attention and time go.")} />
+      <InsightsFeatureGroup bare workflow brief />
       <View style={{ gap: space[2] }}>
-        <Eyebrow>{t("Three things")}</Eyebrow>
-        <View style={{ flexDirection: "row", alignItems: "stretch", gap: space[1] }}>
-          {objects.map((item, index) => (
-            <View key={item.icon} style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1] }}>
-              {index > 0 && <Icon name="ChevronRight" size={14} color={colors.foregroundMuted} />}
-              <View
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  alignSelf: "stretch",
-                  gap: space[1.5],
-                  padding: 10,
-                  borderRadius: radius.lg,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: colors.surface1,
-                }}
-              >
-                <IconTile name={item.icon} />
-                <Label bold size={font.base} selectable={false}>{item.name()}</Label>
-                <Label size={font.sm}>{item.note()}</Label>
-                <Label muted size={font.sm}>{item.paseo()}</Label>
-              </View>
-            </View>
-          ))}
-        </View>
+        <DemoControls hint={t("Sample numbers from a project's Insights page.")} />
+        <DemoFrame>
+          <View style={{ flex: 1, minWidth: 0, padding: space[3], gap: space[3] }}>
+            <SideTitle>{t("Attention per card")}</SideTitle>
+            <Sample>
+              <InsightsSample />
+            </Sample>
+          </View>
+        </DemoFrame>
       </View>
-      <View style={{ gap: space[2] }}>
-        <Eyebrow>{t("The loop")}</Eyebrow>
-        <LaneStrip />
-        <View style={{ gap: space[2], marginTop: space[1] }}>
-          {steps.map((step) => (
-            <View key={step.text} style={{ flexDirection: "row", gap: space[2], alignItems: "flex-start" }}>
-              <RoleBadge agent={step.agent} />
-              <View style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                <Label size={font.md}>{step.text}</Label>
-              </View>
-            </View>
-          ))}
-        </View>
+      <Columns>
+        {[
+          <Legend key="i" title={t("Interventions")} text={t("Messages, permissions and next steps you had to send.")} />,
+          <Legend key="r" title={t("Review rounds")} text={t("How often a card came back from In review.")} />,
+          <Legend key="q" title={t("Questions from the agent")} text={t("What agents had to ask you, per card.")} />,
+        ]}
+      </Columns>
+    </View>
+  );
+}
+
+function Hint({ icon, text }: { icon: string; text: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", gap: space[1.5], alignItems: "flex-start" }}>
+      <View style={{ paddingTop: 2 }}>
+        <Icon name={icon} size={13} color={colors.foregroundMuted} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Label muted size={font.sm}>{text}</Label>
       </View>
     </View>
   );
 }
 
-function FeaturesPage() {
+function MoreFeatures() {
   const { colors } = useTheme();
-  const [moreOpen, setMoreOpen] = useState(false);
-  // The headline features, shown as tiles; everything else folds under More features.
-  const highlights = [
-    { icon: "Activity", color: colors.accent, title: t("Automatic status"), text: t("Cards follow the agent's work through the lanes. Done stays yours.") },
-    { icon: "Bell", color: colors.statusWarning, title: t("Needs-you reminders"), text: t("Questions, approvals and errors light up the card. Answer them right there.") },
-    { icon: "Brain", color: colors.accent, title: t("Run summaries"), text: t("After every turn a cheap model keeps the card's state, recap and next step up to date.") },
-    { icon: "Sparkles", color: colors.accent, title: t("Suggested next steps"), text: t("Tap one to fill in the message box. Nothing is sent until you send it.") },
-  ];
   const more = [
-    { icon: "ListChecks", color: colors.statusSuccess, title: t("Workpad"), text: t("Agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them. Delivering without them needs a note.") },
-    { icon: "Lightbulb", color: colors.statusSuccess, title: t("Follow-up ideas"), text: t("Work an agent finds along the way lands in the Ideas inbox. Good idea or Dismiss.") },
-    { icon: "BookMarked", color: colors.accent, title: t("Project memory"), text: t("Decisions and pitfalls you confirm carry over to new cards' sessions. Agents and the review of finished cards suggest them; you edit or delete them any time.") },
-    { icon: "Package", color: colors.accent, title: t("Inputs and outputs"), text: t("Each card lists the files and links it worked from and delivered, added by agents or by you.") },
-    { icon: "Ticket", color: colors.accent, title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, or GitHub/GitLab issue or pull request, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
-    { icon: "Tags", color: colors.accent, title: t("Tags"), text: t("Tag cards by module or direction. Agents tag their own cards too; filter and search by #tag.") },
-    { icon: "CircleGauge", color: colors.accent, title: t("Project insights"), text: t("Today's cards, turns, agent time, commits, tokens and what is waiting on you.") },
-    { icon: "Workflow", color: colors.accent, title: t("Workflow insights"), text: t("Optional: on a schedule you choose, a model reads the commands agents ran and suggests scripts, tools and rules worth keeping.") },
-    { icon: "FolderGit2", color: colors.statusSuccess, title: t("Saved with your project"), text: t("Each project's board is also kept in its folder (.flowly, ignored by git). Add the folder again to restore it.") },
+    { icon: "ListChecks", title: t("Workpad"), text: t("Agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them. Delivering without them needs a note.") },
+    { icon: "Package", title: t("Inputs and outputs"), text: t("Each card lists the files and links it worked from and delivered, added by agents or by you.") },
+    { icon: "Ticket", title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, or GitHub/GitLab issue or pull request, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
+    { icon: "Tags", title: t("Tags"), text: t("Tag cards by module or direction. Agents tag their own cards too; filter and search by #tag.") },
+    { icon: "FolderGit2", title: t("Saved with your project"), text: t("Each project's board is also kept in its folder (.flowly, ignored by git). Add the folder again to restore it.") },
   ];
   return (
     <View style={{ gap: space[3] }}>
-      <PageTitle title={t("What makes it different")} detail={t("Anything marked with the sparkle was written or suggested by AI.")} />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-        {highlights.map((item) => (
-          <View
-            key={item.icon}
-            style={{
-              flexGrow: 1,
-              flexBasis: "45%",
-              minWidth: 200,
-              gap: space[2],
-              padding: space[3],
-              borderRadius: radius.lg,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.surface1,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-              <IconTile name={item.icon} color={item.color} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Label bold size={font.base} selectable={false}>{item.title}</Label>
-              </View>
-            </View>
-            <Label muted size={font.md}>{item.text}</Label>
+      <Label bold size={font.base} selectable={false}>{t("More features")}</Label>
+      {more.map((item) => (
+        <View key={item.icon} style={{ flexDirection: "row", gap: space[2], alignItems: "flex-start" }}>
+          <View style={{ paddingTop: 2 }}>
+            <Icon name={item.icon} size={14} color={colors.foregroundMuted} />
           </View>
-        ))}
-      </View>
-      <Disclosure title={t("More features ({n})", { n: more.length })} open={moreOpen} onChange={setMoreOpen} flush>
-        {more.map((item) => (
-          <View key={item.icon} style={{ flexDirection: "row", gap: space[2], alignItems: "flex-start" }}>
-            <View style={{ paddingTop: 2 }}>
-              <Icon name={item.icon} size={15} color={item.color} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Label size={font.md}>
-                <Label bold size={font.md} selectable={false}>{item.title}</Label>
-                {"  "}
-                <Label muted size={font.md}>{item.text}</Label>
-              </Label>
-            </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Label bold size={font.md} selectable={false}>{item.title}</Label>
+            <Label muted size={font.sm}>{item.text}</Label>
           </View>
-        ))}
-      </Disclosure>
+        </View>
+      ))}
     </View>
   );
 }
@@ -308,44 +293,65 @@ function StartPage({ canCreate }: { canCreate: boolean }) {
     { icon: "Bell", text: t("Reply when a card says Needs you.") },
   ];
   return (
-    <View style={{ gap: space[4] }}>
+    <View style={{ gap: space[5] }}>
       <PageTitle
         title={t("Ready when you are")}
         detail={canCreate ? t("Your first three steps. Nothing is created until you confirm.") : t("Your first three steps.")}
       />
-      <View
-        style={{
-          borderRadius: radius.lg,
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.surface1,
-        }}
-      >
+      <Panel style={{ padding: 0, gap: 0 }}>
         {checklist.map((item, index) => (
           <View
             key={item.icon}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space[3],
-              padding: space[3],
-              borderTopWidth: index > 0 ? 1 : 0,
-              borderTopColor: colors.border,
-            }}
+            style={{ flexDirection: "row", alignItems: "center", gap: space[3], padding: space[3], borderTopWidth: index > 0 ? 1 : 0, borderTopColor: colors.border }}
           >
-            <Icon name="Circle" size={16} color={colors.foregroundMuted} />
+            <IconTile name={item.icon} />
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Label size={font.base}>{item.text}</Label>
+              <Label size={font.md}>{item.text}</Label>
             </View>
-            <Icon name={item.icon} size={15} color={colors.accent} />
           </View>
         ))}
-      </View>
-      <View style={{ flexDirection: "row", gap: space[1], alignItems: "center" }}>
-        <Icon name="CircleHelp" size={13} color={colors.foregroundMuted} />
-        <Label muted size={font.sm}>{t("You can reopen this tour from Settings or the Command Center.")}</Label>
-      </View>
+      </Panel>
+      <MoreFeatures />
+      <Hint icon="Settings" text={t("Change any of this later in Settings, the gear at the bottom left. You can reopen this tour there or from the Command Center.")} />
     </View>
+  );
+}
+
+/**
+ * Floats over the bottom of a page that continues below the fold, until it is scrolled near its end:
+ * page 2's settings sit under its demo (ONBOARDING-SETUP-SPEC §3.1). Pressing it scrolls to the end.
+ */
+function MoreBelow({ show, label, onPress }: { show: boolean; label: string; onPress(): void }) {
+  const { colors } = useTheme();
+  const opacity = useMotionValue(show ? 1 : 0, motionDuration.forward);
+  return (
+    <Animated.View pointerEvents={show ? "box-none" : "none"} style={{ position: "absolute", left: 0, right: 0, bottom: space[3], alignItems: "center", opacity }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          ...noFocusRing,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space[1.5],
+          height: touch ? 36 : 30,
+          paddingHorizontal: space[3],
+          borderRadius: radius.full,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: pressed ? colors.surface2 : colors.surface0,
+          shadowColor: "#000",
+          shadowOpacity: 0.12,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: 3,
+        })}
+      >
+        <Label medium size={font.sm} selectable={false}>{label}</Label>
+        <Icon name="ChevronDown" size={14} color={colors.foreground} />
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -368,15 +374,32 @@ function Dots({ page }: { page: number }) {
   );
 }
 
+/** RN-Web forwards keyboard events on a focusable View; React Native's types omit them. */
+type WebKeyEvent = {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+  repeat: boolean;
+  target: unknown;
+  currentTarget: unknown;
+  nativeEvent?: { isComposing?: boolean };
+  preventDefault(): void;
+  stopPropagation(): void;
+};
+
 /**
- * First-run welcome tour: three short pages. Closing it any way (Skip, Esc,
- * finishing) calls `onClose`; `onCreate` runs after the final primary button.
- * The tour itself never creates a Paseo or board resource.
+ * The welcome tour (ONBOARDING-SPEC, ONBOARDING-SETUP-SPEC): five pages that explain Flowly and
+ * set its basics, in a window of its own (the host Modal's width is fixed). Closing it any way
+ * (Skip, Esc, the backdrop, finishing) calls `onClose`; `onCreate` runs after the final primary
+ * button. Enter, → and ← page through it (§3.2). The tour never creates a Paseo or board resource.
  */
 export function WelcomeTour({
   open,
   theme,
   canCreate,
+  firstRun,
   onClose,
   onCreate,
 }: {
@@ -384,69 +407,179 @@ export function WelcomeTour({
   theme: PluginTheme;
   /** There is no project yet: the last page offers Create project. */
   canCreate: boolean;
+  /** Opened by itself for a new user: the outside-session switches are a draft stored when it closes. */
+  firstRun: boolean;
   onClose(): void;
   onCreate(): void;
 }) {
+  useShortcutBlock(open);
+  const native = useStored(useSettings(nativeSessionSettings), nativeSessionSettingsValues);
+  // First run: nothing outside Flowly changes until the tour closes (ONBOARDING-SETUP-SPEC §4).
+  const [draft, setDraft] = useState<OutsideChoice>(firstRunOutside);
+  useEffect(() => {
+    if (open) setDraft(firstRunOutside);
+  }, [open]);
+  const outside = firstRun ? draft : native.values ? outsideShown(native.values) : firstRunOutside;
+  const changeOutside = (next: OutsideChoice) => (firstRun ? setDraft(next) : native.save(outsidePatch(next)));
+  const finish = (then: () => void) => {
+    if (firstRun) void native.saveSure(outsidePatch(draft));
+    then();
+  };
+  const close = () => finish(onClose);
+  return (
+    <RNModal visible={open} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
+      <Theme.Provider value={theme}>
+        <TourWindow
+          open={open}
+          theme={theme}
+          canCreate={canCreate}
+          outside={outside}
+          onOutside={changeOutside}
+          onClose={close}
+          onCreate={() => finish(onCreate)}
+        />
+      </Theme.Provider>
+    </RNModal>
+  );
+}
+
+function TourWindow({
+  open,
+  theme,
+  canCreate,
+  outside,
+  onOutside,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  theme: PluginTheme;
+  canCreate: boolean;
+  outside: OutsideChoice;
+  onOutside(next: OutsideChoice): void;
+  onClose(): void;
+  onCreate(): void;
+}) {
+  const { colors } = useTheme();
+  const { width, height } = useWindowDimensions();
   const [page, setPage] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
+  const root = useRef<View>(null);
+  const scroll = useRef<{ scrollTo?(options: { y: number; animated: boolean }): void; scrollToEnd?(options: { animated: boolean }): void } | null>(null);
+  // How far the page goes below the fold (MoreBelow).
+  const fold = useRef({ y: 0, content: 0, view: 0 });
+  const [below, setBelow] = useState(false);
+  const measure = (patch: Partial<typeof fold.current>) => {
+    Object.assign(fold.current, patch);
+    const { y, content, view } = fold.current;
+    setBelow(view > 0 && content - view - y > 24);
+  };
   useEffect(() => {
     if (open) {
       setPage(0);
       setDirection(1);
     }
   }, [open]);
+  // Keyboard: the tour holds focus on open and after each page change, so Enter works at once.
+  useEffect(() => {
+    if (!open) return;
+    scroll.current?.scrollTo?.({ y: 0, animated: false });
+    measure({ y: 0 });
+    const timer = setTimeout(() => (root.current as unknown as { focus?(): void } | null)?.focus?.(), 50);
+    return () => clearTimeout(timer);
+  }, [open, page]);
   const last = page === welcomePageCount - 1;
   const go = (step: 1 | -1) => {
     setDirection(step);
     setPage((current) => stepPage(current, step));
   };
+  const primary = () => (last ? (canCreate ? onCreate() : onClose()) : go(1));
+  const onKeyDown = (e: WebKeyEvent) => {
+    const action = tourKey(
+      { key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, repeat: e.repeat, isComposing: e.nativeEvent?.isComposing },
+      { page, onTour: e.target === e.currentTarget },
+    );
+    if (!action) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (action === "back") go(-1);
+    else if (action === "next") go(1);
+    else primary();
+  };
+  const keyboardProps = { focusable: true, onKeyDown } as object;
   return (
-    <Modal
-      open={open}
-      title={t("Welcome to Flowly")}
-      icon={<FlowlyMark surface={theme.colors.surface0} />}
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-    >
-      <Modal.Content contentContainerStyle={{ padding: space[4], gap: space[4] }}>
-        <Theme.Provider value={theme}>
-          <MotionReveal transitionKey={String(page)} direction={direction} distance={14}>
-            {page === 0 ? <HowPage /> : page === 1 ? <FeaturesPage /> : <StartPage canCreate={canCreate} />}
-          </MotionReveal>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-            <Dots page={page} />
-            <View style={{ flex: 1 }} />
-            {!last && (
-              <Button quiet onPress={onClose}>
-                {t("Skip")}
-              </Button>
-            )}
-            {page > 0 && (
-              <Button onPress={() => go(-1)}>
-                {t("Back")}
-              </Button>
-            )}
-            {last ? (
-              <>
-                {canCreate && <Button onPress={onClose}>{t("Not now")}</Button>}
-                <Button
-                  primary
-                  icon={canCreate ? "Plus" : undefined}
-                  onPress={canCreate ? onCreate : onClose}
-                >
-                  {canCreate ? t("Create project") : t("Done")}
-                </Button>
-              </>
-            ) : (
-              <Button primary onPress={() => go(1)}>
-                {t("Next")}
-              </Button>
-            )}
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: space[4] }}>
+      <Pressable accessible={false} importantForAccessibility="no" onPress={onClose} style={{ ...noFocusRing, ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" }} />
+      <View
+        ref={root}
+        accessibilityViewIsModal
+        {...keyboardProps}
+        style={{
+          ...noFocusRing,
+          width: Math.min(tourMaxWidth, width - 32),
+          maxWidth: "100%",
+          height: Math.min(760, height - 48),
+          borderRadius: radius.xl,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface0,
+          overflow: "hidden",
+          shadowColor: "#000",
+          shadowOpacity: 0.25,
+          shadowRadius: 24,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: 12,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingLeft: space[5], paddingRight: space[3], minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <FlowlyMark surface={theme.colors.surface0} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Label bold size={font.lg} selectable={false}>{t("Welcome to Flowly")}</Label>
           </View>
-        </Theme.Provider>
-      </Modal.Content>
-    </Modal>
+          <IconButton icon="X" label={t("Close")} onPress={onClose} />
+        </View>
+        <View style={{ flex: 1 }}>
+        <ScrollView
+          ref={scroll as never}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: space[5], paddingBottom: space[6] }}
+          scrollEventThrottle={64}
+          onScroll={(e) => measure({ y: e.nativeEvent.contentOffset.y })}
+          onContentSizeChange={(_w: number, h: number) => measure({ content: h })}
+          onLayout={(e) => measure({ view: e.nativeEvent.layout.height })}
+        >
+          <MotionReveal transitionKey={String(page)} direction={direction} distance={14}>
+            {page === 0 ? (
+              <HowPage />
+            ) : page === 1 ? (
+              <BuiltInPage active={open} outside={outside} onOutside={onOutside} />
+            ) : page === 2 ? (
+              <MemoryPage />
+            ) : page === 3 ? (
+              <InsightsPage />
+            ) : (
+              <StartPage canCreate={canCreate} />
+            )}
+          </MotionReveal>
+        </ScrollView>
+        <MoreBelow show={below} label={page === 1 ? t("Settings below") : t("More below")} onPress={() => scroll.current?.scrollToEnd?.({ animated: true })} />
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[5], paddingVertical: space[3], borderTopWidth: 1, borderTopColor: colors.border }}>
+          <Dots page={page} />
+          <View style={{ flex: 1 }} />
+          {!last && (
+            <Button quiet onPress={onClose}>
+              {t("Skip")}
+            </Button>
+          )}
+          {page > 0 && <Button onPress={() => go(-1)}>{t("Back")}</Button>}
+          {last && canCreate && <Button onPress={onClose}>{t("Not now")}</Button>}
+          <Button primary icon={last && canCreate ? "Plus" : touch ? undefined : "CornerDownLeft"} onPress={primary}>
+            {last ? (canCreate ? t("Create project") : t("Done")) : t("Next")}
+          </Button>
+        </View>
+      </View>
+    </View>
   );
 }
 

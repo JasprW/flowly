@@ -2,7 +2,7 @@ import { memo } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { NextMove } from "../shared/model";
-import { IconButton, Label, font, noFocusRing, space, tint, touch, useTheme } from "./ui";
+import { CueRing, IconButton, Label, font, noFocusRing, space, tint, touch, useTheme } from "./ui";
 import { Enter } from "./motion";
 import { t } from "../shared/i18n";
 
@@ -15,9 +15,12 @@ export const NextMoves = memo(function NextMoves({
   disabled,
   onPick,
   onDismiss,
+  cue = -1,
 }: {
   moves: readonly NextMove[];
   disabled: boolean;
+  /** Index of a step to ring (the welcome tour's autoplay); -1 for none. */
+  cue?: number;
   /** Called for message moves (fill the composer) and action moves (`moveTo`) alike. */
   onPick(move: NextMove): void;
   onDismiss(): void;
@@ -72,6 +75,7 @@ export const NextMoves = memo(function NextMoves({
               <Label size={font.sm} medium lines={1} selectable={false}>
                 {move.label}
               </Label>
+              {cue >= 0 && <CueRing on={cue === index} radius={height / 2} />}
             </Pressable>
             );
           })}

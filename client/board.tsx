@@ -27,7 +27,6 @@ import type { PaseoAgent } from "@getpaseo/client";
 import {
   Theme,
   Label,
-  CountPill,
   Button,
   Field,
   Choices,
@@ -47,8 +46,8 @@ import {
   verticalScroll,
   verticalContent, noFocusRing } from "./ui";
 import { StatusIcon, priorityLabels } from "./status";
+import { AttentionButton } from "./attention-button";
 import {
-  attentionBadgeText,
   allAttentionFromSources,
   attentionOpenToken,
   lastSessionSettings,
@@ -80,7 +79,7 @@ import { SettingsFab, SettingsModal, type SettingsSection } from "./summary-sett
 import { SettingsOpenerContext } from "./settings-opener";
 import { findingDescription, workflowInsightsSettings, workflowSettingsValues, type Finding } from "../shared/workflow-insights";
 import { WrapupModal } from "./wrapup";
-import { performanceLogOn, performanceSettings, ideasSettings, ideasSettingsValues, modelSettings, modelSettingsValues, wrapupSettings, wrapupSettingsValues } from "../shared/settings";
+import { performanceLogOn, performanceSettings, featureSettings, featureSettingsValues, ideasSettings, ideasSettingsValues, modelSettings, modelSettingsValues, wrapupSettings, wrapupSettingsValues } from "../shared/settings";
 import { pickOutputSession } from "./card-output";
 import { cardQuestions } from "../shared/progress";
 import { hasOpenNextMoves } from "../shared/next-moves";
@@ -126,7 +125,7 @@ import {
   type BoardIntent,
 } from "./shortcuts";
 import { ConceptStrip, GuideBanner, WelcomeTour, useOnboarding } from "./onboarding";
-import { nextTip, welcomeDecision, type TipId } from "./onboarding-logic";
+import { nextTip, settingsHintDue, welcomeDecision, type TipId } from "./onboarding-logic";
 import { t, tn } from "../shared/i18n";
 import { workpadEnabled, workpadSignal } from "../shared/workpad";
 import { cardDisplay } from "../shared/card-display";
@@ -155,6 +154,7 @@ const tipText: Record<TipId, () => string> = {
   "attention-dismiss": () => t("Not ready to decide? Dismiss a card from Attention. It comes back when something new happens."),
   "sidebar-order": () => t("Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar."),
   "session-history": () => t("A session's output now starts at the beginning of its current turn. Press Load earlier at the top to read further back."),
+  "settings-entry": () => t("Turn features on or off and change settings here."),
   "first-workpad": () => t("This card has a workpad: the agent's acceptance criteria and checks. The card shows how many checks passed; open it to see which ran on which commit, and tick items yourself."),
 };
 
@@ -271,6 +271,9 @@ function BoardContent(
   // The Ideas switch (IDEAS-INBOX-SPEC §10); on until the setting has loaded.
   const ideasPrefs = useSettings(ideasSettings);
   const ideasOn = ideasPrefs.status !== "ready" || ideasSettingsValues(ideasPrefs.values).ideas;
+  // Project memory and Insights as a whole (Settings → AI features; ONBOARDING-SETUP-SPEC §6).
+  const featurePrefs = useSettings(featureSettings);
+  const features = featureSettingsValues(featurePrefs.status === "ready" ? featurePrefs.values : {});
   // Developer timing log (off unless the host setting is on; PERFORMANCE-SPEC §3).
   const perfPrefs = useSettings(performanceSettings);
   const sendPerf = useRpc(rpc.perfReport);
@@ -297,6 +300,10 @@ function BoardContent(
     [menu, setMenu] = useState<"projects" | "filters" | "status" | "attention" | "shortcuts" | "settings" | null>(null),
     // First-run welcome tour (ONBOARDING-SPEC): opened once automatically, or by hand.
     [welcomeOpen, setWelcomeOpen] = useState(false),
+    // The tour opened by itself for a new user (ONBOARDING-SETUP-SPEC §4); manual opens are not first runs.
+    [welcomeFirstRun, setWelcomeFirstRun] = useState(false),
+    // The tour closed during this visit, so the settings callout may show (ONBOARDING-SETUP-SPEC §5).
+    [tourClosed, setTourClosed] = useState(false),
     // The user just moved a card into Done/Cancelled (drives the wrap-up tip).
     [movedToFinished, setMovedToFinished] = useState(false),
     [escapeRequest, setEscapeRequest] = useState<{ taskId: string; key: string } | null>(null),
@@ -969,6 +976,10 @@ function BoardContent(
   useEffect(() => {
     if (!ideasOn) setPage((current) => (current === "ideas" ? null : current));
   }, [ideasOn]);
+  // So does turning Insights off.
+  useEffect(() => {
+    if (!features.insights) setPage((current) => (current === "insights" ? null : current));
+  }, [features.insights]);
   const showCardIdeas = useStableCallback((id: string) => {
     setIdeaCard(id);
     setPage("ideas");
@@ -987,8 +998,8 @@ function BoardContent(
   const projectIdeaList = useMemo(() => (board?.ideas || []).filter((i) => i.projectId === project?.id), [board?.ideas, project?.id]);
   const projectOpenIdeas = useMemo(() => projectIdeaList.filter((i) => i.status === "open").length, [projectIdeaList]);
   // Project memory candidates waiting for review (PROJECT-MEMORY-SPEC §8.1); the chip hides when the project turned memory off.
-  const memoryCounts = useMemoryCountsQuery(!!project);
-  const memoryOn = !!project && project.memory !== false;
+  const memoryCounts = useMemoryCountsQuery(!!project && features.memory);
+  const memoryOn = features.memory && !!project && project.memory !== false;
   const memoryCandidates = memoryOn ? (memoryCounts.data?.[project!.id] ?? 0) : null;
   const projectTasks = useMemo(() => (board?.tasks || []).filter((t) => t.projectId === project?.id), [board?.tasks, project?.id]);
   // A session of this project has a live Paseo child agent (SUBAGENTS-SPEC §7).
@@ -1024,6 +1035,7 @@ function BoardContent(
     if (inPanel || welcomeHandled.current === welcome) return;
     if (welcome === "show") {
       welcomeHandled.current = welcome;
+      setWelcomeFirstRun(true);
       setWelcomeOpen(true);
     } else if (welcome === "mark-seen") {
       // Someone who already uses the board is never interrupted, and gets no first-time tips either.
@@ -1031,9 +1043,23 @@ function BoardContent(
       void onboarding.markExistingUserSeen();
     }
   }, [welcome, inPanel]);
-  const closeWelcome = () => {
+  const afterTour = useAfterModalClose();
+  const closeWelcome = (pointAtSettings = true) => {
     setWelcomeOpen(false);
+    setWelcomeFirstRun(false);
     if (!onboarding.values?.welcomeSeen) void onboarding.markWelcomeSeen();
+    // Point at Settings once the tour's modal has gone (two modals never switch in one frame).
+    if (pointAtSettings) afterTour(() => setTourClosed(true));
+  };
+  const settingsHint =
+    !inPanel &&
+    settingsHintDue({
+      tipsSeen: onboarding.values?.tipsSeen ?? [],
+      tourClosed,
+      blocked: !onboarding.values || welcomeOpen || dialogOpen || menu === "settings" || (compact && !!task),
+    });
+  const seeSettingsHint = () => {
+    if (settingsHint) void onboarding.markTipSeen("settings-entry");
   };
   const tip = inPanel || !board || !project || !!project.archivedAt || page
     ? null
@@ -1060,10 +1086,10 @@ function BoardContent(
           cardWithSession: !!task && !!cardIndex.agentsByWorkspace.get(task.workspaceId)?.length,
           fullSidebar: !!task && (board.artifacts.some((a) => a.taskId === task.id) || board.ideas.some((i) => i.taskId === task.id)),
           hasSummary: !task && !!summaries.data?.latest.some((e) => projectTasks.some((x) => x.id === e.taskId)),
-          workflowSuggestion: workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
+          workflowSuggestion: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
           memoryCandidate: !task && !!memoryCandidates,
         },
-        blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen,
+        blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint,
       });
   const dismissTip = (id: TipId) => {
     if (id === "first-done") setMovedToFinished(false);
@@ -1179,11 +1205,11 @@ function BoardContent(
       { id: "settings", label: t("Project settings"), icon: "SlidersHorizontal", onPress: () => openIn(() => setProjectForm("edit")) },
       { id: "new-task", label: t("New task"), icon: "Plus", disabled: !!p.archivedAt, onPress: () => openIn(() => setTaskForm({ status: "todo" })) },
       { kind: "separator", id: "pages" },
-      { id: "insights", label: t("Insights"), icon: "Activity", onPress: () => openIn(() => setPage("insights")) },
+      ...(features.insights ? [{ id: "insights", label: t("Insights"), icon: "Activity", onPress: () => openIn(() => setPage("insights")) }] : []),
       ...(ideasOn
         ? [{ id: "ideas", label: t("Ideas"), icon: "Lightbulb", onPress: () => openIn(() => { setIdeaCard(""); setPage("ideas"); }) }]
         : []),
-      ...(p.memory !== false ? [{ id: "memory", label: t("Memory"), icon: "BookMarked", onPress: () => openIn(() => setPage("memory")) }] : []),
+      ...(features.memory && p.memory !== false ? [{ id: "memory", label: t("Memory"), icon: "BookMarked", onPress: () => openIn(() => setPage("memory")) }] : []),
       { kind: "separator", id: "order" },
       { id: "left", label: t("Move left"), icon: "ChevronLeft", disabled: index === 0 || pending, onPress: () => reorderProject(p.id, { direction: "up" }) },
       { id: "right", label: t("Move right"), icon: "ChevronRight", disabled: index === projects.length - 1 || pending, onPress: () => reorderProject(p.id, { direction: "down" }) },
@@ -1223,7 +1249,7 @@ function BoardContent(
         setWelcomeOpen(true);
         return true;
       case "insights":
-        if (!project) return false;
+        if (!project || !features.insights) return false;
         togglePage("insights");
         return true;
       case "ideas":
@@ -1232,7 +1258,7 @@ function BoardContent(
         togglePage("ideas");
         return true;
       case "memory":
-        if (!project) return false;
+        if (!project || !features.memory) return false;
         togglePage("memory");
         return true;
       case "escape":
@@ -1437,7 +1463,7 @@ function BoardContent(
         }
         startIdea={startRequest?.taskId === drawer.item.task.id ? startRequest.idea : undefined}
         onAllIdeas={showCardIdeas}
-        onMemoryPage={openMemoryPage}
+        onMemoryPage={features.memory ? openMemoryPage : undefined}
         sessionEntry={
           sessionEntry?.taskId === drawer.item.task.id && drawer.active ? sessionEntry : undefined
         }
@@ -1580,7 +1606,7 @@ function BoardContent(
             overview={boardOverview(project, board.tasks, agents.data || [], attention)}
             nameOf={nameOf}
             onAttention={openAttentionMenu}
-            onInsights={() => togglePage("insights")}
+            onInsights={features.insights ? () => togglePage("insights") : undefined}
             insightsShortcut={shortcutsOn ? "I" : ""}
             openIdeas={ideasOn ? projectOpenIdeas : null}
             onIdeas={() => {
@@ -2247,7 +2273,10 @@ function BoardContent(
         {!(compact && task) && (
           <SettingsFab
             open={menu === "settings"}
+            hint={settingsHint ? tipText["settings-entry"]() : undefined}
+            onHintDismiss={seeSettingsHint}
             onPress={() => {
+              seeSettingsHint();
               setSettingsSection(undefined);
               setMenu("settings");
             }}
@@ -2269,10 +2298,16 @@ function BoardContent(
           open={welcomeOpen}
           theme={props.theme}
           canCreate={(board?.projects.length ?? 0) === 0}
-          onClose={closeWelcome}
+          firstRun={welcomeFirstRun}
+          onClose={() => closeWelcome()}
           onCreate={() => {
-            closeWelcome();
-            setProjectForm("new");
+            closeWelcome(false);
+            // The project form is a Modal too: open it once the tour's has closed (two modals never switch in one frame).
+            // The settings callout waits behind the form, so it is set in the same update and never flashes first.
+            afterModalClose(() => {
+              setProjectForm("new");
+              setTourClosed(true);
+            });
           }}
         />
         {wrapPromptTask && (
@@ -2367,54 +2402,6 @@ function ProjectSwitcher({
         </Label>
       </View>
       <Icon name="ChevronsUpDown" size={14} color={colors.foregroundMuted} />
-    </Pressable>
-  );
-}
-
-function AttentionButton({
-  count,
-  compact,
-  open,
-  shortcut,
-  onPress,
-}: {
-  count: number;
-  compact: boolean;
-  /** Its dropdown is showing. */
-  open: boolean;
-  shortcut: string;
-  onPress(): void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${count ? tn(count, "Needs attention, {n} card", "Needs attention, {n} cards") : t("Needs attention")}${shortcut ? ` (${shortcut})` : ""}`}
-      accessibilityState={{ expanded: open }}
-      onPress={onPress}
-      style={(state) => {
-        const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
-        return {
-          ...noFocusRing,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: space[1.5],
-          height: touch ? 44 : 32,
-          minWidth: touch ? 44 : 32,
-          justifyContent: "center",
-          paddingHorizontal: compact ? 0 : space[2] + 2,
-          borderRadius: radius.md,
-          backgroundColor: open || hovered || pressed ? colors.surface2 : "transparent",
-        };
-      }}
-    >
-      <Icon name="Bell" size={15} color={count ? colors.foreground : colors.foregroundMuted} />
-      {!compact && (
-        <Label size={font.md} medium muted={!count} selectable={false}>
-          {t("Attention")}</Label>
-      )}
-      {!!count && <CountPill text={attentionBadgeText(count) || ""} />}
     </Pressable>
   );
 }

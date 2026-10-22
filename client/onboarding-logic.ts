@@ -1,6 +1,7 @@
 /** Pure decisions for first-run guidance (ONBOARDING-SPEC). No React, no storage. */
 
-export const welcomePageCount = 3;
+/** How it works, Built in, Project memory, Insights, Ready (ONBOARDING-SETUP-SPEC §3). */
+export const welcomePageCount = 5;
 
 /** Page index after a Back/Next step, kept inside the tour. */
 export function stepPage(page: number, direction: 1 | -1): number {
@@ -28,7 +29,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "first-memory-candidate"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "first-memory-candidate", "settings-entry"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -78,7 +79,8 @@ export interface TipFacts {
   memoryCandidate: boolean;
 }
 
-const tipFact: Record<TipId, keyof TipFacts> = {
+/** Banner tips; `settings-entry` is the callout by the settings button instead (settingsHintDue). */
+const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
   "first-card": "hasCard",
   "needs-you": "needsYou",
   "first-idea": "openIdea",
@@ -107,7 +109,7 @@ const tipFact: Record<TipId, keyof TipFacts> = {
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: TipId[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-workflow-insight", "ai-language", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
+  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-workflow-insight", "ai-language", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 
@@ -120,4 +122,83 @@ export const TIPS_SEEN_MAX = 100;
 /** Stored tips with `id` added once (bounded like the setting). */
 export function withTipSeen(tipsSeen: readonly string[], id: string): string[] {
   return tipsSeen.includes(id) ? [...tipsSeen] : [...tipsSeen, id].slice(-TIPS_SEEN_MAX);
+}
+
+/**
+ * The callout by the settings button (ONBOARDING-SETUP-SPEC §5): once, after the welcome tour
+ * closed in this visit, when nothing else is open.
+ */
+export function settingsHintDue(input: { tipsSeen: readonly string[]; tourClosed: boolean; blocked: boolean }): boolean {
+  return input.tourClosed && !input.blocked && !input.tipsSeen.includes("settings-entry");
+}
+
+/** The tour's "Also in sessions outside Flowly" switches, one per built-in feature. */
+export interface OutsideChoice {
+  progress: boolean;
+  nextMoves: boolean;
+  ideas: boolean;
+}
+
+/** What the first-run tour shows and, closed in any way, stores (§4): all on. */
+export const firstRunOutside: OutsideChoice = { progress: true, nextMoves: true, ideas: true };
+
+/** What the stored settings mean for each feature: a part only runs while the master switch is on. */
+export function outsideShown(v: { outside: boolean; outsideProgress: boolean; outsideNextMoves: boolean; outsideIdeas: boolean }): OutsideChoice {
+  return { progress: v.outside && v.outsideProgress, nextMoves: v.outside && v.outsideNextMoves, ideas: v.outside && v.outsideIdeas };
+}
+
+/**
+ * The native-session patch for a choice. All four fields are written so that turning one part on
+ * never wakes the others that only looked off because the master switch was.
+ */
+export function outsidePatch(c: OutsideChoice) {
+  return { outside: c.progress || c.nextMoves || c.ideas, outsideProgress: c.progress, outsideNextMoves: c.nextMoves, outsideIdeas: c.ideas };
+}
+
+export type TourKeyAction = "next" | "back" | "finish";
+
+/**
+ * Keyboard navigation in the welcome tour (ONBOARDING-SETUP-SPEC §3.2): Enter takes the primary
+ * step (Next, or finishing on the last page) but only when the tour itself has focus, so Enter on a
+ * focused switch or button keeps its own meaning; → and ← page anywhere in the tour. Modifiers,
+ * key repeat and IME composition are ignored; Esc is the window's own close.
+ */
+export function tourKey(
+  key: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean; repeat?: boolean; isComposing?: boolean },
+  state: { page: number; onTour: boolean },
+): TourKeyAction | null {
+  if (key.metaKey || key.ctrlKey || key.altKey || key.shiftKey || key.repeat || key.isComposing) return null;
+  const last = state.page >= welcomePageCount - 1;
+  if (key.key === "Enter") return state.onTour ? (last ? "finish" : "next") : null;
+  if (key.key === "ArrowRight") return last ? null : "next";
+  if (key.key === "ArrowLeft") return state.page > 0 ? "back" : null;
+  return null;
+}
+
+/** What the Built in page's autoplay does next (ONBOARDING-SETUP-SPEC §3, page 2), or null while the demo is busy or done. */
+export type LoopAutoStep = { cue: "move" | "send" | "idea" | "restart"; wait: number };
+
+export function loopAutoStep(s: {
+  turn: number;
+  draft: boolean;
+  working: boolean;
+  updating: boolean;
+  idea: "none" | "open" | "task" | "dismissed";
+}): LoopAutoStep | null {
+  if (s.working || s.updating) return null;
+  if (s.idea === "task" || s.idea === "dismissed") return { cue: "restart", wait: 4000 };
+  if (s.idea === "open") return { cue: "idea", wait: 1500 };
+  if (s.turn === 0) return s.draft ? { cue: "send", wait: 800 } : { cue: "move", wait: 1500 };
+  return null;
+}
+
+/** The Project memory demo (page 3): suggested → confirmed → a new card's session uses it. */
+export type MemoryPhase = "suggested" | "confirmed" | "working" | "used" | "dismissed";
+export type MemoryAutoStep = { cue: "confirm" | "restart"; wait: number };
+
+/** Autoplay presses Confirm, lets the new card's session run by itself, then starts over. */
+export function memoryAutoStep(phase: MemoryPhase): MemoryAutoStep | null {
+  if (phase === "suggested") return { cue: "confirm", wait: 1500 };
+  if (phase === "used" || phase === "dismissed") return { cue: "restart", wait: 4000 };
+  return null;
 }

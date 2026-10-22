@@ -17,12 +17,23 @@ export const cardFrameStyle = (colors: { border: string; surface1: string }) =>
  * card's actions) on the right. `after` renders below the padded area, full
  * width (e.g. the Ideas page's source line).
  */
-export function ContentCard({ footer, after, children }: { footer?: ReactNode; after?: ReactNode; children: ReactNode }) {
+export function ContentCard({
+  footer,
+  after,
+  defaultOpen = false,
+  children,
+}: {
+  footer?: ReactNode;
+  after?: ReactNode;
+  /** Start expanded (the welcome tour shows every field); Show less still collapses it. */
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
   const { colors } = useTheme();
   return (
     <View style={cardFrameStyle(colors)}>
       <View style={{ padding: space[3], paddingBottom: after ? space[1] : space[3] }}>
-        <Clamped background={colors.surface1} footer={footer}>
+        <Clamped background={colors.surface1} footer={footer} defaultOpen={defaultOpen}>
           {children}
         </Clamped>
       </View>
@@ -101,9 +112,9 @@ const CLAMP_HEIGHT = 104;
  * bottom-left corner and `footer` on the right of the same row.
  * `background` is the surface the fade blends into.
  */
-function Clamped({ background, footer, children }: { background: string; footer?: ReactNode; children: ReactNode }) {
+function Clamped({ background, footer, defaultOpen = false, children }: { background: string; footer?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
   const [natural, setNatural] = useState(0);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const overflows = natural > CLAMP_HEIGHT + 8;
   const target = natural ? (open || !overflows ? natural : CLAMP_HEIGHT) : null;
   const height = useMotionHeight(target);
