@@ -63,7 +63,7 @@ import { waitingOn } from "../shared/links";
 import { LinkPicker } from "./task-links";
 import { TaskDrawer } from "./drawer";
 import { DeleteTaskDialog } from "./task-delete";
-import { useBoardQuery, useLiveAgents, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
+import { useBoardQuery, useLiveAgents, useMemoryCountsQuery, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
 import { useStableCallback, useStableTheme } from "./stable";
 import { isLegacyScope } from "../shared/scope";
 import { LaneList } from "./lane-list";
@@ -98,6 +98,7 @@ import { useBoardView } from "./board-view";
 import { OverviewBar } from "./overview-bar";
 import { InsightsPage } from "./insights";
 import { IdeasPage } from "./ideas-page";
+import { MemoryPage } from "./memory";
 import { lastViewedProject, pickProject, rememberViewedProject } from "./project-memory";
 import { ProjectTabs } from "./project-tabs";
 import { RemoveProjectDialog } from "./project-remove";
@@ -147,6 +148,7 @@ const tipText: Record<TipId, () => string> = {
   "project-menu": () => t("Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove."),
   subagents: () => t("When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo."),
   "ai-language": () => t("AI-written text follows Settings → AI features → AI output language. It starts as your interface language."),
+  "first-memory-candidate": () => t("An agent suggested something to remember. Confirm it in Memory and new sessions on this project will know it; you can edit or delete it any time."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
   "card-display": () => t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
   "attention-dismiss": () => t("Not ready to decide? Dismiss a card from Attention. It comes back when something new happens."),
@@ -298,7 +300,7 @@ function BoardContent(
     [movedToFinished, setMovedToFinished] = useState(false),
     [escapeRequest, setEscapeRequest] = useState<{ taskId: string; key: string } | null>(null),
     // Project-level page over the board area: Insights or Ideas (IDEAS-INBOX-SPEC §3.3).
-    [page, setPage] = useState<"insights" | "ideas" | null>(null),
+    [page, setPage] = useState<"insights" | "ideas" | "memory" | null>(null),
     // Ideas page: only this card's ideas ("All ideas" from a card).
     [ideaCard, setIdeaCard] = useState(""),
     // `idea`: Start session prefilled from an idea on the Ideas page (IDEAS-SPEC §6.3).
@@ -955,8 +957,11 @@ function BoardContent(
   );
   const linkFrom = useStableCallback((source: Task) => setLinking(source));
   const openTaskById = useStableCallback((id: string) => setTask(id));
-  const togglePage = (next: "insights" | "ideas") => setPage((current) => (current === next ? null : next));
+  const togglePage = (next: "insights" | "ideas" | "memory") => {
+    setPage((current) => (current === next ? null : next));
+  };
   const closePage = useStableCallback(() => setPage(null));
+  const openMemoryPage = useStableCallback(() => setPage("memory"));
   // Turning Ideas off closes its page.
   useEffect(() => {
     if (!ideasOn) setPage((current) => (current === "ideas" ? null : current));
@@ -978,6 +983,10 @@ function BoardContent(
   });
   const projectIdeaList = useMemo(() => (board?.ideas || []).filter((i) => i.projectId === project?.id), [board?.ideas, project?.id]);
   const projectOpenIdeas = useMemo(() => projectIdeaList.filter((i) => i.status === "open").length, [projectIdeaList]);
+  // Project memory candidates waiting for review (PROJECT-MEMORY-SPEC §8.1); the chip hides when the project turned memory off.
+  const memoryCounts = useMemoryCountsQuery(!!project);
+  const memoryOn = !!project && project.memory !== false;
+  const memoryCandidates = memoryOn ? (memoryCounts.data?.[project!.id] ?? 0) : null;
   const projectTasks = useMemo(() => (board?.tasks || []).filter((t) => t.projectId === project?.id), [board?.tasks, project?.id]);
   // A session of this project has a live Paseo child agent (SUBAGENTS-SPEC §7).
   const projectHasSubagent = useMemo(() => {
@@ -1049,6 +1058,7 @@ function BoardContent(
           fullSidebar: !!task && (board.artifacts.some((a) => a.taskId === task.id) || board.ideas.some((i) => i.taskId === task.id)),
           hasSummary: !task && !!summaries.data?.latest.some((e) => projectTasks.some((x) => x.id === e.taskId)),
           workflowSuggestion: workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
+          memoryCandidate: !task && !!memoryCandidates,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen,
       });
@@ -1170,6 +1180,7 @@ function BoardContent(
       ...(ideasOn
         ? [{ id: "ideas", label: t("Ideas"), icon: "Lightbulb", onPress: () => openIn(() => { setIdeaCard(""); setPage("ideas"); }) }]
         : []),
+      ...(p.memory !== false ? [{ id: "memory", label: t("Memory"), icon: "BookMarked", onPress: () => openIn(() => setPage("memory")) }] : []),
       { kind: "separator", id: "order" },
       { id: "left", label: t("Move left"), icon: "ChevronLeft", disabled: index === 0 || pending, onPress: () => reorderProject(p.id, { direction: "up" }) },
       { id: "right", label: t("Move right"), icon: "ChevronRight", disabled: index === projects.length - 1 || pending, onPress: () => reorderProject(p.id, { direction: "down" }) },
@@ -1216,6 +1227,10 @@ function BoardContent(
         if (!project || !ideasOn) return false;
         setIdeaCard("");
         togglePage("ideas");
+        return true;
+      case "memory":
+        if (!project) return false;
+        togglePage("memory");
         return true;
       case "escape":
         if (!task && page) {
@@ -1417,6 +1432,7 @@ function BoardContent(
         }
         startIdea={startRequest?.taskId === drawer.item.task.id ? startRequest.idea : undefined}
         onAllIdeas={showCardIdeas}
+        onMemoryPage={openMemoryPage}
         sessionEntry={
           sessionEntry?.taskId === drawer.item.task.id && drawer.active ? sessionEntry : undefined
         }
@@ -1567,6 +1583,9 @@ function BoardContent(
               togglePage("ideas");
             }}
             ideasShortcut={shortcutsOn ? "B" : ""}
+            memoryCandidates={memoryCandidates}
+            onMemory={() => togglePage("memory")}
+            memoryShortcut={shortcutsOn ? "M" : ""}
             onLane={(status) => {
               setPage(null);
               if (compact) setMobileStatus(status);
@@ -1687,6 +1706,8 @@ function BoardContent(
                     onNewSession={ideaInNewSession}
                     onBack={closePage}
                   />
+                ) : page === "memory" && board ? (
+                  <MemoryPage project={project} tasks={projectTasks} compact={compact} nameOf={nameOf} onOpenTask={openTaskById} onBack={closePage} />
                 ) : compact ? (
                   <>
                     <View style={{ paddingHorizontal: space[2], paddingTop: space[2] }}>

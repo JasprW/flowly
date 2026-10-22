@@ -1,0 +1,14 @@
+{
+  "build": "1dfe946 with uncommitted working tree",
+  "typecheck": {"command": "npm run typecheck", "result": "PASS", "exitCode": 0},
+  "test": {
+    "command": "npm test",
+    "result": "PASS",
+    "exitCode": 0,
+    "testFilesPassed": 112,
+    "testFilesSkipped": 13,
+    "testsPassed": 903,
+    "testsSkipped": 65
+  },
+  "pluginInstallOrReload": "Not run by this test session; parent confirmed plugin was already installed and reloaded."
+}

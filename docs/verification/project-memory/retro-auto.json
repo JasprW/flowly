@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "id": "e4adacaf-5e58-4259-91e4-e5e34a5eb3fd",
+      "status": "candidate",
+      "kind": "decision",
+      "title": "Short codes use 7-character base62",
+      "source": {
+        "by": "agent",
+        "taskId": "5fe28d64-e35f-4889-b80b-4f3f666803a9",
+        "agentId": "1b78f53e-8356-4317-92b6-7bf7a39f8d12",
+        "eventId": "3448586d-c2b4-4079-8a73-60c5eb0a94c0"
+      }
+    },
+    {
+      "id": "8afbf7af-fffb-4999-af19-8bdea9c58586",
+      "status": "candidate",
+      "kind": "decision",
+      "title": "短码采用 7 位 base62，不采用 UUID",
+      "evidence": "The user decided: short codes are 7-character base62; UUIDs were rejected because the links get too long.",
+      "source": {
+        "by": "retro",
+        "taskId": "5fe28d64-e35f-4889-b80b-4f3f666803a9"
+      }
+    }
+  ],
+  "errors": [],
+  "running": [],
+  "checkedAt": "2026-10-21T17:17:49.550Z"
+}

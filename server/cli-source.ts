@@ -2,13 +2,14 @@ export const cliSource = String.raw`#!/usr/bin/env node
 import {readFile, writeFile} from 'node:fs/promises';
 
 const args=process.argv.slice(2), opts={}, positional=[];
-const allowed=new Set(['context-file','save-request','request-file','task-revision','project-revision','note','kind','title','detail','rationale','context','type','priority','scope','role','target','id','add','remove','tags','moves','workpad','workpad-file','workpad-revision','acknowledge-open','no-moves']);
+const allowed=new Set(['context-file','save-request','request-file','task-revision','project-revision','note','kind','title','detail','rationale','context','type','priority','scope','role','target','id','add','remove','tags','moves','workpad','workpad-file','workpad-revision','acknowledge-open','no-moves','body','keywords','supersedes','query']);
 const booleanFlags=new Set(['acknowledge-open','no-moves']);
 const workpadFlags=['workpad','workpad-file','workpad-revision'];
 const ideaFlags=['detail','rationale','context','type','priority','scope','tags'];
 const tagFlags=['add','remove'];
 const list=v=>v===undefined?[]:v.split(',').map(x=>x.trim()).filter(Boolean);
 const artifactFlags=['role','target','id'];
+const memoryFlags=['body','keywords','supersedes'];
 function fail(message){throw new Error(message);}
 try {
   for(let i=0;i<args.length;i++) {
@@ -16,7 +17,7 @@ try {
     if(arg.startsWith('--')) {const key=arg.slice(2);if(!allowed.has(key)||Object.hasOwn(opts,key))fail('Unknown or duplicate flag: '+arg); if(booleanFlags.has(key)){opts[key]=true;continue;} const value=args[++i];if(value===undefined||value.startsWith('--'))fail('Missing value for '+arg);opts[key]=value;}
     else positional.push(arg);
   }
-  const command=positional[0];if(!['current','get','status','note','idea','artifact','artifact-remove','tags','set-type','next-moves','workpad','external','ticket'].includes(command))fail('Usage: current [--save-request path] | external --id <artifact id> (read an external input: Jira ticket, Confluence page, GitHub/GitLab issue or PR/MR; ticket is an alias) | status <design|development|test|blocked|in_review> | note (status and note also take --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> or --no-moves: the next steps for the user, recorded with the call) | idea --title --detail --rationale [--context --type --priority --scope here|new] | artifact --role input|output --target <path or link> [--title --note] | artifact-remove --id <artifact id> | tags [--add a,b] [--remove c] | set-type <feature|bugfix|research|refactor|docs|chore> (only when the card has no type) | next-moves --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> | workpad --workpad-revision <n> (--workpad <JSON> | --workpad-file <path>) with {acceptance, validation, confusions}; status in_review [--acknowledge-open] delivers despite open workpad items or missing card setup (type, tags, workpad), with --context-file and --request-file.');
+  const command=positional[0];if(!['current','get','status','note','idea','remember','recall','artifact','artifact-remove','tags','set-type','next-moves','workpad','external','ticket'].includes(command))fail('Usage: current [--save-request path] | external --id <artifact id> (read an external input: Jira ticket, Confluence page, GitHub/GitLab issue or PR/MR; ticket is an alias) | status <design|development|test|blocked|in_review> | note (status and note also take --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> or --no-moves: the next steps for the user, recorded with the call) | idea --title --detail --rationale [--context --type --priority --scope here|new] | remember --kind decision|convention|pitfall|contact --title [--body --tags a,b --keywords x,y --supersedes <memory id>] (a project memory candidate the user confirms) | recall [--query words --kind k] (search confirmed project memory; no request file) | artifact --role input|output --target <path or link> [--title --note] | artifact-remove --id <artifact id> | tags [--add a,b] [--remove c] | set-type <feature|bugfix|research|refactor|docs|chore> (only when the card has no type) | next-moves --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> | workpad --workpad-revision <n> (--workpad <JSON> | --workpad-file <path>) with {acceptance, validation, confusions}; status in_review [--acknowledge-open] delivers despite open workpad items or missing card setup (type, tags, workpad), with --context-file and --request-file.');
   if(positional.length!==(['status','set-type'].includes(command)?2:1))fail('Unexpected positional arguments.');
   const path=opts['context-file']||process.env.FLOWLY_CONTEXT_FILE||process.env.ULTRA_KANBAN_CONTEXT_FILE;if(!path)fail('No session context. Use the command supplied by the card drawer.');
   const context=JSON.parse(await readFile(path,'utf8'));
@@ -25,8 +26,11 @@ try {
   const discovery=JSON.parse(await readFile(context.discoveryFile,'utf8'));
   const url=new URL(discovery.url);if(discovery.version!==1||url.protocol!=='http:'||url.hostname!=='127.0.0.1'||url.pathname!=='/')fail('Invalid loopback service discovery file.');
   let input={}, action='get';
-  if(command!=='idea'&&ideaFlags.some(k=>opts[k]!==undefined))fail('--'+ideaFlags.find(k=>opts[k]!==undefined)+' is only valid for idea.');
-  if(opts.title!==undefined&&!['idea','artifact'].includes(command))fail('--title is only valid for idea and artifact.');
+  const ideaOnly=command==='remember'?ideaFlags.filter(k=>k!=='tags'):ideaFlags;
+  if(command!=='idea'&&ideaOnly.some(k=>opts[k]!==undefined))fail('--'+ideaOnly.find(k=>opts[k]!==undefined)+' is only valid for idea.');
+  if(command!=='remember'&&memoryFlags.some(k=>opts[k]!==undefined))fail('--'+memoryFlags.find(k=>opts[k]!==undefined)+' is only valid for remember.');
+  if(command!=='recall'&&opts.query!==undefined)fail('--query is only valid for recall.');
+  if(opts.title!==undefined&&!['idea','artifact','remember'].includes(command))fail('--title is only valid for idea, artifact and remember.');
   if(!['artifact','artifact-remove','external','ticket'].includes(command)&&artifactFlags.some(k=>opts[k]!==undefined))fail('--'+artifactFlags.find(k=>opts[k]!==undefined)+' is only valid for artifact commands.');
   if(!['status','note','next-moves'].includes(command)&&(opts.moves!==undefined||opts['no-moves']!==undefined))fail('--'+(opts.moves!==undefined?'moves':'no-moves')+' is only valid for status, note and next-moves.');
   if(opts.moves!==undefined&&opts['no-moves']!==undefined)fail('--moves and --no-moves cannot be combined; use one.');
@@ -34,11 +38,13 @@ try {
   if(command!=='workpad'&&workpadFlags.some(k=>opts[k]!==undefined))fail('--'+workpadFlags.find(k=>opts[k]!==undefined)+' is only valid for workpad.');
   if(command!=='status'&&opts['acknowledge-open']!==undefined)fail('--acknowledge-open is only valid for status.');
   if(command!=='tags'&&tagFlags.some(k=>opts[k]!==undefined))fail('--'+tagFlags.find(k=>opts[k]!==undefined)+' is only valid for tags.');
-  if(command==='external'||command==='ticket'){if(!opts.id)fail(command+' requires --id <artifact id> (an external input from current).');if(['request-file','save-request','note','kind','role','target'].some(k=>opts[k]!==undefined))fail('Only --id is valid for '+command+'.');action='external';input={artifactId:opts.id};}
+  if(command==='recall'){if(['request-file','save-request','note','role','target','id'].some(k=>opts[k]!==undefined))fail('Only --query and --kind are valid for recall.');action='recall';input={query:opts.query||''};if(opts.kind)input.kind=opts.kind;}
+  else if(command==='external'||command==='ticket'){if(!opts.id)fail(command+' requires --id <artifact id> (an external input from current).');if(['request-file','save-request','note','kind','role','target'].some(k=>opts[k]!==undefined))fail('Only --id is valid for '+command+'.');action='external';input={artifactId:opts.id};}
   else if(command==='get'||command==='current') {if(['request-file','task-revision','project-revision','note','kind','role','target','id'].some(k=>opts[k]!==undefined))fail('Write flags are not valid for current.');}
   else {
     if(opts['save-request'])fail('--save-request is only valid for current.');
     if(command==='idea'){if(!opts['request-file']||!opts.title?.trim()||!opts.detail?.trim()||!opts.rationale?.trim())fail('idea requires --request-file, --title, --detail and --rationale.');if(opts.note||opts.kind)fail('--note and --kind are not valid for idea.');}
+    else if(command==='remember'){if(!opts['request-file']||!opts.kind||!opts.title?.trim())fail('remember requires --request-file, --kind and --title.');if(opts.note)fail('--note is not valid for remember.');}
     else if(command==='artifact'){if(!opts['request-file']||!opts.role||!opts.target?.trim())fail('artifact requires --request-file, --role and --target.');if(opts.kind||opts.id)fail('--kind and --id are not valid for artifact.');}
     else if(command==='artifact-remove'){if(!opts['request-file']||!opts.id)fail('artifact-remove requires --request-file and --id.');if(opts.note||opts.kind||opts.role||opts.target)fail('Only --id is valid for artifact-remove.');}
     else if(command==='tags'){if(!opts['request-file']||(!list(opts.add).length&&!list(opts.remove).length))fail('tags requires --request-file and --add or --remove (comma-separated).');if(opts.note||opts.kind)fail('--note and --kind are not valid for tags.');}
@@ -57,6 +63,7 @@ try {
       else if(opts.moves!==undefined){try{carried=JSON.parse(opts.moves);}catch{carried=undefined;}if(!Array.isArray(carried))fail('--moves must be a JSON array of {label, prompt} or {label, moveTo:"done"}; use --no-moves when nothing needs the user.');}
     }
     if(command==='idea'){action='idea';input={expectedRevision:snapshot.revision,request:snapshot.request,title:opts.title};for(const k of ideaFlags)if(opts[k]!==undefined)input[k]=k==='tags'?list(opts[k]):opts[k];}
+    else if(command==='remember'){action='remember';input={expectedRevision:snapshot.revision,request:snapshot.request,kind:opts.kind,title:opts.title,body:opts.body||'',tags:list(opts.tags),keywords:list(opts.keywords)};if(opts.supersedes)input.supersedes=opts.supersedes;}
     else if(command==='tags'){action='tags';input={expectedRevision:snapshot.revision,request:snapshot.request,add:list(opts.add),remove:list(opts.remove)};}
     else if(command==='next-moves'){let moves;try{moves=JSON.parse(opts.moves);}catch{fail('--moves must be a JSON array of {label, prompt}.');}action='next_moves';input={expectedRevision:snapshot.revision,request:snapshot.request,moves};}
     else if(command==='workpad'){let pad;try{pad=JSON.parse(opts.workpad!==undefined?opts.workpad:await readFile(opts['workpad-file'],'utf8'));}catch{fail('The workpad must be a JSON object {acceptance, validation, confusions}.');}if(!pad||typeof pad!=='object'||Array.isArray(pad))fail('The workpad must be a JSON object {acceptance, validation, confusions}.');action='workpad';input={expectedRevision:snapshot.revision,request:snapshot.request,workpadRevision:Number(opts['workpad-revision']),acceptance:pad.acceptance,validation:pad.validation,confusions:pad.confusions};}

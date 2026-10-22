@@ -1,0 +1,77 @@
+{
+  "taskAgents": [
+    {
+      "id": "1b78f53e-8356-4317-92b6-7bf7a39f8d12",
+      "name": "Luna \u00b7 Memory test A",
+      "status": "idle",
+      "archived": true,
+      "mode": "full-access"
+    },
+    {
+      "id": "92a63fed-fad3-4bed-b373-ab8d3a25a029",
+      "name": "Flowly memory review \u00b7 Memory test A",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    },
+    {
+      "id": "16bd40b5-083f-47fc-ace4-f21bf0d8c173",
+      "name": "Flowly memory review \u00b7 Memory test A",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    },
+    {
+      "id": "1496ef7b-404e-4af2-a4fa-3d4912688a29",
+      "name": "Kanban summary \u00b7 Memory test A",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    },
+    {
+      "id": "d90a0660-798a-4666-8af4-aa9412e2662b",
+      "name": "Kanban summary \u00b7 Memory test A",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    },
+    {
+      "id": "a3f2c784-b57e-4dd4-aad1-690096876ea8",
+      "name": "Kanban summary \u00b7 Memory test A",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    },
+    {
+      "id": "bf519a61-e9c5-438b-8a4c-940c1d7e2d12",
+      "name": "Kanban summary \u00b7 Memory test B",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    },
+    {
+      "id": "33790375-f125-4039-b7a1-b4c8f34b1f4b",
+      "name": "Luna \u00b7 Memory test B",
+      "status": "closed",
+      "archived": true,
+      "mode": "full-access"
+    }
+  ],
+  "retroAgents": [
+    {
+      "id": "92a63fed-fad3-4bed-b373-ab8d3a25a029",
+      "name": "Flowly memory review \u00b7 Memory test A",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    },
+    {
+      "id": "16bd40b5-083f-47fc-ace4-f21bf0d8c173",
+      "name": "Flowly memory review \u00b7 Memory test A",
+      "status": "closed",
+      "archived": true,
+      "mode": "default"
+    }
+  ],
+  "testWorkspacesStillListed": []
+}

@@ -61,6 +61,7 @@ import { TaskProgress } from "./task-progress";
 import { TaskUsage } from "./task-usage";
 import { SessionMarkdown } from "./session-content";
 import { TaskIdeas } from "./task-ideas";
+import { TaskMemorySection } from "./memory";
 import { LinkOrigin, TaskLinks } from "./task-links";
 import { TaskArtifacts } from "./task-artifacts";
 import { TaskWorkpad } from "./task-workpad";
@@ -97,6 +98,7 @@ function TaskDrawerView({
   startRequest,
   startIdea,
   onAllIdeas,
+  onMemoryPage,
   onFilterTag,
   escapeRequest,
   attention,
@@ -136,6 +138,8 @@ function TaskDrawerView({
   startIdea?: Idea;
   /** Opens the project Ideas page showing only this card (IDEAS-INBOX-SPEC §5). */
   onAllIdeas?(taskId: string): void;
+  /** Opens the project Memory page (PROJECT-MEMORY-SPEC §8.2). */
+  onMemoryPage?(): void;
   /** Adds a tag to the board filter (CARD-TAGS-SPEC §6.3). */
   onFilterTag?(tag: string): void;
   /** Changes on each board Esc shortcut: leave the session preview, else close. */
@@ -747,7 +751,8 @@ function TaskDrawerView({
         );
       case "ideas":
         return (
-          onCreateFromIdea && onOpenTask && (
+          <>
+          {onCreateFromIdea && onOpenTask && (
             <TaskIdeas
               taskId={task.id}
               sessions={ordered}
@@ -762,7 +767,10 @@ function TaskDrawerView({
               onOpenTask={onOpenTask}
               section={sectionStates.ideas}
             />
-          )
+          )}
+          {/* Project memory proposed from this card, right after its ideas (PROJECT-MEMORY-SPEC §8.2). */}
+          {onMemoryPage && <TaskMemorySection task={task} project={project} onOpenPage={onMemoryPage} />}
+          </>
         );
       case "links":
         return (

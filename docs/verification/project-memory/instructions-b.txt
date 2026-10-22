@@ -1,0 +1,2 @@
+Project memory (confirmed by the user; all 1 entries):
+- [Decision] 短码为 7 位 base62，拒绝 UUID: Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long. (memory 5b136f23, from "Memory test A")

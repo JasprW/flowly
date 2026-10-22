@@ -77,6 +77,7 @@ export function ProjectForm({
     [autoStatus, setAutoStatus] = useState(project?.autoStatus !== false),
     [workpad, setWorkpad] = useState(project?.workpad !== false),
     [workflowInsights, setWorkflowInsights] = useState(project?.workflowInsights !== false),
+    [memory, setMemory] = useState(project?.memory !== false),
     [agentModel, setAgentModel] = useState<AgentModel | null>(project?.agentModel ?? null),
     [archivedShown, setArchivedShown] = useState(!!showArchived),
     [lanes, setLanes] = useState<Lane[]>(() => projectLanes(project)),
@@ -113,6 +114,7 @@ export function ProjectForm({
           ...(autoStatus !== (project.autoStatus !== false) ? { autoStatus } : {}),
           ...(workpad !== (project.workpad !== false) ? { workpad } : {}),
           ...(workflowInsights !== (project.workflowInsights !== false) ? { workflowInsights } : {}),
+          ...(memory !== (project.memory !== false) ? { memory } : {}),
           ...(JSON.stringify(lanes) !== JSON.stringify(projectLanes(project)) ? { lanes } : {}),
           ...(JSON.stringify(agentModel) !== JSON.stringify(project.agentModel ?? null) ? { agentModel } : {}),
         });
@@ -285,6 +287,14 @@ export function ProjectForm({
               detail={t("Include this project when workflow insights run. Turn the feature itself on in Settings → AI features.")}
               value={workflowInsights}
               onChange={setWorkflowInsights}
+            />
+          )}
+          {project && (
+            <Toggle
+              title={t("Project memory")}
+              detail={t("Share confirmed decisions and pitfalls with new sessions on this project. Off stops injecting them and stops new suggestions; what is remembered is kept.")}
+              value={memory}
+              onChange={setMemory}
             />
           )}
           {project && onShowArchived && (

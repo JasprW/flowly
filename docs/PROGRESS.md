@@ -5,6 +5,22 @@
 - [x] Researched the Paseo registry (getpaseo/plugins README, PROTOCOL, REVIEW, publishing guide): icon and screenshots come from `icon`/`media` in `paseo-plugin.json` (package-relative PNG icon; PNG/JPG/WebP/GIF/MP4/WebM media; first image is the thumbnail; SVG rejected), or from `listing.*` overrides a reviewer adds. The two screenshots in the previous listing were reviewer-added overrides.
 - [x] `assets/icon.png` (light 512 app icon) and six screenshots (board, Needs you, summary, ideas, insights, next moves, resized from `docs/promo/screenshots`) declared in the manifest and added to `files`; `ci:package` fails when a declared asset is not in the tarball.
 - [ ] UNRUN: the Insights screenshot predates Workflow insights and the welcome tour pages; retake with `docs/promo/shots.mjs` for a later release. Onboarding: no tour or tip change (packaging only).
+## Project memory (card "项目记忆：可审阅的跨卡共享记忆 + 完成卡复盘") — 2026-10-22
+
+Spec: [PROJECT-MEMORY-SPEC](PROJECT-MEMORY-SPEC.md). Every card started from zero; what was decided on one card only reached the next one if someone wrote it into AGENTS.md or a spec.
+
+- [x] Spec written and confirmed first (boundaries with AGENTS.md §2, what to store §2.1, dry run on the Flowly board §2.4, file storage vs mem0 §3.4, when to summarize §4.0, lifecycle §6.5).
+- [x] `memory.json` store (serialized writes, backup, atomic replacement, invalid data preserved), per-entry revision with `MEMORY_CONFLICT`, limits and Make room, backups on delete, cascades on card delete and project Remove (`server/memory.ts`, `shared/memory.ts`).
+- [x] Agent tools `flowly_remember` (candidate; receipt + `memory_proposed` event, idempotent by event) and `flowly_recall` (read-only); `flowly_get_task` `memory`; CLI `remember` / `recall`; skill rule.
+- [x] First instructions carry the project memory block (`sessionContext`, all entries while they fit 8 / 2400 characters, else pinned + relevant); injected entries count as used by the card.
+- [x] Clues: the user's own messages of each managed turn (answer / feedback / message), filtered (short, picked suggestion, secret). Native question-tool answers (Claude `AskUserQuestion`, Codex `request_user_input` and the async variant's `Answers to your questions:` follow-up) become `answer` clues, one per question; formats checked on real timelines and Paseo's source on 2026-10-22 (spec §4.0). Live: a Claude session's AskUserQuestion answered like the drawer left two `answer` clues with `ask` ([report](verification/project-memory.md), last section).
+- [x] Finished-card review on entering Done (default on, Summary model, project-root workspace, labels `flowly=summarizer`, `flowly-memory=retro`, hard-deleted in `finally` via `server/summarizer-remove.ts`, archive fallback); manual **Find memories**; skip without new material.
+- [x] Review tightened after user feedback (too many card-specific candidates; 1 of 7 kept): at most one candidate per card, a required `reuse` (a later card on a different feature) or it is dropped, waiting and dismissed suggestions passed as counter-examples; the same generality rule added for `flowly_remember`.
+- [x] UI: Memory page (`M`, overview chip, project tab menu), candidate review with edit/confirm/dismiss, edit/pin/archive/delete/restore, Copy as AGENTS.md rule, Clean up / Archive all stale, Make room; drawer Memory section; project switch *Project memory*; Settings → AI features *Find memories in finished cards*; nine catalogs.
+- [x] Onboarding: tour line *Project memory* (More features), tip `first-memory-candidate`, README highlights in both languages, ONBOARDING-SPEC tip table.
+- [x] `shared/memory.test.ts` (16), `server/memory.test.ts` (13, incl. card A's confirmed decision in card B's first instructions), tool list, settings defaults, tip order.
+- [x] Luna 6 end-to-end on Tinylink, session `014fabc7` ([report](verification/project-memory.md)): card A's confirmed decision in card B's first instructions, `flowly_get_task` and `flowly_recall`; UI edit and delete reach new session contexts; MEMORY_SECRET / MEMORY_DUPLICATE; automatic and manual review with archived review sessions (before the switch to hard delete); counts; cleanup verified. UNRUN: a screenshot of the drawer's Memory section (below the captured viewport); phones.
+
 
 ## AI output language (card "AI output language setting for all AI features") — 2026-10-21
 

@@ -50,6 +50,7 @@ Headline tiles:
 Under More features (a new feature normally goes here; promote it to a tile only by replacing one):
 - *Workpad*: agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks (passed, failed or not run on a named commit) and confusions; delivering without them needs a note ([WORKPAD-SPEC](WORKPAD-SPEC.md), [CARD-SETUP-SPEC](CARD-SETUP-SPEC.md) §4). No new tip: the change is agent behavior with no new screen moment.
 - *Follow-up ideas*: work an agent finds on the way lands in the Ideas inbox; Good idea or Dismiss.
+- *Project memory*: decisions and pitfalls you confirm carry over to new cards' sessions; agents and the review of finished cards suggest them, and you edit or delete them any time (PROJECT-MEMORY-SPEC).
 - *Inputs and outputs*: each card lists the files and links it worked from and delivered, added by agents or by you ([CARD-ARTIFACTS-SPEC](CARD-ARTIFACTS-SPEC.md)).
 - *Tickets, docs and PRs as inputs*: start a card from a Jira ticket, Confluence page, or GitHub/GitLab issue or pull request; agents read it every turn and Flowly never changes it.
 - *Tags*: tag cards by module or direction; agents tag their own cards too; filter and search by #tag.
@@ -74,7 +75,7 @@ Title with detail "Your first three steps." (plus "Nothing is created until you 
 
 ### 5. One-time contextual tips (small, non-modal)
 
-A tip is a single dismissible banner row (icon, one sentence, **Got it**) under the overview bar; only **Got it** records it as seen. Priority when several apply: agent-question, needs-you, attention-dismiss, first-done, older-finished, next-move, first-workpad, subagents, first-idea, first-workflow-insight, ai-language, first-artifact, first-ticket, first-tag, first-card, card-display, connectors, session-history, sidebar-order, project-menu, jira-connect. The empty-project hint takes the same slot and wins at the top of the relevant surface, using theme colours. At most one tip is visible at a time; a tip appears at most once per host (`tipsSeen`); dismissing or acting on the feature records it. Tips never block input, never move a focused input, and are not shown while the welcome tour is open.
+A tip is a single dismissible banner row (icon, one sentence, **Got it**) under the overview bar; only **Got it** records it as seen. Priority when several apply: agent-question, needs-you, attention-dismiss, first-done, older-finished, next-move, first-workpad, subagents, first-idea, first-memory-candidate, first-workflow-insight, ai-language, first-artifact, first-ticket, first-tag, first-card, card-display, connectors, session-history, sidebar-order, project-menu, jira-connect. The empty-project hint takes the same slot and wins at the top of the relevant surface, using theme colours. At most one tip is visible at a time; a tip appears at most once per host (`tipsSeen`); dismissing or acting on the feature records it. Tips never block input, never move a focused input, and are not shown while the welcome tour is open.
 
 | Tip id | Shown when | Text |
 | --- | --- | --- |
@@ -86,6 +87,7 @@ A tip is a single dismissible banner row (icon, one sentence, **Got it**) under 
 | `first-workpad` | the project's Card workpad switch is on, a card of the project has a workpad and no card is open (WORKPAD-SPEC §8, §9) | "This card has a workpad: the agent's acceptance criteria and checks. The card shows how many checks passed; open it to see which ran on which commit, and tick items yourself." |
 | `subagents` | a session of the project has a live Paseo child agent (SUBAGENTS-SPEC §7) | "When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo." |
 | `first-idea` | the first time Ideas has an open item | "An agent suggested follow-up work. Good idea starts a card or continues here; Dismiss removes it." |
+| `first-memory-candidate` | the current project has a project-memory candidate waiting for review and no card is open (PROJECT-MEMORY-SPEC §11); read from `memory.counts` with the board | "An agent suggested something to remember. Confirm it in Memory and new sessions on this project will know it; you can edit or delete it any time." |
 | `first-workflow-insight` | Workflow insights is on and the current project has an open suggestion (WORKFLOW-INSIGHTS-SPEC §8); read once per project while unseen, no polling | "Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card." |
 | `first-artifact` | a card of the project has an artifact and no card is open | "Cards now collect artifacts: the files and links a task worked from and delivered. Agents add them as they work; you can add your own in the card." |
 | `first-tag` | a card of the project has a tag an agent added and no card is open | "Agents tag their cards by module and direction. Open a card and tap a tag to filter the board by it, or search #tag." |

@@ -68,7 +68,7 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
       }),
     },
   } as unknown as PaseoApi;
-  let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true };
+  let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true };
   const digests = new DigestStore(board.directory);
   const git = new GitStats(async () => "");
   const service = new InsightsService(board, flow, git, new SummaryStore(board.directory), digests, async () => settings, async () => "en", 1000, () => NOW);

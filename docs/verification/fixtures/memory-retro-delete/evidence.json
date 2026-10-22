@@ -1,0 +1,109 @@
+{
+  "startedAt": "2026-10-22T03:35:16.041Z",
+  "steps": [
+    {
+      "at": "2026-10-22T03:35:16.367Z",
+      "step": "card-created",
+      "id": "f74aeaad-fb8d-499e-a2b8-2097c5aa73aa",
+      "workspaceId": "wks_690dfd038a0468b1"
+    },
+    {
+      "at": "2026-10-22T03:35:16.527Z",
+      "step": "session-created",
+      "agentId": "6cb262be-5678-487d-9531-248a4851ec07"
+    },
+    {
+      "at": "2026-10-22T03:35:22.536Z",
+      "step": "clues",
+      "count": 1,
+      "kinds": [
+        "message"
+      ]
+    },
+    {
+      "at": "2026-10-22T03:35:22.606Z",
+      "step": "moved-done"
+    },
+    {
+      "at": "2026-10-22T03:35:22.624Z",
+      "step": "retro-queued",
+      "queued": true
+    },
+    {
+      "at": "2026-10-22T03:35:25.632Z",
+      "step": "review-session-seen",
+      "id": "12833246-4b79-4573-b71a-66ac44210e09",
+      "status": "running",
+      "archivedAt": null
+    },
+    {
+      "at": "2026-10-22T03:35:33.653Z",
+      "step": "retro-finished",
+      "retro": {
+        "taskId": "f74aeaad-fb8d-499e-a2b8-2097c5aa73aa",
+        "at": "2026-10-22T03:35:33.047Z",
+        "clueAt": "2026-10-22T03:35:20.963Z"
+      },
+      "error": null
+    },
+    {
+      "at": "2026-10-22T03:35:34.655Z",
+      "step": "check",
+      "reviewSessionsSeen": [
+        "12833246-4b79-4573-b71a-66ac44210e09"
+      ],
+      "leftAfterRun": [],
+      "hardDeleted": true
+    },
+    {
+      "at": "2026-10-22T03:36:14.659Z",
+      "step": "after-auto-delay",
+      "sessions": [],
+      "retros": 1
+    },
+    {
+      "at": "2026-10-22T03:36:14.676Z",
+      "step": "cleanup-memory",
+      "id": "11521f2d-19b4-4623-bf40-679fe695040e"
+    },
+    {
+      "at": "2026-10-22T03:36:14.690Z",
+      "step": "cleanup-memory",
+      "id": "631a2263-2356-4906-841c-f1c2af3504ad"
+    },
+    {
+      "at": "2026-10-22T03:36:14.834Z",
+      "step": "cleanup-delete",
+      "id": "f74aeaad-fb8d-499e-a2b8-2097c5aa73aa",
+      "backup": "/Users/bofan.wang/.paseo/plugin-data/flowly/removed/task-f74aeaad-fb8d-499e-a2b8-2097c5aa73aa-2026-10-22T03-36-14-790Z.json",
+      "archived": {
+        "sessions": 0,
+        "workspace": false
+      }
+    },
+    {
+      "at": "2026-10-22T03:36:14.868Z",
+      "step": "cleanup-verify",
+      "cardOnBoard": false,
+      "tinylinkCards": 6,
+      "sessionArchived": true,
+      "cluesLeft": 0,
+      "entriesLeft": 0,
+      "reviewSessionsLeft": 0
+    }
+  ],
+  "card": {
+    "id": "f74aeaad-fb8d-499e-a2b8-2097c5aa73aa",
+    "workspaceId": "wks_690dfd038a0468b1"
+  },
+  "agentId": "6cb262be-5678-487d-9531-248a4851ec07",
+  "check": {
+    "reviewSessionsSeen": [
+      "12833246-4b79-4573-b71a-66ac44210e09"
+    ],
+    "leftAfterRun": [],
+    "hardDeleted": true,
+    "afterAutoDelay": []
+  },
+  "endedAt": "2026-10-22T03:36:14.868Z"
+}

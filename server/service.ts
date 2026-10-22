@@ -22,6 +22,7 @@ import { workpadEnabled, workpadOf } from "../shared/workpad";
 import { normalizeTags } from "../shared/tags";
 import { tagLimits } from "../shared/model";
 import { repoMatcher } from "./repos";
+import { memoryContext } from "./memory";
 import type { z } from "zod";
 import type { removeProject as removeProjectRpc, restoreProjectCheck as restoreProjectCheckRpc } from "../shared/rpc";
 
@@ -658,6 +659,8 @@ export class BoardService {
       !!matches.length &&
       !task.archivedAt &&
       !project.archivedAt;
+    // Project memory for the first instructions (PROJECT-MEMORY-SPEC §6.1); unreadable memory never blocks a session.
+    const memory = await memoryContext(this.store.directory, task, project, board).catch(() => ({ lines: [] as string[], ids: [] as string[] }));
     const directories = effectiveRepos(task, project).map((repo) => ({
       repo,
       directory:
@@ -683,7 +686,9 @@ export class BoardService {
         linkContextLines(linksOf(board, task.id), (t) => laneName(project, t.status)),
         artifactContextLines(artifactsOf(board.artifacts, task.id), 10, await this.unreadableExternals(board, task.id)),
         setupContextLine(setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project))),
+        memory.lines,
       ),
+      memoryIds: memory.ids,
       directories,
       workspaceRepoPaths: matches,
       owner:

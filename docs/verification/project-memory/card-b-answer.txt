@@ -1,0 +1,5 @@
+Card B Luna session (codex/gpt-6-luna, full-access) reported:
+
+- Initial instructions: “Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long.”
+- flowly_get_task: 1 memory entry, decision “短码为 7 位 base62，拒绝 UUID”, id 5b136f23-729b-4d2b-abe4-553ca6de5c31, with the edited confirmed body.
+- flowly_recall with query “short code length”: the same 1 entry, id, title, and body.

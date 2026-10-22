@@ -22,6 +22,9 @@ export function OverviewBar({
   openIdeas,
   onIdeas,
   ideasShortcut,
+  memoryCandidates,
+  onMemory,
+  memoryShortcut,
 }: {
   overview: BoardOverview;
   nameOf(status: Status): string;
@@ -33,6 +36,10 @@ export function OverviewBar({
   openIdeas: number | null;
   onIdeas(): void;
   ideasShortcut: string;
+  /** Project memory candidates waiting for review (PROJECT-MEMORY-SPEC §8.1); null when memory is off for the project. */
+  memoryCandidates: number | null;
+  onMemory(): void;
+  memoryShortcut: string;
   /** Jump to a lane (compact: switch tabs; desktop: expand it if collapsed). */
   onLane(status: Status): void;
 }) {
@@ -101,6 +108,15 @@ export function OverviewBar({
         >
           {openIdeas ? t("Ideas {openIdeas}", { openIdeas }) : t("Ideas")}
         </Chip>
+        )}
+        {memoryCandidates !== null && (
+          <Chip
+            label={`${t("Project memory: {n} to review", { n: memoryCandidates })}${memoryShortcut ? ` (${memoryShortcut})` : ""}`}
+            icon={<Icon name="BookMarked" size={13} color={memoryCandidates ? colors.accent : colors.foregroundMuted} />}
+            onPress={onMemory}
+          >
+            {memoryCandidates ? t("Memory {n}", { n: memoryCandidates }) : t("Memory")}
+          </Chip>
         )}
         <Chip label={`${t("Project insights")}${insightsShortcut ? ` (${insightsShortcut})` : ""}`} icon={<Icon name="Activity" size={13} color={colors.foregroundMuted} />} onPress={onInsights}>
           {t("Insights")}</Chip>

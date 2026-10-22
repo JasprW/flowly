@@ -67,6 +67,8 @@ Work an agent discovers along the way (a bug it tripped over, a limitation, the 
 ![Ideas inbox with source cards](docs/promo/screenshots/04-ideas-inbox.png)
 ![Good idea: start a new task, continue in the session, or use a new session](docs/promo/screenshots/04b-good-idea-two-paths.png)
 
+What should outlive a card goes to **project memory**: decisions you made (including the options you turned down), pitfalls and dead ends, how you want work done, and the people and systems involved. Agents suggest entries with `flowly_remember`, and a cheap model reviews each card you move to Done and suggests at most one more, only when it holds beyond that card; nothing counts until you confirm it on the project's **Memory** page (`M`). Confirmed entries go into the first instructions of the project's new sessions (all of them while they fit, otherwise the pinned and most relevant ones; agents look up the rest with `flowly_recall`). You can edit, pin, archive or delete any entry, copy one as an `AGENTS.md` rule, and turn memory off per project. It is stored on your machine, never in the repository.
+
 ### 5. Inputs and outputs
 
 Each card has an **Artifacts** list: the documents, links and deliverables it worked from (inputs) and produced (outputs). Agents register them through the board tools as they work; you add, edit or remove your own from the card. Only references are stored; files stay where they are and open in a read-only preview. Every entry shows whether you or an agent added it, and agents can't remove the ones you added.

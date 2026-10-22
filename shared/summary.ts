@@ -68,6 +68,8 @@ export const summarySettings = defineSettings({
     summaryModel: z.string().max(200).default(""),
     /** Generate a past day's project digest when Insights opens it (PROJECT-INSIGHTS-SPEC §7). */
     digestEnabled: z.boolean().default(true),
+    /** Review cards moved into Done for project memory candidates (PROJECT-MEMORY-SPEC §4.2, §9). */
+    retroEnabled: z.boolean().default(true),
   }),
 });
 export type SummarySettings = z.infer<typeof summarySettings.schema>;

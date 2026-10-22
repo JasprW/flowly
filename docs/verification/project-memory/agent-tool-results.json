@@ -1,0 +1,115 @@
+[
+  {
+    "tool": "flowly.flowly_remember",
+    "status": "completed",
+    "outputKeys": [
+      "content",
+      "structuredContent",
+      "_meta"
+    ],
+    "object": {
+      "matches": [
+        "memoryId\":\"5b136f23-729b-4d2b-abe4-553ca6de5c31"
+      ],
+      "memoryId": "5b136f23-729b-4d2b-abe4-553ca6de5c31",
+      "entries": [],
+      "code": "zh-CN",
+      "total": 0
+    },
+    "agentId": "1b78f53e-8356-4317-92b6-7bf7a39f8d12"
+  },
+  {
+    "tool": "flowly.flowly_remember",
+    "status": "failed",
+    "outputKeys": [
+      "content",
+      "structuredContent",
+      "_meta"
+    ],
+    "object": {
+      "matches": [
+        "MEMORY_SECRET"
+      ],
+      "code": "MEMORY_SECRET"
+    },
+    "agentId": "1b78f53e-8356-4317-92b6-7bf7a39f8d12"
+  },
+  {
+    "tool": "flowly.flowly_remember",
+    "status": "completed",
+    "outputKeys": [
+      "content",
+      "structuredContent",
+      "_meta"
+    ],
+    "object": {
+      "matches": [
+        "memoryId\":\"e4adacaf-5e58-4259-91e4-e5e34a5eb3fd"
+      ],
+      "memoryId": "e4adacaf-5e58-4259-91e4-e5e34a5eb3fd",
+      "entries": [],
+      "code": "zh-CN",
+      "total": 0
+    },
+    "agentId": "1b78f53e-8356-4317-92b6-7bf7a39f8d12"
+  },
+  {
+    "tool": "flowly.flowly_remember",
+    "status": "failed",
+    "outputKeys": [
+      "content",
+      "structuredContent",
+      "_meta"
+    ],
+    "object": {
+      "matches": [
+        "MEMORY_DUPLICATE"
+      ],
+      "code": "MEMORY_DUPLICATE"
+    },
+    "agentId": "1b78f53e-8356-4317-92b6-7bf7a39f8d12"
+  },
+  {
+    "tool": "flowly.flowly_recall",
+    "status": "completed",
+    "outputKeys": [
+      "content",
+      "structuredContent",
+      "_meta"
+    ],
+    "object": {
+      "entries": [
+        {
+          "id": "5b136f23-729b-4d2b-abe4-553ca6de5c31",
+          "title": "短码为 7 位 base62，拒绝 UUID",
+          "kind": "decision",
+          "body": "Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long."
+        }
+      ],
+      "total": 1
+    },
+    "agentId": "33790375-f125-4039-b7a1-b4c8f34b1f4b"
+  },
+  {
+    "tool": "flowly.flowly_get_task",
+    "status": "completed",
+    "outputKeys": [
+      "content",
+      "structuredContent",
+      "_meta"
+    ],
+    "object": {
+      "entries": [
+        {
+          "id": "5b136f23-729b-4d2b-abe4-553ca6de5c31",
+          "title": "短码为 7 位 base62，拒绝 UUID",
+          "kind": "decision",
+          "body": "Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long."
+        }
+      ],
+      "code": "zh-CN",
+      "total": 1
+    },
+    "agentId": "33790375-f125-4039-b7a1-b4c8f34b1f4b"
+  }
+]

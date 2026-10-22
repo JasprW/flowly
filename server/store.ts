@@ -339,6 +339,7 @@ export class BoardStore {
       if (input.autoStatus !== undefined) p.autoStatus = input.autoStatus;
       if (input.workpad !== undefined) p.workpad = input.workpad;
       if (input.workflowInsights !== undefined) p.workflowInsights = input.workflowInsights;
+      if (input.memory !== undefined) p.memory = input.memory;
       if (input.agentModel !== undefined) {
         if (input.agentModel) p.agentModel = input.agentModel;
         else delete p.agentModel;

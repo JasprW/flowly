@@ -1,0 +1,43 @@
+{
+  "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+  "taskA": "5fe28d64-e35f-4889-b80b-4f3f666803a9",
+  "taskB": "f55e2130-1c36-4dbf-970e-6e992b22076d",
+  "firstCandidate": {
+    "id": "5b136f23-729b-4d2b-abe4-553ca6de5c31",
+    "statusBeforeConfirmation": "candidate",
+    "kind": "decision",
+    "source": {
+      "by": "agent",
+      "taskId": "5fe28d64-e35f-4889-b80b-4f3f666803a9",
+      "agentId": "1b78f53e-8356-4317-92b6-7bf7a39f8d12",
+      "eventId": "9cd07226-0b90-477a-92cb-022d545b8f86"
+    },
+    "cardEvent": {
+      "action": "memory_proposed",
+      "actor": "agent",
+      "eventId": "9cd07226-0b90-477a-92cb-022d545b8f86"
+    },
+    "toolResultMemoryId": "5b136f23-729b-4d2b-abe4-553ca6de5c31",
+    "candidateCountWhileWaiting": 1
+  },
+  "validationErrors": {
+    "fakeSecretPattern": "MEMORY_SECRET",
+    "sameTitle": "MEMORY_DUPLICATE"
+  },
+  "confirmedByHuman": true,
+  "confirmedBody": "Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long.",
+  "cardBInitialInstructions": "instructions-b.txt",
+  "cardBAgentResults": "agent-tool-results.json",
+  "uiEdit": {
+    "title": "Short code length is 7 base62 characters",
+    "freshPrepareSessionIncludedEditedTitle": true
+  },
+  "uiDelete": {
+    "entryRemoved": true,
+    "freshPrepareSessionExcludedEditedTitle": true
+  },
+  "autoRetro": "retro-auto.json",
+  "manualRetro": "retro-manual.json",
+  "candidateCountAfterReviewAndDismissal": 0,
+  "otherProjectCandidateCountBeforeAndAfter": 5
+}

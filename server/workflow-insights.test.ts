@@ -75,7 +75,7 @@ async function setup() {
     },
   } as unknown as PaseoApi;
   let settings: WorkflowSettings = { enabled: true, model: "", intervalDays: 7, runHour: 9, timeZone: "UTC" };
-  const summary: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true };
+  const summary: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true };
   const log = new CommandLog(board.directory);
   const state = new WorkflowStore(board.directory);
   let now = NOW;

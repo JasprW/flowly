@@ -328,3 +328,34 @@ export function useWorkflowInsightsQuery(projectId: string, enabled: boolean, po
     placeholderData: (previous) => previous,
   });
 }
+
+/** A project's memory (PROJECT-MEMORY-SPEC §5.1): read while the Memory page or a drawer's Memory section is shown. */
+export const memoryKey = (projectId: string) => ["flowly", "memory", projectId] as const;
+export function useMemoryQuery(projectId: string, enabled: boolean) {
+  const read = useRpc(rpc.readMemory);
+  const client = useQueryClient();
+  const key = memoryKey(projectId);
+  return useQuery({
+    queryKey: key,
+    queryFn: () => readChanged(client, key, (etag) => read({ projectId, ...(etag ? { etag } : {}) })),
+    enabled: enabled && !!projectId,
+    staleTime: 0,
+    // Every 5 s while a finished-card review runs, else every 30 s.
+    refetchInterval: (q) => (enabled ? (q.state.data?.running.length ? 5_000 : 30_000) : false),
+    placeholderData: (previous) => previous,
+  });
+}
+/** Candidates waiting per project, for the overview chip; read with the board, once a minute. */
+export const memoryCountsKey = ["flowly", "memory-counts"] as const;
+export function useMemoryCountsQuery(enabled: boolean) {
+  const read = useRpc(rpc.memoryCounts);
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: memoryCountsKey,
+    queryFn: () => readChanged(client, memoryCountsKey, (etag) => read(etag ? { etag } : {})),
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: enabled ? 60_000 : false,
+    placeholderData: (previous) => previous,
+  });
+}

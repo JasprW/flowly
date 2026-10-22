@@ -27,6 +27,8 @@ import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type
 import {
   agentStatuses,
   ideaInputSchema,
+  rememberInputSchema,
+  recallInputSchema,
   artifactInputSchema,
   artifactRemovalSchema,
   tagsInputSchema,
@@ -41,6 +43,8 @@ import {
   type StatusInput,
   type ProgressInput,
   type IdeaInput,
+  type RememberInput,
+  type RecallInput,
   type ArtifactToolInput,
   type ArtifactRemovalInput,
   type TagsToolInput,
@@ -56,6 +60,12 @@ import { ToolSecrets, digest } from "./tool-context";
 import { ToolError } from "./tool-error";
 import { ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Receipt, type Status } from "../shared/model";
 import { isLegacyScope } from "../shared/scope";
+import { MemoryError, type MemoryService } from "./memory";
+
+/** A project-memory refusal as the tool error agents read (PROJECT-MEMORY-SPEC §4.1). */
+function memoryToolError(e: unknown): unknown {
+  return e instanceof MemoryError ? new ToolError(e.code, e.message) : e;
+}
 
 export class AgentService {
   private paseo?: PaseoApi;
@@ -78,6 +88,19 @@ export class AgentService {
   }
   /** Reads external inputs (CONNECTORS-SPEC §9); set by the plugin entry. */
   connectors?: ConnectorService;
+  /** Project memory (PROJECT-MEMORY-SPEC); set by the plugin entry. */
+  memory?: MemoryService;
+  /** flowly_recall (PROJECT-MEMORY-SPEC §6.4): read-only. */
+  async recall(identity: ToolIdentity, raw: RecallInput) {
+    const input = recallInputSchema.parse(raw);
+    const r = await this.resources(identity);
+    if (!this.memory) throw new ToolError("MEMORY_DISABLED", "Project memory is unavailable in this Flowly build.");
+    const found = await this.memory.recall(r.project, r.task.id, input).catch((e) => {
+      throw memoryToolError(e);
+    });
+    this.accesses.set(identity.agentId, { at: new Date(this.clock()).toISOString(), action: "recall" });
+    return found;
+  }
   /** Per-session external content last seen, for external `unread`. */
   readonly externalReads: ExternalReadStore;
   /**
@@ -336,6 +359,7 @@ export class AgentService {
           ...(workpadEnabled(r.project)
             ? { workpadEnabled: true, ...workpadContext(board.workpads, board.plans, r.task.id, identity.agentId) }
             : { workpadEnabled: false, workpad: null, plan: [] }),
+          ...(this.memory ? { memory: await this.memory.taskContext(r.task, r.project).catch(() => ({ enabled: false, total: 0, entries: [], candidates: [] })) } : {}),
           ...(scripts.length ? { projectScripts: scripts } : {}),
           links: linksOf(board, r.task.id)
             .filter((v) => v.other)
@@ -385,13 +409,15 @@ export class AgentService {
   }
   async write(
     identity: ToolIdentity,
-    action: "status" | "progress" | "idea" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
+    action: "status" | "progress" | "idea" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
     raw: unknown,
   ): Promise<ToolResult> {
-    const input: StatusInput | ProgressInput | IdeaInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
+    const input: StatusInput | ProgressInput | IdeaInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
       action === "status"
         ? statusInputSchema.parse(raw)
-        : action === "idea"
+        : action === "remember"
+          ? rememberInputSchema.parse(raw)
+          : action === "idea"
           ? ideaInputSchema.parse(raw)
           : action === "artifact"
             ? artifactInputSchema.parse(raw)
@@ -446,6 +472,27 @@ export class AgentService {
     const commits = action === "workpad" ? await this.commits(input as WorkpadInput, resources.workspace.workspaceDirectory, head ?? null) : undefined;
     // Tags are normalized before the write; one invalid value refuses the whole call (CARD-TAGS-SPEC §4.1).
     const tagEdit = action === "tags" || action === "idea" ? normalizeToolTags(action, input as TagsToolInput | IdeaInput) : undefined;
+    // A memory candidate (PROJECT-MEMORY-SPEC §4.1): its refusals come before the card write, so they leave no receipt.
+    const memoryInput =
+      action === "remember"
+        ? (() => {
+            const m = input as RememberInput;
+            try {
+              return { ...m, tags: normalizeTags(m.tags) };
+            } catch (e) {
+              throw new ToolError("TAG_INVALID", e instanceof Error ? e.message : String(e));
+            }
+          })()
+        : undefined;
+    if (memoryInput) {
+      if (!this.memory) throw new ToolError("MEMORY_DISABLED", "Project memory is unavailable in this Flowly build.");
+      const { kind, title, body, tags, keywords, supersedes } = memoryInput;
+      const isReplay = (await this.store.read()).agentReceipts.some((r) => r.key === `${identity.agentId}:${digest(input.request.id)}`);
+      if (!isReplay)
+        await this.memory.precheck(resources.project, resources.task.id, { kind, title, body, tags, keywords, supersedes }).catch((e) => {
+          throw memoryToolError(e);
+        });
+    }
     const key = `${identity.agentId}:${digest(input.request.id)}`,
       payloadHash = digest(JSON.stringify({ action, input }));
     // What this call left out (NEXT-MOVES-SPEC §9): read from the board as it is after the write, also on a replay
@@ -720,13 +767,13 @@ export class AgentService {
         typeEvent ??
         movesEvent ??
         workpadEvent ??
-        (action === "idea"
+        (action === "idea" || action === "remember"
           ? this.store.event(board, {
               taskId: task.id,
               agentId: identity.agentId,
               actor: "agent",
-              action: "idea_proposed",
-              note: (input as IdeaInput).title,
+              action: action === "idea" ? "idea_proposed" : "memory_proposed",
+              note: (input as IdeaInput | RememberInput).title,
             })
           : this.store.event(board, {
               taskId: task.id,
@@ -793,19 +840,31 @@ export class AgentService {
       notice,
       ...receipt
     } = result.receipt;
+    // The candidate is stored after the card write, keyed by its event: a replay stores it if the first write was lost.
+    let memoryId: string | undefined;
+    if (memoryInput && this.memory) {
+      const { kind, title, body, tags, keywords, supersedes } = memoryInput;
+      const entry = await this.memory
+        .propose({ projectId: resources.project.id, taskId: resources.task.id, agentId: identity.agentId, eventId: result.receipt.eventId, by: "agent", kind, title, body, tags, keywords, ...(supersedes ? { supersedes } : {}) })
+        .catch((e) => {
+          throw memoryToolError(e);
+        });
+      memoryId = entry.id;
+    }
+    const memoryField = memoryId ? { memoryId } : {};
     try {
       const current = await this.get(identity, true, false);
       this.accesses.set(identity.agentId, {
         at: new Date(this.clock()).toISOString(),
         action,
       });
-      return { receipt, replayed: result.replayed, ...remindersField(result.reminders), ...ideaField(result.ideaId), ...(result.artifactId ? { artifactId: result.artifactId } : {}), ...(notice ? { notice } : {}), current };
+      return { receipt, replayed: result.replayed, ...remindersField(result.reminders), ...ideaField(result.ideaId), ...memoryField, ...(result.artifactId ? { artifactId: result.artifactId } : {}), ...(notice ? { notice } : {}), current };
     } catch (e) {
       return {
         receipt,
         replayed: result.replayed,
         ...remindersField(result.reminders),
-        ...ideaField(result.ideaId), ...(result.artifactId ? { artifactId: result.artifactId } : {}),
+        ...ideaField(result.ideaId), ...memoryField, ...(result.artifactId ? { artifactId: result.artifactId } : {}),
         ...(notice ? { notice } : {}),
         current: null,
         contextError: e instanceof Error ? e.message : "Re-read the task.",

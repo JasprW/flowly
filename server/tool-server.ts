@@ -20,6 +20,9 @@ import {
 } from "@modelcontextprotocol/node";
 import {
   ideaInputSchema,
+  rememberInputSchema,
+  recallInputSchema,
+  recallResultSchema,
   artifactInputSchema,
   artifactRemovalSchema,
   readExternalInputSchema,
@@ -239,6 +242,28 @@ export class ToolServer {
           (input) => wrap(() => this.agents.write(identity, "idea", input)),
         );
         mcp.registerTool(
+          "flowly_remember",
+          {
+            description:
+              "Propose something for the project's memory that would make a later, different card's agent re-ask the user, retry a dead end or hit the same problem: a decision the user made with its reason, including a rejected option (decision); a dead end, or the general lesson behind a bug you fixed, not the fix (pitfall); how the user wants work done here that the repository does not say (convention); people, external systems and environments (contact). It is a candidate: the user confirms it before any session sees it. Not this card's progress (that is the summary), not open or deferred items (those are ideas), not what code, git or docs already say, and never a secret (say where it is kept). Only what holds beyond this card: if every later card that would need it works on the same feature, file or bug, leave it to the code and the summary. At most 3 per delivery, usually none; check memory.candidates in get_task first. To correct an entry, propose a new one with supersedes=<its id>; you cannot edit or delete entries. Returns MEMORY_DISABLED, MEMORY_DUPLICATE, MEMORY_LIMIT or MEMORY_SECRET when refused. Does not change card status or task revision. Copy revisions/request from get_task.",
+            inputSchema: rememberInputSchema,
+            outputSchema: toolResultSchema,
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          },
+          (input) => wrap(() => this.agents.write(identity, "remember", input)),
+        );
+        mcp.registerTool(
+          "flowly_recall",
+          {
+            description:
+              "Search the project's memory: decisions, conventions, pitfalls and contacts the user confirmed on earlier cards. get_task memory already lists the entries chosen for this card; use this when you start on an area they do not cover. Read-only; no request needed.",
+            inputSchema: recallInputSchema,
+            outputSchema: recallResultSchema,
+            annotations: { readOnlyHint: true, openWorldHint: false },
+          },
+          (input) => wrap(() => this.agents.recall(identity, input)),
+        );
+        mcp.registerTool(
           "flowly_add_artifact",
           {
             description:
@@ -403,7 +428,7 @@ export class ToolServer {
     }
     const body = z
       .strictObject({
-        action: z.enum(["get", "status", "progress", "idea", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
+        action: z.enum(["get", "status", "progress", "idea", "remember", "recall", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
         input: z.unknown(),
       })
       .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
@@ -413,7 +438,9 @@ export class ToolServer {
           await this.agents.get(identity))
         : body.action === "external" || body.action === "ticket"
           ? await this.agents.readExternal(identity, readExternalInputSchema.parse(body.input))
-          : await this.agents.write(identity, body.action, body.input);
+          : body.action === "recall"
+            ? await this.agents.recall(identity, recallInputSchema.parse(body.input))
+            : await this.agents.write(identity, body.action, body.input);
     this.json(res, { ok: true, result: value });
   }
   private async prepare(
@@ -460,6 +487,8 @@ export class ToolServer {
         task.workspaceId,
         operationId,
       );
+      // The injected memory counts as used by this card (PROJECT-MEMORY-SPEC §3.2).
+      void this.agents.memory?.markUsed(ctx.memoryIds, taskId).catch(() => undefined);
       const existing = await paseo.agents.ref(identity.agentId).refresh();
       if (
         existing?.agent &&
@@ -488,6 +517,7 @@ export class ToolServer {
     if (current.task.archivedAt || current.project.archivedAt)
       throw new ToolError("ARCHIVED", "Task/project is archived.");
     const ctx = await new BoardService(this.store).context(taskId, paseo);
+    void this.agents.memory?.markUsed(ctx.memoryIds, taskId).catch(() => undefined);
     return this.prepare(identity, ctx.context, "cli");
   }
   async sessionContext(

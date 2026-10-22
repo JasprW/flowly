@@ -284,6 +284,13 @@ export function AiPage() {
           disabled={summary.busy}
           onChange={(digestEnabled) => summary.save({ digestEnabled })}
         />
+        <SettingSwitch
+          title={t("Find memories in finished cards")}
+          detail={t("When a card moves to Done, the summary model suggests at most one thing worth remembering for the project's later cards, and usually none. You confirm it. Uses a few tokens per card.")}
+          value={summary.values?.retroEnabled ?? true}
+          disabled={summary.busy}
+          onChange={(retroEnabled) => summary.save({ retroEnabled })}
+        />
       </SettingsGroup>
       <WorkflowInsightsGroup />
       <SettingsGroup title={t("Ideas")} description={t("Agents suggest worthwhile next steps as ideas on their cards; you turn them into new tasks or dismiss them.")}>

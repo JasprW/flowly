@@ -107,6 +107,8 @@ export const projectSchema = z.object({
   workpad: z.boolean().optional(),
   /** Included in workflow insights (WORKFLOW-INSIGHTS-SPEC §2.2). Absent means included. */
   workflowInsights: z.boolean().optional(),
+  /** Project memory (PROJECT-MEMORY-SPEC §9). Absent means on. */
+  memory: z.boolean().optional(),
   /** Display order in the project chooser (lower first); absent sorts by creation. */
   position: z.number().optional(),
   lanes: lanesSchema.optional(),
@@ -423,7 +425,7 @@ export const receiptSchema = z.object({
   agentId: z.string(),
   taskId: z.string(),
   payloadHash: z.string(),
-  action: z.enum(["status", "progress", "idea", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad"]),
+  action: z.enum(["status", "progress", "idea", "remember", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad"]),
   /** Empty when an artifact write changed nothing (same target already recorded). */
   eventId: z.string(),
   /** The artifact an artifact write added, updated or removed. */
@@ -510,6 +512,7 @@ export const projectEdit = z.strictObject({
   autoStatus: z.boolean().optional(),
   workpad: z.boolean().optional(),
   workflowInsights: z.boolean().optional(),
+  memory: z.boolean().optional(),
   lanes: lanesSchema.optional(),
   /** A model sets the project default; null removes it (the global default applies again). */
   agentModel: agentModelSchema.nullable().optional(),

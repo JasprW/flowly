@@ -2,6 +2,7 @@ import { z } from "zod";
 import { relations } from "./links";
 import { setupItems } from "./card-setup";
 import { connectorProviderSchema, itemTypeSchema } from "./connectors";
+import { memoryKinds, memoryLimits } from "./memory";
 import {
   taskSchema,
   projectSchema,
@@ -139,6 +140,42 @@ export const ideaInputSchema = z.strictObject({
       "here: an extension of this card's goal that this card's session can continue with its current context; new: divergent work that deserves its own card.",
     ),
 });
+/** flowly_remember (PROJECT-MEMORY-SPEC §4.1): a candidate for the project's memory; the user confirms it. */
+export const rememberInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  request: requestSchema,
+  kind: z
+    .enum(memoryKinds)
+    .describe(
+      "decision: a choice the user made and why, including a rejected option; pitfall: a dead end or the general lesson behind a bug (not the fix); convention: how the user wants work done here that the repository does not say; contact: people, external systems and environments.",
+    ),
+  title: z.string().trim().min(1).max(memoryLimits.title).describe("The rule or fact itself, in the language of get_task outputLanguage."),
+  body: z.string().trim().max(memoryLimits.body).default("").describe("What and why, or the symptom and how to avoid it. Never a secret: say where it is kept instead."),
+  tags: z.array(z.string().trim().min(1).max(32)).max(memoryLimits.tags).default([]).describe("1-4 area tags; reuse projectTags."),
+  keywords: z
+    .array(z.string().trim().min(1).max(memoryLimits.keyword))
+    .max(memoryLimits.keywords)
+    .default([])
+    .describe("Search words for recall: synonyms, the English and the user's-language name, file or module names."),
+  supersedes: z.string().min(1).max(200).optional().describe("The id of an active memory this one replaces (from get_task memory or flowly_recall)."),
+});
+/** flowly_recall (PROJECT-MEMORY-SPEC §6.4): read-only search of the project's confirmed memory. */
+export const recallInputSchema = z.strictObject({
+  query: z.string().max(200).default("").describe("Words about the area you are starting on; empty lists the latest confirmed entries."),
+  kind: z.enum(memoryKinds).optional(),
+  limit: z.number().int().min(1).max(memoryLimits.recallMax).default(memoryLimits.recallDefault),
+});
+const memoryItemSchema = z.object({
+  id: z.string(),
+  kind: z.enum(memoryKinds),
+  title: z.string(),
+  body: z.string(),
+  tags: z.array(z.string()),
+  pinned: z.boolean(),
+  sourceTaskId: z.string().optional(),
+  confirmedAt: z.string().optional(),
+});
+export const recallResultSchema = z.object({ entries: z.array(memoryItemSchema), total: z.number() });
 /** flowly_set_tags (CARD-TAGS-SPEC §4.1): tag this card with modules and directions. */
 export const tagsInputSchema = z.strictObject({
   expectedRevision: revisionSchema,
@@ -330,6 +367,18 @@ export const toolContextSchema = z.object({
       acceptedAgentId: z.string().optional(),
     }),
   ),
+  /**
+   * Project memory the user confirmed on earlier cards (PROJECT-MEMORY-SPEC §6.3), chosen for this card;
+   * `candidates` are the ones proposed from this card, to avoid duplicates.
+   */
+  memory: z
+    .object({
+      enabled: z.boolean(),
+      total: z.number(),
+      entries: z.array(memoryItemSchema),
+      candidates: z.array(z.object({ id: z.string(), title: z.string(), status: z.string() })),
+    })
+    .optional(),
   /** Scripts in the project root's paseo.json (WORKFLOW-INSIGHTS-SPEC §5.4); absent when it has none. */
   projectScripts: z.array(z.object({ name: z.string(), type: z.enum(["script", "service"]) })).optional(),
   /** The project's most used tags (CARD-TAGS-SPEC §2.3); reuse one when it fits. */
@@ -409,6 +458,8 @@ export const toolResultSchema = z.object({
   reminders: z.array(z.string()).optional(),
   /** The proposed idea, for flowly_propose_idea. */
   ideaId: z.string().optional(),
+  /** The proposed memory candidate, for flowly_remember. */
+  memoryId: z.string().optional(),
   /** For flowly_add_artifact: the write succeeded but not as asked (an entry the user added keeps its role). */
   notice: z.string().optional(),
   /** The added, updated or removed artifact, for the artifact tools. */
@@ -441,6 +492,8 @@ export type ToolPreparation = z.infer<typeof preparationSchema>;
 export type StatusInput = z.infer<typeof statusInputSchema>;
 export type ProgressInput = z.infer<typeof progressInputSchema>;
 export type IdeaInput = z.infer<typeof ideaInputSchema>;
+export type RememberInput = z.infer<typeof rememberInputSchema>;
+export type RecallInput = z.input<typeof recallInputSchema>;
 export type TagsToolInput = z.infer<typeof tagsInputSchema>;
 export type TypeToolInput = z.infer<typeof typeInputSchema>;
 export type NextMovesInput = z.infer<typeof nextMovesInputSchema>;

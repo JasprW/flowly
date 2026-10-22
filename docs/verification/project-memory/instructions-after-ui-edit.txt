@@ -1,0 +1,2 @@
+Project memory (confirmed by the user; all 1 entries):
+- [Decision] Short code length is 7 base62 characters: Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long. (memory 5b136f23, from "Memory test A")

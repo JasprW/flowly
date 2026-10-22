@@ -1,0 +1,42 @@
+Flowly
+Tinylink
+3
+8
+tasks
+· 1 done
+Idle
+1 unread
+In review 2
+Ideas 3
+Memory 1
+Insights
+Board
+Memory
+To review · 1
+Decision
+Suggested by an agent
+Short codes use 7-character base62
+Short codes use seven base62 characters.
+Dismiss
+Edit
+Confirm
+From
+Memory test A
+· Todo
+Memory · 1
+Add memory
+All
+Decisions 1
+Conventions 0
+Pitfalls 0
+Contacts 0
+Decision
+Used 14m ago · 1 card
+Short code length is 7 base62 characters
+Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long.
+#api
+Show more
+From
+Memory test A
+· Todo
+Recall: 1 searches, 0 found nothing (30 days)

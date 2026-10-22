@@ -42,6 +42,7 @@ import { WorkflowInsightsService, WorkflowStore } from "./server/workflow-insigh
 import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workflow-insights";
 import { sessionModel } from "./server/agent-model";
 import { turnPick, userTexts } from "./shared/agent-habits";
+import { MemoryService } from "./server/memory";
 
 export default function contribute(server: PluginServerContext) {
   server.registerSettings(boardViewSettings);
@@ -220,6 +221,20 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.wrapup, (input, { paseo }) => wrapups.run(input, paseo));
   const tools = new ToolServer(store);
   tools.agents.connectors = connectors;
+  // Project memory (PROJECT-MEMORY-SPEC): confirmed knowledge shared across a project's cards.
+  const memory = new MemoryService(store, summaries.store, summaries.settings, aiLanguage, (taskId) => summaries.settled(taskId));
+  tools.agents.memory = memory;
+  server.handle(rpc.readMemory, async ({ projectId, etag }) => ifChanged(await memory.view(projectId), etag));
+  server.handle(rpc.memoryCounts, async ({ etag }) => ifChanged(await memory.counts(), etag));
+  server.handle(rpc.createMemory, (input) => memory.create(input));
+  server.handle(rpc.updateMemory, (input) => memory.update(input));
+  server.handle(rpc.confirmMemory, (input) => memory.confirm(input));
+  server.handle(rpc.dismissMemory, (input) => memory.dismiss(input));
+  server.handle(rpc.restoreMemory, (input) => memory.restore(input));
+  server.handle(rpc.archiveMemory, (input) => memory.archive(input));
+  server.handle(rpc.archiveStaleMemory, (input) => memory.archiveMany(input));
+  server.handle(rpc.deleteMemory, (input) => memory.remove(input));
+  server.handle(rpc.reviewForMemory, (input, { paseo }) => memory.manual(input.taskId, paseo));
   // Unreadable settings keep the default (on).
   tools.agents.ideasOn = async () => {
     const state = await ideasPrefs.read().catch(() => null);
@@ -319,6 +334,8 @@ export default function contribute(server: PluginServerContext) {
       );
       return;
     }
+    // Entering Done: the finished-card review for project memory (PROJECT-MEMORY-SPEC §4.2), in the background.
+    if (task.status === "done" && previous !== "done") memory.afterDone(task.id, paseo);
     if (!finished(task.status) || finished(previous)) return;
     void (async () => {
       const prefs = await wrapupPrefs.read().catch(() => null);
@@ -356,6 +373,9 @@ export default function contribute(server: PluginServerContext) {
     const removed = await service.removeProject(input, paseo);
     await summaries.store.removeTasks(input.id, taskIds).catch((e) =>
       console.error("Kanban summaries not removed:", e instanceof Error ? e.message : String(e)),
+    );
+    await memory.removeProject(input.id, taskIds).catch((e) =>
+      console.error("Flowly project memory not removed:", e instanceof Error ? e.message : String(e)),
     );
     await tools.pruneContexts().catch((e) =>
       console.error("Kanban session bindings not cleaned:", e instanceof Error ? e.message : String(e)),
@@ -426,6 +446,9 @@ export default function contribute(server: PluginServerContext) {
       );
     await summaries.store.removeTasks(`task-${deleted.id}`, new Set([deleted.id])).catch((e) =>
       console.error("Kanban summaries not removed:", e instanceof Error ? e.message : String(e)),
+    );
+    await memory.removeTask(deleted.id).catch((e) =>
+      console.error("Flowly project memory not cleaned:", e instanceof Error ? e.message : String(e)),
     );
     await tools.pruneContexts().catch((e) =>
       console.error("Kanban session bindings not cleaned:", e instanceof Error ? e.message : String(e)),
@@ -515,6 +538,11 @@ export default function contribute(server: PluginServerContext) {
       recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts) });
       if (auto) applyTurnEnded(store, board, identity, event.outcome);
     });
+    // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
+    void store
+      .read()
+      .then((board) => memory.recordTurn(identity, event.timeline, board))
+      .catch((e) => console.error("Flowly memory clue not recorded:", e instanceof Error ? e.message : String(e)));
     // The session's plan and the workspace HEAD for the workpad (WORKPAD-SPEC §2.2, §5.2); never blocks the hook.
     void workpads.recordTurn(identity, event.timeline, paseo).catch((e) =>
       console.error("Kanban workpad plan not recorded:", e instanceof Error ? e.message : String(e)),

@@ -1,0 +1,105 @@
+{
+  "deletedCards": [
+    "5fe28d64-e35f-4889-b80b-4f3f666803a9",
+    "f55e2130-1c36-4dbf-970e-6e992b22076d"
+  ],
+  "deletedResidualMemory": [],
+  "originalCardsBefore": [
+    {
+      "id": "918e5a87-c6b8-45b5-a11c-326bd5c2957c",
+      "title": "Add rate limiting to POST /shorten",
+      "status": "in_review",
+      "revision": 8,
+      "workspaceId": "wks_ba6ff18c509f409e"
+    },
+    {
+      "id": "f0e55983-8064-4c1c-9319-a9de794ffe4d",
+      "title": "Expired links crash the server instead of returning an error",
+      "status": "design",
+      "revision": 2,
+      "workspaceId": "wks_7d81d4dbcaf9dd67"
+    },
+    {
+      "id": "af077ae5-9a44-47da-9ede-80dd7964669e",
+      "title": "Add click counter and GET /stats/:code",
+      "status": "in_review",
+      "revision": 5,
+      "workspaceId": "wks_6fd42afc21d656dc"
+    },
+    {
+      "id": "0e9cf956-03cc-4549-8dfe-f9175ad6268f",
+      "title": "Custom aliases for short links",
+      "status": "todo",
+      "revision": 1,
+      "workspaceId": "wks_35118905f34253ec"
+    },
+    {
+      "id": "ed8b1a84-40a9-47a3-9fcb-efc9d5c98d54",
+      "title": "Add Dockerfile and GitHub Actions workflow",
+      "status": "backlog",
+      "revision": 1,
+      "workspaceId": "wks_37d6bd4cab89da78"
+    },
+    {
+      "id": "eabc3d51-508e-4c1d-b10f-37b0d95c1d79",
+      "title": "Scaffold project and short code generator",
+      "status": "done",
+      "revision": 4,
+      "workspaceId": "wks_a4e7f5a7a51ef2fc"
+    }
+  ],
+  "originalCardsAfter": [
+    {
+      "id": "918e5a87-c6b8-45b5-a11c-326bd5c2957c",
+      "title": "Add rate limiting to POST /shorten",
+      "status": "in_review",
+      "revision": 8,
+      "workspaceId": "wks_ba6ff18c509f409e"
+    },
+    {
+      "id": "f0e55983-8064-4c1c-9319-a9de794ffe4d",
+      "title": "Expired links crash the server instead of returning an error",
+      "status": "design",
+      "revision": 2,
+      "workspaceId": "wks_7d81d4dbcaf9dd67"
+    },
+    {
+      "id": "af077ae5-9a44-47da-9ede-80dd7964669e",
+      "title": "Add click counter and GET /stats/:code",
+      "status": "in_review",
+      "revision": 5,
+      "workspaceId": "wks_6fd42afc21d656dc"
+    },
+    {
+      "id": "0e9cf956-03cc-4549-8dfe-f9175ad6268f",
+      "title": "Custom aliases for short links",
+      "status": "todo",
+      "revision": 1,
+      "workspaceId": "wks_35118905f34253ec"
+    },
+    {
+      "id": "ed8b1a84-40a9-47a3-9fcb-efc9d5c98d54",
+      "title": "Add Dockerfile and GitHub Actions workflow",
+      "status": "backlog",
+      "revision": 1,
+      "workspaceId": "wks_37d6bd4cab89da78"
+    },
+    {
+      "id": "eabc3d51-508e-4c1d-b10f-37b0d95c1d79",
+      "title": "Scaffold project and short code generator",
+      "status": "done",
+      "revision": 4,
+      "workspaceId": "wks_a4e7f5a7a51ef2fc"
+    }
+  ],
+  "originalsUnchanged": true,
+  "originalCardCount": 6,
+  "testCardsRemaining": 0,
+  "memoryRemainingFromTest": 0,
+  "tinylinkCandidateCount": 0,
+  "otherProjectCandidateCounts": {
+    "154c66d4-9d96-4ff1-b810-205a5d016330": 5
+  },
+  "retroErrors": [],
+  "running": []
+}

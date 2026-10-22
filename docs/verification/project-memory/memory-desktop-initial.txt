@@ -1,0 +1,30 @@
+(host sidebar text removed; starts at the plugin's page header)
+Board
+Memory
+To review · 1
+Decision
+Suggested by an agent
+Short codes use 7-character base62
+Short codes use seven base62 characters.
+Dismiss
+Edit
+Confirm
+From
+Memory test A
+· Todo
+Memory · 1
+Add memory
+All
+Decisions 1
+Conventions 0
+Pitfalls 0
+Contacts 0
+Decision
+Used 3m ago · 1 card
+短码为 7 位 base62，拒绝 UUID
+Short codes are exactly 7 characters using base62; UUIDs were rejected because links become too long.
+#api
+From
+Memory test A
+· Todo
+Recall: 1 searches, 0 found nothing (30 days)
