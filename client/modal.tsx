@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef } from "react";
 import { Animated, StyleSheet, type ViewStyle } from "react-native";
 import {
   Modal as HostModal,
@@ -54,3 +54,24 @@ TrackedModal.Content = function Content(props: ModalContentProps) {
   );
 };
 export const Modal: ModalComponent = TrackedModal;
+
+/** The host Modal has no closed callback; opening another Modal or a heavy view in the frame one closes freezes Paseo. */
+export const MODAL_CLOSE_MS = 450;
+
+/**
+ * Runs `fn` after a Modal has had time to close (the latest call wins; cleared on unmount).
+ * Close the Modal first, then pass whatever opens next through this.
+ */
+export function useAfterModalClose() {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  return useCallback((fn: () => void) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      fn();
+    }, MODAL_CLOSE_MS);
+  }, []);
+}
