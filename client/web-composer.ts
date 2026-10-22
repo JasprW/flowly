@@ -15,6 +15,8 @@ type Field = {
   focus?(): void;
   setSelectionRange?(start: number, end: number): void;
   dispatchEvent(event: object): boolean;
+  getClientRects?(): ArrayLike<unknown>;
+  closest?(selector: string): unknown;
 };
 type Fiber = { return: Fiber | null; alternate: Fiber | null; memoizedProps: Record<string, unknown> | null };
 const browser = globalThis as unknown as {
@@ -22,18 +24,32 @@ const browser = globalThis as unknown as {
   InputEvent?: new (type: "input", init: { bubbles: boolean }) => object;
 };
 
-function agentIdOf(field: Field): string | null {
-  const key = Object.keys(field).find((name) => name.startsWith("__reactFiber$"));
-  let node = key ? ((field as unknown as Record<string, Fiber | null>)[key] ?? null) : null;
-  for (; node; node = node.return) {
+function ownerOf(start: Fiber | null): string | null {
+  for (let node = start; node; node = node.return) {
     const props = node.memoizedProps;
-    if (!props || typeof props.agentId !== "string" || !("workspaceId" in props)) continue;
-    // A fiber whose other copy disagrees is mid-update and proves nothing.
-    const alternate = node.alternate?.memoizedProps;
-    if (alternate && alternate.agentId !== props.agentId) return null;
-    return props.agentId;
+    if (props && typeof props.agentId === "string" && "workspaceId" in props) return props.agentId;
   }
   return null;
+}
+
+/**
+ * The sessions the box's composer has been rendered for. The DOM node keeps the fiber it was created with, and React
+ * swaps a fiber with its other copy on each update, so either copy may hold the props of an earlier render: a box
+ * created for a new session's draft keeps naming the draft until the page reloads. Both copies are asked.
+ */
+function ownersOf(field: Field): string[] {
+  const key = Object.keys(field).find((name) => name.startsWith("__reactFiber$"));
+  const fiber = key ? ((field as unknown as Record<string, Fiber | null>)[key] ?? null) : null;
+  return [ownerOf(fiber), ownerOf(fiber?.alternate ?? null)].filter((id): id is string => !!id);
+}
+
+/**
+ * Paseo keeps other workspaces mounted but hidden (`aria-hidden`, or not laid out); a box there may still name this
+ * session through a stale fiber copy, and is never the one being used.
+ */
+function onScreen(field: Field): boolean {
+  if (field.getClientRects && field.getClientRects().length === 0) return false;
+  return !field.closest?.('[aria-hidden="true"]');
 }
 
 /** React tracks the value it rendered; the prototype's own setter plus an `input` event is what reaches onChange. */
@@ -49,8 +65,8 @@ function setValue(field: Field, value: string) {
 export function fillComposer(agentId: string, text: string): boolean {
   try {
     if (Platform.OS !== "web" || !browser.document || !browser.InputEvent) return false;
-    const fields = Array.from(browser.document.querySelectorAll(SELECTOR)).filter((f) => agentIdOf(f) === agentId);
-    // Two boxes for one session (a split view) cannot be told apart: do not guess.
+    const fields = Array.from(browser.document.querySelectorAll(SELECTOR)).filter((f) => onScreen(f) && ownersOf(f).includes(agentId));
+    // Two visible boxes for one session (a split view) cannot be told apart: do not guess.
     if (fields.length !== 1) return false;
     const field = fields[0];
     const next = nextMoveDraft(text, field.value ?? "");

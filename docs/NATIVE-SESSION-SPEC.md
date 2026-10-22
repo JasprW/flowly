@@ -137,6 +137,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 
 - **消息型建议**，按设置 `nextMoveTap`（host 设置 `native-session`，默认 `fill`）：
   - `fill`（默认）：把 `prompt` 填进**这个 session 的** Paseo 输入框；输入框已有文字时在其后空一行追加（与 Flowly 的 `nextMoveDraft` 相同），光标移到末尾并聚焦。**不发送**，由用户在 Paseo 里发送。仅 web 与桌面可用（`client/web-composer.ts`，见 AGENTS.md 例外）；找不到该 session 的输入框（iOS/Android app、Paseo 改了输入框结构）时退回 `copy`。（退回复制是设计者的决定。）
+    - 认定归属（2026-10-22 修正）：只看屏幕上的输入框（不在 `aria-hidden` 子树、有布局）；fiber 的两份副本里**任一**沿 `return` 链找到的 `agentId` 等于本 session 即算属于它。DOM 节点保存的是创建时的 fiber，React 每次更新在两份副本间切换，所以任一副本都可能停在旧的 props 上：在新 session 草稿里创建的输入框会一直带着草稿 id，直到刷新页面。原先“两份副本不一致就不认”的规则因此在长时间不刷新的桌面 app 里一直退回复制。仍有两个可见输入框属于同一 session（分屏）时不猜，退回复制。
   - `copy`：复制 `prompt`，toast “Copied. Paste it into the message box.”。
   - 卡片保留到下一轮开始或用户关闭。
 - **Move to Done**：同前（重新校验建议仍当前、卡片未完成 → 移到 Done；未开 *Auto wrap up* 且有东西可收尾时在卡片内询问 Wrap up / Open in Flowly / Not now，有阻塞或警告时只给 Open in Flowly）。
