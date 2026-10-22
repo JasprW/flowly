@@ -207,6 +207,8 @@ const catalog: Catalog = {
   "Session started, but the idea was not marked: {message}": "La session a démarré, mais l’idée n’a pas été marquée : {message}",
   "Created the task": "A créé la tâche",
   "Edited the task": "A modifié la tâche",
+  "Edited the idea": "A modifié l'idée",
+  "Removed the idea": "A supprimé l'idée",
   "Changed status": "A changé le statut",
   "Changed archive state": "A changé l’état d’archivage",
   "Set the task type": "A défini le type de tâche",

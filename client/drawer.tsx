@@ -1245,6 +1245,8 @@ const activityText: Record<string, string> = localizedLabels({
   workspace_restore_skipped: msg("Workspace not restored"),
   sessions_restored: msg("Restored the sessions"),
   progress_reported: msg("Reported progress"),
+  idea_edited: msg("Edited the idea"),
+  idea_removed: msg("Removed the idea"),
   "agent.turn_started": msg("Started a turn"),
   "agent.turn_ended": msg("Finished a turn"),
 });

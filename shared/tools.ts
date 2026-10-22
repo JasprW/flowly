@@ -151,6 +151,30 @@ export const ideaInputSchema = z.strictObject({
       "here: an extension of this card's goal that this card's session can continue with its current context; new: divergent work that deserves its own card.",
     ),
 });
+/** flowly_update_idea (IDEAS-SPEC §3.1): edit an open idea of this card, or dismiss it. */
+export const ideaUpdateInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  request: requestSchema,
+  id: z.string().min(1).describe("Idea id from get_task ideas."),
+  title: z.string().trim().min(1).max(ideaLimits.title).optional(),
+  detail: z.string().trim().min(1).max(ideaLimits.detail).optional(),
+  rationale: z.string().trim().min(1).max(ideaLimits.rationale).optional(),
+  context: z.string().trim().max(ideaLimits.context).optional(),
+  type: taskTypeSchema.optional(),
+  priority: prioritySchema.optional(),
+  tags: tagInputList.optional().describe("Replaces the idea's suggested tags."),
+  scope: z.enum(["here", "new"]).optional(),
+  status: z
+    .literal("dismissed")
+    .optional()
+    .describe("dismissed: close the idea, e.g. when the user rejected it or it no longer applies. It stays under Closed, where the user can restore it."),
+});
+/** flowly_remove_idea (IDEAS-SPEC §3.1): delete an idea of this card that was proposed by mistake. */
+export const ideaRemovalSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  request: requestSchema,
+  id: z.string().min(1).describe("Idea id from get_task ideas."),
+});
 /** flowly_remember (PROJECT-MEMORY-SPEC §4.1): a candidate for the project's memory; the user confirms it. */
 export const rememberInputSchema = z.strictObject({
   expectedRevision: revisionSchema,
@@ -469,7 +493,7 @@ export const toolResultSchema = z.object({
    * (CARD-SETUP-SPEC §3.3): plain text, the write already succeeded. Absent when there is nothing to remind.
    */
   reminders: z.array(z.string()).optional(),
-  /** The proposed idea, for flowly_propose_idea. */
+  /** The proposed, updated or removed idea, for the idea tools. */
   ideaId: z.string().optional(),
   /** The proposed memory candidate, for flowly_remember. */
   memoryId: z.string().optional(),
@@ -505,6 +529,8 @@ export type ToolPreparation = z.infer<typeof preparationSchema>;
 export type StatusInput = z.infer<typeof statusInputSchema>;
 export type ProgressInput = z.infer<typeof progressInputSchema>;
 export type IdeaInput = z.infer<typeof ideaInputSchema>;
+export type IdeaUpdateInput = z.infer<typeof ideaUpdateInputSchema>;
+export type IdeaRemovalInput = z.infer<typeof ideaRemovalSchema>;
 export type RememberInput = z.infer<typeof rememberInputSchema>;
 export type RecallInput = z.input<typeof recallInputSchema>;
 export type TagsToolInput = z.infer<typeof tagsInputSchema>;

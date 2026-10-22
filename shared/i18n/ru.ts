@@ -207,6 +207,8 @@ const catalog: Catalog = {
   "Session started, but the idea was not marked: {message}": "Сессия запущена, но идею не удалось отметить: {message}",
   "Created the task": "Создал(а) задачу",
   "Edited the task": "Изменил(а) задачу",
+  "Edited the idea": "Изменил(а) идею",
+  "Removed the idea": "Удалил(а) идею",
   "Changed status": "Сменил(а) статус",
   "Changed archive state": "Изменил(а) состояние архива",
   "Set the task type": "Задал(а) тип задачи",

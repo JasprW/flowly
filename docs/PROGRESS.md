@@ -1,5 +1,18 @@
 # Implementation progress
 
+## Agent idea management (card "扩展idea工具") — 2026-10-22
+
+Spec: [IDEAS-SPEC §3.1](IDEAS-SPEC.md). User request: agents manage their card's ideas themselves (dismiss, edit, delete), e.g. close an idea the user rejected.
+
+- [x] `flowly_update_idea` (edit fields of an open idea and/or `status: "dismissed"`) and `flowly_remove_idea`; receipt actions `idea_update` / `idea_remove`; agent events `idea_edited` / `idea_dismissed` / `idea_removed`. Card-scoped, accepted is final, only the user restores, duplicate-title check on rename, Ideas off → `IDEAS_DISABLED`.
+- [x] CLI `idea-update` / `idea-remove`, HTTP `/api` actions, skill text (`server/skill-source.ts`, `skills/flowly/SKILL.md`).
+- [x] Tests: `server/agent-service.test.ts` (edit, dismiss, replay, refusals, remove), `server/tool-server.test.ts` (MCP list/call, CLI).
+- [x] Onboarding not changed: agent-facing tools only, no new UI, setting or user action.
+- [x] Continuation verification: installed MCP propose → multi-field edit → dismiss → remove; exact dismiss/remove replay, `REQUEST_REUSED` and `IDEA_CLOSED` refusals, Activity and unchanged card status/revision. Temporary idea removed. [Evidence](verification/idea-tools-2026-10-22.md).
+- [x] Independent `codex/gpt-6-luna`, explicitly full-access at creation (`d34eee81-94d1-4d32-a918-bd07392ee19b`): `npm run typecheck`; `npm test` (110 files / 936 tests passed), on `fab80456ead8` + dirty changes. [Luna report](verification/idea-tools-2026-10-22-luna.md). First live CLI attempt had no session context; the parent then used the existing `tools.prepare-existing` RPC to bind that session for the remaining checks.
+- [x] Luna live CLI supplement: propose → multi-field edit → dismiss → refused dismissed edit → remove, exact replay / `REQUEST_REUSED`, and unchanged status/revision all passed. Temporary ideas/snapshots and the owned test session were removed; fresh native lookup and card session list confirm cleanup. Visual desktop/compact checks unrun (no client change); no commit/push requested.
+- [x] Astra review (user-requested replacement after Fable quota/balance failures) found P2 proposal replay losing `ideaId` after removal and P3 Activity localization omissions. Both fixed: persist optional receipt `ideaId` with legacy fallback; map `idea_edited` / `idea_removed` through `msg()` and all nine catalogs. Pre-fix regression failed as expected; post-fix focused 97 PASS, independent Luna typecheck/full suite 110 files / 938 PASS and 18 runtime translations PASS. Reloaded plugin's real MCP propose → remove → replay returns the original ID/receipt without resurrecting the idea or changing task state/revision. Test idea/session cleaned up. [Original review](verification/idea-tools-2026-10-22-astra.md), [fix evidence](verification/idea-tools-2026-10-22-fixes.md). Desktop/compact rendering unrun; no new tour/tip/What's new (bug fixes only).
+
 ## Turn checklist and audit calibration — 2026-10-22
 
 Spec first: [TURN-CHECKLIST-SPEC](TURN-CHECKLIST-SPEC.md). User authorized the minimal combined recommendations 1+3 after calibrating the audit; no hooks.

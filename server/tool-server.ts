@@ -20,6 +20,8 @@ import {
 } from "@modelcontextprotocol/node";
 import {
   ideaInputSchema,
+  ideaRemovalSchema,
+  ideaUpdateInputSchema,
   rememberInputSchema,
   recallInputSchema,
   recallResultSchema,
@@ -242,6 +244,28 @@ export class ToolServer {
           (input) => wrap(() => this.agents.write(identity, "idea", input)),
         );
         mcp.registerTool(
+          "flowly_update_idea",
+          {
+            description:
+              "Edit or dismiss an idea on this card (id from get_task ideas). Pass only the fields to change: title, detail, rationale, context, type, priority, scope or tags (tags replace the suggested ones). status=dismissed closes it: use it when the user rejected the idea in conversation or it no longer applies (for example this card already did it), instead of leaving it open. A dismissed idea stays under Closed, where only the user can restore it. Only open ideas can be edited; an accepted idea is final (IDEA_CLOSED). Does not change card status or task revision. Copy revisions/request from get_task.",
+            inputSchema: ideaUpdateInputSchema,
+            outputSchema: toolResultSchema,
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+          },
+          (input) => wrap(() => this.agents.write(identity, "idea_update", input)),
+        );
+        mcp.registerTool(
+          "flowly_remove_idea",
+          {
+            description:
+              "Delete an idea on this card that should never have been proposed: a duplicate, a mistake, or work this card already requires. For an idea the user rejected, prefer flowly_update_idea status=dismissed, which keeps it visible. An accepted idea cannot be removed (IDEA_CLOSED). Does not change card status or task revision. Copy revisions/request from get_task.",
+            inputSchema: ideaRemovalSchema,
+            outputSchema: toolResultSchema,
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+          },
+          (input) => wrap(() => this.agents.write(identity, "idea_remove", input)),
+        );
+        mcp.registerTool(
           "flowly_remember",
           {
             description:
@@ -428,7 +452,7 @@ export class ToolServer {
     }
     const body = z
       .strictObject({
-        action: z.enum(["get", "status", "progress", "idea", "remember", "recall", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
+        action: z.enum(["get", "status", "progress", "idea", "idea_update", "idea_remove", "remember", "recall", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
         input: z.unknown(),
       })
       .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));

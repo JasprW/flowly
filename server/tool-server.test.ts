@@ -79,6 +79,8 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
     "flowly_update_status",
     "flowly_report_progress",
     "flowly_propose_idea",
+    "flowly_update_idea",
+    "flowly_remove_idea",
     "flowly_remember",
     "flowly_recall",
     "flowly_add_artifact",
@@ -188,13 +190,27 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
   expect(proposed.result.structuredContent.current.ideas).toEqual([
     { id: proposed.result.structuredContent.ideaId, title: "Follow-up", status: "open", scope: "new" },
   ]);
+  // The agent closes an idea the user rejected (IDEAS-SPEC §3.1).
+  const dismissedIdea = await mcp("tools/call", {
+    name: "flowly_update_idea",
+    arguments: {
+      expectedRevision: proposed.result.structuredContent.current.revision,
+      request: proposed.result.structuredContent.current.request,
+      id: proposed.result.structuredContent.ideaId,
+      status: "dismissed",
+    },
+  });
+  expect(dismissedIdea.result.structuredContent.receipt.action).toBe("idea_update");
+  expect(dismissedIdea.result.structuredContent.current.ideas).toEqual([
+    { id: proposed.result.structuredContent.ideaId, title: "Follow-up", status: "dismissed", scope: "new" },
+  ]);
   // Over MCP the delivery call carries the next moves, and so does an explicit none (NEXT-MOVES-SPEC §8).
   const moves = [{ label: "Commit", prompt: "Commit and push." }, { label: "Move to Done", moveTo: "done" }];
   const delivered = await mcp("tools/call", {
     name: "flowly_update_status",
     arguments: {
-      expectedRevision: proposed.result.structuredContent.current.revision,
-      request: proposed.result.structuredContent.current.request,
+      expectedRevision: dismissedIdea.result.structuredContent.current.revision,
+      request: dismissedIdea.result.structuredContent.current.request,
       status: "in_review",
       note: "MCP delivery",
       nextMoves: moves,
@@ -410,6 +426,14 @@ test("CLI runs a complete scoped flow; replay, wrong env, snapshots and flags", 
     "here",
   );
   expect(proposed.current.ideas).toEqual([{ id: proposed.ideaId, title: "CLI idea", status: "open", scope: "here" }]);
+  await cli("current", "--save-request", snapshot);
+  const updated = await cli("idea-update", "--request-file", snapshot, "--id", proposed.ideaId, "--title", "CLI idea, sharper", "--scope", "new", "--dismiss");
+  expect(updated.receipt.action).toBe("idea_update");
+  expect(updated.current.ideas).toEqual([{ id: proposed.ideaId, title: "CLI idea, sharper", status: "dismissed", scope: "new" }]);
+  await cli("current", "--save-request", snapshot);
+  const removed = await cli("idea-remove", "--request-file", snapshot, "--id", proposed.ideaId);
+  expect(removed).toMatchObject({ ideaId: proposed.ideaId, current: { ideas: [] } });
+  await cli("current", "--save-request", snapshot);
   for (const args of [
     ["status", "in_review", "--request-file", snapshot, "--note", "n", "--outputs", "not json"],
     ["note", "--kind", "result", "--request-file", snapshot, "--note", "n", "--outputs", "{}"],
@@ -418,6 +442,10 @@ test("CLI runs a complete scoped flow; replay, wrong env, snapshots and flags", 
     ["note", "--kind", "progress", "--request-file", snapshot, "--note", "n", "--no-outputs"],
     ["current", "--no-outputs"],
     ["idea", "--request-file", snapshot, "--title", "No detail", "--rationale", "r"],
+    ["idea-update", "--request-file", snapshot, "--id", "x"],
+    ["idea-remove", "--request-file", snapshot],
+    ["idea-remove", "--request-file", snapshot, "--id", "x", "--title", "t"],
+    ["idea", "--request-file", snapshot, "--title", "t", "--detail", "d", "--rationale", "r", "--dismiss"],
     ["note", "--request-file", snapshot, "--note", "n", "--title", "misplaced"],
     ["next-moves", "--request-file", snapshot, "--moves", "not json"],
     ["note", "--request-file", snapshot, "--note", "n", "--moves", "{}"],

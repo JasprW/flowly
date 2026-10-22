@@ -1148,3 +1148,105 @@ test("gate: initial acknowledgeOpen also refuses open checks, fixing them needs 
   await pad(x, { validation: [{ text: "E2E", state: "pass" }] });
   expect((await deliver(x)).receipt.status).toBe("in_review");
 });
+
+// An agent manages its card's ideas (IDEAS-SPEC §3.1).
+const manageIdea = async (x: Rig, action: "idea_update" | "idea_remove", fields: Record<string, unknown>) => {
+  const ctx = await x.service.get(x.identity);
+  return x.service.write(x.identity, action, { expectedRevision: ctx.revision, request: ctx.request, ...fields });
+};
+
+test("an agent edits and dismisses an open idea of its card without touching the card", async () => {
+  const x = await setup();
+  const { ideaId } = await proposeIdea(x);
+  const before = (await x.store.read()).tasks[0];
+  const edited = await manageIdea(x, "idea_update", { id: ideaId, title: "Sharper title", priority: "high", tags: ["Ideas"] });
+  expect(edited.ideaId).toBe(ideaId);
+  let board = await x.store.read();
+  expect(board.ideas[0]).toMatchObject({ title: "Sharper title", priority: "high", tags: ["ideas"], status: "open", detail: "Do the follow-up." });
+  expect(board.events.at(-1)).toMatchObject({ action: "idea_edited", actor: "agent", agentId: x.identity.agentId, note: "Sharper title" });
+  // The user rejected it in conversation: the agent closes it; it stays under Closed.
+  const ctx = await x.service.get(x.identity);
+  const call = { expectedRevision: ctx.revision, request: ctx.request, id: ideaId, status: "dismissed" };
+  const dismissed = await x.service.write(x.identity, "idea_update", call);
+  board = await x.store.read();
+  expect(board.ideas[0]!.status).toBe("dismissed");
+  expect(board.events.at(-1)).toMatchObject({ action: "idea_dismissed", actor: "agent", note: "Sharper title" });
+  expect(board.tasks[0]).toEqual(before);
+  // Exact replay returns the receipt; changed parameters are refused.
+  expect(await x.service.write(x.identity, "idea_update", call)).toMatchObject({ replayed: true, ideaId, receipt: dismissed.receipt });
+  await expect(x.service.write(x.identity, "idea_update", { ...call, title: "Other" })).rejects.toMatchObject({ code: "REQUEST_REUSED" });
+  // Dismissing again is a no-op; a dismissed idea cannot be edited (only the user restores it).
+  await manageIdea(x, "idea_update", { id: ideaId, status: "dismissed" });
+  expect((await x.store.read()).events.filter((e) => e.action === "idea_dismissed")).toHaveLength(1);
+  await expect(manageIdea(x, "idea_update", { id: ideaId, title: "Again" })).rejects.toMatchObject({ code: "IDEA_CLOSED" });
+});
+
+test("idea management refusals: nothing to change, duplicate title, another card, accepted, Ideas off", async () => {
+  const x = await setup();
+  const a = (await proposeIdea(x)).ideaId!;
+  const b = (await proposeIdea(x, "second")).ideaId!;
+  await expect(manageIdea(x, "idea_update", { id: a })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  // Another session's idea on the same card can be managed, but not given a taken title.
+  await expect(manageIdea(x, "idea_update", { id: b, title: " follow-up OF " + x.identity.agentId })).rejects.toMatchObject({ code: "IDEA_DUPLICATE" });
+  await expect(manageIdea(x, "idea_remove", { id: "missing" })).rejects.toMatchObject({ code: "IDEA_NOT_FOUND" });
+  await x.store.mutate((board) => {
+    board.ideas.find((i) => i.id === b)!.taskId = "other";
+    board.ideas.find((i) => i.id === a)!.status = "accepted";
+  });
+  await expect(manageIdea(x, "idea_update", { id: b, status: "dismissed" })).rejects.toMatchObject({ code: "IDEA_NOT_FOUND" });
+  await expect(manageIdea(x, "idea_update", { id: a, status: "dismissed" })).rejects.toMatchObject({ code: "IDEA_CLOSED" });
+  await expect(manageIdea(x, "idea_remove", { id: a })).rejects.toMatchObject({ code: "IDEA_CLOSED" });
+  x.service.ideasOn = async () => false;
+  await expect(manageIdea(x, "idea_remove", { id: a })).rejects.toMatchObject({ code: "IDEAS_DISABLED" });
+});
+
+test("an agent removes an open or dismissed idea of its card", async () => {
+  const x = await setup();
+  const { ideaId } = await proposeIdea(x);
+  const removed = await manageIdea(x, "idea_remove", { id: ideaId });
+  expect(removed.ideaId).toBe(ideaId);
+  const board = await x.store.read();
+  expect(board.ideas).toEqual([]);
+  expect(board.events.at(-1)).toMatchObject({ action: "idea_removed", actor: "agent", note: `Follow-up of ${x.identity.agentId}` });
+  expect(board.agentReceipts.at(-1)).toMatchObject({ action: "idea_remove", eventId: board.events.at(-1)!.id });
+  const again = (await proposeIdea(x)).ideaId;
+  await manageIdea(x, "idea_update", { id: again, status: "dismissed" });
+  await manageIdea(x, "idea_remove", { id: again });
+  expect((await x.store.read()).ideas).toEqual([]);
+});
+
+test("proposal replay keeps the idea ID after removal and service reload without resurrecting it", async () => {
+  const x = await setup();
+  const ctx = await x.service.get(x.identity);
+  const call = { expectedRevision: ctx.revision, request: ctx.request, title: "Replay after removal", detail: "A follow-up", rationale: "Regression" };
+  const first = await x.service.write(x.identity, "idea", call);
+  await manageIdea(x, "idea_remove", { id: first.ideaId });
+  const secrets = new ToolSecrets(x.store.directory);
+  await secrets.initialize();
+  const restored = new AgentService(new BoardStore(x.store.directory), secrets);
+  restored.attach(x.paseo);
+  const before = await readFile(x.store.path, "utf8");
+  const replay = await restored.write(x.identity, "idea", call);
+  expect(replay).toMatchObject({ replayed: true, ideaId: first.ideaId, receipt: first.receipt });
+  expect(replay.current?.ideas).toEqual([]);
+  expect(replay.current?.revision).toEqual(ctx.revision);
+  expect(await readFile(x.store.path, "utf8")).toBe(before);
+});
+
+test("proposal replay reads legacy receipts without an idea ID while the idea is retained", async () => {
+  const x = await setup();
+  const ctx = await x.service.get(x.identity);
+  const call = { expectedRevision: ctx.revision, request: ctx.request, title: "Legacy receipt", detail: "A follow-up", rationale: "Compatibility" };
+  const first = await x.service.write(x.identity, "idea", call);
+  await x.store.mutate((board) => {
+    const receipt = board.agentReceipts.find((r) => r.eventId === first.receipt.eventId)!;
+    delete receipt.ideaId;
+  });
+  const secrets = new ToolSecrets(x.store.directory);
+  await secrets.initialize();
+  const restored = new AgentService(new BoardStore(x.store.directory), secrets);
+  restored.attach(x.paseo);
+  const before = await readFile(x.store.path, "utf8");
+  expect(await restored.write(x.identity, "idea", call)).toMatchObject({ replayed: true, ideaId: first.ideaId });
+  expect(await readFile(x.store.path, "utf8")).toBe(before);
+});

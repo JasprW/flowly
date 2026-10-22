@@ -29,6 +29,8 @@ import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type
 import {
   agentStatuses,
   ideaInputSchema,
+  ideaRemovalSchema,
+  ideaUpdateInputSchema,
   rememberInputSchema,
   recallInputSchema,
   artifactInputSchema,
@@ -45,6 +47,8 @@ import {
   type StatusInput,
   type ProgressInput,
   type IdeaInput,
+  type IdeaRemovalInput,
+  type IdeaUpdateInput,
   type RememberInput,
   type RecallInput,
   type ArtifactToolInput,
@@ -417,16 +421,20 @@ export class AgentService {
   }
   async write(
     identity: ToolIdentity,
-    action: "status" | "progress" | "idea" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
+    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
     raw: unknown,
   ): Promise<ToolResult> {
-    const input: StatusInput | ProgressInput | IdeaInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
+    const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
       action === "status"
         ? statusInputSchema.parse(raw)
         : action === "remember"
           ? rememberInputSchema.parse(raw)
           : action === "idea"
           ? ideaInputSchema.parse(raw)
+          : action === "idea_update"
+          ? ideaUpdateInputSchema.parse(raw)
+          : action === "idea_remove"
+          ? ideaRemovalSchema.parse(raw)
           : action === "artifact"
             ? artifactInputSchema.parse(raw)
             : action === "artifact_remove"
@@ -446,9 +454,10 @@ export class AgentService {
       input.expectedRevision,
     );
     const resources = await this.resources(identity);
-    // Read for a proposal, and for a delivery whose result may remind of ideas (IDEAS-SPEC §4.1).
+    // Read for the idea tools, and for a delivery whose result may remind of ideas (IDEAS-SPEC §4.1).
+    const ideaWrite = action === "idea" || action === "idea_update" || action === "idea_remove";
     const ideasOn =
-      action === "idea" || (action === "status" && (input as StatusInput).status === "in_review") ? await this.ideasOn() : true;
+      ideaWrite || (action === "status" && (input as StatusInput).status === "in_review") ? await this.ideasOn() : true;
     const outputDelivery =
       (action === "status" && (input as StatusInput).status === "in_review") ||
       (action === "progress" && (input as ProgressInput).kind === "result");
@@ -514,7 +523,10 @@ export class AgentService {
         : undefined;
     const commits = action === "workpad" ? await this.commits(input as WorkpadInput, resources.workspace.workspaceDirectory, head ?? null) : undefined;
     // Tags are normalized before the write; one invalid value refuses the whole call (CARD-TAGS-SPEC §4.1).
-    const tagEdit = action === "tags" || action === "idea" ? normalizeToolTags(action, input as TagsToolInput | IdeaInput) : undefined;
+    const tagEdit =
+      action === "tags" || action === "idea" || (action === "idea_update" && (input as IdeaUpdateInput).tags)
+        ? normalizeToolTags(action === "tags" ? "tags" : "idea", input as TagsToolInput | IdeaInput)
+        : undefined;
     // A memory candidate (PROJECT-MEMORY-SPEC §4.1): its refusals come before the card write, so they leave no receipt.
     const memoryInput =
       action === "remember"
@@ -565,8 +577,9 @@ export class AgentService {
             "Request already committed with different parameters.",
           );
         const idea = existing.eventId ? board.ideas.find((i) => i.eventId === existing.eventId) : undefined;
+        const managed = action === "idea_update" || action === "idea_remove" ? (input as IdeaUpdateInput).id : undefined;
         return {
-          value: { receipt: existing, replayed: true, ideaId: idea?.id, artifactId: existing.artifactId, reminders: reminders(board) },
+          value: { receipt: existing, replayed: true, ideaId: existing.ideaId ?? managed ?? idea?.id, artifactId: existing.artifactId, reminders: reminders(board) },
           changed: false,
         };
       }
@@ -613,7 +626,7 @@ export class AgentService {
           "Agent receipt capacity is full; no unexpired receipt was removed. Try after expiry or use the human board UI.",
           true,
         );
-      if (action === "idea" && !ideasOn)
+      if (ideaWrite && !ideasOn)
         throw new ToolError("IDEAS_DISABLED", "Ideas are turned off in Flowly settings. Mention follow-up suggestions in your reply instead.");
       if (action === "idea") checkIdea(board, task.id, (input as IdeaInput).title);
       if (artifactWrite && !artifactsOn)
@@ -827,7 +840,15 @@ export class AgentService {
           moves: [...moves],
         });
       const movesEvent = action === "next_moves" ? recordMoves((input as NextMovesInput).moves) : undefined;
+      // Managing an idea of this card (IDEAS-SPEC §3.1).
+      const ideaEvent =
+        action === "idea_update" || action === "idea_remove"
+          ? manageIdea(board, task.id, action, input as IdeaUpdateInput | IdeaRemovalInput, tagEdit?.add, new Date(this.clock()).toISOString(), (e) =>
+              this.store.event(board, { taskId: task.id, agentId: identity.agentId, actor: "agent", ...e }),
+            )
+          : undefined;
       const event =
+        ideaEvent ??
         artifactEvent ??
         tagsEvent ??
         typeEvent ??
@@ -856,7 +877,7 @@ export class AgentService {
       if (deliveryPad) deliveryPad.delivery = { ...delivered!, revision: deliveryPad.revision, eventId: event.id, at: event.at };
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).
       if (carried) recordMoves(carried);
-      let ideaId: string | undefined;
+      let ideaId = action === "idea_update" || action === "idea_remove" ? (input as IdeaUpdateInput).id : undefined;
       if (action === "idea") {
         const idea = input as IdeaInput;
         ideaId = randomUUID();
@@ -887,6 +908,7 @@ export class AgentService {
         payloadHash,
         action,
         eventId: event.id,
+        ...(ideaId ? { ideaId } : {}),
         ...(artifactId ? { artifactId } : {}),
         ...(outputs !== undefined ? { artifactIds } : {}),
         ...(notice ? { notice } : {}),
@@ -995,6 +1017,52 @@ export function checkIdea(board: Board, taskId: string, title: string) {
       "IDEA_LIMIT",
       `This card already has ${ideaLimits.openPerTask} open ideas. Stop proposing until the user accepts or dismisses some.`,
     );
+}
+
+const ideaFields = ["title", "detail", "rationale", "context", "type", "priority", "scope"] as const;
+
+/**
+ * An agent edits, dismisses or removes an idea of its own card (IDEAS-SPEC §3.1). Accepted ideas are final;
+ * a dismissed one can only be removed (only the user restores it). Returns the event, or an empty one when
+ * nothing changed.
+ */
+export function manageIdea(
+  board: Board,
+  taskId: string,
+  action: "idea_update" | "idea_remove",
+  input: IdeaUpdateInput | IdeaRemovalInput,
+  tags: string[] | undefined,
+  at: string,
+  record: (e: { action: string; note: string }) => { id: string; at: string },
+) {
+  const idea = board.ideas.find((i) => i.id === input.id && i.taskId === taskId);
+  if (!idea) throw new ToolError("IDEA_NOT_FOUND", `No idea ${input.id} on this card. Use an id from get_task ideas.`);
+  if (idea.status === "accepted")
+    throw new ToolError("IDEA_CLOSED", "This idea was already accepted by the user; it can no longer be changed or removed.");
+  if (action === "idea_remove") {
+    board.ideas = board.ideas.filter((i) => i !== idea);
+    return record({ action: "idea_removed", note: idea.title });
+  }
+  const edit = input as IdeaUpdateInput;
+  const changes: Partial<Idea> = {};
+  for (const k of ideaFields) if (edit[k] !== undefined && edit[k] !== idea[k]) Object.assign(changes, { [k]: edit[k] });
+  if (tags && JSON.stringify(tags) !== JSON.stringify(idea.tags ?? [])) changes.tags = tags;
+  const dismiss = edit.status === "dismissed" && idea.status !== "dismissed";
+  if (!Object.keys(changes).length && !dismiss) {
+    if (edit.status === undefined && !ideaFields.some((k) => edit[k] !== undefined) && !edit.tags)
+      throw new ToolError("INVALID_INPUT", "Give at least one field to change, or status=dismissed.");
+    return { id: "", at };
+  }
+  if (Object.keys(changes).length && idea.status !== "open")
+    throw new ToolError("IDEA_CLOSED", "Only open ideas can be edited. The user can restore a dismissed idea.");
+  if (changes.title && board.ideas.some((i) => i !== idea && i.taskId === taskId && i.status === "open" && ideaTitleKey(i.title) === ideaTitleKey(changes.title!)))
+    throw new ToolError("IDEA_DUPLICATE", "This card already has another open idea with that title.");
+  Object.assign(idea, changes);
+  if (changes.tags && !changes.tags.length) delete idea.tags;
+  if (dismiss) idea.status = "dismissed";
+  idea.updatedAt = at;
+  const edited = Object.keys(changes).length ? record({ action: "idea_edited", note: idea.title }) : undefined;
+  return dismiss ? record({ action: "idea_dismissed", note: idea.title }) : edited!;
 }
 
 /** Keeps at most `keptPerTask` ideas per card, dropping the oldest closed ones first. */

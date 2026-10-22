@@ -207,6 +207,8 @@ const catalog: Catalog = {
   "Session started, but the idea was not marked: {message}": "工作階段已啟動，但未能標記該想法：{message}",
   "Created the task": "建立了任務",
   "Edited the task": "編輯了任務",
+  "Edited the idea": "編輯了想法",
+  "Removed the idea": "移除了想法",
   "Changed status": "更改了狀態",
   "Changed archive state": "更改了封存狀態",
   "Set the task type": "設定了任務類型",

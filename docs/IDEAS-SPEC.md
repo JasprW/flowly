@@ -52,6 +52,10 @@ idea 不是任务卡：不进泳道、不占 workspace、不改来源卡状态�
   - `idea_accepted`（human，来源卡，note=`标题 → 新卡标题`）
   - `idea_adopted`（human，来源卡，agentId=目标 session，note=标题）
   - `idea_dismissed`、`idea_restored`（human，来源卡，note=标题）
+  - `idea_edited`、`idea_dismissed`、`idea_removed`（agent，来源卡，agentId=调用的 session，note=标题；§3.1）
+- 回执 `action` 另有 `"idea_update"`、`"idea_remove"`（§3.1）。
+- 2026-10-22 Astra 审查修复：新 idea 提出、更新和删除回执同时持久化可选 `ideaId`，重放优先返回回执保存的 ID；idea 被删除或自动裁剪后仍返回原 ID，不复活实体、不重复事件。旧回执无该字段时，更新/删除从请求 ID 兼容读取，提出仍从保留的 idea 反查；已删除的旧实体无法事后恢复 ID，不做数据迁移。
+- 新增 `idea_edited`、`idea_removed` Activity 动作使用 `msg()` 标记的本地化映射（英文键 `Edited the idea`、`Removed the idea`）和全部语言目录，随界面语言切换。
 
 ## 3. Agent 工具 `flowly_propose_idea`
 
@@ -75,12 +79,28 @@ idea 不是任务卡：不进泳道、不占 workspace、不改来源卡状态�
 - `flowly_get_task` 的上下文新增 `ideas: [{ id, title, status, scope?, acceptedTaskId?, acceptedAgentId? }]`（本卡全部 idea），供 agent 避免重复。
 - CLI 新增 `idea` 子命令：`idea --request-file <snapshot> --title … --detail … --rationale … [--context …] [--type …] [--priority …] [--scope here|new]`（不需要 `--note`）。HTTP `/api` 的 `action` 新增 `"idea"`。
 
+### 3.1 Agent 管理本卡的 idea（2026-10-22 卡片“扩展idea工具”）
+
+用户要求 agent 能自行管理 ideas（关闭、修改、删除），例如用户在对话里驳回了某个提议，agent 直接把它关掉，而不是一直挂在卡上。
+
+- `flowly_update_idea { expectedRevision, request, id, title?, detail?, rationale?, context?, type?, priority?, scope?, tags?, status?: "dismissed" }`：只传要改的字段（`tags` 整体替换建议标签，`[]` 清空）。`status: "dismissed"` 关闭 idea，与用户点 Dismiss 结果相同（进入 Closed 分组，用户可 Restore）。改字段与关闭可在同一次调用里完成，各记一条事件（先 `idea_edited`，后 `idea_dismissed`）。
+- `flowly_remove_idea { expectedRevision, request, id }`：删除 idea，用于提错或重复的。用户驳回的推荐用 dismiss（保留可见、可恢复），删除只留下 `idea_removed` 事件。
+- 范围与约束：
+  - 只能操作本卡（连接所绑定的卡）上的 idea，本卡任何 session 提出的都可以；其他卡的 id 报 `IDEA_NOT_FOUND`。
+  - `accepted` 是终态：改、关、删都报 `IDEA_CLOSED`。
+  - 只有 `open` 的 idea 能改字段；`dismissed` 的只能删除，恢复（Restore）仍只有用户能做，agent 不推翻用户的忽略。再次 dismiss 已忽略的 idea 不改数据、不记事件。
+  - 改标题时与本卡其他 open idea 做同样的重名检查（`IDEA_DUPLICATE`）。没给任何字段也没给 `status` 报 `INVALID_INPUT`；给的值与现值相同则不改数据、不记事件（回执 `eventId` 为空）。
+  - 其余与 `flowly_propose_idea` 相同：身份、签名、过期、revision、归档与已完成卡拒绝（`ARCHIVED` / `TASK_FINISHED`）、Ideas 关闭报 `IDEAS_DISABLED`、重放返回原回执、参数不同报 `REQUEST_REUSED`；不改卡片状态或 task revision。结果的 `ideaId` 为所操作的 idea。
+- CLI：`idea-update --request-file … --id <idea id> [--title --detail --rationale --context --type --priority --scope --tags a,b] [--dismiss]`，`idea-remove --request-file … --id <idea id>`；HTTP `/api` 的 `action` 新增 `"idea_update"`、`"idea_remove"`。
+- 界面不变：侧栏与 Ideas 页照常经 etag 读取刷新，agent 关闭的 idea 出现在 Closed 分组。
+
 ## 4. Skill 规则（新增一条）
 
 - 每次交付（`in_review`）时回顾本回合注意到的、用户没要求但值得做的东西（顺带发现的 bug、重构机会、后续功能），最多提 3 个，用 `flowly_propose_idea`；确实没有值得提的可以是 0 个，但要有意识地决定，不是忘了（§4.1 在没提过时提醒）。本卡目标的延伸用 `scope=here`（用户可能把它发回本 session 继续）；发散性工作（顺带发现的 bug、重构、独立功能）用 `scope=new`。本卡本来就要求的工作不是 idea，直接做。
 - 每次交付最多 3 个；先看 `ideas` 避免重复。
 - `context` 写清新任务需要的文件、分支和结论，因为新卡的 agent 看不到本对话。
 - idea 只是建议：不要自行开始、不要建卡。
+- 保持本卡 open idea 是最新的（§3.1）：用户在对话里驳回、或本卡已经做了/使它失去意义时用 `flowly_update_idea status=dismissed` 关闭；内容错误或过时用 `flowly_update_idea` 修改；提错（重复）的用 `flowly_remove_idea` 删除。已采纳的是终态，已忽略的只有用户能恢复。
 
 ### 4.1 交付时提醒（已实现，2026-10-20）
 
@@ -214,7 +234,7 @@ agent 建议 `scope=new` 时 “Start a new task · Suggested” 排在最前、
 ## 9. 不做
 
 - summarizer 自动生成 idea；虚拟 Ideas 泳道。项目级 Ideas 页已于 2026-10-16 加入，见 [IDEAS-INBOX-SPEC](IDEAS-INBOX-SPEC.md)。
-- 自动建卡或自动给新卡派 agent；idea 排序、投票、编辑。
+- 自动建卡或自动给新卡派 agent；idea 排序、投票；用户在界面上编辑 idea（agent 编辑见 §3.1）。
 
 ## 10. 验收
 
@@ -223,6 +243,9 @@ agent 建议 `scope=new` 时 “Start a new task · Suggested” 排在最前、
   - 建卡：预检与事务内复检、`origin` 与 accepted 原子写入、非 open idea 报错且不创建 workspace、跨项目拒绝。
   - `ideas.update` 状态约束；删除卡片与移除项目的级联与备份；旧 `board.json`（无 `ideas`）可读。
   - `ideaDescription()` 输出与截断；`sessionContext` 的来源行。
-- 工具服务：注册 `flowly_propose_idea`；`/api` 的 `idea` 动作；`flowly_get_task` 返回 `ideas`。
+  - 管理（§3.1）：本卡 open idea 修改字段、关闭、删除；dismissed 只可删除或重复关闭；accepted 不可改删；跨卡拒绝；改名重名、空更新、Ideas 关闭；回执重放与 `REQUEST_REUSED`；事件记录正确，卡片 revision 保持不变。
+  - Astra 回归：提出 → 删除 → 重载服务 → 原样重放提出，仍返回原 `ideaId` 和回执，保留空 ideas 且不再写文件；旧回执无 `ideaId` 且实体仍在时兼容反查；新增 Activity 两个键在全部语言目录中完整。
+- 工具服务：注册 `flowly_propose_idea`、`flowly_update_idea`、`flowly_remove_idea`；`/api` 的 `idea` / `idea_update` / `idea_remove` 动作；`flowly_get_task` 返回 `ideas`；CLI `idea-update` / `idea-remove` 和无效参数拒绝。
+- 管理工具的真实验证（2026-10-22）：已 reload 的插件上，以本卡临时 idea 走通 MCP 与 Luna 6 full-access CLI 的“提出 → 修改 → 关闭 → 删除”，检查回执重放、错误拒绝、Activity、卡片状态与 revision 不变，结束清理临时 idea 与测试 session。该增量没有客户端变更，桌面/compact 渲染不作为工具调用通过的证据。报告见 [idea-tools verification](verification/idea-tools-2026-10-22.md)。
 - 交付时提醒（§4.1，`server/agent-service.test.ts`）：`in_review` 且该会话没提过 idea、Ideas 开 → 结果带 ideas 提醒；Ideas 关 → 没有；该会话已提过（含已忽略的）→ 没有；另一个会话提过的不算；旧的 `idea_proposed` 事件被修剪后仍不误报（按 `board.ideas` 判断）；`blocked`/`question`/`result` 不带 ideas 提醒；失败的写入（`WORKPAD_OPEN`）不带。
 - typecheck、全量测试；安装并 reload 本插件；用 Luna 6 全权限测试 session 在 fixture 卡片上走通“提出 → 侧栏显示 → 建卡 → 双向链接”，结束后清理。
