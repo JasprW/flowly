@@ -284,3 +284,7 @@ host 设置 `native-session` 增加字段（默认值保证旧存储可读）：
 
 - 单元：外部 session 判定（管理 / 子 agent / summarizer / 无 workspace / 归档）、设置门控（总开关、三项）、单飞合并、输出解析（moves/ideas 上限与容错）、存储上限、suggestion 在下一轮失效、行追加与跳过、idea 操作三种目标与重新校验、chip 当前性。
 - Luna 6（全权限）：开启设置后，一个普通（非 Flowly）session 完成一轮 → 原生 timeline 出现 Progress 与 Next moves 卡片、Ideas chip（若有 idea）；三项开关分别生效；Continue here / New session / New workspace / Dismiss；关闭总开关后不再生成；管理 session 行为不变；测试结束恢复设置为原值并清理全部 fixture。
+
+## 管理绑定的清理
+
+`sessions.managed` 与 `sessions.native-chips` 只列出卡片仍存在的绑定。删除卡片或项目后，插件会删除对应的 `sessions/<agentId>.json`（即工具凭据），插件启动时也会清一次旧的孤儿绑定（看板没有任何卡片时跳过，不信任空看板）。已归档 session 的绑定保留：卡片重开时 wrap-up 归档的 session 会被恢复，需要原绑定；数量受现存卡片限制，不会无限增长。无法解析的文件原样保留。

@@ -62,6 +62,17 @@ export class ToolServer {
   attach(paseo: PaseoApi) {
     this.agents.attach(paseo);
   }
+  private async taskIds() {
+    return new Set((await this.store.read()).tasks.map((t) => t.id));
+  }
+  /** Managed sessions of cards that still exist (a deleted card's binding is not listed). */
+  async managedSessions() {
+    return this.secrets.managedSessions(await this.taskIds());
+  }
+  /** Removes the bindings and credentials of deleted cards; never throws into its caller's flow. */
+  async pruneContexts() {
+    return this.secrets.pruneContexts(await this.taskIds());
+  }
   health() {
     const listening = !!this.server?.listening;
     return {
@@ -105,6 +116,11 @@ export class ToolServer {
   }
   private async initialize() {
     await this.secrets.initialize();
+    // Bindings of cards deleted earlier (or before this cleanup existed). An empty board is never trusted for this.
+    if ((await this.store.read()).tasks.length)
+      await this.pruneContexts().catch((e) =>
+        console.error("Kanban session bindings not cleaned:", e instanceof Error ? e.message : String(e)),
+      );
     await writePrivate(
       join(this.store.directory, "flowly.mjs"),
       cliSource,

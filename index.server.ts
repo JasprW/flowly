@@ -259,12 +259,12 @@ export default function contribute(server: PluginServerContext) {
     tools.attach(paseo);
     return boardDeltas.read(await store.view(), input);
   });
-  server.handle(rpc.managedSessions, () => tools.secrets.managedSessions());
+  server.handle(rpc.managedSessions, () => tools.managedSessions());
   server.handle(rpc.nativeChips, async () => {
     const [wrap, native] = await Promise.all([wrapupPrefs.read().catch(() => null), nativePrefs.read().catch(() => null)]);
     const values = nativeSessionSettingsValues(native?.status === "ready" ? native.values : {});
     return {
-      managed: await tools.secrets.managedSessions(),
+      managed: await tools.managedSessions(),
       ideas: await tools.agents.ideasOn(),
       autoWrapup: wrapupSettingsValues(wrap?.status === "ready" ? wrap.values : {}).autoWrapup,
       nextMoveTap: values.nextMoveTap,
@@ -278,7 +278,7 @@ export default function contribute(server: PluginServerContext) {
     return { ok: true as const };
   });
   server.handle(rpc.refreshSummary, async (input, { paseo }) => {
-    const managed = (await tools.secrets.managedSessions()).filter((s) => s.taskId === input.taskId);
+    const managed = (await tools.managedSessions()).filter((s) => s.taskId === input.taskId);
     return summaries.refresh(input.taskId, managed.map((s) => s.agentId), paseo);
   });
   server.handle(rpc.toolsHealth, async (_, { paseo }) => {
@@ -357,6 +357,9 @@ export default function contribute(server: PluginServerContext) {
     await summaries.store.removeTasks(input.id, taskIds).catch((e) =>
       console.error("Kanban summaries not removed:", e instanceof Error ? e.message : String(e)),
     );
+    await tools.pruneContexts().catch((e) =>
+      console.error("Kanban session bindings not cleaned:", e instanceof Error ? e.message : String(e)),
+    );
     await Promise.all([flow.removeProject(input.id), insights.digests.removeProject(input.id), workflow.removeProject(input.id)]).catch((e) =>
       console.error("Kanban insights data not removed:", e instanceof Error ? e.message : String(e)),
     );
@@ -423,6 +426,9 @@ export default function contribute(server: PluginServerContext) {
       );
     await summaries.store.removeTasks(`task-${deleted.id}`, new Set([deleted.id])).catch((e) =>
       console.error("Kanban summaries not removed:", e instanceof Error ? e.message : String(e)),
+    );
+    await tools.pruneContexts().catch((e) =>
+      console.error("Kanban session bindings not cleaned:", e instanceof Error ? e.message : String(e)),
     );
     return archived ? { ...deleted, archived: { sessions: archived.archivedSessions, workspace: archived.archivedWorkspace } } : deleted;
   });

@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
   randomBytes,
@@ -151,8 +151,11 @@ export class ToolSecrets {
       return false;
     }
   }
-  /** All Kanban-managed sessions with their bound card (no credentials). */
-  async managedSessions(): Promise<{ agentId: string; taskId: string; workspaceId: string }[]> {
+  /**
+   * All Kanban-managed sessions with their bound card (no credentials). With
+   * `taskIds` (the cards that still exist) bindings of deleted cards are left out.
+   */
+  async managedSessions(taskIds?: ReadonlySet<string>): Promise<{ agentId: string; taskId: string; workspaceId: string }[]> {
     let names: string[] = [];
     try {
       names = await readdir(join(this.directory, "sessions"));
@@ -164,7 +167,33 @@ export class ToolSecrets {
         .filter((name) => name.endsWith(".json"))
         .map((name) => this.managedIdentity(name.slice(0, -5))),
     );
-    return found.filter((identity): identity is ToolIdentity => !!identity);
+    return found.filter((identity): identity is ToolIdentity => !!identity && (!taskIds || taskIds.has(identity.taskId)));
+  }
+  /** Deletes the session bindings (and so the credentials) of cards that no longer exist; returns how many. */
+  async pruneContexts(taskIds: ReadonlySet<string>) {
+    const job = this.files.then(async () => {
+      const keep = new Set((await this.managedSessions(taskIds)).map((s) => s.agentId));
+      let names: string[] = [];
+      try {
+        names = await readdir(join(this.directory, "sessions"));
+      } catch {
+        return 0;
+      }
+      let removed = 0;
+      for (const name of names) {
+        const agentId = name.slice(0, -5);
+        if (!name.endsWith(".json") || keep.has(agentId)) continue;
+        // Unreadable files are kept: invalid data is preserved, never reset.
+        if (!(await this.managedIdentity(agentId))) continue;
+        await unlink(this.contextFile(agentId)).then(() => removed++, () => undefined);
+      }
+      return removed;
+    });
+    this.files = job.then(
+      () => undefined,
+      () => undefined,
+    );
+    return job;
   }
   /** Bound identity of a Kanban-managed session, or null. */
   async managedIdentity(agentId: string): Promise<ToolIdentity | null> {
