@@ -1,0 +1,30 @@
+{
+  "validator": {
+    "paseoAgentId": "52d01379-838b-450f-b87d-83853e935ffa",
+    "sessionId": "01a1641d-90d0-74a3-9fb0-670de39c052b",
+    "provider": "codex",
+    "model": "gpt-6-luna",
+    "mode": "full-access",
+    "thinking": "high",
+    "modeSource": "read-only Paseo agent status snapshot"
+  },
+  "checks": [
+    { "command": "node --test benchmarks/constraints/*.checks.mjs", "result": "PASS", "tests": 30, "when": "before concurrent owner additions" },
+    { "command": "node --test benchmarks/constraints/*.checks.mjs", "result": "PASS", "tests": 33, "when": "after shared owner additions" },
+    { "command": "node --test docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs", "result": "FAIL", "tests": 3, "passed": 2, "failed": 1, "finding": "INVALID turn with complete-looking evidence receives finalVerdict PASS" },
+    { "command": "node --test benchmarks/constraints/*.checks.mjs", "result": "PASS", "tests": 38, "when": "post-fix recheck in same full-access Luna session" },
+    { "command": "node --test docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs", "result": "PASS", "tests": 3, "passed": 3, "failed": 0, "when": "post-fix recheck in same full-access Luna session" }
+  ],
+  "focusedEvidence": {
+    "invalidTurn": { "expected": "UNKNOWN unless an explicit FAIL is present", "actual": "PASS", "source": "benchmarks/constraints/grade.mjs:15-16,77" },
+    "invalidTurnWithKnownFailure": { "result": "PASS: existing check preserves FAIL", "sourceTest": "benchmarks/constraints/grade.checks.mjs:38" },
+    "directoryOwnership": { "result": "PASS: missing/relative/foreign directory rejected before worktree subprocess; no cwd fallback", "source": "benchmarks/constraints/io.mjs:35-37" },
+    "branchOwnership": { "result": "PASS: cleanup checks frozen expected ref and only fills it if absent; existing/changed refs are not deletable", "source": "benchmarks/constraints/runtime.mjs:126-135; benchmarks/constraints/io.mjs:31-33" },
+    "cleanupFailurePropagation": { "result": "PASS by code inspection and existing grade check: cleanup FAIL maps to exit 1", "source": "benchmarks/constraints/runtime.mjs:144-159; benchmarks/constraints/grade.mjs:86-89" },
+    "invalidVerdictFix": { "result": "PASS: runtime.validity adds UNKNOWN and verdict priority retains explicit FAIL", "source": "benchmarks/constraints/grade.mjs:88-89; benchmarks/constraints/grade.checks.mjs:63" },
+    "newRegressionCoverage": ["T3 reuses actual prior execution only for proven equal input", "unrun self-report after actual successful execution is a known mismatch", "only independently proven stale-only refusal is expected proactively"]
+  },
+  "liveResourcesCreatedByValidator": false,
+  "fableReview": "UNRUN",
+  "astraReview": "PENDING"
+}

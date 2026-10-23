@@ -1,0 +1,40 @@
+{
+  "state": "PASS",
+  "rows": [
+    {
+      "key": "sonnet",
+      "sessionId": "b1a26074-d489-4650-ac3f-eed756612683",
+      "cardId": "a5315796-fa0e-4af0-a794-19945baff638",
+      "workspaceId": "wks_3dd68b54aea1e216",
+      "model": "claude-sonnet-5-5",
+      "mode": "bypassPermissions",
+      "sessionArchived": true,
+      "cardAbsent": true,
+      "workspaceInactive": true,
+      "directoryAbsent": true,
+      "localRefAbsent": true,
+      "remoteAbsent": true
+    },
+    {
+      "key": "gpt",
+      "sessionId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+      "cardId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+      "workspaceId": "wks_c42c31413985b736",
+      "model": "gpt-6-luna",
+      "mode": "full-access",
+      "sessionArchived": true,
+      "cardAbsent": true,
+      "workspaceInactive": true,
+      "directoryAbsent": true,
+      "localRefAbsent": true,
+      "remoteAbsent": true
+    }
+  ],
+  "permanentCardsPreserved": true,
+  "permanentGitSnapshotPreserved": true,
+  "oldEvidenceFilesChecked": 33,
+  "oldEvidenceChanged": [],
+  "harnessChangedDuringRun": [],
+  "remoteMainAfter": "5bfb3b9cca6ee58171ed40953c6747a33932807d\trefs/heads/main",
+  "at": "2026-10-23T02:14:07.333Z"
+}

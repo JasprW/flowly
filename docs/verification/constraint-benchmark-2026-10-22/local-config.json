@@ -1,0 +1,25 @@
+{
+  "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+  "repoPath": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+  "baseCommit": "47899f7286df26700d4235800825b2ecbcee12bb",
+  "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+  "parentAgentId": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f",
+  "turnTimeoutMs": 900000,
+  "runTimeoutMs": 3600000,
+  "models": [
+    {
+      "key": "sonnet",
+      "provider": "claude",
+      "model": "claude-sonnet-5-5",
+      "mode": "bypassPermissions",
+      "thinking": "medium"
+    },
+    {
+      "key": "gpt",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "mode": "full-access",
+      "thinking": "medium"
+    }
+  ]
+}

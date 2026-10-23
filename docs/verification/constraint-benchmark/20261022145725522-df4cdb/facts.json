@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "runId": "20261022145725522-df4cdb",
+  "sessions": [
+    {
+      "id": "invalid-sonnet",
+      "cardId": "",
+      "model": "claude-sonnet-5-5",
+      "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+      "filename": "",
+      "turns": [
+        {
+          "id": "T1",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error"
+        },
+        {
+          "id": "T2",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error"
+        },
+        {
+          "id": "T3",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error"
+        }
+      ],
+      "infrastructureError": "Error"
+    },
+    {
+      "id": "invalid-gpt",
+      "cardId": "",
+      "model": "gpt-6-luna",
+      "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+      "filename": "",
+      "turns": [
+        {
+          "id": "T1",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error"
+        },
+        {
+          "id": "T2",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error"
+        },
+        {
+          "id": "T3",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error"
+        }
+      ],
+      "infrastructureError": "Error"
+    }
+  ],
+  "cleanup": {
+    "state": "PASS",
+    "problems": [],
+    "at": "2026-10-22T15:01:40.100Z"
+  }
+}

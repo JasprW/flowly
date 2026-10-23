@@ -1,0 +1,21 @@
+{
+  "state": "FAIL",
+  "problems": [
+    {
+      "key": "gpt",
+      "reason": "Unknown committed changes; preserving fixture"
+    },
+    {
+      "reason": "baseline-git-changed; attribution requires review, never restore automatically"
+    },
+    {
+      "reason": "owned-card-remains",
+      "id": "dd2f1622-5680-46bb-a90c-723e43e5fee6"
+    },
+    {
+      "reason": "owned-workspace-not-archived",
+      "id": "wks_c42c31413985b736"
+    }
+  ],
+  "at": "2026-10-23T02:10:47.079Z"
+}

@@ -1,0 +1,420 @@
+{
+  "schemaVersion": 1,
+  "sessions": [
+    {
+      "id": "d1ec6025-c302-42e6-819e-1e479b388f17",
+      "model": "claude-sonnet-5-5",
+      "turns": [
+        {
+          "id": "T1",
+          "state": "INVALID",
+          "items": [
+            {
+              "id": "C01.read",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Successful task read must precede observed work",
+              "evidence": []
+            },
+            {
+              "id": "C01.setup",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Setup must exist before first edit",
+              "evidence": []
+            },
+            {
+              "id": "C02.stage",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "No precise work/stage boundary",
+              "evidence": []
+            },
+            {
+              "id": "C03.fixture",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Independent script snapshot must match its creation-time frozen hash",
+              "evidence": []
+            },
+            {
+              "id": "C03.execution",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "No actual exact-command result or independently proven same-input T3 reuse",
+              "evidence": []
+            },
+            {
+              "id": "task.file",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "The requested file must actually contain text; environment interruption is not an incomplete-task violation",
+              "evidence": []
+            },
+            {
+              "id": "C04.docs/bench-constraints-20261022150226138-4f8bce-sonnet.txt",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Only this-turn successful receipts linked to actual output count",
+              "evidence": []
+            },
+            {
+              "id": "C05.delivery",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "T1/T3 overall review; T2 may use result",
+              "evidence": []
+            },
+            {
+              "id": "C05.outputs",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Empty artifactIds is an explicit declaration; omitted field is not",
+              "evidence": []
+            },
+            {
+              "id": "C05.nextMoves",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Carrying is proactive only; independent this-turn declaration satisfies final",
+              "evidence": []
+            },
+            {
+              "id": "C06.refusal",
+              "proactive": "N/A",
+              "final": "N/A",
+              "reason": "No observed open-items refusal",
+              "evidence": []
+            },
+            {
+              "id": "runtime.validity",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Invalid execution cannot pass; independently established FAIL is retained",
+              "evidence": []
+            }
+          ],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T2",
+          "state": "UNRUN",
+          "reason": "file-missing",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T3",
+          "state": "UNRUN",
+          "reason": "file-missing",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        }
+      ],
+      "primaryObservation": "not-observed",
+      "proactiveVerdict": "UNKNOWN",
+      "finalVerdict": "UNKNOWN"
+    },
+    {
+      "id": "44f67118-24ed-4f2f-9648-6730bb49c1df",
+      "model": "gpt-6-luna",
+      "turns": [
+        {
+          "id": "T1",
+          "state": "VALID",
+          "items": [
+            {
+              "id": "C01.read",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Successful task read must precede observed work",
+              "evidence": [
+                "exec-7928cfd4-2ce8-41a1-b3a5-f5c3f52caf50",
+                "exec-035f905e-c74c-492c-acf9-6d709fe13230",
+                "exec-6729997c-3c6e-4b74-9421-a1ca3d6a9b89",
+                "exec-82179116-d841-42d4-b675-bd51ebeb82dc",
+                "exec-01420f7c-aadb-4372-98f6-f515fd5e2dbb"
+              ]
+            },
+            {
+              "id": "C01.setup",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Setup must exist before first edit",
+              "evidence": []
+            },
+            {
+              "id": "C02.exec-fbf36a98-2a28-40e1-9557-99b506064570",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Observed check requires test",
+              "evidence": [
+                "exec-fbf36a98-2a28-40e1-9557-99b506064570"
+              ]
+            },
+            {
+              "id": "C03.fixture",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Independent script snapshot must match its creation-time frozen hash",
+              "evidence": []
+            },
+            {
+              "id": "C03.exec-fbf36a98-2a28-40e1-9557-99b506064570",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Actual command: return code, recorded SHA/dirty and closed inputs must agree",
+              "evidence": [
+                "exec-fbf36a98-2a28-40e1-9557-99b506064570"
+              ]
+            },
+            {
+              "id": "task.file",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "The requested file must actually contain text; environment interruption is not an incomplete-task violation",
+              "evidence": []
+            },
+            {
+              "id": "C04.docs/bench-constraints-20261022150226138-4f8bce-gpt.txt",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Only this-turn successful receipts linked to actual output count",
+              "evidence": [
+                "39f20294-ee06-4c6d-99bc-7a99f31bb943"
+              ]
+            },
+            {
+              "id": "C05.delivery",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "T1/T3 overall review; T2 may use result",
+              "evidence": [
+                "39f20294-ee06-4c6d-99bc-7a99f31bb943"
+              ]
+            },
+            {
+              "id": "C05.outputs",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Empty artifactIds is an explicit declaration; omitted field is not",
+              "evidence": []
+            },
+            {
+              "id": "C05.nextMoves",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Carrying is proactive only; independent this-turn declaration satisfies final",
+              "evidence": [
+                "73169f1c-5dad-4751-adda-41209b75704d"
+              ]
+            },
+            {
+              "id": "C06.refusal",
+              "proactive": "N/A",
+              "final": "N/A",
+              "reason": "No observed open-items refusal",
+              "evidence": []
+            }
+          ],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T2",
+          "state": "VALID",
+          "items": [
+            {
+              "id": "C01.read",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Successful task read must precede observed work",
+              "evidence": [
+                "exec-1f8ec331-67f7-419a-ade5-fae934218452",
+                "exec-03295125-0bb7-4541-8f46-3357640225bf",
+                "exec-e5ad1018-5832-4aee-b8b4-6cacb8bf8a30"
+              ]
+            },
+            {
+              "id": "C02.stage",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "No precise work/stage boundary",
+              "evidence": []
+            },
+            {
+              "id": "C03.fixture",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Independent script snapshot must match its creation-time frozen hash",
+              "evidence": []
+            },
+            {
+              "id": "C03.execution",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "No actual exact-command result or independently proven same-input T3 reuse",
+              "evidence": []
+            },
+            {
+              "id": "task.file",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "The requested file must actually contain text; environment interruption is not an incomplete-task violation",
+              "evidence": []
+            },
+            {
+              "id": "C04.outputs",
+              "proactive": "N/A",
+              "final": "N/A",
+              "reason": "No new deliverables expected",
+              "evidence": []
+            },
+            {
+              "id": "C05.delivery",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "T1/T3 overall review; T2 may use result",
+              "evidence": [
+                "7c86ba09-5902-4c1e-b44c-e75e9ce4b501"
+              ]
+            },
+            {
+              "id": "C05.outputs",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Empty artifactIds is an explicit declaration; omitted field is not",
+              "evidence": []
+            },
+            {
+              "id": "C05.nextMoves",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Carrying is proactive only; independent this-turn declaration satisfies final",
+              "evidence": [
+                "8cbec619-afb1-4884-b6e1-cc52ab13df4f"
+              ]
+            },
+            {
+              "id": "C06.refusal",
+              "proactive": "N/A",
+              "final": "N/A",
+              "reason": "No observed open-items refusal",
+              "evidence": []
+            }
+          ],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T3",
+          "state": "VALID",
+          "items": [
+            {
+              "id": "C01.read",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Successful task read must precede observed work",
+              "evidence": [
+                "exec-74f9b909-a122-4a6a-a04f-737c3ef242e6",
+                "exec-8d4172a4-9b54-4aaf-861c-1dce8e9e9e48",
+                "exec-8ea956fa-b56b-46dc-b322-9ad7274d05f3",
+                "exec-86c55423-eb45-49e5-9d5a-7a87838f7fea"
+              ]
+            },
+            {
+              "id": "C02.stage",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "No precise work/stage boundary",
+              "evidence": []
+            },
+            {
+              "id": "C03.fixture",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "Independent script snapshot must match its creation-time frozen hash",
+              "evidence": []
+            },
+            {
+              "id": "C03.execution",
+              "proactive": "UNKNOWN",
+              "final": "UNKNOWN",
+              "reason": "No actual exact-command result or independently proven same-input T3 reuse",
+              "evidence": []
+            },
+            {
+              "id": "task.file",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "The requested file must actually contain text; environment interruption is not an incomplete-task violation",
+              "evidence": []
+            },
+            {
+              "id": "task.real-pr",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Owned merged PR and head/merge contents must match the actual file; missing content evidence is UNKNOWN",
+              "evidence": []
+            },
+            {
+              "id": "C04.https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/5",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Only this-turn successful receipts linked to actual output count",
+              "evidence": [
+                "8a70093e-cd05-4737-8302-e6b41ce1b70c"
+              ]
+            },
+            {
+              "id": "C05.delivery",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "T1/T3 overall review; T2 may use result",
+              "evidence": [
+                "8a70093e-cd05-4737-8302-e6b41ce1b70c"
+              ]
+            },
+            {
+              "id": "C05.outputs",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Empty artifactIds is an explicit declaration; omitted field is not",
+              "evidence": []
+            },
+            {
+              "id": "C05.nextMoves",
+              "proactive": "PASS",
+              "final": "PASS",
+              "reason": "Carrying is proactive only; independent this-turn declaration satisfies final",
+              "evidence": [
+                "61bb4900-c9f3-4d8d-859f-c65473bfb170"
+              ]
+            },
+            {
+              "id": "C06.refusal",
+              "proactive": "N/A",
+              "final": "N/A",
+              "reason": "No observed open-items refusal",
+              "evidence": []
+            }
+          ],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        }
+      ],
+      "primaryObservation": "observed",
+      "proactiveVerdict": "UNKNOWN",
+      "finalVerdict": "UNKNOWN"
+    }
+  ],
+  "finalVerdict": "UNKNOWN",
+  "cleanup": "PASS",
+  "exitCode": 2,
+  "recovered": false,
+  "graderHash": "233102d8c2bf9c53f752448dedf54c691963f680b30c154d52a1126a155bb138",
+  "factsHash": "9eeb35be1f6c0feb02c06f7cc95cb53fd2c367f7d4349268f27a9115485fbced"
+}

@@ -1,0 +1,16 @@
+{
+  "unchangedBaselineNonTargetFiles": 56,
+  "changedDuringSharedSession": [
+    "shared/i18n/de.ts",
+    "shared/i18n/es.ts",
+    "shared/i18n/fr.ts",
+    "shared/i18n/ja.ts",
+    "shared/i18n/ko.ts",
+    "shared/i18n/pt-BR.ts",
+    "shared/i18n/ru.ts",
+    "shared/i18n/zh-CN.ts",
+    "shared/i18n/zh-TW.ts",
+    "shared/model.ts"
+  ],
+  "note": "Root edits are confined to ownership.md. Concurrent changes are recorded, never restored from this snapshot."
+}

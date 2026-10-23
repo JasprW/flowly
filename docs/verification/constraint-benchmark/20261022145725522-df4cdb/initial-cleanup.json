@@ -1,0 +1,33 @@
+{
+  "state": "FAIL",
+  "problems": [
+    {
+      "key": "sonnet",
+      "reason": "Unknown worktree changes; preserving fixture"
+    },
+    {
+      "key": "gpt",
+      "reason": "Unknown worktree changes; preserving fixture"
+    },
+    {
+      "reason": "baseline-git-changed; attribution requires review, never restore automatically"
+    },
+    {
+      "reason": "owned-card-remains",
+      "id": "49cf0ba8-58ad-48ea-8f35-0730e177c647"
+    },
+    {
+      "reason": "owned-workspace-not-archived",
+      "id": "wks_4fd00dbd5ed503bb"
+    },
+    {
+      "reason": "owned-card-remains",
+      "id": "beb2cc41-924c-4586-89c3-dae56e241c7f"
+    },
+    {
+      "reason": "owned-workspace-not-archived",
+      "id": "wks_30746d2c00320839"
+    }
+  ],
+  "at": "2026-10-22T14:57:31.875Z"
+}

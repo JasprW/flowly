@@ -1,0 +1,21 @@
+{
+  "state": "PASS",
+  "command": [
+    "node",
+    "--test",
+    "benchmarks/constraints/grade.checks.mjs",
+    "docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs"
+  ],
+  "sha": "2a727e8af2d4908d1cc86f2905c641c1cb56b838",
+  "dirty": true,
+  "files": {
+    "cases.json": "d909cd17214618327f9d29d91f8a90833bf8a7685e8c377cb4692a4a42d27084",
+    "facts.mjs": "e6e22344908dcb60f918ae6db7e33debd83a074bd437550927496f363369c927",
+    "grade.checks.mjs": "d3dfc3daf1e56cfecc4ad5455704e9142db8bface742e4242ac0e2e695b1af90",
+    "grade.mjs": "233102d8c2bf9c53f752448dedf54c691963f680b30c154d52a1126a155bb138",
+    "io.mjs": "54f6420ecaf56c9336fba58c627342df7579d3304a8c2107da1894817c0ae520",
+    "run.mjs": "3ed266f5d4d3265903c5a2bf57cdee8d9e8911424dcf13819a88f2bca5304de1",
+    "runtime.mjs": "20816d9d59366b869aaae79b1c9c49cdb928228c3c25bd08e8999a4fbb12887f"
+  },
+  "node": "v26.9.0"
+}

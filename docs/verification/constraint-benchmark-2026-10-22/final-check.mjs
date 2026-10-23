@@ -1,0 +1,5 @@
+import path from 'node:path';import {readFile,readdir,writeFile} from 'node:fs/promises';import {command,execute,save} from '../../../benchmarks/constraints/io.mjs';import {hash} from '../../../benchmarks/constraints/facts.mjs';
+const before=await command('git',['rev-parse','HEAD']);const files={};for(const name of (await readdir('benchmarks/constraints')).filter(n=>n.endsWith('.mjs')||n.endsWith('.json')))files[name]=hash(await readFile(path.join('benchmarks/constraints',name)));
+const args=['--test','benchmarks/constraints/grade.checks.mjs','docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs'];
+const result=await execute('node',args,{maxBuffer:2<<20});const after=await command('git',['rev-parse','HEAD']);if(before!==after)throw Error('HEAD changed during verification');
+const dir=path.dirname(import.meta.filename);await writeFile(path.join(dir,'final-checks.txt'),result.stdout+result.stderr);await save(path.join(dir,'final-checks.json'),{state:'PASS',command:['node',...args],sha:before,dirty:true,files,node:process.version});console.log(JSON.stringify({state:'PASS',sha:before,tests:result.stdout.match(/(?:tests |# tests )(\d+)/)?.[1]}));

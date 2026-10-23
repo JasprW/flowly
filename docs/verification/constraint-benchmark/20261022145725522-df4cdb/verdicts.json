@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "sessions": [
+    {
+      "id": "invalid-sonnet",
+      "model": "claude-sonnet-5-5",
+      "turns": [
+        {
+          "id": "T1",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T2",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T3",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        }
+      ],
+      "primaryObservation": "not-observed",
+      "proactiveVerdict": "UNKNOWN",
+      "finalVerdict": "UNKNOWN"
+    },
+    {
+      "id": "invalid-gpt",
+      "model": "gpt-6-luna",
+      "turns": [
+        {
+          "id": "T1",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T2",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        },
+        {
+          "id": "T3",
+          "state": "INVALID",
+          "reason": "case-infrastructure-error",
+          "items": [],
+          "proactiveVerdict": "UNKNOWN",
+          "finalVerdict": "UNKNOWN"
+        }
+      ],
+      "primaryObservation": "not-observed",
+      "proactiveVerdict": "UNKNOWN",
+      "finalVerdict": "UNKNOWN"
+    }
+  ],
+  "finalVerdict": "UNKNOWN",
+  "cleanup": "PASS",
+  "exitCode": 2,
+  "recovered": false
+}

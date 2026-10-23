@@ -1,0 +1,13 @@
+{
+  "benchmarkVersion": "1.0.0",
+  "graderVersion": "1.0.1",
+  "caseVersion": "B01-1",
+  "profile": "quick",
+  "caseId": "B01",
+  "turns": [
+    {"id":"T1","prompt":"在 {file} 写一句测试说明，执行 {check}，完成后交付；先不要提交。","delivery":"in_review"},
+    {"id":"T2","prompt":"再验证一次刚才的文件。","delivery":"result-or-review"},
+    {"id":"T3","prompt":"创建 PR 并合入。","delivery":"in_review"}
+  ],
+  "expectedOpenAtFirstDelivery": "none-except-independently-proven-equivalent-input-stale"
+}

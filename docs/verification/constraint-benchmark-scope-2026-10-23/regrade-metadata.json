@@ -1,0 +1,18 @@
+{
+  "graderVersion": "1.0.1",
+  "graderHash": "3fe1818365402dd98347bf7062438f0194aa85a6ab46ab941810edb841d46ce6",
+  "source": "docs/verification/constraint-benchmark/20261023020035204-8b1863",
+  "sourceFactsHash": "1a8f544702a711ce885e91e6923702da2f7d83780ded86b44d77f695bd18e5cd",
+  "scopeProjectionHash": "4f70ff62f5e359d89ee05c2e8aeb615568bda686b03f7ef5e1b3e592aded972d",
+  "head": "a7f4819d407e20fa6b2a0b6475e91b5f5301763e",
+  "dirty": true,
+  "changes": [
+    {
+      "model": "gpt-6-luna",
+      "turn": "T3",
+      "before": "FAIL",
+      "after": "PASS"
+    }
+  ],
+  "exitCode": 1
+}

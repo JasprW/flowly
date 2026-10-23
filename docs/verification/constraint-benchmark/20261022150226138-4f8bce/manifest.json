@@ -1,0 +1,98 @@
+{
+  "runId": "20261022150226138-4f8bce",
+  "config": {
+    "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+    "repoPath": "/Users/bofan.wang/Developer/personal/flowly-test/tinylink",
+    "baseCommit": "47899f7286df26700d4235800825b2ecbcee12bb",
+    "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+    "parentAgentId": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f",
+    "turnTimeoutMs": 900000,
+    "runTimeoutMs": 3600000,
+    "models": [
+      {
+        "key": "sonnet",
+        "provider": "claude",
+        "model": "claude-sonnet-5-5",
+        "mode": "bypassPermissions",
+        "thinking": "medium"
+      },
+      {
+        "key": "gpt",
+        "provider": "codex",
+        "model": "gpt-6-luna",
+        "mode": "full-access",
+        "thinking": "medium"
+      }
+    ]
+  },
+  "cases": {
+    "benchmarkVersion": "1.0.0",
+    "graderVersion": "1.0.0",
+    "caseVersion": "B01-1",
+    "profile": "quick",
+    "caseId": "B01",
+    "turns": [
+      {
+        "id": "T1",
+        "prompt": "在 {file} 写一句测试说明，执行 {check}，完成后交付；先不要提交。",
+        "delivery": "in_review"
+      },
+      {
+        "id": "T2",
+        "prompt": "再验证一次刚才的文件。",
+        "delivery": "result-or-review"
+      },
+      {
+        "id": "T3",
+        "prompt": "创建 PR 并合入。",
+        "delivery": "in_review"
+      }
+    ],
+    "expectedOpenAtFirstDelivery": "none-except-independently-proven-equivalent-input-stale"
+  },
+  "source": {
+    "head": "fab80456ead870e7b7e6a493bae276ee878e34fd",
+    "tree": "f1ea7bfe23ac0e3038a38d89adf1ccf430b2c788",
+    "dirtyPatchHash": "6816107c216523a7bc898a78f88b933126d550a30ae748335c1479bffd8bc577",
+    "files": {
+      "cases.json": "d909cd17214618327f9d29d91f8a90833bf8a7685e8c377cb4692a4a42d27084",
+      "facts.mjs": "64a5fad81b52c135759ac42d0aca8c8fc5496a9365f9b6c851f1a907a3ff0f19",
+      "grade.mjs": "2a7d39260dcf9d5381d093d4b9e1c6b7590411bf57e2beae586954a3612f20c1",
+      "io.mjs": "8a874f967cc1ae74b670a22a0b8e741d904bdca0f1cdc1511432008ff3c35dd3",
+      "runtime.mjs": "c89a79c28d2b3835a5617751ff2ddca579ad4aacf0e9ed76d87b5a4c84429c7e",
+      "run.mjs": "1416b969217725bfc0e0743870aa820ee4bc4d257b30e025803217056776ed67"
+    }
+  },
+  "createdAt": "2026-10-22T15:02:26.143Z",
+  "planned": [
+    {
+      "model": "claude/claude-sonnet-5-5",
+      "key": "sonnet",
+      "turns": [
+        "T1",
+        "T2",
+        "T3"
+      ]
+    },
+    {
+      "model": "codex/gpt-6-luna",
+      "key": "gpt",
+      "turns": [
+        "T1",
+        "T2",
+        "T3"
+      ]
+    }
+  ],
+  "runtime": {
+    "installation": [
+      {
+        "id": "flowly",
+        "path": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban",
+        "status": "running"
+      }
+    ],
+    "loadedImplementationHash": "unknown",
+    "skillHash": "b2c9ac048406363772bdd8217b71f35025286f51dd63a6bb10c394d9c0c06be8"
+  }
+}

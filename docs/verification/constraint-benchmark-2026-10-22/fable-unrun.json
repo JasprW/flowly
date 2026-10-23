@@ -1,0 +1,11 @@
+{
+  "sessionId": "814310dd-e38c-438f-9895-56322cd8f3fc",
+  "provider": "claude",
+  "model": "claude-fable-5-1",
+  "mode": "bypassPermissions",
+  "state": "UNRUN",
+  "reason": "You've hit your weekly limit · resets 9am (Asia/Singapore)",
+  "archived": true,
+  "replacementRequestedByUser": "codex/gpt-6-astra",
+  "replacementSession": "5e6e85cc-fd09-472c-86f0-3b667476ef0f"
+}

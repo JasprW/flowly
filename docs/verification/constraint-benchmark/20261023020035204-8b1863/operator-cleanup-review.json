@@ -1,0 +1,34 @@
+{
+  "state": "REVIEWED",
+  "at": "2026-10-23T02:12:27.337Z",
+  "cardId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+  "workspaceId": "wks_c42c31413985b736",
+  "branch": "bench-constraints-20261023020035204-8b1863-gpt",
+  "head": "39321682c6aa8320cf1f9aeceabdd263cc3134cc",
+  "parent": "2e2b9bdd0855f61765effbfd9cbc56018d256633",
+  "directChange": "docs/bench-constraints-20261023020035204-8b1863-gpt.txt",
+  "importedUnmodifiedPaths": [
+    "docs/bench-constraints-20261022150226138-4f8bce-gpt.txt",
+    "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt",
+    "docs/flowly-delivery-codex-036d.txt",
+    "docs/flowly-delivery-codex-r2-036d.txt",
+    "docs/flowly-delivery-sonnet-036d.txt",
+    "docs/flowly-delivery-sonnet-r2-036d.txt"
+  ],
+  "prs": [
+    {
+      "url": "https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/6",
+      "state": "MERGED",
+      "head": "bf5f3f65d30ff46cd3914d0eedbc97554097f5b9",
+      "mergeCommit": "2e2b9bdd0855f61765effbfd9cbc56018d256633"
+    },
+    {
+      "url": "https://github.com/JasprW/flowly-delivery-fixture-20261022-036d/pull/7",
+      "state": "MERGED",
+      "head": "39321682c6aa8320cf1f9aeceabdd263cc3134cc",
+      "mergeCommit": "5bfb3b9cca6ee58171ed40953c6747a33932807d"
+    }
+  ],
+  "reason": "All non-target paths are unchanged imported fixture history; own new commit touches only the allowed file. Original task.scope score remains unchanged.",
+  "freezeAt": "2026-10-23T02:10:43.585Z"
+}

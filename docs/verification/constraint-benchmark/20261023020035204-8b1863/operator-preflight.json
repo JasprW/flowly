@@ -1,0 +1,9 @@
+{
+  "configIdenticalToPreviousManifest": true,
+  "configFileHash": "417c4349b03fe75d378bc0ee1a70028556b0c0d0e6a707bd841eb9d83409f3e3",
+  "previousRun": "20261022150226138-4f8bce",
+  "oldEvidenceFileCount": 33,
+  "sourceHead": "a7f4819d407e20fa6b2a0b6475e91b5f5301763e",
+  "messagePolicy": "Only the unchanged fixed B01 prompts; no operator intervention in subject sessions.",
+  "harnessUnchangedSinceFinal57Checks": true
+}

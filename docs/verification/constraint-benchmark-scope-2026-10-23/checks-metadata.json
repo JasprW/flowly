@@ -1,0 +1,18 @@
+{
+  "command": "node --test benchmarks/constraints/*.checks.mjs docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs",
+  "state": "PASS",
+  "tests": 77,
+  "sha": "a7f4819d407e20fa6b2a0b6475e91b5f5301763e",
+  "dirty": true,
+  "files": {
+    "benchmarks/constraints/run.mjs": "d6c246a347b29795bb94d6916818faeceda09a819e16fdd58092be2e7abd0b43",
+    "benchmarks/constraints/grade.checks.mjs": "471fe6bb404cacb706fad857e01b986d85f567dcd10954c6264001d71858661b",
+    "benchmarks/constraints/runtime.mjs": "be5b8039d992a1eb6687bf1cbaa23d439bef9888e3f571acbab56ff913576c15",
+    "benchmarks/constraints/facts.mjs": "e6e22344908dcb60f918ae6db7e33debd83a074bd437550927496f363369c927",
+    "benchmarks/constraints/cases.json": "0d056c20cb4f9b7eb38dfd7335982367472d981e986a02664baee40b28c75ae3",
+    "benchmarks/constraints/scope.mjs": "5d211260338fd0c5f5724a8c7fa412ac29ae4668cf95bc0b6a6b66f1d2a14d9b",
+    "benchmarks/constraints/scope.checks.mjs": "c91f160482b6d8443bd99c987f5f0d396f1053ca2ff0356893e9a0094ed0cbbb",
+    "benchmarks/constraints/io.mjs": "54f6420ecaf56c9336fba58c627342df7579d3304a8c2107da1894817c0ae520",
+    "benchmarks/constraints/grade.mjs": "6aafad6fb6c0c6eba582269ac9ac244a3a2475496e095b8ed932a8489f22b325"
+  }
+}

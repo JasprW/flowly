@@ -1,0 +1,185 @@
+{
+  "runId": "20261022150226138-4f8bce",
+  "owned": [
+    {
+      "key": "sonnet",
+      "operationId": "bench-constraints-20261022150226138-4f8bce-sonnet",
+      "branch": "bench-constraints-20261022150226138-4f8bce-sonnet",
+      "filename": "docs/bench-constraints-20261022150226138-4f8bce-sonnet.txt",
+      "provider": "claude",
+      "model": "claude-sonnet-5-5",
+      "mode": "bypassPermissions",
+      "thinking": "medium",
+      "phase": "session-created",
+      "turns": [
+        {
+          "id": "T1",
+          "startedAt": "2026-10-22T15:02:30.366Z",
+          "phase": "sent"
+        }
+      ],
+      "remoteBeforeAbsent": true,
+      "cardId": "133dea58-d78a-41b4-b3f0-764fc95ebac2",
+      "workspaceId": "wks_93d2103037406a88",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-20261022150226138-4f8bce-sonnet",
+      "checkId": "bench-constraints-20261022150226138-4f8bce-sonnet",
+      "checkFile": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/docs/verification/constraint-benchmark/20261022150226138-4f8bce/fixtures/sonnet/check.mjs",
+      "checkHash": "7e61645b17200d078e62c7dbdc64d1469389cca7286b8134bbd8d6c28d0e323c",
+      "checkCommand": "node '/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/docs/verification/constraint-benchmark/20261022150226138-4f8bce/fixtures/sonnet/check.mjs'",
+      "id": "d1ec6025-c302-42e6-819e-1e479b388f17",
+      "initialBefore": {
+        "task": {
+          "id": "133dea58-d78a-41b4-b3f0-764fc95ebac2",
+          "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+          "workspaceId": "wks_93d2103037406a88",
+          "status": "todo",
+          "revision": 1
+        },
+        "workpad": null,
+        "artifacts": [],
+        "receipts": [],
+        "head": {
+          "sha": "47899f7286df26700d4235800825b2ecbcee12bb",
+          "dirty": false
+        },
+        "file": null
+      },
+      "promptHash": "9003211e910756aa79a7a0c5df26402439b7baae9ba69b20295f42f06aac6294",
+      "startedAt": "2026-10-22T15:02:30.366Z",
+      "branchExpected": "47899f7286df26700d4235800825b2ecbcee12bb",
+      "remoteExpected": null,
+      "cleaned": true
+    },
+    {
+      "key": "gpt",
+      "operationId": "bench-constraints-20261022150226138-4f8bce-gpt",
+      "branch": "bench-constraints-20261022150226138-4f8bce-gpt",
+      "filename": "docs/bench-constraints-20261022150226138-4f8bce-gpt.txt",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "mode": "full-access",
+      "thinking": "medium",
+      "phase": "session-created",
+      "turns": [
+        {
+          "id": "T1",
+          "startedAt": "2026-10-22T15:02:36.089Z",
+          "phase": "sent"
+        },
+        {
+          "id": "T2",
+          "startedAt": "2026-10-22T15:05:40.973Z",
+          "phase": "sent"
+        },
+        {
+          "id": "T3",
+          "startedAt": "2026-10-22T15:06:43.098Z",
+          "phase": "sent"
+        }
+      ],
+      "remoteBeforeAbsent": true,
+      "cardId": "13878a8f-7851-4d1d-8cbb-c2ff367bfbd0",
+      "workspaceId": "wks_957507a85b0966b3",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-20261022150226138-4f8bce-gpt",
+      "checkId": "bench-constraints-20261022150226138-4f8bce-gpt",
+      "checkFile": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/docs/verification/constraint-benchmark/20261022150226138-4f8bce/fixtures/gpt/check.mjs",
+      "checkHash": "ca5baa9b6d591bb1b52eeb77446db483372600ec2e3d71d21b89ce0289450316",
+      "checkCommand": "node '/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/docs/verification/constraint-benchmark/20261022150226138-4f8bce/fixtures/gpt/check.mjs'",
+      "id": "44f67118-24ed-4f2f-9648-6730bb49c1df",
+      "initialBefore": {
+        "task": {
+          "id": "13878a8f-7851-4d1d-8cbb-c2ff367bfbd0",
+          "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+          "workspaceId": "wks_957507a85b0966b3",
+          "status": "todo",
+          "revision": 1
+        },
+        "workpad": null,
+        "artifacts": [],
+        "receipts": [],
+        "head": {
+          "sha": "47899f7286df26700d4235800825b2ecbcee12bb",
+          "dirty": false
+        },
+        "file": null
+      },
+      "promptHash": "c2d9ce2f629e55c39291f4c700b438fe1b98ae63ed3c906307d935109f792466",
+      "startedAt": "2026-10-22T15:02:36.089Z",
+      "branchExpected": "0b022ebb63c120e8a7fcb0625cefa418d9833530",
+      "remoteExpected": "0b022ebb63c120e8a7fcb0625cefa418d9833530",
+      "cleaned": true
+    }
+  ],
+  "createdAt": "2026-10-22T15:02:26.143Z",
+  "baseline": {
+    "git": {
+      "refs": {
+        "refs/heads/kanban/test-first-message-images-2026-10-21-4b8a05": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "refs/heads/main": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "refs/heads/test/delivery-codex-036d": "63b46546a360aadee7aeb3fe0d198607aa5ea263",
+        "refs/heads/test/delivery-codex-r2-036d": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "refs/heads/test/delivery-sonnet-036d": "4fec26d129f91c759c3dbd3ead756e092a03b7b1",
+        "refs/heads/test/delivery-sonnet-r2-036d": "3c1382e18d1ab1d3ec4bec9a0a970f56f777c702"
+      },
+      "configHash": "a18f6d06e6844c1702f000ef1d1010d84d19a5f5aa3339949783964d632a7810",
+      "remoteHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "statusHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "head": "47899f7286df26700d4235800825b2ecbcee12bb"
+    },
+    "tasks": [
+      {
+        "id": "918e5a87-c6b8-45b5-a11c-326bd5c2957c",
+        "revision": 8,
+        "status": "in_review",
+        "workspaceId": "wks_ba6ff18c509f409e"
+      },
+      {
+        "id": "f0e55983-8064-4c1c-9319-a9de794ffe4d",
+        "revision": 2,
+        "status": "design",
+        "workspaceId": "wks_7d81d4dbcaf9dd67"
+      },
+      {
+        "id": "af077ae5-9a44-47da-9ede-80dd7964669e",
+        "revision": 5,
+        "status": "in_review",
+        "workspaceId": "wks_6fd42afc21d656dc"
+      },
+      {
+        "id": "0e9cf956-03cc-4549-8dfe-f9175ad6268f",
+        "revision": 1,
+        "status": "todo",
+        "workspaceId": "wks_35118905f34253ec"
+      },
+      {
+        "id": "ed8b1a84-40a9-47a3-9fcb-efc9d5c98d54",
+        "revision": 1,
+        "status": "backlog",
+        "workspaceId": "wks_37d6bd4cab89da78"
+      },
+      {
+        "id": "eabc3d51-508e-4c1d-b10f-37b0d95c1d79",
+        "revision": 4,
+        "status": "done",
+        "workspaceId": "wks_a4e7f5a7a51ef2fc"
+      }
+    ],
+    "projectId": "prj_63a70119e68a1973",
+    "remoteMain": "4bc39c979a8b174cb419254e47ce4d9c9b8d7c70\trefs/heads/main"
+  },
+  "scratch": {
+    "ref": "refs/heads/bench-constraints-20261022150226138-4f8bce-scratch",
+    "expected": "47899f7286df26700d4235800825b2ecbcee12bb",
+    "phase": "deleted"
+  },
+  "availability": [
+    {
+      "key": "sonnet",
+      "available": true
+    },
+    {
+      "key": "gpt",
+      "available": true
+    }
+  ]
+}

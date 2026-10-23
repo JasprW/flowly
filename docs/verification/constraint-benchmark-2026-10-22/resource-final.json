@@ -1,0 +1,55 @@
+{
+  "owned": [
+    {
+      "key": "sonnet",
+      "cardId": "49cf0ba8-58ad-48ea-8f35-0730e177c647",
+      "workspaceId": "wks_4fd00dbd5ed503bb",
+      "id": null,
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-20261022145725522-df4cdb-sonnet",
+      "branch": "bench-constraints-20261022145725522-df4cdb-sonnet",
+      "directoryAbsent": true,
+      "cleaned": true
+    },
+    {
+      "key": "gpt",
+      "cardId": "beb2cc41-924c-4586-89c3-dae56e241c7f",
+      "workspaceId": "wks_30746d2c00320839",
+      "id": null,
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-20261022145725522-df4cdb-gpt",
+      "branch": "bench-constraints-20261022145725522-df4cdb-gpt",
+      "directoryAbsent": true,
+      "cleaned": true
+    },
+    {
+      "key": "sonnet",
+      "cardId": "133dea58-d78a-41b4-b3f0-764fc95ebac2",
+      "workspaceId": "wks_93d2103037406a88",
+      "id": "d1ec6025-c302-42e6-819e-1e479b388f17",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-20261022150226138-4f8bce-sonnet",
+      "branch": "bench-constraints-20261022150226138-4f8bce-sonnet",
+      "directoryAbsent": true,
+      "cleaned": true
+    },
+    {
+      "key": "gpt",
+      "cardId": "13878a8f-7851-4d1d-8cbb-c2ff367bfbd0",
+      "workspaceId": "wks_957507a85b0966b3",
+      "id": "44f67118-24ed-4f2f-9648-6730bb49c1df",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-20261022150226138-4f8bce-gpt",
+      "branch": "bench-constraints-20261022150226138-4f8bce-gpt",
+      "directoryAbsent": true,
+      "cleaned": true
+    },
+    {
+      "key": "cleanup",
+      "cardId": "2cbb6936-20fb-4cce-94c8-54a2636c6dec",
+      "workspaceId": "wks_dcfca50d9e400c91",
+      "id": null,
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-cleanup-20261022151901098-owned",
+      "branch": "bench-constraints-cleanup-20261022151901098-owned",
+      "directoryAbsent": true,
+      "cleaned": true
+    }
+  ],
+  "allOwnedDirectoriesAbsent": true
+}

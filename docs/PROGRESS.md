@@ -28,6 +28,14 @@ Spec: [IDEAS-SPEC §3.1](IDEAS-SPEC.md). User request: agents manage their card'
 - [x] Luna live CLI supplement: propose → multi-field edit → dismiss → refused dismissed edit → remove, exact replay / `REQUEST_REUSED`, and unchanged status/revision all passed. Temporary ideas/snapshots and the owned test session were removed; fresh native lookup and card session list confirm cleanup. Visual desktop/compact checks unrun (no client change); no commit/push requested.
 - [x] Astra review (user-requested replacement after Fable quota/balance failures) found P2 proposal replay losing `ideaId` after removal and P3 Activity localization omissions. Both fixed: persist optional receipt `ideaId` with legacy fallback; map `idea_edited` / `idea_removed` through `msg()` and all nine catalogs. Pre-fix regression failed as expected; post-fix focused 97 PASS, independent Luna typecheck/full suite 110 files / 938 PASS and 18 runtime translations PASS. Reloaded plugin's real MCP propose → remove → replay returns the original ID/receipt without resurrecting the idea or changing task state/revision. Test idea/session cleaned up. [Original review](verification/idea-tools-2026-10-22-astra.md), [fix evidence](verification/idea-tools-2026-10-22-fixes.md). Desktop/compact rendering unrun; no new tour/tip/What's new (bug fixes only).
 
+## Constraint benchmark — design checkpoint, 2026-10-22
+
+- [x] [CONSTRAINT-BENCHMARK-SPEC](CONSTRAINT-BENCHMARK-SPEC.md), draft revision 2: after [Fable review and primary-agent verification](verification/constraint-benchmark-design-2026-10-22/fable-review.md), current scope is an independent grader + B01 quick (three file/verification/PR turns, Sonnet and GPT). B02–B04, compare and automatic resume are deferred.
+- [x] Separate proactive and final verdicts; define expected refusal, equivalent-input SHA staleness, state-based turn prerequisites and exit-code precedence. Preserve test-stage requirements and all known failures; earlier scoring failures do not automatically suppress T3.
+- [x] Define server receipt/artifact facts, nextMoves offered=0 versus omission and uncertain call correlation, actual execution evidence, shared Git common-dir ownership, cleanup permission preflight and independent cleanup retry. Audit v2 alone cannot score all six obligations.
+- [x] Historical design checkpoint: implementation and model runs had not started at this revision. Fable r2 rereview and the later implementation/live results are recorded below and in the linked verification reports; this checkpoint alone is not execution evidence. No product UI/onboarding change.
+
+
 ## Turn checklist and audit calibration — 2026-10-22
 
 Spec first: [TURN-CHECKLIST-SPEC](TURN-CHECKLIST-SPEC.md). User authorized the minimal combined recommendations 1+3 after calibrating the audit; no hooks.
@@ -837,3 +845,16 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - PASS: focused checks (3 files / 59 tests), `npm run typecheck`, `npm test` (109 files / 932 tests), plugin reload. Verification directories are excluded from product TS/Vitest discovery so third-party research fixtures are preserved without entering product checks.
 - Live PASS after the fix: fresh Sonnet and GPT sessions received only “创建 PR 并合入”, merged PR #3/#4, atomically registered the PR via outputs and delivered again. First-round private-metadata failures are retained. Evidence: [verification/delivery-constraints-2026-10-22.md](verification/delivery-constraints-2026-10-22.md). Four cards/worktrees and five test sessions are cleaned; remote fixture branches removed. UNRUN: deleting four local Tinylink test refs requires filesystem access outside the task root; sandbox refused and escalation did not complete. The user asked to retain the private GitHub repository and PR history for reuse.
 - Onboarding: no new UI, setting or entry point; existing Inputs and outputs and Workpad guidance covers the behavior. No tour, tip or What's new change.
+
+## 2026-10-22 Constraint benchmark（卡片“流程约束不足”）
+
+- 实现 `benchmarks/constraints/` 的独立 grader 与 B01 quick `run / grade / cleanup`；补清只读 receipt 来源、nextMoves 主动/最终归属，保留 test 阶段与事实前置条件，不加 hooks。来源缺失/冲突不猜；独立 FAIL 不被 UNKNOWN 覆盖。
+- 最终聚焦检查 PASS：54 主项 + 3 Luna 风险项 = 57。独立 Luna 验证了前一版本 56/56；GPT Astra 按用户指定完成实现审查并关闭阻塞。类型检查 PASS。工具/文档变更，无产品 reload/UI/onboarding 变更。
+- 真实 quick：GPT 三回合、fixture PR #5 合入与 output 登记已观测；Sonnet weekly quota INVALID，双模型最终 UNKNOWN/exit 2，不能称全部通过。原始失败、补采及版本化重评保留；不重跑模型改成绩。
+- 两次 quick 的专属资源与一次无模型 dirty-worktree 清理 smoke 均收尾通过，原有 Tinylink/旧 refs/私有仓库历史保留；审查/验证会话已归档。详见 [实现与验证报告](verification/constraint-benchmark-2026-10-22/implementation-report.md)。
+
+## 2026-10-23 Benchmark scope 历史同步修正
+
+- grader 1.0.1：每case启动会话前冻结fixture main，评分和清理共用scope图/路径/tree审计。已批准历史的原样导入可通过，额外新提交、dirty、模式变化、改后还原和merge resolution仍拒绝；缺证据UNKNOWN，不按任意最终父提交放行。
+- 保存证据离线回归：77/77 PASS。独立重评只将GPT T3的scope误FAIL改为PASS，其他五回合成绩不变，整体仍FAIL/exit1。旧run 56个文件hash保持，未跑模型、未创建原生fixture、未改旧成绩；临时Git测试目录已清理。
+- 未重跑新Luna/模型会话，遵循本次“不重跑模型”；复用保存的Luna风险用例。无产品API/UI改动，无需reload或onboarding更新。证据见 [scope修正报告](verification/constraint-benchmark-scope-2026-10-23/report.md)。

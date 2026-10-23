@@ -1,0 +1,53 @@
+{
+  "state": "PASS",
+  "rows": [
+    {
+      "id": "814310dd-e38c-438f-9895-56322cd8f3fc",
+      "model": "claude-fable-5-1",
+      "mode": "bypassPermissions",
+      "thinking": "high",
+      "archived": true,
+      "pass": true
+    },
+    {
+      "id": "5e6e85cc-fd09-472c-86f0-3b667476ef0f",
+      "model": "gpt-6-astra",
+      "mode": "full-access",
+      "thinking": "high",
+      "archived": true,
+      "pass": true
+    },
+    {
+      "id": "52d01379-838b-450f-b87d-83853e935ffa",
+      "model": "gpt-6-luna",
+      "mode": "full-access",
+      "thinking": "high",
+      "archived": true,
+      "pass": true
+    },
+    {
+      "id": "8203ee93-34d2-4eab-8994-3ac3778023a5",
+      "model": "gpt-6-luna",
+      "mode": "full-access",
+      "thinking": "high",
+      "archived": true,
+      "pass": true
+    },
+    {
+      "id": "d1ec6025-c302-42e6-819e-1e479b388f17",
+      "model": "claude-sonnet-5-5",
+      "mode": "bypassPermissions",
+      "thinking": "medium",
+      "archived": true,
+      "pass": true
+    },
+    {
+      "id": "44f67118-24ed-4f2f-9648-6730bb49c1df",
+      "model": "gpt-6-luna",
+      "mode": "full-access",
+      "thinking": "medium",
+      "archived": true,
+      "pass": true
+    }
+  ]
+}

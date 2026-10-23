@@ -1,0 +1,823 @@
+{
+  "taskId": "08a37039-643c-4354-9062-0fefdf2eec21",
+  "sessionId": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f",
+  "base": "a7f4819d407e20fa6b2a0b6475e91b5f5301763e",
+  "method": "isolated index from origin/main; whole owned paths plus benchmark-only sections in two shared documents",
+  "priorOwnership": [
+    "docs/verification/constraint-benchmark-2026-10-22/ownership.md",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/ownership.md"
+  ],
+  "ownedFiles": {
+    "benchmarks/constraints/README.md": "88dea02510a90645c3e3880277c26e42084d1b9a5e27f3fd5831a77f0c8cabe4",
+    "benchmarks/constraints/cases.json": "0d056c20cb4f9b7eb38dfd7335982367472d981e986a02664baee40b28c75ae3",
+    "benchmarks/constraints/facts.mjs": "e6e22344908dcb60f918ae6db7e33debd83a074bd437550927496f363369c927",
+    "benchmarks/constraints/grade.checks.mjs": "471fe6bb404cacb706fad857e01b986d85f567dcd10954c6264001d71858661b",
+    "benchmarks/constraints/grade.mjs": "6aafad6fb6c0c6eba582269ac9ac244a3a2475496e095b8ed932a8489f22b325",
+    "benchmarks/constraints/io.mjs": "54f6420ecaf56c9336fba58c627342df7579d3304a8c2107da1894817c0ae520",
+    "benchmarks/constraints/run.mjs": "d6c246a347b29795bb94d6916818faeceda09a819e16fdd58092be2e7abd0b43",
+    "benchmarks/constraints/runtime.mjs": "be5b8039d992a1eb6687bf1cbaa23d439bef9888e3f571acbab56ff913576c15",
+    "benchmarks/constraints/scope.checks.mjs": "c91f160482b6d8443bd99c987f5f0d396f1053ca2ff0356893e9a0094ed0cbbb",
+    "benchmarks/constraints/scope.mjs": "5d211260338fd0c5f5724a8c7fa412ac29ae4668cf95bc0b6a6b66f1d2a14d9b",
+    "docs/CONSTRAINT-BENCHMARK-SPEC.md": "9f0b07aec43a63214c754a0e5a3701d60e16ec7c6f12a2e4bb51d19853622624",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/cleanup.json": "2920cacd9e2f07692655acdbd1c5646ab48f8b522a1131380e2b99a17d470a1a",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/facts.json": "c26f051fd5840e33ff521c29cf39079f14c3a2f50d95d663ee693cfd822df33f",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/initial-cleanup.json": "c2a3a60e55e595f2ed3aee2e9df74102854d9b9891613e26aae3a4829048052c",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/initial-report.md": "ba2ab07d5c1e92ca7e675cba441039bef06e8385a5d14280eabb307bb868ebd5",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/manifest.json": "63f6be22b2633be8b07adcd09b56b31a9a801cecfb6055c25a063da85bec1d86",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/ownership.json": "8c233f939141613bf3b0c8ecb464310812384c98f964fd12ed01c0ad757529c7",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/report-2a7d39260dcf.md": "ed9283e6cb7ea62cb06d09ebec114d5bca17a0ccd2282b96099b04918aebdc5b",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/report.md": "ed9283e6cb7ea62cb06d09ebec114d5bca17a0ccd2282b96099b04918aebdc5b",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/verdicts-2a7d39260dcf.json": "90231403d224c1930860d9e3886e04762bb733f75bda80f0631f691b122829ca",
+    "docs/verification/constraint-benchmark/20261022145725522-df4cdb/verdicts.json": "90231403d224c1930860d9e3886e04762bb733f75bda80f0631f691b122829ca",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/cleanup.json": "403645c4dd5e704aefcdca36f15db291912b0e5323ce8bf92b6494a5cf736c6e",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/facts.json": "12cbeaea356ed323138d11d631a2156d4bc6b34302f63413fa747cfcba320c8f",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/fixtures/gpt/check.mjs": "ca5baa9b6d591bb1b52eeb77446db483372600ec2e3d71d21b89ce0289450316",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/fixtures/sonnet/check.mjs": "7e61645b17200d078e62c7dbdc64d1469389cca7286b8134bbd8d6c28d0e323c",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/initial-cleanup.json": "403645c4dd5e704aefcdca36f15db291912b0e5323ce8bf92b6494a5cf736c6e",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/initial-facts.json": "6ceb7e325d13d7c4fd9fbc1ff381231c8caa03cddc98b07fed2867d6e6610976",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/initial-report.md": "0427c22c3a4769633133d7da293b5b77ab178bbb6cb4805f8de7c466ba890fa7",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/initial-verdicts.json": "c06d01395958d255bb15e4cb2d9fd8c701cee7c878041a334c26be496353caae",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/manifest.json": "c2a5e47382dbf2ac8e20d3508a6c57910d025a33a705fe812f3205268986144f",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/ownership.json": "63efcfa7b60ee9823bd959daa3f1ad39bac72911a86a4565f8c5c957acf2c7ce",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/report-12363fff52ce.md": "0427c22c3a4769633133d7da293b5b77ab178bbb6cb4805f8de7c466ba890fa7",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/report-233102d8c2bf-9eeb35be1f6c.md": "d374f73eef7c127e1e46131f7ecfdc27cac7219c561b2949c243a63658b1dc5d",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/report-d6e579baa12d-9eeb35be1f6c.md": "172ce3757343309353f4e4cf6e435420097268c1cef585dce950fc0e2ab2b452",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/report-d6e579baa12d-d19a96644737.md": "358fc371ac316e6ae9ff2cd24536fb9167225bf37263003cd6d03bfb8a9ad363",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/report.md": "d374f73eef7c127e1e46131f7ecfdc27cac7219c561b2949c243a63658b1dc5d",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/supplemented-facts-2af0623e14ec.json": "bc0397f8a3ba4280fdcd5c4b53675d3b890240d6f2ca75f36106192d1f260cf1",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/supplemented-facts-b7dd660852c3.json": "12cbeaea356ed323138d11d631a2156d4bc6b34302f63413fa747cfcba320c8f",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/supplemented-facts.json": "12cbeaea356ed323138d11d631a2156d4bc6b34302f63413fa747cfcba320c8f",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/verdicts-12363fff52ce.json": "c06d01395958d255bb15e4cb2d9fd8c701cee7c878041a334c26be496353caae",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/verdicts-233102d8c2bf-9eeb35be1f6c.json": "557e043f099a758d39c531e8e1e8e575359ccc4d10a2c04567bbfdf9fb5bb2af",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/verdicts-d6e579baa12d-9eeb35be1f6c.json": "527800cd33eee3a793a52a7ffa657d9a621ebfbd9b3d96b34a3e3fb1add4e8a4",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/verdicts-d6e579baa12d-d19a96644737.json": "6edf1b039f715100e8f7fe3c23634c8b3c84005041b1b21eefb87c9ad9856915",
+    "docs/verification/constraint-benchmark/20261022150226138-4f8bce/verdicts.json": "557e043f099a758d39c531e8e1e8e575359ccc4d10a2c04567bbfdf9fb5bb2af",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/cleanup.json": "695d5f0192a8d8819e9ce02e60a9ce2350f218ac411da1be7ec7fc8560974054",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/facts.json": "1a8f544702a711ce885e91e6923702da2f7d83780ded86b44d77f695bd18e5cd",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/fixtures/gpt/check.mjs": "0da24a0700f3abb5e3cccc4afbf9411a5f7955b0a326169b9ae6aee95dcd3ba6",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/fixtures/sonnet/check.mjs": "c72adf50a30ec7662e3a9a282bad2d22c57520a6f6df5c046cd78ce8ef901fad",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/initial-cleanup.json": "5b7be4386bae65e11334e8002903139eb6c0ac7115dd4d175572c9da04eb55f1",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/initial-facts.json": "2299566462f750123634aea66a3efbcdbaf54f3b602aa6a029d44b995002ac44",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/initial-report.md": "a792cd790ae5c880db300a6756feadafab09aa4623dae583cbd848176568cc18",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/initial-verdicts.json": "50e1731362a034ada6dc6610d54ccc65f48af42ddbd23fd0742ae33e8719cef5",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/manifest.json": "607cefd7e9f20c257a1a2aacf7410ebc07324bd73e4e9733e8f01a36bf773d81",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-cleanup-review.json": "e6e06f879f8edd517695501e4cce2bd2b45308a9c57e741104e325dfbf6cac2a",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-cleanup.mjs": "4153d3c65a16b2175568809acf866a1a8258e999c84524a58d6e825a5af757ef",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-preflight.json": "2c4acebc6ab7efc872247b9ba9d970a7e2772f0aef8150a3e9420ac9ba25bad4",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-preservation-baseline.json": "77c191a03c64fc4eafc050750cd1887db8ff1be2edf8c09662bbe1cae753c7f2",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-report.md": "ca67df6c1542fd4e1d55f6fbb503e27181dab508ba2396eb49dded0fd87279e9",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-verification.json": "0d1fe9b271272b2578d22250ee53e3ba4706928ec078770364d5e5067fa9ac5d",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-verify.mjs": "0927727061cab9c3d6c5a702e117a1624ace89e970595a2223ba53821499e42f",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/ownership.json": "40271c5b16196832375ed86c143932f9225cdba8ba416f2d66357754f8948435",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/report-233102d8c2bf-0a124fe0037d.md": "aca280e78b546d8095fcaa5fd244130b3e696e29d544227963b7f310b18528fa",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/report-233102d8c2bf-e3700a4ef04f.md": "a792cd790ae5c880db300a6756feadafab09aa4623dae583cbd848176568cc18",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/report.md": "aca280e78b546d8095fcaa5fd244130b3e696e29d544227963b7f310b18528fa",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/verdicts-233102d8c2bf-0a124fe0037d.json": "25f801f256136a638c84f83ecada8d7e245e62a0d0ffebd697803c6f079cafe7",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/verdicts-233102d8c2bf-e3700a4ef04f.json": "50e1731362a034ada6dc6610d54ccc65f48af42ddbd23fd0742ae33e8719cef5",
+    "docs/verification/constraint-benchmark/20261023020035204-8b1863/verdicts.json": "25f801f256136a638c84f83ecada8d7e245e62a0d0ffebd697803c6f079cafe7",
+    "docs/verification/constraint-benchmark-2026-10-22/agents-final.json": "eddf80f6bfbdb9de1c22dc806f2f37cc34b0cbc6dddcb9aae2d0bf58bf75fa50",
+    "docs/verification/constraint-benchmark-2026-10-22/astra-final-review.md": "26fda00b5af2a8f15ee902eee70f80f006d3d9bc09d612b72a5610c4ba9267bd",
+    "docs/verification/constraint-benchmark-2026-10-22/cleanup-smoke-ownership.json": "55dc2531580cc0fb5da5f768bb84cc8e871a1270268fcb1c1e2042e3c28c8871",
+    "docs/verification/constraint-benchmark-2026-10-22/cleanup-smoke-result.json": "feb763e4d2a888654e74b0727a2447448366226d9faa259a8b625e0a1e5d93b6",
+    "docs/verification/constraint-benchmark-2026-10-22/cleanup-smoke.mjs": "1699ef9ab072c528b644b6861a7f6ecfac77001fe7199cc228d52b2d2145865f",
+    "docs/verification/constraint-benchmark-2026-10-22/fable-unrun.json": "d04572ac89c4a468d5f060134180d5899ffe5b2067406a99dd438de6188c39be",
+    "docs/verification/constraint-benchmark-2026-10-22/final-check.mjs": "f43be2e3cd2d9d835c192f651e9ba3272773d192313f6215cf2f92e7343fa909",
+    "docs/verification/constraint-benchmark-2026-10-22/final-checks.json": "4351a29db1124e2fa9056f5f09ba0ab2ac2bb369fc6743702d213549791f1b83",
+    "docs/verification/constraint-benchmark-2026-10-22/final-checks.txt": "420e91db09099a610f7db953492a6d75ad43c026c3f8043a65bf05b01a93b2d3",
+    "docs/verification/constraint-benchmark-2026-10-22/implementation-report.md": "82242ab2f77f22052e8641b076218a52f0a6037c3a3c374c0bfcb0888f356a99",
+    "docs/verification/constraint-benchmark-2026-10-22/local-config.json": "417c4349b03fe75d378bc0ee1a70028556b0c0d0e6a707bd841eb9d83409f3e3",
+    "docs/verification/constraint-benchmark-2026-10-22/luna-evidence.json": "ef5cfc783e3a5dc5d4679624167ae28b0edd0455499b111ccf2ddfcc2774a589",
+    "docs/verification/constraint-benchmark-2026-10-22/luna-final-evidence.json": "8422708a2a46ccf616e778229a33479dcffd52bae5be68c7122c22ef76bd2939",
+    "docs/verification/constraint-benchmark-2026-10-22/luna-final.md": "9253d88cd14e87882e32b1e96726aca9238c20861aed98f8982bd78bd8ef2b56",
+    "docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs": "aeb9b604eeb63aee9b91e11d7574fd99fb66e58cec5269803153e9c7a55a0af3",
+    "docs/verification/constraint-benchmark-2026-10-22/luna-verification.md": "65df7555e4808843e1c9f60f18b793c3d13a8510aea7eb87b4bcf89c6ecb6792",
+    "docs/verification/constraint-benchmark-2026-10-22/ownership.md": "33319d71fe1d3c3cc8186917d6953bdad52fc0676c19b66719b5d62b09bb530e",
+    "docs/verification/constraint-benchmark-2026-10-22/resource-final.json": "d24924f3e40cc1d5939363bbcfefdf0839a189ab0022e52fa51f543bff108570",
+    "docs/verification/constraint-benchmark-2026-10-22/shared-workspace-check.json": "c10eb468739b5473f483ba377322b721abf385f8ef76280f75a47aa026e6228f",
+    "docs/verification/constraint-benchmark-2026-10-22/supplement.mjs": "b7dd660852c3217f8dd9d77ed96f13cf96d3a370abc453d0d7a65d75aaa75049",
+    "docs/verification/constraint-benchmark-2026-10-22/verify-agents.mjs": "71973a3094e477d7e15ed4a7169e3cd79ca12ed9236cd25c0e762328c0745c72",
+    "docs/verification/constraint-benchmark-design-2026-10-22/fable-rereview-r2.md": "c52311c9021cad96841e63c045c2a8b297345b53b8410bb70e6f3c03b0c3ca1a",
+    "docs/verification/constraint-benchmark-design-2026-10-22/fable-review.md": "746c212f5a7b655a7454221880ddf0ef3c430364192613ae03249fa2a6fa8aed",
+    "docs/verification/constraint-benchmark-design-2026-10-22/rereview-session.json": "b6d4299d54c5beaf682158d0dcb79669bf79d73cabe6faf898af747e5e85cc80",
+    "docs/verification/constraint-benchmark-design-2026-10-22/rereviewed-draft-r2.md": "f2e1465db692eb029487763a54fff30119cff6b8ddf68140437f0cabe88d7d83",
+    "docs/verification/constraint-benchmark-design-2026-10-22/review-session.json": "8a3f927f588dc4837c9069577ffc1c9ca7b8f4688ce340ee2da6448760aca510",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/checks-75.txt": "8e7a92c5f0d4134e09d00ea2be3e1cbdefae5d1a074e464641fd9da23ca2b477",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/checks-76.txt": "462ef1c94cbfd0adedda4cbdfafa17a661d9913ea94182286d1d86c1fdb6ca18",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/checks-metadata.json": "74b37348bd630d0e4c705b52fa3b63b2b0ff8abeeb36d5b7ae869596c2503534",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/checks-output.txt": "03f117b17a9019eb53988c5e272d37b693116becfc51e0bc5b9667175f11560e",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/ownership.md": "78971b4a1ffd12e7b53f6d8b4f686741bc610998387465d638a6c00eda890202",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/preservation-before.json": "c77177032012d0f39a1205ea9268874c79f89922a49b8488a5e7b401cbd66657",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/preservation-result.json": "07efc7dcce3bc161db98fd239970efc7064dd8336ccde8536666144ab5f95ec7",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/project-saved-evidence.mjs": "9bf5f6a3bab5c2bc1f4319c69c270889be170c3e4c5ab1c1f67cc8884efdc584",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/regrade-metadata.json": "99d2252432dd47af9b4ccddebadd5c3039f195938b32de503acab08a70b2de61",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/regrade-saved.mjs": "86f3d166cda1f0c0037da96d815349d3a507f19694bec705e4d8e176d272d85a",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/regraded-report.md": "66941f663c8d1d39dfef651be54822f7b7614c679eb25eb0a38a9c42312bffc7",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/regraded-verdicts.json": "34ef297432b76245348371262d53c136e0b5499c39033eefa80b99f6fe33416b",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/report.md": "46932bb400573a30c378525f0cec3fa1b2cea2deab8d5ec5101378870a52e423",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/saved-scope.json": "0fb390a5eac5690d960048618f0771d75b5fb1c8d8980e80b4acf87e5d442fed",
+    "docs/verification/constraint-benchmark-scope-2026-10-23/saved-scopes.json": "4f70ff62f5e359d89ee05c2e8aeb615568bda686b03f7ef5e1b3e592aded972d"
+  },
+  "mixedBlobs": {
+    "docs/PROGRESS.md": "2b6dfa1da080dc9f25fcbf4146a057147cc79f1dedbe7ca87f3ad1806f9795f4",
+    "docs/SPEC-OUTLINE.md": "8f3485613e59e5ae79009ce081adf6212fb0264ceb59996550d94bb2b1073498"
+  },
+  "nonTargetFiles": {
+    "AGENTS.md": {
+      "hash": "43ef465e2f1ec209e39c68a5308dad5e1444960d2d31636b17e5f49ea696efaf",
+      "mode": 33188
+    },
+    "README.md": {
+      "hash": "94ef0b32562b28359eed3276ef735ad33b8072deb25bfabf9bebd4eaa25a8793",
+      "mode": 33188
+    },
+    "README.zh-CN.md": {
+      "hash": "d6de4409cc8d505141afb4a676021529eab29e8db15d245a92437eb907814cd1",
+      "mode": 33188
+    },
+    "client/board.tsx": {
+      "hash": "6eac8d36c2a02728d2c96a995a91c14c0dc552b6618c9abe03d45f564327d124",
+      "mode": 33188
+    },
+    "client/insights.tsx": {
+      "hash": "cb44f52efc1471f9254df9fd5eb451f0efa871c4f40389651d65d1a14c1bcf01",
+      "mode": 33188
+    },
+    "client/onboarding-logic.test.ts": {
+      "hash": "cf4262669eaf5a7c66bd7c713e4fc3306478406b99c8d3b76eef77cc1fca77c3",
+      "mode": 33188
+    },
+    "client/onboarding-logic.ts": {
+      "hash": "af0910eaf6b534b20edb4ff6c6c10df270db76e20c9c72a6f9d37fb2fe41f713",
+      "mode": 33188
+    },
+    "client/onboarding-state.ts": {
+      "hash": "4424806d072bdc281544b38b3056b063c87281c8dd13fcb5e4fccb3c379125c5",
+      "mode": 33188
+    },
+    "client/queries.ts": {
+      "hash": "1ca027a17c3ff011feb5a79de9022695cb2ec4155705454fb0d057af423cc302",
+      "mode": 33188
+    },
+    "client/session-chips.test.ts": {
+      "hash": "3fc23a445bdf395f17a27da12db8e8e09a424966dd25006a98e484bcdaa7f97f",
+      "mode": 33188
+    },
+    "client/session-link.ts": {
+      "hash": "46fba9cfb178d4ccbe30405be7825605d47ba17b46aa3832d99f5efc619a758d",
+      "mode": 33188
+    },
+    "client/session-markdown.test.ts": {
+      "hash": "72023cc167c18cd6008a1ba669d786c87396cc3ee8d756e87c87c131a76e14b8",
+      "mode": 33188
+    },
+    "client/session-markdown.ts": {
+      "hash": "d072ce0aeb1808e39f9c3d4cf00da9774fcb5cae4e827f70307fc6d1827a0de4",
+      "mode": 33188
+    },
+    "client/settings-pages.tsx": {
+      "hash": "9c8f4c1fb11f17ca4d49ddedb20b0080704a842133f0ee7b7d2b26241234b3c8",
+      "mode": 33188
+    },
+    "client/summary-settings.tsx": {
+      "hash": "f0d5dae1ff7226984f6fb668736ba28a61241724e98267a42338ba0a74369d93",
+      "mode": 33188
+    },
+    "docs/NATIVE-SESSION-SPEC.md": {
+      "hash": "c2aa18dcc33cd205b0030e9ed32eaf50e2baa31004a4ea6ee933eb6eeaa50ba1",
+      "mode": 33188
+    },
+    "docs/ONBOARDING-SPEC.md": {
+      "hash": "3af624791202c21ece5ff96787c8f8822f6de5bace861b935b97eca7a0fa038b",
+      "mode": 33188
+    },
+    "docs/PERFORMANCE-SPEC.md": {
+      "hash": "87ff92d75687269b42bc992f91d34d318089b3f6b3d9e4d6a5b3877a61179086",
+      "mode": 33188
+    },
+    "docs/PROJECT-INSIGHTS-SPEC.md": {
+      "hash": "78302968254bd0de41deddc6b5effef11a85634c744534ae28369d5fcd20a3ec",
+      "mode": 33188
+    },
+    "docs/SESSION-CHIP-SPEC.md": {
+      "hash": "fa06a213cc96e28d0d75e2b2c8854589eb743e8657cea0c031933e2bc95fc756",
+      "mode": 33188
+    },
+    "docs/verification/fixtures/session-chip/session-link.test.ts": {
+      "hash": "0b465638028527c4c62f1c45a628101d3b51efa6fa74ef622b918965706b47ba",
+      "mode": 33188
+    },
+    "index.server.ts": {
+      "hash": "eb435c8e4ce5132af93e6b60650a0c835a5b7bf53a190af18821035532522de1",
+      "mode": 33188
+    },
+    "package-lock.json": {
+      "hash": "55f6ed7484df7da774708921d151c555d8a835fc774a3cb0c79b098f98dc72ca",
+      "mode": 33188
+    },
+    "package.json": {
+      "hash": "f9085bdab7b706e96cc91dc777445006353c28dd611b749df0d33f2e1b51edc2",
+      "mode": 33188
+    },
+    "server/insights.ts": {
+      "hash": "b16297d6afb74e49acbc2738d62ada3e388c31acb5bea7b75da4b9cd58b27ae1",
+      "mode": 33188
+    },
+    "server/progress-rules.test.ts": {
+      "hash": "b8ec06b9f7002a55da55758be12ca09eaa01e9bcdf305e70d5e46faabce14aa1",
+      "mode": 33188
+    },
+    "server/progress-rules.ts": {
+      "hash": "67103e2a468d5a851bd5e7fc99155ecf9c5697fbd95fb63a40f25ca76bd732fa",
+      "mode": 33188
+    },
+    "shared/agent-habits.test.ts": {
+      "hash": "4d56691818f6f5745cfba2277a56c6c20116fbb0103545d37543e812ece56ffe",
+      "mode": 33188
+    },
+    "shared/agent-habits.ts": {
+      "hash": "268015f0c67244d441726307e41364196e502723082301641c02ea84d7188a7d",
+      "mode": 33188
+    },
+    "shared/i18n/de.ts": {
+      "hash": "7be939eea99e8c91e184d42055b604044166583792290ef60b8af472dfa26c95",
+      "mode": 33188
+    },
+    "shared/i18n/es.ts": {
+      "hash": "4fd5819276eb1b9175d026be8f1330aa5c059f1ee00e7df672f0054dc3d998e1",
+      "mode": 33188
+    },
+    "shared/i18n/fr.ts": {
+      "hash": "8a937dc1ee6fb005b0bedffb68131b434b36b3ecb75627783f990008dd164225",
+      "mode": 33188
+    },
+    "shared/i18n/ja.ts": {
+      "hash": "08c4c5a396d1a556c3131f15468d89f7e879647fca57d1f8e59a760f85ec840b",
+      "mode": 33188
+    },
+    "shared/i18n/ko.ts": {
+      "hash": "421f94c1765a13909be67bc0d4d1ce8223e80b8d6dbd25479619ae204e17ba9a",
+      "mode": 33188
+    },
+    "shared/i18n/pt-BR.ts": {
+      "hash": "c91a2e52706f5a840ee38c77b4c64ece2c2375d978713e0af56605e6ef2859e2",
+      "mode": 33188
+    },
+    "shared/i18n/ru.ts": {
+      "hash": "88196547e18fab01dd62ebacef579c5c02227af1f7adcdbcd2a52790c919624f",
+      "mode": 33188
+    },
+    "shared/i18n/zh-CN.ts": {
+      "hash": "4f78153144b58363f87fe708c3a710460ff2e767e0ac0dd49ab88f82cc62f909",
+      "mode": 33188
+    },
+    "shared/i18n/zh-TW.ts": {
+      "hash": "4b62b6878908d20134fb2bfb2359af5123efcf58ab1d74c940a578ea95f14b15",
+      "mode": 33188
+    },
+    "shared/insights.test.ts": {
+      "hash": "0fb4ad56f0d4b34be36adde3f3e10643bcd2d64a08fb87b8e8ba37e7989f3824",
+      "mode": 33188
+    },
+    "shared/insights.ts": {
+      "hash": "5ab6f044c8e957457e5e106d538b3c37c2be76534ea85958dfbfb2baaa78e43d",
+      "mode": 33188
+    },
+    "shared/model.ts": {
+      "hash": "5980dfe95d9979541b2e1e18fb6d251e40777bb76dfc6d74a79a2027910f5b2c",
+      "mode": 33188
+    },
+    "shared/rpc.ts": {
+      "hash": "ef7b6a94a2a1e9fab63905a1987ab45663dd8957e8d6db58c015316dc79a169e",
+      "mode": 33188
+    },
+    "shared/settings.ts": {
+      "hash": "607192327084ed68cd2012ddd9033b872866537d9fc43a937b29ddcb3a0d48e0",
+      "mode": 33188
+    },
+    "client/session-link-query.test.ts": {
+      "hash": "1c38de3ea9dee68fcad4a129cc771956a6cba2bf8a10cb756cc2abeea4ea82e9",
+      "mode": 33188
+    },
+    "client/whats-new-window.tsx": {
+      "hash": "5b9cfc008931db4b95463c222801ff6655b5b375c08415743fb86dd953ebcdf4",
+      "mode": 33188
+    },
+    "client/whats-new.test.ts": {
+      "hash": "0a5fdd134919882b95c63fef911cfd7bf7b6d59b45278ee5d5cec16f91a3faef",
+      "mode": 33188
+    },
+    "client/whats-new.ts": {
+      "hash": "759ea5c5285d8075cb6bfeb5566693fc153a494312dd4bac5c33defb68c395b6",
+      "mode": 33188
+    },
+    "docs/INSIGHTS-REDESIGN-SPEC.md": {
+      "hash": "774db5d50287866627af81606b7252103190a194a8615b7e106fabc0fa5e8b8d",
+      "mode": 33188
+    },
+    "docs/WHATS-NEW-SPEC.md": {
+      "hash": "c39b2130037a42cf9362d3e049c43ed7c1de77be383011a0bbb02a045a4a4250",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-22/README.md": {
+      "hash": "23805c06f8abc78d0f4355b2aae40c0c1b2b61ee5ffb47bd5d716f02e872e580",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-22/device-state.txt": {
+      "hash": "babb81b11a7056fe7093468b544bf3b0bb6585a57f1b337c709c8c9889824c4f",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-22/doctor-stderr.txt": {
+      "hash": "8d82b1790ffc0dc61fc7bf76f26d40ba301600a8078cd7ea3d23ad26d7b781b6",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-22/doctor.json": {
+      "hash": "67ae616e52e5879f8149bb39c86f6484796b85287900c6160901a16db3161296",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-22/help.txt": {
+      "hash": "1c1d15753a9bdc1d86e5785b38548e77f1ce706ebe865042d08338190eb05d19",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/README.md": {
+      "hash": "4ad0f21a5317f89a18371fee403d4427b54842ad7a81638c7cd067c31235e30a",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/connections.txt": {
+      "hash": "f8f595ab6c2f3496d20c5e79d0474e1e281952c0b498fb5f5a550ce6f7cfd16c",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/control.py": {
+      "hash": "e824ab7346ee1671d8c00f962557b7464d508d6c76277704723a456c5ffe99ca",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/current.txt": {
+      "hash": "a14d0d780dc5b3948d6ee4de4ed3355bc791756960c9872a265364d1ef77dca4",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/doctor-stderr.txt": {
+      "hash": "8d82b1790ffc0dc61fc7bf76f26d40ba301600a8078cd7ea3d23ad26d7b781b6",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/doctor.json": {
+      "hash": "30244191050bdb5a1096e083df4794b5354fb0d9e3964c31a702adc05598afb8",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/help.txt": {
+      "hash": "1c1d15753a9bdc1d86e5785b38548e77f1ce706ebe865042d08338190eb05d19",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/initial.txt": {
+      "hash": "92bb59d5a44da504b7ef5be5f9e78293b0c413d8ebd52b2d00c4fcd68d97ce56",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/lock.txt": {
+      "hash": "9f5b45fba18f0c0d56ce1f6a6b693fb5314b5ebb88a06d0942961e441fec4868",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/menu.txt": {
+      "hash": "bc6b90bf82b87e1940434f9f5b4979b9c5a396854faa3925978d0a4e3c8e2557",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/navigation.txt": {
+      "hash": "e59c952cae95668764aca3ef4f0d6b6411c85fe75c22257a83dfae072c65d5c9",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/paseo-restored.txt": {
+      "hash": "fe6706b6332e261a4ea458623abdf4befc2a0b198dc74b724083c7bc3676655b",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/pin-screen.txt": {
+      "hash": "3eb4d0d19b53976fd758ed07abdd567a1dc61f4f964a4e610e11dfe1314ffa23",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/settings-after-back.txt": {
+      "hash": "7889b3ececcb27659724492488a52b58f94bef9adac478ed5fe6f1332f12f6c5",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/settings-before-tap.txt": {
+      "hash": "0d98e8fe65ac9ce03bddca7d80c06a537e2bc0ba099073ee1efc53c18a7b1b21",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/settings.txt": {
+      "hash": "5754d3c26c88713a30d4ab889be0ce75322428b946c5aeecc2429eabc1cdfd10",
+      "mode": 33188
+    },
+    "docs/verification/artemis-2026-10-23/unlocked.txt": {
+      "hash": "45e9cd8b765599625ab7d68464d180d5c77948744b210a8fee130f39bfa793ef",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/README.md": {
+      "hash": "b2a80987aa0a7d6f24837c407483a2a2d6268aae978b9f9e11b3e7ffcaaec7db",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/after-cold-target.txt": {
+      "hash": "c646dfc96cc4c8ad61ff6c6748cc6d9f01379d61901e53aa76aea080e1992380",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/after-cold-timing.json": {
+      "hash": "16a32e5fe4bbbf024264eeb81f4381b58e3d0688581e07a3737d3c5f921aab8c",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/after-warm-1-target.txt": {
+      "hash": "441c4327e36b4a4599080b053aef5e2163c352c8e35b2210946175261ed240cd",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/after-warm-1-timing.json": {
+      "hash": "609792b32d7a340e4e4a5bcfc5ab91adad75e635f4bf1accc4cd9bc376046323",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/after-warm-2-target.txt": {
+      "hash": "a279f113d94473462455e17a56600da5caa81df7a1fecc274a7eb70ee93ff595",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/after-warm-2-timing.json": {
+      "hash": "c4b2e44521201c93d4a714349ca3f90819cb8ca38df30bcf1ae06afd6ad5ff13",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/android-perf.json": {
+      "hash": "19d2fc2e4a4a65151f8a12948c9dd0670baa556d72b7cbc9a25f55180fd91da5",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/baseline-last.txt": {
+      "hash": "3b842ee502d76035e5057dfba3d131bf838eef9f54e0caa0f899cbb044162b4d",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/baseline-timing.json": {
+      "hash": "e161678da62fddd5883e9047dd8fdb72476aa8e85e70915f158b2c3e52939d72",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/README.md": {
+      "hash": "f93c2e88a2d19b73c30d87154484de229b7aa183df19585ca98723f0d5891e69",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/after-hashes.json": {
+      "hash": "1829158de71629dc8ebaafbf1a828f9c4c248e351536e8573aace7eae94acde2",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/android-perf-after.json": {
+      "hash": "7d3fd3b1df5c5bca741a80466005ce14e14e8b681d5257e592f267bc02b2c1ef",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/before-hashes.json": {
+      "hash": "399fb9a636d947c25859c86d3d30c90484917174bb4e02e924d5f39d89b75229",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/board.tsx.before.txt": {
+      "hash": "5f2ee5fe044a839332c63d6bf07a7b16211951f4f2067dbeccef0e89cd407dd1",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/board.tsx.owned.diff": {
+      "hash": "fd75e21e1437dcee4ca804616314d47a99ad4582325865835aaebf633c1ef33b",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/cleanup-check.mjs": {
+      "hash": "26bf36fb2e24914299111a19411a957b0d5dc9fa8912988927a9bfa4ba58d13b",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/cleanup.json": {
+      "hash": "b63a727899ba31e09983a71ae2c45f78b538125138094cd06831ade43252fef6",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/client-relaunch.txt": {
+      "hash": "64f6ac57b870d0ebc5d2d6c885fe34e7dafffb056682f53ce551b51274a4e4ee",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/luna-cleanup-delete.json": {
+      "hash": "881f265ec9098c381acc9fe3e7804840df2258669682236e698b149db7a15af1",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/luna-head.txt": {
+      "hash": "867d0113adf76f97990bc7202cff6fdebc9663ae9e7bb3acbdb416faa103fe76",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/luna-report.md": {
+      "hash": "08a0ca2cc4d147fad71a19c797d358f00a62e95105ae60dd78236921da47f8f1",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/luna-sha256.txt": {
+      "hash": "a8a86ebc63d759afda363b08683e02390c8b950aa0eb029e30ed4ac0e596b994",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/luna-worktree-status.txt": {
+      "hash": "89c2a6fb8caa76c7d0f9b8b6c14aaab92452e819b6931903f59d90690b33abff",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/native-before.txt": {
+      "hash": "adbcf46ad43ffc9017da1fd34033554883dbfd36453deb81ce465d6cbf2107e2",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/queries.ts.before.txt": {
+      "hash": "65bda2e0dbc32f3465c6709a5659cfde59bd3c5dcd4be29739698b295e8697d9",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/queries.ts.owned.diff": {
+      "hash": "ca1dbfe91c90c872ffe5698746d63b47e512ca880a3e717b71ac40cecd37bb8f",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/relaunch-state.txt": {
+      "hash": "c237fb866cc71474dfb886f6c838f96968c43c38b61c090e5905b0b22bd8fe7f",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/return-native-2.txt": {
+      "hash": "ae85f8435eff7786ef3dfc5035ca00b98ec8533328d2975ccf1c45bcbdf8cc97",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/return-native-cold.txt": {
+      "hash": "ae85f8435eff7786ef3dfc5035ca00b98ec8533328d2975ccf1c45bcbdf8cc97",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/fix/test-session.json": {
+      "hash": "748137b64d3518ddd8d94f37b0cbc0024396f6e1ad07af285e0b169847c78d9d",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/host-probe.mjs": {
+      "hash": "2bd523023f8216e24fea31e0c147711a59497fe2c7a6ea7f4ef34bf9e6c1594c",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/host-read-sizes.json": {
+      "hash": "667b74b502575c04737888037e83988a08d7f594307e18bbf05bd341c131c88c",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/logged-target.txt": {
+      "hash": "89db148b9a1142d668de7fdb795c7ff47c626db4bea8182239f43728c8b506ca",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/logged-timing.json": {
+      "hash": "de084e8631fb0d34f44a3f44ab215f038fe2344a1daa0f80ce2a4a954072a139",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/measure.py": {
+      "hash": "914eaa3c91fce776b8fbb82775f93052f42b6cc61370a4c7e9777f8e8497ad6a",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/native-now.txt": {
+      "hash": "cbc31d3793decd0727ba9c4510fde047b9c956a6bd1dd90c2fce3544075ff99f",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/ordinary-target.txt": {
+      "hash": "2de22f60316ccfff973bd9217fcfccb3be2d90a535421a3934b117c4566344be",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/ordinary-timing.json": {
+      "hash": "4e0e6c7885156046d39eaa721c33f3c3ef52900a65729f3ea2d166e1b94585bf",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/plugin-list.json": {
+      "hash": "cc3ee3d543d940831448ba711d4c7c1315178942f11284dfe1ba2ee80195a74b",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/probe.py": {
+      "hash": "aa458640904ba2021fba3fcb9629bd20e9757910f5b048711350ecbaaeacf85a",
+      "mode": 33188
+    },
+    "docs/verification/chip-latency-2026-10-23/timing-original.json": {
+      "hash": "357da8ecd5ef0fa57efc6dc300dc7617f66a1cd98ea5ca7bfff4f1674ba0031f",
+      "mode": 33188
+    },
+    "docs/verification/fixtures/insights/handcount.mjs": {
+      "hash": "0be62ba04e9c592ed2df3ce81d571a1a63a73392a3e553a87da12fe8b1154ed5",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/REPORT.md": {
+      "hash": "386ef21ce7bceb840d62548011593cbd19e80cedb3c0e15d0aa93d80523968ed",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/capture-checks.json": {
+      "hash": "938892a6d8b380952e6c472b4434923bb85640e91a2d79e24e24952cf42d0c0d",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/capture.mjs": {
+      "hash": "47c99233a0fa0c6a2c34d381a1df4d1a70f31d2172b819de922b3b9e79e5cd57",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/discovered-catalog.json": {
+      "hash": "7f2644bfb4961c68eba5119923fb13be9a2ccff706a056a0d1af9c2499358ffc",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/evidence-manifest.json": {
+      "hash": "e76b22c18d034f5011069a1cc736be84aba77844947927132ad5d77bf362378b",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/initial-context.json": {
+      "hash": "9bdbf3ffbdde75cba6a8382f91de7e30954a1161ac12e024f55b9ab69f3687e2",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/initial-instructions.txt": {
+      "hash": "7c086c56bfff9fd4b720b12c4097af32340db07450534f6cac5cf702337745d7",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/mcp-tools.json": {
+      "hash": "6f3dba14b1c5a6772c84ba641a273107b516521d929cc5aa93aca225845ded1e",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/measure.py": {
+      "hash": "d958696d9bf0bcb7b3a97d1615af3d77300e905318bfa71c4232723cfb63ee78",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/measurements.json": {
+      "hash": "60748c370f94b37828759710fa3f2d5d88a60a5f52f91cd833169f26c2ec7cff",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/memory-injection.txt": {
+      "hash": "b78fbe8652f90b7021de32fee0481b78ae39f27d921cb17c8dec8576d175815f",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/setup-context.json": {
+      "hash": "84003c4aaa4a797185bfb3a2f76f66025e1c8a412bf3518557042d21875454cd",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/skill.txt": {
+      "hash": "b2c9ac048406363772bdd8217b71f35025286f51dd63a6bb10c394d9c0c06be8",
+      "mode": 33188
+    },
+    "docs/verification/flowly-harness-cost-2026-10-23/task-injection.txt": {
+      "hash": "f5d17479ec15ada8568953c74037b616019ecab643deb152f8d42fc8d34dee5b",
+      "mode": 33188
+    },
+    "docs/verification/insights-redesign-2026-10-22.md": {
+      "hash": "40c139c75557279da4a918eeb26575ab1c79fd177089ca50b07b843f4b252e4b",
+      "mode": 33188
+    },
+    "docs/verification/insights-redesign-before-2026-10-22.png": {
+      "hash": "117f61cff8b84678698e0a6a308b22f99403f9c93b02cb2c793610105bab986a",
+      "mode": 33188
+    },
+    "docs/verification/insights-redesign-v1-withdrawn-2026-10-22.png": {
+      "hash": "2431499db84ceeb5e4e07286c9c46a5ce647cea9210b0db7081a832e86d1f2ad",
+      "mode": 33188
+    },
+    "docs/verification/insights-redesign-v2-desktop-dark-2026-10-22.png": {
+      "hash": "4ce45665df431cfafd749ea5520c08f4354d372f9662a956fd020d87984431bb",
+      "mode": 33188
+    },
+    "docs/verification/insights-redesign-v2-desktop-light-2026-10-22.png": {
+      "hash": "50cae612f4e5705c7e095814270d5b7e018f50654a523a9d08d44a990389af85",
+      "mode": 33188
+    },
+    "docs/verification/insights-redesign-v2-narrow-2026-10-22.png": {
+      "hash": "dde9cda029ed8b2e478fcec3ddd388bb30c9e1616286e77db7d84a395e904e03",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/README.md": {
+      "hash": "20ba5737044233f7737dc47105ae7916ee51fcce7076d3e9867e9fb6788ac207",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/after-hashes.json": {
+      "hash": "7601e1b908a991f602b7e22702f501814b106a7918fce77a196f27f08604beb8",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/after-restored.json": {
+      "hash": "a3acd1baa4375723bc15751c31b5498854f856b37097229dbe45d978bee43744",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/after-usb.json": {
+      "hash": "31b46f6f78ffccab4ef3336c6e099f16a063136d40ba7bfd3037838b24f15019",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/after.json": {
+      "hash": "9962cf09ff22d00ec2f06df8e573f8a5a2ff17e22345022d41dd86960c3ff245",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/before-corrected.json": {
+      "hash": "965d579ed9a9a7e226f11cd81ca515e648d1b8187c4cf39888b5fd28a45083ea",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/before-hashes.json": {
+      "hash": "da6c3d4c0a62bb8f4187d6553ab5a61bf0a72d1ada9271039d8e285e6ca5ae4c",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/before.json": {
+      "hash": "4f8f64e3eaea4987075560c820377edaef55175d0cb652776cd3ea85ff8df599",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/cold-start.py": {
+      "hash": "e5c1676f441b980265ad1243faeadc8a63f5b7e991a7a16e554592152236334e",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/cold-usb.py": {
+      "hash": "02e492d398399de069fae863004f49017831c2496ba4ba3242372a9349661797",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/connection-errors.txt": {
+      "hash": "82c910bb326b98939af01c9e52247f6bc1b68d8efa227b7023be6fcb72e94515",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/host-after.json": {
+      "hash": "e6035c4626be60a20be1c38e3a7463fb62265d2f7a7288f8b9eb379371f0044f",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/host-before.json": {
+      "hash": "05fe0f2320fa1e4feb8c00a3f9bd972a2dfd7a577d8d5969ccf7d9c1b9ea58d5",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/host.mjs": {
+      "hash": "645590c95e8ce225ef4f32c40d3f12a415c57467ac6c5e25286f0f3daecdf00e",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/index.server.ts.before.txt": {
+      "hash": "2a32e020814d71d3061c2c2d78998508a5b5d5c0c9aa2ebdc7d1fa646845dbc3",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/index.server.ts.owned.diff": {
+      "hash": "2ae3212ab291d5f8c1013e246dde2308ea843f384afdb5a63b0a0b509e9b0747",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/luna-acceptance.md": {
+      "hash": "e288ff04f5ecb557004a21fa3b10132341f0ce87b61a79d85468b1ec4afb8d4c",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/luna-state.json": {
+      "hash": "4a58e258dfd17122fab0181874f4d8d3b7601683a15a5be8355d9766b46b8d45",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/rpc-check.json": {
+      "hash": "5ec2066476b2277e5c3f075c352facfb7d201b22af5b9e366d957d23ab419c81",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/rpc.ts.before.txt": {
+      "hash": "6fb21bda67e9bb47d6a286e31d68b9d506e004fa2a300a23d06caef3cdff4155",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/rpc.ts.owned.diff": {
+      "hash": "66c3016254bf341cc7e725a3b4f8b480bb10eb6af6b4ed05b30199242398f5d6",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/session-chips.test.ts.before.txt": {
+      "hash": "0fd72ca7d1491738eba8beb2bc5fa2b5979ae96db307348790dc13302315df02",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/session-chips.test.ts.owned.diff": {
+      "hash": "9bb8b223ba67d001222c8e3e59f39846910d425d68008fad3321bf1369eb3538",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/session-link.ts.before.txt": {
+      "hash": "870b88fa5134a3ec8244fa2374e311abac7d2111150ffc451b5ba1c0b5b490fc",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/session-link.ts.owned.diff": {
+      "hash": "6307c6fc0f924f17c4f0726181e20f399b236863e325a34063e0e9e476ee5b28",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/test-session.json": {
+      "hash": "8fff968fc68e00d79fe74f5e4f598074c266b08447d53fc49b5aa8f8d7edc05e",
+      "mode": 33188
+    },
+    "docs/verification/native-cold-start-2026-10-23/usb-cleanup.json": {
+      "hash": "e4ec3b82a7f922cb86f12d13570dc77e0a2034ea52157aadea7889959e2f678c",
+      "mode": 33188
+    },
+    "docs/verification/summary-models-2026-10-23-ship-audit.json": {
+      "hash": "5ca90bb5e2d122b04976a74dcc020c72d3eb88965f88253dac6fd76e8b5b9f2c",
+      "mode": 33188
+    },
+    "docs/verification/summary-models-2026-10-23-ship-final-luna.md": {
+      "hash": "9831f06275439bde4e56f64200fd56423a640bb418fb5893ab656107bc83acd0",
+      "mode": 33188
+    },
+    "docs/verification/summary-models-2026-10-23-ship-luna.md": {
+      "hash": "d3d1cc892f4b6d07ba8176c140b8a567caec40d3f1124e1541e05f69e409b339",
+      "mode": 33188
+    },
+    "docs/verification/summary-models-2026-10-23-ship.md": {
+      "hash": "1e15119ef84ac1f929cfa8c4a38962bf03f18f19bf27e41ed39913b822c627ec",
+      "mode": 33188
+    },
+    "docs/verification/whats-new-2026-10-22.md": {
+      "hash": "877e80d8fbc561e861cb54468bac16c8bac9af1fe6a0cec9a59cc0145d1c804a",
+      "mode": 33188
+    },
+    "docs/verification/whats-new-2026-10-22/desktop-dark.png": {
+      "hash": "7d1ea63dcd09523f01dedcf04559c78d8f905b362a9f992444c20d4eb2abe357",
+      "mode": 33188
+    },
+    "docs/verification/whats-new-2026-10-22/desktop-light.png": {
+      "hash": "4caec332375e5d0388fbca2145ef41e464484bb930f087cc64f4a8e5af4fb6cc",
+      "mode": 33188
+    },
+    "docs/verification/whats-new-2026-10-22/open-settings-light.png": {
+      "hash": "6170979f4493fcebe11129025a24832db5befb3e95535dc5463aa95a9a9d4dee",
+      "mode": 33188
+    },
+    "docs/verification/workspace-change-ownership-2026-10-21.md": {
+      "hash": "0d87fa54ea6faf8ca7f74660413bd1f4a8f7668e6ff60e11b5da539b01b28b1d",
+      "mode": 33188
+    },
+    "server/chip-board.test.ts": {
+      "hash": "1bd2b5e720b8e5c0a93373d305b19d0d228018d1e95465c84add46f2e268487b",
+      "mode": 33188
+    },
+    "server/chip-board.ts": {
+      "hash": "5ea9f2f032c24aa4236176eb3f348db5cf648b2b642f1f9ff7cfe2142eb8e6d8",
+      "mode": 33188
+    },
+    "shared/workflow-stats.test.ts": {
+      "hash": "98053c6e40975f8b38e52169705d67802ed9e8cf5cd402359cfea159d1da4067",
+      "mode": 33188
+    },
+    "shared/workflow-stats.ts": {
+      "hash": "3586a339207193b1b8d6dfe0f6c06ba8b0923b5bdb7571a4b9be8e9a26b95392",
+      "mode": 33188
+    }
+  },
+  "preservation": "Original and independent regraded results are included separately, without rewriting raw run files. No models or live fixture operations in this shipping step."
+}

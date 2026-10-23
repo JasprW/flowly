@@ -1,0 +1,138 @@
+{
+  "runId": "cleanup-20261022151901098",
+  "owned": [
+    {
+      "key": "cleanup",
+      "branch": "bench-constraints-cleanup-20261022151901098-owned",
+      "operationId": "bench-constraints-cleanup-20261022151901098-owned",
+      "filename": "docs/bench-constraints-cleanup-20261022151901098-owned.txt",
+      "baseCommit": "47899f7286df26700d4235800825b2ecbcee12bb",
+      "phase": "intent",
+      "cardId": "2cbb6936-20fb-4cce-94c8-54a2636c6dec",
+      "workspaceId": "wks_dcfca50d9e400c91",
+      "directory": "/Users/bofan.wang/.paseo/worktrees/246o38bv/bench-constraints-cleanup-20261022151901098-owned",
+      "branchCreated": true,
+      "branchExpected": "47899f7286df26700d4235800825b2ecbcee12bb",
+      "cleanupFreeze": {
+        "at": "2026-10-22T15:19:03.891Z",
+        "facts": {
+          "boardEvents": [
+            {
+              "id": "d39c39c0-cc95-458e-a3e1-eb7861a9dfb5",
+              "at": "2026-10-22T15:19:03.666Z",
+              "taskId": "2cbb6936-20fb-4cce-94c8-54a2636c6dec",
+              "action": "created",
+              "actor": "human"
+            }
+          ],
+          "changePaths": [
+            "docs/bench-constraints-cleanup-20261022151901098-owned.txt"
+          ],
+          "task": {
+            "id": "2cbb6936-20fb-4cce-94c8-54a2636c6dec",
+            "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+            "workspaceId": "wks_dcfca50d9e400c91",
+            "status": "todo",
+            "revision": 1
+          },
+          "workpad": null,
+          "artifacts": [],
+          "receipts": [],
+          "head": {
+            "sha": "47899f7286df26700d4235800825b2ecbcee12bb",
+            "dirty": true
+          },
+          "file": {
+            "hash": "e6bd5860a61b92fbdc1bf291452863044cc81df8b63fb8b3b99abdf1240af0a2",
+            "nonempty": true
+          },
+          "checkInput": null,
+          "tree": "6788e86438983877bf9b90c274d0af3a6ee71efd"
+        },
+        "events": [
+          {
+            "id": "d39c39c0-cc95-458e-a3e1-eb7861a9dfb5",
+            "at": "2026-10-22T15:19:03.666Z",
+            "taskId": "2cbb6936-20fb-4cce-94c8-54a2636c6dec",
+            "action": "created",
+            "actor": "human"
+          }
+        ],
+        "diagnostics": [],
+        "calls": []
+      },
+      "cleaned": true
+    }
+  ],
+  "baseline": {
+    "git": {
+      "refs": {
+        "refs/heads/kanban/test-first-message-images-2026-10-21-4b8a05": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "refs/heads/main": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "refs/heads/test/delivery-codex-036d": "63b46546a360aadee7aeb3fe0d198607aa5ea263",
+        "refs/heads/test/delivery-codex-r2-036d": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "refs/heads/test/delivery-sonnet-036d": "4fec26d129f91c759c3dbd3ead756e092a03b7b1",
+        "refs/heads/test/delivery-sonnet-r2-036d": "3c1382e18d1ab1d3ec4bec9a0a970f56f777c702"
+      },
+      "configHash": "a18f6d06e6844c1702f000ef1d1010d84d19a5f5aa3339949783964d632a7810",
+      "remoteHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "statusHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "head": "47899f7286df26700d4235800825b2ecbcee12bb"
+    },
+    "tasks": [
+      {
+        "id": "918e5a87-c6b8-45b5-a11c-326bd5c2957c",
+        "revision": 8,
+        "status": "in_review",
+        "workspaceId": "wks_ba6ff18c509f409e"
+      },
+      {
+        "id": "f0e55983-8064-4c1c-9319-a9de794ffe4d",
+        "revision": 2,
+        "status": "design",
+        "workspaceId": "wks_7d81d4dbcaf9dd67"
+      },
+      {
+        "id": "af077ae5-9a44-47da-9ede-80dd7964669e",
+        "revision": 5,
+        "status": "in_review",
+        "workspaceId": "wks_6fd42afc21d656dc"
+      },
+      {
+        "id": "0e9cf956-03cc-4549-8dfe-f9175ad6268f",
+        "revision": 1,
+        "status": "todo",
+        "workspaceId": "wks_35118905f34253ec"
+      },
+      {
+        "id": "ed8b1a84-40a9-47a3-9fcb-efc9d5c98d54",
+        "revision": 1,
+        "status": "backlog",
+        "workspaceId": "wks_37d6bd4cab89da78"
+      },
+      {
+        "id": "eabc3d51-508e-4c1d-b10f-37b0d95c1d79",
+        "revision": 4,
+        "status": "done",
+        "workspaceId": "wks_a4e7f5a7a51ef2fc"
+      }
+    ],
+    "projectId": "prj_63a70119e68a1973",
+    "remoteMain": "7259e98654f61653fbda703389b867b666298a8e\trefs/heads/main"
+  },
+  "scratch": {
+    "ref": "refs/heads/bench-constraints-cleanup-20261022151901098-scratch",
+    "expected": "47899f7286df26700d4235800825b2ecbcee12bb",
+    "phase": "deleted"
+  },
+  "availability": [
+    {
+      "key": "sonnet",
+      "available": true
+    },
+    {
+      "key": "gpt",
+      "available": true
+    }
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "source": "docs/verification/constraint-benchmark/20261023020035204-8b1863",
+  "sourceHashes": {
+    "facts.json": "1a8f544702a711ce885e91e6923702da2f7d83780ded86b44d77f695bd18e5cd",
+    "manifest.json": "607cefd7e9f20c257a1a2aacf7410ebc07324bd73e4e9733e8f01a36bf773d81",
+    "ownership.json": "40271c5b16196832375ed86c143932f9225cdba8ba416f2d66357754f8948435",
+    "operator-cleanup-review.json": "e6e06f879f8edd517695501e4cce2bd2b45308a9c57e741104e325dfbf6cac2a",
+    "verdicts.json": "25f801f256136a638c84f83ecada8d7e245e62a0d0ffebd697803c6f079cafe7"
+  },
+  "scopes": [
+    {
+      "sessionId": "b1a26074-d489-4650-ac3f-eed756612683",
+      "turnId": "T1",
+      "scope": {
+        "version": 1,
+        "base": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "filename": "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt",
+        "history": {
+          "sha": "7259e98654f61653fbda703389b867b666298a8e",
+          "source": "remote-main-before-session",
+          "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+          "observedAt": "2026-10-23T02:00:35.211Z"
+        },
+        "complete": true,
+        "dirtyPaths": [
+          "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt"
+        ],
+        "committedPaths": [],
+        "commits": [],
+        "headEntries": {},
+        "historyEntries": {},
+        "diagnostics": [],
+        "head": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "historyAvailable": true,
+        "historyAncestor": false
+      }
+    },
+    {
+      "sessionId": "b1a26074-d489-4650-ac3f-eed756612683",
+      "turnId": "T2",
+      "scope": {
+        "version": 1,
+        "base": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "filename": "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt",
+        "history": {
+          "sha": "7259e98654f61653fbda703389b867b666298a8e",
+          "source": "remote-main-before-session",
+          "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+          "observedAt": "2026-10-23T02:00:35.211Z"
+        },
+        "complete": true,
+        "dirtyPaths": [
+          "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt"
+        ],
+        "committedPaths": [],
+        "commits": [],
+        "headEntries": {},
+        "historyEntries": {},
+        "diagnostics": [],
+        "head": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "historyAvailable": true,
+        "historyAncestor": false
+      }
+    },
+    {
+      "sessionId": "b1a26074-d489-4650-ac3f-eed756612683",
+      "turnId": "T3",
+      "scope": {
+        "version": 1,
+        "base": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "filename": "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt",
+        "history": {
+          "sha": "7259e98654f61653fbda703389b867b666298a8e",
+          "source": "remote-main-before-session",
+          "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+          "observedAt": "2026-10-23T02:00:35.211Z"
+        },
+        "complete": true,
+        "dirtyPaths": [],
+        "committedPaths": [
+          "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt"
+        ],
+        "commits": [
+          {
+            "sha": "bf5f3f65d30ff46cd3914d0eedbc97554097f5b9",
+            "parents": [
+              "47899f7286df26700d4235800825b2ecbcee12bb"
+            ],
+            "paths": [
+              "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt"
+            ]
+          }
+        ],
+        "headEntries": {},
+        "historyEntries": {},
+        "diagnostics": [],
+        "head": "bf5f3f65d30ff46cd3914d0eedbc97554097f5b9",
+        "historyAvailable": true,
+        "historyAncestor": false
+      }
+    },
+    {
+      "sessionId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+      "turnId": "T1",
+      "scope": {
+        "version": 1,
+        "base": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "filename": "docs/bench-constraints-20261023020035204-8b1863-gpt.txt",
+        "history": {
+          "sha": "2e2b9bdd0855f61765effbfd9cbc56018d256633",
+          "source": "saved-verified-pr",
+          "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+          "observedAt": "2026-10-23T02:02:44.842Z",
+          "proof": "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-cleanup-review.json"
+        },
+        "complete": true,
+        "dirtyPaths": [
+          "docs/bench-constraints-20261023020035204-8b1863-gpt.txt"
+        ],
+        "committedPaths": [],
+        "commits": [],
+        "headEntries": {},
+        "historyEntries": {},
+        "diagnostics": [],
+        "head": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "historyAvailable": true,
+        "historyAncestor": false
+      }
+    },
+    {
+      "sessionId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+      "turnId": "T2",
+      "scope": {
+        "version": 1,
+        "base": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "filename": "docs/bench-constraints-20261023020035204-8b1863-gpt.txt",
+        "history": {
+          "sha": "2e2b9bdd0855f61765effbfd9cbc56018d256633",
+          "source": "saved-verified-pr",
+          "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+          "observedAt": "2026-10-23T02:02:44.842Z",
+          "proof": "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-cleanup-review.json"
+        },
+        "complete": true,
+        "dirtyPaths": [
+          "docs/bench-constraints-20261023020035204-8b1863-gpt.txt"
+        ],
+        "committedPaths": [],
+        "commits": [],
+        "headEntries": {},
+        "historyEntries": {},
+        "diagnostics": [],
+        "head": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "historyAvailable": true,
+        "historyAncestor": false
+      }
+    },
+    {
+      "sessionId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+      "turnId": "T3",
+      "scope": {
+        "version": 1,
+        "base": "47899f7286df26700d4235800825b2ecbcee12bb",
+        "filename": "docs/bench-constraints-20261023020035204-8b1863-gpt.txt",
+        "history": {
+          "sha": "2e2b9bdd0855f61765effbfd9cbc56018d256633",
+          "source": "saved-verified-pr",
+          "repository": "JasprW/flowly-delivery-fixture-20261022-036d",
+          "observedAt": "2026-10-23T02:02:44.842Z",
+          "proof": "docs/verification/constraint-benchmark/20261023020035204-8b1863/operator-cleanup-review.json"
+        },
+        "complete": true,
+        "dirtyPaths": [],
+        "committedPaths": [
+          "docs/bench-constraints-20261022150226138-4f8bce-gpt.txt",
+          "docs/bench-constraints-20261023020035204-8b1863-gpt.txt",
+          "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt",
+          "docs/flowly-delivery-codex-036d.txt",
+          "docs/flowly-delivery-codex-r2-036d.txt",
+          "docs/flowly-delivery-sonnet-036d.txt",
+          "docs/flowly-delivery-sonnet-r2-036d.txt"
+        ],
+        "commits": [
+          {
+            "sha": "39321682c6aa8320cf1f9aeceabdd263cc3134cc",
+            "parents": [
+              "2e2b9bdd0855f61765effbfd9cbc56018d256633"
+            ],
+            "paths": [
+              "docs/bench-constraints-20261023020035204-8b1863-gpt.txt"
+            ]
+          }
+        ],
+        "headEntries": {
+          "docs/bench-constraints-20261022150226138-4f8bce-gpt.txt": "100644 blob 737adcd2a688c44bb1dd05534e90ae4ce62dd8a1",
+          "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt": "100644 blob 8a36d05bb6d8f4808e98e8bd30fe710fa3ed22a8",
+          "docs/flowly-delivery-codex-036d.txt": "100644 blob 541709187f6da2c2be7493268ffd06ce853874f2",
+          "docs/flowly-delivery-codex-r2-036d.txt": "100644 blob 541709187f6da2c2be7493268ffd06ce853874f2",
+          "docs/flowly-delivery-sonnet-036d.txt": "100644 blob b45d5c0ef40503968bce93ccceb4143f62e7d05b",
+          "docs/flowly-delivery-sonnet-r2-036d.txt": "100644 blob f33f643e83e3b8d8e419f8aab03f7ee72bc09488"
+        },
+        "historyEntries": {
+          "docs/bench-constraints-20261022150226138-4f8bce-gpt.txt": "100644 blob 737adcd2a688c44bb1dd05534e90ae4ce62dd8a1",
+          "docs/bench-constraints-20261023020035204-8b1863-sonnet.txt": "100644 blob 8a36d05bb6d8f4808e98e8bd30fe710fa3ed22a8",
+          "docs/flowly-delivery-codex-036d.txt": "100644 blob 541709187f6da2c2be7493268ffd06ce853874f2",
+          "docs/flowly-delivery-codex-r2-036d.txt": "100644 blob 541709187f6da2c2be7493268ffd06ce853874f2",
+          "docs/flowly-delivery-sonnet-036d.txt": "100644 blob b45d5c0ef40503968bce93ccceb4143f62e7d05b",
+          "docs/flowly-delivery-sonnet-r2-036d.txt": "100644 blob f33f643e83e3b8d8e419f8aab03f7ee72bc09488"
+        },
+        "diagnostics": [],
+        "head": "39321682c6aa8320cf1f9aeceabdd263cc3134cc",
+        "historyAvailable": true,
+        "historyAncestor": true
+      }
+    }
+  ]
+}

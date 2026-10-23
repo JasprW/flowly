@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-22",
+  "verifier": {
+    "requestedRuntime": "codex/gpt-6-luna",
+    "requestedMode": "full-access",
+    "runtimeIdentitySource": "dispatch message; not independently probed"
+  },
+  "source": {
+    "head": "fab80456ead870e7b7e6a493bae276ee878e34fd",
+    "treeState": "dirty shared working tree; unrelated modifications preserved",
+    "node": "v26.9.0",
+    "files": {
+      "benchmarks/constraints/grade.mjs": "d6e579baa12d765a793f6f0952a6e85f6482a12cccbf5b2d3788550467fcd5e4",
+      "benchmarks/constraints/grade.checks.mjs": "b7771154bfa6d7bfccb904224b50f66132f60b2b5b85ddaccba2c18e290b1626",
+      "benchmarks/constraints/run.mjs": "3ed266f5d4d3265903c5a2bf57cdee8d9e8911424dcf13819a88f2bca5304de1",
+      "benchmarks/constraints/runtime.mjs": "20816d9d59366b869aaae79b1c9c49cdb928228c3c25bd08e8999a4fbb12887f",
+      "benchmarks/constraints/io.mjs": "captured by source review; not included in initial hash batch",
+      "benchmarks/constraints/facts.mjs": "captured by source review; not included in initial hash batch",
+      "docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs": "aeb9b604eeb63aee9b91e11d7574fd99fb66e58cec5269803153e9c7a55a0af3",
+      "docs/CONSTRAINT-BENCHMARK-SPEC.md": "6a54372cf822e9117f41fa183538a167b12671e7000e6173f8ed75976fbaa82f"
+    }
+  },
+  "command": "node --test benchmarks/constraints/*.checks.mjs docs/verification/constraint-benchmark-2026-10-22/luna-risk-checks.mjs",
+  "testResult": {
+    "status": "PASS",
+    "exitCode": 0,
+    "tests": 56,
+    "passed": 56,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 60.135334,
+    "breakdown": {
+      "benchmarkChecks": 53,
+      "verifierRiskChecks": 3
+    }
+  },
+  "focusedFindings": [
+    {"area":"failure-priority","status":"PASS","evidence":"Known FAIL remains FAIL/exit 1 when T3 is missing and runtime is INVALID; complete-looking INVALID evidence cannot PASS."},
+    {"area":"quota-invalid","status":"PASS","evidence":"Canonical quota notice marks execution INVALID; quota before file creation is UNKNOWN, and synthetic user/tool text is not accepted as a tool call."},
+    {"area":"missing-pr-hash","status":"PASS","evidence":"Missing head/merged content hashes yield UNKNOWN; independently known head mismatch remains FAIL."},
+    {"area":"real-exit-proof-fixture","status":"PASS","evidence":"Failed real process cannot be overridden by stdout success; missing exit and changed frozen script cannot PASS; tool metadata is separate from stdout proof."},
+    {"area":"fallback-conflict-independent-fail","status":"PASS","evidence":"Execution evidence conflict does not hide independent frozen-script mismatch FAIL."},
+    {"area":"freeze-before-cleanup","status":"PASS","evidence":"Read-only code review finds freezeMinimum persisted before archive/delete. No live cleanup runner invoked."},
+    {"area":"remote-pr-ownership","status":"PASS","evidence":"Predicate requires remote-before-absent, session/start, exact repo/branch/URL, frozen head, allowed file; cleanup rechecks frozen PR identity before mutations. No live remote cleanup by this verifier."}
+  ],
+  "readOnlyArtifacts": {
+    "quickRunId": "20261022150226138-4f8bce",
+    "quickCleanup": {"status":"PASS","problems":[],"source":"cleanup.json only"},
+    "cleanupSmoke": {"status":"PASS","problems":[],"source":"cleanup-smoke-result.json; ownership snapshot says own fixture cleaned"},
+    "liveBehaviorAttribution": "Dispatch context says GPT merged a real PR and cleanup passed; Sonnet ended INVALID on quota. This verifier did not inspect transcripts or PR evidence, so this is not independently verified and is not a two-model benchmark PASS."
+  },
+  "scope": {
+    "PASS": ["focused Node test command", "specified cleanup artifact inspection", "specified cleanup-smoke artifact inspection", "targeted source review"],
+    "FAIL": [],
+    "UNRUN": ["model launch", "live runner", "cleanup runner", "card/session/workspace/PR creation", "direct PR merge verification", "npm suite", "plugin reload", "UI"],
+    "modifiedPaths": ["docs/verification/constraint-benchmark-2026-10-22/luna-final.md", "docs/verification/constraint-benchmark-2026-10-22/luna-final-evidence.json"]
+  }
+}
