@@ -1303,6 +1303,15 @@ function BoardContent(
     }
   };
   const keyboardProps = shortcutsOn ? { focusable: true, onKeyDown } : {};
+  // Opening the board from the sidebar leaves keyboard focus on the host's sidebar row, which draws a
+  // focus ring while the board scrolls. Hand focus to the board root (it draws no ring of its own).
+  // Once per mount: a later compact -> wide resize must not pull focus out of an active control.
+  const focusedRoot = useRef(false);
+  useEffect(() => {
+    if (!shortcutsOn || focusedRoot.current) return;
+    focusedRoot.current = true;
+    (rootRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+  }, [shortcutsOn]);
 
   useEffect(() => {
     if (data.isPending) return;
