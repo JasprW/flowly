@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from "react";
-import { Linking, View } from "react-native";
+import { View } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
-import { useRpc, useSettings } from "@getpaseo/plugin/client";
+import { openExternalUrl, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import type { Artifact } from "../shared/model";
@@ -389,7 +389,7 @@ export function ExternalPreview({ artifact, onClose }: { artifact: Artifact; onC
         <Theme.Provider value={theme}>
           <View style={{ gap: space[2] }}>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-              <Button small icon="ExternalLink" onPress={() => void Linking.openURL(artifact.target).catch(() => toast.show(t("Could not open the link."), { variant: "error" }))}>
+              <Button small icon="ExternalLink" onPress={() => void openExternalUrl(artifact.target).catch(() => toast.show(t("Could not open the link."), { variant: "error" }))}>
                 {t("Open in {service}", { service: familyNames[family] })}
               </Button>
               <Button small icon="RefreshCw" disabled={preview.isFetching} onPress={() => setRefresh((n) => n + 1)}>

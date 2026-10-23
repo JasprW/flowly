@@ -115,7 +115,7 @@
 - 标题 `Artifacts`，计数为总数；右侧 `+` 打开 §5.3 表单。没有产物时只显示标题行和 `+`。
 - 按角色分组，顺序 `Outputs`、`Inputs`，组内按 `createdAt` 倒序；空组不显示。每组先显示 5 条，其下 “Show N more” 每次再追加 5 条（同一列表、与已显示行左对齐，不缩进），没有收起；关闭侧栏再打开或换一张卡片才回到 5 条。有产物时标题可点击（计数后带箭头）整体收起/展开，是否默认展开与区块位置都在 设置 → Cards → Card sidebar 调整（[DRAWER-SPEC](DRAWER-SPEC.md#section-order-and-artifacts-paging)）。
 - 每行：类型图标（`FileText` / 目录 `Folder` / 链接 `Link`）、标题（单行截断）、第二行弱化显示 note（单行截断，没有则显示短路径或主机名）；每行都标明来源：标题右侧显示 `User` 或 AI 标记（`Sparkles`，AI-MARK-SPEC）小图标（无障碍 “Added by you” / “Added by an agent”）；角色由分组标题标明，无障碍名称以 “Input:” / “Output:” 开头；文件不存在时标题弱化，第二行以 “Missing” 开头。
-- 点击行：url 用 `Linking.openURL`；file 打开 §6.1 预览。行尾两个图标按钮：**Edit**（铅笔，打开 §5.3，可改角色、标题、说明）与 **Remove**（`X`，无确认，乐观移除 160 ms 收起，失败恢复并弹 error toast，成功弹 toast “Artifact removed. The file was not changed.”）。host toast 不支持操作按钮，所以不做 Undo；插件也没有剪贴板 API，不做 Copy path。
+- 点击行：url 用 `openExternalUrl`，在系统默认浏览器打开；file 打开 §6.1 预览。行尾两个图标按钮：**Edit**（铅笔，打开 §5.3，可改角色、标题、说明）与 **Remove**（`X`，无确认，乐观移除 160 ms 收起，失败恢复并弹 error toast，成功弹 toast “Artifact removed. The file was not changed.”）。host toast 不支持操作按钮，所以不做 Undo；插件也没有剪贴板 API，不做 Copy path。
 - 卡片或项目已归档时 `+`、编辑与移除禁用，列表照常显示与打开。
 - 增删动效用 `client/motion.tsx` 原语，遵循 Reduce Motion，可打断；抽屉打开时已有行不播放进场。
 
@@ -199,3 +199,10 @@
 ## 2026-10-22 增量：交付时原子登记产物
 
 `flowly_update_status(in_review)` 与 `flowly_report_progress(result)` 的 `outputs?: {target,title?,note?}[]` 在同一事务登记 output；`[]` 表示本次无产物，省略则成功后提醒。复用本规范的路径边界、目标去重和用户条目保护。回执 `artifactIds` 持久化，精确重放不会再校验已消失文件或重新访问 connector。完整契约、开关行为和 CLI 参数见 [DELIVERY-CONSTRAINTS-SPEC](DELIVERY-CONSTRAINTS-SPEC.md) §1。
+
+## External links (2026-10-23)
+
+URL artifacts, connector preview links, and HTTP(S) links in session Markdown use Paseo's `openExternalUrl` API.
+Desktop clients open the system default browser. Web clients open a separate tab. Phones use the operating system URL handler.
+The press handler calls the API directly, and the existing error message appears if the opener rejects.
+File artifacts and connector previews retain their existing preview behavior.

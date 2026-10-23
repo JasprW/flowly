@@ -1,5 +1,6 @@
+import { openExternalUrl } from "@getpaseo/plugin/client";
 import { memo, useMemo, useState } from "react";
-import { Linking, Platform, ScrollView, Text, View } from "react-native";
+import { Platform, ScrollView, Text, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import {
   parseSessionInline,
@@ -46,7 +47,7 @@ const Inline = memo(function Inline({
               onPress={
                 link
                   ? () => {
-                      void Linking.openURL(part.url!).catch(() =>
+                      void openExternalUrl(part.url!).catch(() =>
                         setLinkError(true),
                       );
                     }
