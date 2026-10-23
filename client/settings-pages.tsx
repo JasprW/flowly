@@ -28,6 +28,8 @@ import {
 import { agentModelFromValues, type AgentModel } from "../shared/agent-defaults";
 import { deviceLocale, formatLocale, getLocale, locales, msg, t, tn } from "../shared/i18n";
 import { hideFinishedChoices } from "./finished-cards";
+import { useBoardView } from "./board-view";
+import { sendBehaviors, sendBehaviorText, type SendBehavior } from "./send-queue";
 import { modelOptions, providerOptions } from "./options";
 import { ModelDefaultGroup } from "./model-default";
 import { SettingRow, SettingSelect, SettingSwitch, SettingsGroup, SettingsPage } from "./settings-ui";
@@ -70,13 +72,19 @@ export function GeneralPage({ onTour }: { onTour(): void }) {
   const onboarding = useOnboarding();
   const [reset, setReset] = useState(false);
   return (
-    <SettingsPage title={t("General")} description={t("Language and the welcome tour.")}>
+    <SettingsPage title={t("General")} description={t("Language, sending messages and the welcome tour.")}>
       <Problem text={language.problem} />
       <SettingsGroup
         title={t("Language")}
         description={t("The language of Flowly's buttons and messages. Agent instructions, error details from the daemon and AI-written summaries are not affected.")}
       >
         <InterfaceLanguageRow />
+      </SettingsGroup>
+      <SettingsGroup
+        title={t("Sending messages")}
+        description={t("In a session's message box, Enter sends and Shift+Enter starts a new line.")}
+      >
+        <SendBehaviorRow />
       </SettingsGroup>
       <SettingsGroup
         title={t("Welcome tour")}
@@ -95,6 +103,23 @@ export function GeneralPage({ onTour }: { onTour(): void }) {
         />
       </SettingsGroup>
     </SettingsPage>
+  );
+}
+
+/** What Enter does while a session is running (the choice that used to sit under the message box). */
+function SendBehaviorRow() {
+  const view = useBoardView();
+  const current: SendBehavior = view.values?.sendBehavior || "steer";
+  return (
+    <SettingSelect
+      title={t("When a session is running")}
+      detail={`${t(sendBehaviorText[current].detail)} ${t("Same options as Paseo's “Default send” setting. Plugins cannot read that setting, so choose it here.")}`}
+      value={current}
+      placeholder={t(sendBehaviorText[current].label)}
+      disabled={!view.values}
+      options={sendBehaviors.map((b) => ({ value: b, label: t(sendBehaviorText[b].label) }))}
+      onChange={(next) => void view.update({ sendBehavior: next as SendBehavior })}
+    />
   );
 }
 

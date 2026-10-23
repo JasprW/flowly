@@ -237,7 +237,7 @@ function MoveChip(p: {
               ? tint(colors.accent, 0.5)
               : colors.border,
           backgroundColor:
-            pressed || hovered || focused
+            pressed || hovered
               ? colors.surface2
               : p.first
                 ? tint(colors.accent, 0.08)

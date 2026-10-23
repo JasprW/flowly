@@ -77,7 +77,7 @@ export function OlderToggle({ count, shown, onPress }: { count: number; shown: b
           gap: space[1.5],
           minHeight: touch ? 40 : 30,
           borderRadius: radius.md,
-          backgroundColor: hovered || focused || pressed ? colors.surface2 : "transparent",
+          backgroundColor: hovered || pressed ? colors.surface2 : "transparent",
         };
       }}
     >
@@ -121,6 +121,7 @@ export function DesktopColumns({
   older = noOlder,
   olderShown = [],
   onToggleOlder,
+  reveal,
   renderCard,
   onAdd,
   onDrop,
@@ -145,6 +146,8 @@ export function DesktopColumns({
   /** Lanes whose older cards are shown. */
   olderShown?: readonly Status[];
   onToggleOlder?(status: Status): void;
+  /** Scrolls this lane into view each time `n` changes (the overview bar's In review / Blocked chips). */
+  reveal?: { status: Status; n: number };
   renderCard(task: Task, drag: CardDrag, dragging: boolean): ReactNode;
   onAdd(status: Status): void;
   onDrop(input: Placement): void;
@@ -262,6 +265,19 @@ export function DesktopColumns({
   useEffect(() => {
     cancel();
   }, [cancelKey, disabled]);
+  useEffect(() => {
+    if (!reveal?.n) return;
+    // After the lane has expanded and been measured.
+    const timer = setTimeout(() => {
+      const lane = columns.current.find((c) => c.status === reveal.status);
+      if (!lane) return;
+      const maxX = Math.max(0, contentWidth.current - viewport.current.width);
+      const x = Math.min(maxX, Math.max(0, lane.x - space[3]));
+      offset.current = x;
+      scrollRef.current?.scrollTo({ x, animated: true });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [reveal?.n]);
   useEffect(() => {
     if (!dragging) return;
     const timer = setInterval(() => {

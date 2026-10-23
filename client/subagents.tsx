@@ -119,7 +119,7 @@ export const SubagentsChip = memo(function SubagentsChip({
             borderRadius: 16,
             borderWidth: 1,
             borderColor: colors.border,
-            backgroundColor: open || hover || focused || pressed ? colors.surface2 : colors.surface1,
+            backgroundColor: open || hover || pressed ? colors.surface2 : colors.surface1,
           };
         }}
       >
@@ -173,7 +173,7 @@ function SubagentRow({ agent, onOpen }: { agent: PaseoAgent; onOpen?: (agentId: 
           paddingHorizontal: space[2] + 2,
           paddingVertical: 4,
           borderRadius: radius.md,
-          backgroundColor: onOpen && (hover || focused || pressed) ? colors.surface1 : "transparent",
+          backgroundColor: onOpen && (hover || pressed) ? colors.surface1 : "transparent",
         };
       }}
     >

@@ -26,7 +26,8 @@ export type TranscriptHandle = { refresh(): void; jumpToLatest(): void };
  * keyboard or the composer shrinks it. Web (and a host without FlatList): a
  * plain scroll view, as Paseo's web session view does (SESSION-PANE-SPEC §3).
  */
-const virtualized = Platform.OS !== "web" && typeof FlatList === "function";
+// Not `typeof === "function"`: a host FlatList wrapped in memo/forwardRef is an object, and failing that test silently dropped phones onto the plain scroll view, which has no keyboard lift.
+const virtualized = Platform.OS !== "web" && !!FlatList;
 
 type TranscriptProps = {
   /** Imperative access for the composer: refresh after a send, jump to the newest output. */
@@ -214,7 +215,8 @@ function SessionTranscriptView({
     // Web: react-native-web's "on-drag" blurs the focused input on every
     // scroll event, including the follow-tail scroll when output arrives,
     // which kicked the user out of the composer while a session ran.
-    keyboardDismissMode: Platform.OS === "ios" ? ("interactive" as const) : Platform.OS === "web" ? ("none" as const) : ("on-drag" as const),
+    // Android: "on-drag" closed the IME on the first scroll, so the last lines could not be read while typing; the keyboard now closes only on Back or send.
+    keyboardDismissMode: Platform.OS === "ios" ? ("interactive" as const) : ("none" as const),
     // The follower only needs to know where the tail is; a frame-rate callback crosses into JS 60 times a second while scrolling.
     scrollEventThrottle: 100,
     onScroll: tail.onScroll,
@@ -330,7 +332,7 @@ function LoadEarlier({ loading, onPress }: { loading: boolean; onPress(): void }
             borderRadius: radius.lg,
             borderWidth: 1,
             borderColor: colors.border,
-            backgroundColor: hovered || focused || state.pressed ? colors.surface2 : colors.surface1,
+            backgroundColor: hovered || state.pressed ? colors.surface2 : colors.surface1,
           };
         }}
       >
@@ -433,7 +435,7 @@ export const ActivityBlock = memo(function ActivityBlock({ block, live }: { bloc
             paddingHorizontal: space[1.5],
             marginHorizontal: -space[1.5],
             borderRadius: radius.md,
-            backgroundColor: hover || focused ? colors.surface2 : "transparent",
+            backgroundColor: hover ? colors.surface2 : "transparent",
           };
         }}
       >

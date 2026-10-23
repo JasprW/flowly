@@ -33,7 +33,7 @@ export function SettingsFab({
   const [hovered, setHovered] = useState(false),
     [pressed, setPressed] = useState(false),
     [focused, setFocused] = useState(false);
-  const lit = open || hovered || focused;
+  const lit = open || hovered;
   const shown = useMotionValue(1, motionDuration.forward, 0);
   const lift = useMotionValue(pressed ? 0.94 : lit ? 1.04 : 1);
   const turn = useMotionValue(open ? 1 : hovered ? 0.5 : 0, motionDuration.forward);
@@ -108,7 +108,7 @@ export function SettingsFab({
           alignItems: "center",
           justifyContent: "center",
           borderWidth: 1,
-          borderColor: open || focused || hint ? colors.accent : hovered ? tint(colors.foregroundMuted, 0.45) : colors.border,
+          borderColor: open || hint ? colors.accent : hovered ? tint(colors.foregroundMuted, 0.45) : colors.border,
           backgroundColor: lit ? colors.surface2 : colors.surface1,
           shadowColor: "#000",
           shadowOpacity: lit ? 0.16 : 0.08,

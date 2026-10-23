@@ -4,6 +4,8 @@ import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useMotionHeight, useMotionValue } from "./motion";
 import { Label, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
 import { t } from "../shared/i18n";
+import type { Status, Task } from "../shared/model";
+import { StatusIcon } from "./status";
 
 /** The bordered surface every content card sits on; the native timeline cards share it. */
 export const cardFrameStyle = (colors: { border: string; surface1: string }) =>
@@ -32,7 +34,7 @@ export function ContentCard({
   const { colors } = useTheme();
   return (
     <View style={cardFrameStyle(colors)}>
-      <View style={{ padding: space[3], paddingBottom: after ? space[1] : space[3] }}>
+      <View style={{ padding: space[3], paddingBottom: space[3] }}>
         <Clamped background={colors.surface1} footer={footer} defaultOpen={defaultOpen}>
           {children}
         </Clamped>
@@ -171,12 +173,51 @@ function Toggle({ open, onPress }: { open: boolean; onPress(): void }) {
           paddingHorizontal: space[1.5],
           marginLeft: -space[1.5],
           borderRadius: radius.md,
-          backgroundColor: pressed || hovered || focused ? colors.surface2 : "transparent",
+          backgroundColor: pressed || hovered ? colors.surface2 : "transparent",
         };
       }}
     >
       <Icon name={open ? "ChevronUp" : "ChevronDown"} size={14} color={colors.foreground} />
       <Label medium size={font.md} selectable={false}>{label}</Label>
+    </Pressable>
+  );
+}
+
+/** "From <card> · <lane>" under a memory or an idea; also the welcome tour's demo. */
+export function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefined; nameOf(status: Status): string; onOpenTask(id: string): void }) {
+  const { colors } = useTheme();
+  if (!task)
+    return (
+      <View style={{ marginHorizontal: space[3], marginBottom: space[1.5], paddingHorizontal: space[2], minHeight: touch ? 36 : 28, justifyContent: "center" }}>
+        <Label muted size={font.xs}>{t("From a deleted card")}</Label>
+      </View>
+    );
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={t("From card {title}, {state}. Open it", { title: task.title, state: task.archivedAt ? t("archived") : nameOf(task.status) })}
+      onPress={() => onOpenTask(task.id)}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
+        ...noFocusRing,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space[1.5],
+        marginHorizontal: space[3],
+        marginBottom: space[1.5],
+        paddingHorizontal: space[2],
+        minHeight: touch ? 36 : 28,
+        borderRadius: radius.md,
+        backgroundColor: pressed || hovered ? colors.surface2 : tint(colors.foreground, 0.03),
+      })}
+    >
+      <Label muted size={font.xs} selectable={false}>{t("From")}</Label>
+      <StatusIcon status={task.status} size={12} />
+      <View style={{ flexShrink: 1, minWidth: 0 }}>
+        <Label size={font.sm} lines={1} selectable={false}>{task.title}</Label>
+      </View>
+      <Label muted size={font.xs} selectable={false}>· {task.archivedAt ? t("Archived") : nameOf(task.status)}</Label>
+      <View style={{ flex: 1 }} />
+      <Icon name="ChevronRight" size={13} color={colors.foregroundMuted} />
     </Pressable>
   );
 }

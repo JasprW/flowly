@@ -62,7 +62,7 @@ export function PickerRow({
         onPress={onToggle}
         style={(state) => {
           const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
           return {
             ...noFocusRing,
             flexDirection: "row",
@@ -185,7 +185,7 @@ export function OptionList({
                   onPress={() => onChange(option.value)}
                   style={(state) => {
                     const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
                     return {
                       ...noFocusRing,
                       flexDirection: "row",

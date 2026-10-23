@@ -96,7 +96,7 @@ function Chip({ icon, text, open, disabled, onPress, label }: {
           maxWidth: 180,
           paddingHorizontal: space[2],
           borderRadius: radius.md,
-          backgroundColor: open || hover || focused || pressed ? colors.surface2 : "transparent",
+          backgroundColor: open || hover || pressed ? colors.surface2 : "transparent",
           opacity: disabled ? 0.5 : 1,
         };
       }}
@@ -160,7 +160,7 @@ export function ChipMenu({ open, items, inline, footer }: { open: boolean; items
               paddingHorizontal: space[2] + 2,
               paddingVertical: 4,
               borderRadius: radius.md,
-              backgroundColor: item.selected ? tint(colors.accent, 0.08) : hover || focused || pressed ? colors.surface1 : "transparent",
+              backgroundColor: item.selected ? tint(colors.accent, 0.08) : hover || pressed ? colors.surface1 : "transparent",
               opacity: item.disabled ? 0.5 : 1,
             };
           }}

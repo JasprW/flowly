@@ -5,6 +5,7 @@ import { enabledStatuses } from "../shared/lanes";
 import type { Idea, Project, Status, Task } from "../shared/model";
 import { eventPoint, useMenuOpener } from "./context-menu";
 import { groupByCard, ideaTabCounts, visibleIdeas, type IdeaQuery, type IdeaSort, type IdeaTab } from "./idea-rows";
+import { SourceLine } from "./content-card";
 import { Enter } from "./motion";
 import { StatusIcon } from "./status";
 import { ClosedIdea, IdeaCard, IdeaRow, sessionName, useExitList, useIdeaActions, type IdeaSession } from "./task-ideas";
@@ -89,7 +90,7 @@ export const IdeasPage = memo(function IdeasPage({
       if (!next.delete(scope)) next.add(scope);
       return next;
     });
-  const source = (taskId: string) => <SourceLine task={cards.get(taskId)} nameOf={nameOf} onOpenTask={onOpenTask} />;
+  const source = (taskId: string) => cards.has(taskId) ? <SourceLine task={cards.get(taskId)} nameOf={nameOf} onOpenTask={onOpenTask} /> : undefined;
   const cardTitle = (id: string) => cards.get(id)?.title;
   const renderOpen = (rows: ExitRows) =>
     rows.map((row) => (
@@ -286,39 +287,6 @@ type ExitRows = ReturnType<typeof useExitList<Idea>>;
 function OpenList({ list, empty, render }: { list: readonly Idea[]; empty: ReactNode; render(rows: ExitRows): ReactNode }) {
   const rows = useExitList(list);
   return <>{rows.length ? render(rows) : empty}</>;
-}
-
-/** "From <card> · <lane>" under an idea; opens the card (archived ones too). */
-function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefined; nameOf(status: Status): string; onOpenTask(id: string): void }) {
-  const { colors } = useTheme();
-  if (!task) return null;
-  return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={t("From card {title}, {state}. Open it", { title: task.title, state: task.archivedAt ? t("archived") : nameOf(task.status) })}
-      onPress={() => onOpenTask(task.id)}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ ...noFocusRing,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space[1.5],
-        marginHorizontal: space[3],
-        marginBottom: space[1.5],
-        paddingHorizontal: space[2],
-        minHeight: touch ? 36 : 28,
-        borderRadius: radius.md,
-        backgroundColor: pressed || hovered ? colors.surface2 : tint(colors.foreground, 0.03),
-      })}
-    >
-      <Label muted size={font.xs} selectable={false}>{t("From")}</Label>
-      <StatusIcon status={task.status} size={12} />
-      <View style={{ flexShrink: 1, minWidth: 0 }}>
-        <Label size={font.sm} lines={1} selectable={false}>{task.title}</Label>
-      </View>
-      <Label muted size={font.xs} selectable={false}>· {task.archivedAt ? t("Archived") : nameOf(task.status)}</Label>
-      <View style={{ flex: 1 }} />
-      <Icon name="ChevronRight" size={13} color={colors.foregroundMuted} />
-    </Pressable>
-  );
 }
 
 function GroupHeader({ task, count, nameOf, onOpenTask }: { task: Task | undefined; count: number; nameOf(status: Status): string; onOpenTask(id: string): void }) {

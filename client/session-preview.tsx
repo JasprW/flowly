@@ -42,7 +42,7 @@ import {
   tint,
   noFocusRing } from "./ui";
 import { sessionTone } from "./status";
-import { resolveSend, sendBehaviorText, sendBehaviors, type SendBehavior } from "./send-queue";
+import { resolveSend, sendBehaviorText, type SendBehavior } from "./send-queue";
 import { useComposer } from "./composer";
 import { useLiveAgents } from "./queries";
 import { imageInputSupported, listenForImages, pickImageFiles, readImages, type Attachment } from "./web-images";
@@ -214,8 +214,7 @@ function SessionPreviewView({
     [focused, setFocused] = useState(false),
     [confirmArchive, setConfirmArchive] = useState(false),
     [renaming, setRenaming] = useState(false),
-    [chipMenu, setChipMenu] = useState<ChipMenuId | null>(null),
-    [modePicker, setModePicker] = useState(false);
+    [chipMenu, setChipMenu] = useState<ChipMenuId | null>(null);
   useShortcutBlock(focused);
   const focusedRef = useRef(false);
   focusedRef.current = focused;
@@ -302,9 +301,6 @@ function SessionPreviewView({
     !busy;
   const view = useBoardView();
   const preferred: SendBehavior = view.values?.sendBehavior || "steer";
-  const setPreferred = (next: SendBehavior) => {
-    if (view.values && view.values.sendBehavior !== next) void view.update({ sendBehavior: next });
-  };
   const composer = useComposer(visible && settled);
   const openMenu = useMenuOpener();
   const config = useSessionConfig(task.id, active, visible && settled, () => void current.refetch());
@@ -521,8 +517,6 @@ function SessionPreviewView({
   const stopMode = running && !draft.trim() && !attachments.length && canWrite && !busy;
   const sendSize = touch ? 34 : 28;
   const inputMax = compact ? 108 : 160;
-  // Touch has no Enter/Shift+Enter: the "When running" choice stays, the key hints go.
-  const keyHints = !compact && Platform.OS === "web";
   const fitInput = (contentHeight: number) => {
     const next = Math.max(inputMin, Math.min(inputMax, Math.ceil(contentHeight)));
     setInputHeight((current) => (current === next ? current : next));
@@ -534,6 +528,12 @@ function SessionPreviewView({
     if (onOpenSession?.(agentId)) return;
     if (typeof navigation?.openAgent === "function") openNativeSession(navigation, agentId, hostId);
   });
+  // Takes a queued message out of the queue and into the input (appended to what is already typed).
+  const withdraw = (m: { id: string; text: string }) =>
+    void composer.remove(sessionId, m.id).then(
+      () => onDraftChange(sessionId, draftBuffer.read().trim() ? `${draftBuffer.read()}\n${m.text}` : m.text),
+      (e) => setError(message(e)),
+    );
   const renderComposer = () => {
     if (!active) return null;
     return (
@@ -553,9 +553,7 @@ function SessionPreviewView({
                             .then(() => toast.show(t("Sent to the running turn"), { variant: "success" }))
                             .catch((e) => setError(message(e))) }]
                       : []),
-                    { id: "edit", label: t("Edit"), icon: "Pencil", disabled: m.id.startsWith("pending-") || !!m.images?.length, onPress: () =>
-                        void composer.remove(sessionId, m.id).then(() =>
-                          onDraftChange(sessionId, draftBuffer.read().trim() ? `${draftBuffer.read()}\n${m.text}` : m.text)) },
+                    { id: "edit", label: t("Edit"), icon: "Pencil", disabled: m.id.startsWith("pending-") || !!m.images?.length, onPress: () => withdraw(m) },
                     { kind: "separator", id: "s" },
                     { id: "remove", label: t("Remove"), icon: "Trash2", danger: true, disabled: m.id.startsWith("pending-"), onPress: () =>
                         void composer.remove(sessionId, m.id).catch((e) => setError(message(e))) },
@@ -598,6 +596,15 @@ function SessionPreviewView({
                     >
                       {t("Steer")}</Button>
                   )}
+                  {!m.images?.length && (
+                    <IconButton
+                      icon="Undo2"
+                      size={26}
+                      label={t("Take back to the message box")}
+                      disabled={m.id.startsWith("pending-")}
+                      onPress={() => withdraw(m)}
+                    />
+                  )}
                   <IconButton
                     icon="X"
                     size={26}
@@ -633,7 +640,8 @@ function SessionPreviewView({
             <View style={{ minWidth: 0, paddingHorizontal: space[1.5] }}>
             {Platform.OS === "web" && (
               // Invisible copy of the draft at the input's width and font: its height is the input's height.
-              <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, opacity: 0 }}>
+              // Absolute children are placed against the padding box, so it needs the same horizontal inset as the input; without it the copy was 12 px wider, fitted a last character the textarea wraps, and the input came out one line short.
+              <View pointerEvents="none" style={{ position: "absolute", left: space[1.5], right: space[1.5], top: 0, opacity: 0 }}>
                 <NativeText
                   accessibilityElementsHidden
                   importantForAccessibility="no-hide-descendants"
@@ -758,7 +766,7 @@ function SessionPreviewView({
               hitSlop={6}
               style={(state) => {
                 const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
                 return {
                   ...noFocusRing,
                   width: sendSize,
@@ -1029,61 +1037,8 @@ function SessionPreviewView({
             />
           )}
           {renderComposer()}
-          {(keyHints || running || queued.length > 0) && (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: 20 }}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                {keyHints && (
-                  <Label muted size={font.xs} lines={1} selectable={false}>
-                    {running
-                      ? t("Enter: {action} · ⌘/Ctrl+Enter: {other} · Shift+Enter: new line", { action: t(sendBehaviorText[preferred].label), other: preferred === "queue" ? t("Send now") : t("Queue") })
-                      : t("Enter to send · Shift+Enter for a new line")}
-                  </Label>
-                )}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t("When running: {label}. Change", { label: t(sendBehaviorText[preferred].label) })}
-                onPress={() => setModePicker(true)}
-                hitSlop={6}
-                style={{ ...noFocusRing, flexDirection: "row", alignItems: "center", gap: 2 }}
-              >
-                <Label muted size={font.xs} selectable={false}>
-                  {t("When running:")}{" "}<Label size={font.xs} medium selectable={false}>{t(sendBehaviorText[preferred].label)}</Label>
-                </Label>
-                <Icon name="ChevronDown" size={12} color={colors.foregroundMuted} />
-              </Pressable>
-            </View>
-          )}
         </Animated.View>
       )}
-      <Modal
-        open={modePicker && visible}
-        title={t("When the session is running")}
-        onOpenChange={(open) => {
-          if (!open) setModePicker(false);
-        }}
-      >
-        <Modal.Content contentContainerStyle={{ padding: space[3], gap: space[1] }}>
-          <Theme.Provider value={theme}>
-            {sendBehaviors.map((b) => (
-              <Row
-                key={b}
-                title={t(sendBehaviorText[b].label)}
-                detail={t(sendBehaviorText[b].detail)}
-                selected={preferred === b}
-                onPress={() => {
-                  setPreferred(b);
-                  setModePicker(false);
-                }}
-              />
-            ))}
-            <View style={{ paddingHorizontal: space[3], paddingTop: space[1] }}>
-              <Label muted size={font.xs}>
-                {t("Same options as Paseo's “Default send” setting. Plugins cannot read that setting, so choose it here.")}</Label>
-            </View>
-          </Theme.Provider>
-        </Modal.Content>
-      </Modal>
       {renaming && visible && active && (
         <RenameSession
           title={active.title || ""}

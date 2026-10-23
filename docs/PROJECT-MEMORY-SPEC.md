@@ -513,7 +513,7 @@ memory: {
   - 达到 180 条时显示容量提示；达到 200 条时，确认或新建会先弹出 Make room（§6.5）；
   - 条目菜单：Edit、Pin / Unpin、Copy as AGENTS.md rule（§5.4）、Archive、Delete…（确认对话框：“Delete this memory? New sessions will no longer see it.”）；
   - 顶部 **Add memory**。
-- **Archived & dismissed · N**：默认折叠，提供 Restore 和 Delete。
+- 页面顶部一组分段（与 Ideas 页一致，2026-10-23 用户要求）：**Memory N**（上面的 To review 与 Memory 区）、**Archived N**、**Dismissed N**。后两段列出对应条目，提供 Restore 和 Delete；Dismissed 的 Restore 回到待审阅（candidate），Archived 的回到 active。取代原来默认折叠的 “Archived & dismissed · N”。
 - 空状态：“Nothing remembered yet. Agents suggest decisions and pitfalls as they work, and finished cards are reviewed for them. You confirm what stays.”
 - 动效、文本输入、无障碍遵守 AGENTS.md 的通用规则：确认、忽略、归档、恢复、删除的收起动效与 Ideas 一致（Memory 页与卡片侧栏的卡片行都复用 `useExitList` + `IdeaRow`，新到达的行上浮淡入；搜索框输入时整个列表重建，不逐行收起）；Archived & dismissed 区和 Add memory 编辑器用 `Collapse` 展开收起，箭头随之旋转；编辑卡片时编辑器与卡片互换带淡入（`client/motion.tsx`），输入框用 `TextBox` / `Field`，所有字符串走 `t()`。成功的瞬时操作用原生 toast。
 

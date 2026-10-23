@@ -145,7 +145,7 @@ export function ContextMenuProvider({ compact, children }: { compact: boolean; c
                         height: touch ? 40 : 30,
                         paddingHorizontal: space[2] + 2,
                         borderRadius: radius.md,
-                        backgroundColor: hover || focused || pressed ? colors.surface2 : "transparent",
+                        backgroundColor: hover || pressed ? colors.surface2 : "transparent",
                         opacity: entry.disabled ? 0.4 : 1,
                       };
                     }}

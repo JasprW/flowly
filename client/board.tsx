@@ -315,6 +315,7 @@ function BoardContent(
     // `idea`: Start session prefilled from an idea on the Ideas page (IDEAS-SPEC §6.3).
     [startRequest, setStartRequest] = useState<{ taskId: string; key: string; idea?: Idea } | null>(null),
     [mobileStatus, setMobileStatus] = useState<Status>("todo"),
+    [reveal, setReveal] = useState<{ status: Status; n: number }>({ status: "todo", n: 0 }),
     [actionTask, setActionTask] = useState<Task | null>(null),
     [projectForm, setProjectForm] = useState<"new" | "edit" | null>(null),
     [removing, setRemoving] = useState<Project | null>(null),
@@ -1810,6 +1811,7 @@ function BoardContent(
                     older={older}
                     olderShown={olderShown}
                     onToggleOlder={toggleOlder}
+                    reveal={reveal}
                     nameOf={nameOf}
                     onToggleCollapse={toggleCollapse}
                     onReorderBlocked={() =>
@@ -2389,7 +2391,7 @@ function ProjectSwitcher({
       onPress={onPress}
       style={(state) => {
         const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
         return {
           ...noFocusRing,
           flexDirection: "row",
@@ -2444,7 +2446,7 @@ function SortButton({ mode, compact, onPress }: { mode: BoardSort; compact: bool
           justifyContent: "center",
           paddingHorizontal: compact ? 0 : space[2] + 2,
           borderRadius: radius.md,
-          backgroundColor: hover || focused || pressed ? colors.surface2 : "transparent",
+          backgroundColor: hover || pressed ? colors.surface2 : "transparent",
         };
       }}
     >
@@ -2477,7 +2479,7 @@ function FilterButton({
       onPress={onPress}
       style={(state) => {
         const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
         return {
           ...noFocusRing,
           flexDirection: "row",

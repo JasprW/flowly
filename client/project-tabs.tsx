@@ -115,7 +115,7 @@ function Tab({
       onPress={onPress}
       style={(state) => {
         const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
         return {
           ...noFocusRing,
           flexDirection: "row",

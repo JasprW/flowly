@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { View } from "react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { modelLabel } from "../shared/summary";
 import type { SummaryRowData } from "../shared/native-session";
 import { CardFootnote, ContentCard } from "./content-card";
 import { SummaryBody } from "./task-progress";
@@ -23,9 +22,7 @@ export const SummaryRow = memo(function SummaryRow({ data, onOpenCard }: { data:
       <ContentCard
         footer={
           <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-            <CardFootnote>
-              {t("Updated {time}", { time: relativeTime(data.at) })} · {modelLabel(data.model)}
-            </CardFootnote>
+            <CardFootnote>{t("Updated {time}", { time: relativeTime(data.at) })}</CardFootnote>
             {onOpenCard && (
               <Button quiet small icon="PanelsTopLeft" onPress={onOpenCard}>
                 {t("Open card")}

@@ -17,13 +17,13 @@ import {
   type MemoryKind,
   type MemoryView,
 } from "../shared/memory";
-import { ContentCard, CardBody, CardHeadline, CardMeta, CardMetaRow, CardText } from "./content-card";
+import { ContentCard, CardBody, CardHeadline, CardMeta, CardMetaRow, CardText, SourceLine } from "./content-card";
+export { SourceLine };
 import { eventPoint, useMenuOpener } from "./context-menu";
 import { Chevron, Collapse, Section } from "./disclosure";
 import { Modal } from "./modal";
 import { Enter } from "./motion";
 import { memoryCountsKey, memoryKey, useMemoryQuery } from "./queries";
-import { StatusIcon } from "./status";
 import { IdeaRow, useExitList, useHeld } from "./task-ideas";
 import { Actions, AiMark, Button, Choices, CueRing, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg, tn } from "../shared/i18n";
@@ -472,7 +472,8 @@ export const MemoryPage = memo(function MemoryPage({
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
-  const [closedOpen, setClosedOpen] = useState(false);
+  // Like the Ideas page: Archived and Dismissed are segments of their own, not a folded section.
+  const [tab, setTab] = useState<"memory" | "archived" | "dismissed">("memory");
   const [staleAsk, setStaleAsk] = useState(false);
   const now = Date.now();
   const entries = view?.entries ?? noEntries;
@@ -480,9 +481,9 @@ export const MemoryPage = memo(function MemoryPage({
   const disabled = !!project.archivedAt || !view?.enabled;
   const candidates = entries.filter((e) => e.status === "candidate").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const active = entries.filter((e) => e.status === "active");
-  const closed = entries.filter((e) => e.status === "dismissed" || e.status === "archived").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  // The section outlives its last row's exit.
-  const closedCount = useHeld(closed.length);
+  const closedOf = (status: "dismissed" | "archived") => entries.filter((e) => e.status === status).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const archived = closedOf("archived");
+  const dismissed = closedOf("dismissed");
   const stale = active.filter((e) => isStale(e, now));
   const needle = search.trim().toLowerCase();
   const shown = active
@@ -516,6 +517,19 @@ export const MemoryPage = memo(function MemoryPage({
           {active.length >= memoryLimits.warnAt && (
             <Notice tone="warning">{t("{n} of {max} memories. Archive stale ones to keep room.", { n: active.length, max: memoryLimits.activePerProject })}</Notice>
           )}
+          <Choices
+            title={t("Memory")}
+            hideTitle
+            value={tab}
+            options={[
+              { value: "memory", label: t("Memory {n}", { n: active.length + candidates.length }) },
+              { value: "archived", label: t("Archived {n}", { n: archived.length }) },
+              { value: "dismissed", label: t("Dismissed {n}", { n: dismissed.length }) },
+            ]}
+            onChange={setTab}
+          />
+          {tab === "memory" ? (
+            <>
           <MemoryRows entries={candidates} actions={actions} render={card} before={<SectionTitle icon="Inbox" title={t("To review · {n}", { n: reviewCount.current })} ai />} />
           <View style={{ gap: space[2] }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
@@ -585,16 +599,23 @@ export const MemoryPage = memo(function MemoryPage({
               </View>
             </Enter>
           </View>
-          {!!closedCount && (
-            <View style={{ gap: space[2] }}>
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: closedOpen }} onPress={() => setClosedOpen(!closedOpen)} style={{ ...noFocusRing, flexDirection: "row", alignItems: "center", gap: space[1.5], minHeight: touch ? 40 : 28 }}>
-                <Chevron open={closedOpen} title="closed-memory" color={colors.foregroundMuted} size={14} />
-                <Label muted medium size={font.sm} selectable={false}>{t("Archived & dismissed · {n}", { n: closedCount })}</Label>
-              </Pressable>
-              <Collapse open={closedOpen} id="closed-memory">
-                <MemoryRows entries={closed} actions={actions} render={card} />
-              </Collapse>
-            </View>
+            </>
+          ) : (
+            <Enter key={tab} distance={0}>
+              <View>
+                <MemoryRows
+                  entries={tab === "archived" ? archived : dismissed}
+                  actions={actions}
+                  render={card}
+                  empty={
+                    <View style={{ alignItems: "center", gap: space[2], paddingVertical: space[6] }}>
+                      <Icon name={tab === "archived" ? "Archive" : "CircleSlash"} size={22} color={colors.foregroundMuted} />
+                      <Label muted size={font.md}>{tab === "archived" ? t("No archived memories.") : t("No dismissed memories.")}</Label>
+                    </View>
+                  }
+                />
+              </View>
+            </Enter>
           )}
           {!!view && view.recall.queries > 0 && (
             <Label muted size={font.xs}>{t("Recall: {queries} searches, {empty} found nothing (30 days)", { queries: view.recall.queries, empty: view.recall.empty })}</Label>
@@ -605,7 +626,7 @@ export const MemoryPage = memo(function MemoryPage({
       {staleAsk && (
         <ConfirmDialog
           title={tn(stale.length, "Archive {n} stale memory?", "Archive {n} stale memories?")}
-          text={t("New sessions stop seeing them. You can restore them from Archived & dismissed.")}
+          text={t("New sessions stop seeing them. You can restore them from Archived.")}
           action={t("Archive")}
           onClose={() => setStaleAsk(false)}
           onConfirm={async () => {
@@ -698,46 +719,6 @@ function SectionTitle({ icon, title, ai }: { icon: string; title: string; ai?: b
       <Label bold size={font.md} selectable={false}>{title}</Label>
       {ai && <AiMark label={t("AI generated")} />}
     </View>
-  );
-}
-
-/** "From <card> · <lane>" under a memory; also the welcome tour's demo. */
-export function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefined; nameOf(status: Status): string; onOpenTask(id: string): void }) {
-  const { colors } = useTheme();
-  if (!task)
-    return (
-      <View style={{ marginHorizontal: space[3], marginBottom: space[1.5], paddingHorizontal: space[2], minHeight: touch ? 36 : 28, justifyContent: "center" }}>
-        <Label muted size={font.xs}>{t("From a deleted card")}</Label>
-      </View>
-    );
-  return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={t("From card {title}, {state}. Open it", { title: task.title, state: task.archivedAt ? t("archived") : nameOf(task.status) })}
-      onPress={() => onOpenTask(task.id)}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({
-        ...noFocusRing,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: space[1.5],
-        marginHorizontal: space[3],
-        marginTop: space[3],
-        marginBottom: space[1.5],
-        paddingHorizontal: space[2],
-        minHeight: touch ? 36 : 28,
-        borderRadius: radius.md,
-        backgroundColor: pressed || hovered ? colors.surface2 : tint(colors.foreground, 0.03),
-      })}
-    >
-      <Label muted size={font.xs} selectable={false}>{t("From")}</Label>
-      <StatusIcon status={task.status} size={12} />
-      <View style={{ flexShrink: 1, minWidth: 0 }}>
-        <Label size={font.sm} lines={1} selectable={false}>{task.title}</Label>
-      </View>
-      <Label muted size={font.xs} selectable={false}>· {task.archivedAt ? t("Archived") : nameOf(task.status)}</Label>
-      <View style={{ flex: 1 }} />
-      <Icon name="ChevronRight" size={13} color={colors.foregroundMuted} />
-    </Pressable>
   );
 }
 

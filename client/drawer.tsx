@@ -1152,7 +1152,7 @@ function SubagentToggle({ id, summary, open, onPress }: { id: string; summary: s
         borderTopWidth: 1,
         borderColor: colors.border,
         // Focus shows as the row's background, not a browser outline the bordered list would clip into a line.
-        backgroundColor: state.pressed || (state as typeof state & { hovered?: boolean; focused?: boolean }).hovered || (state as typeof state & { focused?: boolean }).focused ? colors.surface1 : colors.surface0,
+        backgroundColor: state.pressed || (state as typeof state & { hovered?: boolean; focused?: boolean }).hovered ? colors.surface1 : colors.surface0,
       })}
     >
       <Icon name="CornerDownRight" size={13} color={colors.foregroundMuted} />
@@ -1209,7 +1209,7 @@ function Property({
       }}
       style={(state) => {
         const { pressed, hovered: hover, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
         return {
           ...noFocusRing,
           flexDirection: "row",

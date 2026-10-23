@@ -62,7 +62,7 @@ export const NextMoves = memo(function NextMoves({
                   borderRadius: height / 2,
                   borderWidth: 1,
                   borderColor: action ? tint(colors.statusSuccess, 0.55) : index === 0 ? tint(colors.accent, 0.5) : colors.border,
-                  backgroundColor: pressed || hovered || focused ? colors.surface2 : index === 0 ? tint(colors.accent, 0.08) : colors.surface0,
+                  backgroundColor: pressed || hovered ? colors.surface2 : index === 0 ? tint(colors.accent, 0.08) : colors.surface0,
                   opacity: disabled ? 0.45 : 1,
                 };
               }}

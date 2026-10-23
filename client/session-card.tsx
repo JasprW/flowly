@@ -51,7 +51,7 @@ export function SessionCard({
       {...(menu || {})}
       style={(pressState) => {
         const { pressed, hovered: hover, focused } = pressState as typeof pressState & { hovered?: boolean; focused?: boolean };
-        const hovered = hover || focused;
+        const hovered = hover;
         return {
           ...noFocusRing,
           flexDirection: "row",

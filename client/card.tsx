@@ -244,7 +244,7 @@ export function TaskCard({
       }
       style={{
         borderWidth: 1,
-        borderColor: selected || focused
+        borderColor: selected
           ? colors.accent
           : hovered
             ? tint(colors.foregroundMuted, 0.45)

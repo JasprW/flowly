@@ -131,3 +131,7 @@ Supersedes the native bottom-sheet composer of §9 at the user's request (phone 
 ## 11. Smooth text input everywhere — 2026-10-15
 
 All plugin text fields use `TextBox` (`client/ui.tsx`) through `Field`, the picker search and lane-name inputs. Native: uncontrolled with a seed that changes (with a remount) only on outside changes, so typed text is never pushed back. Web: local state, so a keystroke re-renders only the input. The board filter search commits after 150 ms of quiet (and on blur) because filtering re-renders the whole board; its persistence was already debounced. Rule recorded in AGENTS.md ("Text input").
+
+## Composer simplified (2026-10-23, user request)
+
+The line under the message box (the "Enter to send · Shift+Enter for a new line" key hint and the "When running: Queue" chooser with its modal) is gone. The running-session send behaviour (Steer / Queue / Interrupt, `sendBehavior` in the board-view settings) is now chosen in Settings → General → Sending messages; the keys are unchanged (Enter sends, Shift+Enter a new line, ⌘/Ctrl+Enter the alternative). The send button's accessibility hint still describes what Enter does while running.

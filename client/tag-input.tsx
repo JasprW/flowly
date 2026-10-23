@@ -80,7 +80,7 @@ export function TagPill({
             paddingLeft: 2,
             paddingRight: space[1.5],
             justifyContent: "center",
-            opacity: (state as Hoverable).hovered || (state as Hoverable).focused || hovered || touch ? 1 : 0.55,
+            opacity: (state as Hoverable).hovered || hovered || touch ? 1 : 0.55,
           })}
         >
           <Icon name="X" size={touch ? 14 : 12} color={colors.foregroundMuted} />
@@ -202,7 +202,7 @@ export const TagEditor = memo(function TagEditor({
               borderRadius: radius.md,
               borderWidth: 1,
               borderStyle: "dashed",
-              borderColor: (state as Hoverable).hovered || (state as Hoverable).focused ? colors.foregroundMuted : colors.border,
+              borderColor: (state as Hoverable).hovered ? colors.foregroundMuted : colors.border,
             })}
           >
             <Icon name="Plus" size={12} color={colors.foregroundMuted} />
@@ -299,7 +299,7 @@ export const TagEditor = memo(function TagEditor({
                 paddingHorizontal: space[1.5],
                 justifyContent: "center",
                 borderRadius: radius.sm,
-                backgroundColor: (state as Hoverable).hovered || (state as Hoverable).focused ? colors.surface2 : "transparent",
+                backgroundColor: (state as Hoverable).hovered ? colors.surface2 : "transparent",
               })}
             >
               <Label size={font.sm} muted selectable={false}>{`#${s}`}</Label>

@@ -174,7 +174,7 @@ function Chip({
           onPress={onPress}
           style={(state) => {
             const { hovered, pressed, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
-            return { ...noFocusRing, ...base, backgroundColor: hovered || pressed || focused ? colors.surface2 : "transparent" };
+            return { ...noFocusRing, ...base, backgroundColor: hovered || pressed ? colors.surface2 : "transparent" };
           }}
         >
           {content}
