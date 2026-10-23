@@ -1,0 +1,15 @@
+谢谢，主会话已保存你的原始完整审查，不更改旧稿/规则/成绩。两项阻塞采纳。请只对下面收敛文字做一次简短复核（不用再通读全部材料，分析只读，不运行测试/被测模型，不写文件/卡片/代码），指出仍有阻塞即可：
+
+1. 你的“有新文件/报告/PR就in_review”会误伤正常阶段贡献；既有skill写的是整体交付in_review、部分贡献不完成整卡。我保留“整卡整体交付或用户明确要求handoff”，不是按artifact存在自动选择。
+2. 你的“Before editing files”还可能把Design阶段编写spec/调研报告拉去Development，和WORKFLOW-STAGES-SPEC的Design=方案/规格/调研冲突。第2项改按工作目的分类，保留docs-only实现进入Development，Design写规格/研究报告不强制Development。
+3. “question or blocked needs neither”改成不额外加result，明确仍沿用这些路径现有nextMoves要求。
+4. 诊断口径：Sonnet T2是未观测到读卡，opaque Bash不能证明绝对零读卡；Sonnet T1从Todo直接整体交付加outputs文件前置存在校验，确有额外阶段失效线索，但不回写旧grader UNKNOWN。GPT T2继承Test不证明主动切换，这点采纳。未来reload记录有用，但不能单凭reload日志声称拿到了确切loadedImplementationHash。
+
+主会话拟第2项：
+Use design for research, planning and specs. For implementation (including docs-only changes), set development and define workpad acceptance/checks before editing. Before executing task verification (including workpad or user-requested checks), ensure test. Ordinary inspection does not require test. Keep the stage current.
+
+拟第5项：
+Before ending a work turn (including research, task checks and commit/merge follow-ups), update workpad. Use flowly_update_status(in_review) for the card's overall delivery or the user's requested handoff, even if uncommitted; report partial work or verification-only follow-ups with flowly_report_progress(kind=result). A new artifact alone does not mean the whole card is complete. Include outputs and nextMoves; [] when none. Pure conversation or a pause needs no delivery. After a question or blocked report, do not add a result; keep their existing nextMoves rules. Follow explicit stop/wait instructions.
+
+其余四项不变，六项共1540字符。不新增API/hook，不更改现行阶段规则。这不是请你替实施，只确认修订稿是否还引入冲突/实质规则扩张，并给最终设计建议。请保持简短、事实/推断分开。
+This is analysis only. Do NOT edit, create, or delete any files. Do NOT write code.

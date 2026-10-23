@@ -858,3 +858,11 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - grader 1.0.1：每case启动会话前冻结fixture main，评分和清理共用scope图/路径/tree审计。已批准历史的原样导入可通过，额外新提交、dirty、模式变化、改后还原和merge resolution仍拒绝；缺证据UNKNOWN，不按任意最终父提交放行。
 - 保存证据离线回归：77/77 PASS。独立重评只将GPT T3的scope误FAIL改为PASS，其他五回合成绩不变，整体仍FAIL/exit1。旧run 56个文件hash保持，未跑模型、未创建原生fixture、未改旧成绩；临时Git测试目录已清理。
 - 未重跑新Luna/模型会话，遵循本次“不重跑模型”；复用保存的Luna风险用例。无产品API/UI改动，无需reload或onboarding更新。证据见 [scope修正报告](verification/constraint-benchmark-scope-2026-10-23/report.md)。
+
+
+## 2026-10-23 Shared checklist wording — Fable整体复核后
+
+- Spec先行：TURN-CHECKLIST-SPEC §2/§2.1明确现行阶段和整体交付/阶段汇报边界；只收紧shared/turn-checklist.ts第2/5项，并由既有skill-source生成仓库SKILL.md。另四项与详细规则逐字不变，6项/1583字符。
+- PASS：离线3 files / 62 tests（skill-source、agent-service、tool-server）；规范/生成一致性与旧证据hash核对。保留旧benchmark原始/独立重评，不改评分。
+- 未运行：B01、被测模型/审查会话、fixture/grader、全量测试、安装/reload、Git发布；未加hooks/改服务端行为/API/UI。仓库skill已生成，不宣称运行中的服务已加载新规则或模型遵守改善。无onboarding/tip/What's new改动。
+- [本轮归属、检查与保留证据](verification/turn-checklist-wording-2026-10-23/report.md)。

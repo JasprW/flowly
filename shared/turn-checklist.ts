@@ -1,9 +1,9 @@
 /** Agent-facing rules shared by the generated skill and every live task read. No user data. */
 export const turnChecklist: string[] = [
   "Every turn, including commit/merge/rework/verification follow-ups: read flowly_get_task, handle unread inputs and fix setup.missing before work.",
-  "Before changing code: set development and write workpad acceptance criteria and checks. For research or verification, use design or test to match the current work.",
+  "Use design for research, planning and specs. For implementation (including docs-only changes), set development and define workpad acceptance/checks before editing. Before executing task verification (including workpad or user-requested checks), ensure test. Ordinary inspection does not require test. Keep the stage current.",
   "After running checks: record the actual pass/fail/unrun results, exact commands and tested commit in workpad; use dirty=true for uncommitted changes.",
   "After opening a PR/MR: register every PR/MR URL as an output this turn, even if an earlier turn already delivered.",
-  "Before ending a work turn, including commit/merge-only turns: update workpad, then deliver the overall work with flowly_update_status(in_review) or report your result with flowly_report_progress(kind=result). Include outputs and nextMoves; use [] when none.",
+  "Before ending a work turn (including the card's research work, task checks and commit/merge follow-ups), update workpad, then obtain a successful receipt: flowly_update_status(in_review) for the card's overall delivery or the user's requested handoff, even if uncommitted; flowly_report_progress(kind=result) for partial work or verification-only follow-ups. A new artifact alone does not mean the whole card is complete. Include outputs and nextMoves; [] when none. Pure conversation or a pause needs no delivery. After a question or blocked report, do not add a result; keep their existing nextMoves rules. Follow explicit stop/wait instructions.",
   "On WORKPAD_OPEN or SETUP_INCOMPLETE: review and resolve the gaps, then retry with acknowledgeOpen=true only if needed, explaining every remaining gap. Session completion never proves card completion.",
 ];

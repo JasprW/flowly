@@ -1,0 +1,44 @@
+{
+  "taskId": "08a37039-643c-4354-9062-0fefdf2eec21",
+  "sessionId": "036d5d2b-d2b0-4b54-9ef7-d80c04a0896f",
+  "base": "fb24f9e6f95ee93e4a4b37d7a71826e273212a73",
+  "method": "isolated index from origin/main; explicit paths and one benchmark-card-owned PROGRESS appendix",
+  "selectedFiles": {
+    "docs/TURN-CHECKLIST-SPEC.md": "12075c5a19c6c5964388f73fc09c1b118f785769e41fa213cdb3fed52cc6c8ad",
+    "shared/turn-checklist.ts": "ef12c16145f5252cbe4a77412d08f653b0b2dbc298f95e4e4806b972a816cc74",
+    "skills/flowly/SKILL.md": "f0e2f7c7e1c88676d92df1ac73e2f62fe8e4d5d2a6253b13ff3fd6ff6f708e52",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/advisor-brief.txt": "200c536cc1c7882c5669aade2e4c01a4bf06c1fd8efcaaea7773a13b9932154b",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/fable-final-review.md": "569e0324ae80a55d0b51fa9985d735008afc14b192de74bce1b462721e951b32",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/fable-review-original.md": "fb7b6dbbfaa0c0a545890a05fdc73279619017267ea1f79dc41652f0a42a86b2",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/followup-brief.txt": "eb394140c3a2ded0463507d5b08ef25f865b6a44266f3f6ddb2505b18721a9b5",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/overall-proposal.md": "7b3b4162abaa007e21bc413af8ee6b35c3d9cc398845c2ac9a88cd75b2e8e616",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/ownership.json": "17f6ac9201fc18b9f3a3352a6901355d58d27549b1065223460dade73b7f7635",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/proposed-checklist.json": "f6c12a2a9f26e294d7bc4f89a9df6db884d7e08a677596ff0cb4fc27b654e7e6",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/review-session.json": "b7b428bba48d0ba6cd757e0ac85a9fd82eb4a51a22630afc750e4fa8b6e0fd43",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/review-summary.md": "7eb557e6e1d255d73e97ed4626598324a790d692d333af9a2233414b042938ab",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/verification.json": "c22190af32ce36ab6fd65dbca2dd0be26832993df58e5b04e267a7b8403562bc",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/verify-review.py": "e117f9f709c7db0d25c4100e35c952aa2bdcee964c6707854ac811eda7516911",
+    "docs/verification/constraint-benchmark-analysis-2026-10-23/evidence.json": "f39746483b3c965a10581fa66cb485126ae7a2ac5c05962028c7862134dad303",
+    "docs/verification/constraint-benchmark-analysis-2026-10-23/ownership.json": "9d57ee5110d5545dfd19a0a72d15ffc2710160ae349166c3309054ae97181052",
+    "docs/verification/constraint-benchmark-analysis-2026-10-23/report.md": "868b2cd21949c4351f925f67c825d8cffbd3127bdfd2d8046bedb224aba71fed",
+    "docs/verification/constraint-benchmark-analysis-2026-10-23/verification.json": "688be640114625f3b6d14f7c30b1f1c1fa87c76c55f050bc6405f95a20a85e6f",
+    "docs/verification/constraint-benchmark-analysis-2026-10-23/verify-evidence.py": "f18b5db45e6202ce5921200b1fa25f2a092452eb99946520acdfb8d01471fd66",
+    "docs/verification/turn-checklist-wording-2026-10-23/check-preservation.py": "e1189cf9a2c597e0973b552e231e71f58b946e234f5b93cb887102c5c275834a",
+    "docs/verification/turn-checklist-wording-2026-10-23/checks-metadata.json": "80db43852586aabc18ba6fbcc67efb7ec2221054b656e3732db859bd0e90bd4d",
+    "docs/verification/turn-checklist-wording-2026-10-23/focused-checks.txt": "fdfe24c111d0ec3bd71628873fcd885a257f9451fd934cb9e86c7e593eaf3125",
+    "docs/verification/turn-checklist-wording-2026-10-23/ownership.json": "92ec45a2345978bf7d39ca801efb57cbe9779c378ce822ff91b05f529e0ce394",
+    "docs/verification/turn-checklist-wording-2026-10-23/preservation.json": "ffa61d3de41a20461c4a17940de2b8588d9da201b1ba2cfc513dae6505c3a8ab",
+    "docs/verification/turn-checklist-wording-2026-10-23/progress-section.md": "bdc8530ba359b2af98010929285c72ed2e0b631a2cd42ccd53b6a021cb206fd1",
+    "docs/verification/turn-checklist-wording-2026-10-23/report.md": "597cebbda332ba54cc8c53b1e19b6588a7ecd2c6cd743b096571e66072e4bca6"
+  },
+  "mixedBlob": {
+    "docs/PROGRESS.md": "4f468422e41155976c0b0ba8822479760892d31dfb632c0250dc81860081d58f"
+  },
+  "priorOwnership": [
+    "docs/verification/constraint-benchmark-analysis-2026-10-23/ownership.json",
+    "docs/verification/constraint-benchmark-advisor-2026-10-23/ownership.json",
+    "docs/verification/turn-checklist-wording-2026-10-23/ownership.json"
+  ],
+  "excludedChangedFiles": 435,
+  "preservedOriginalRunPolicy": "No original benchmark facts/scores or independent scope regrade are changed. No B01/model/fixture execution."
+}

@@ -1,0 +1,85 @@
+{
+  "agentId": "87a4305a-07ba-4050-87cc-9e41355472c0",
+  "profile": {
+    "id": "fable-advisor",
+    "provider": "claude",
+    "model": "claude-fable-5-1"
+  },
+  "creationSettings": {
+    "modeId": "bypassPermissions"
+  },
+  "creationResult": {
+    "agentId": "87a4305a-07ba-4050-87cc-9e41355472c0",
+    "type": "claude",
+    "status": "running",
+    "cwd": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban",
+    "workspaceId": "wks_e56a74f6e1bc6cd6",
+    "currentModeId": "bypassPermissions",
+    "availableModes": [
+      {
+        "id": "plan",
+        "label": "Plan Mode",
+        "description": "Analyze the codebase without executing tools or edits"
+      },
+      {
+        "id": "default",
+        "label": "Always Ask",
+        "description": "Prompts for permission the first time a tool is used"
+      },
+      {
+        "id": "acceptEdits",
+        "label": "Accept File Edits",
+        "description": "Automatically approves edit-focused tools without prompting"
+      },
+      {
+        "id": "auto",
+        "label": "Auto mode",
+        "description": "Uses a model classifier to review permission prompts automatically"
+      },
+      {
+        "id": "bypassPermissions",
+        "label": "Bypass",
+        "description": "Skip all permission prompts (use with caution)"
+      }
+    ],
+    "guidance": "You will get notified when the created agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives."
+  },
+  "status": "COMPLETE_ARCHIVED",
+  "authorization": "User explicitly requested Fable advisor review; benchmark model reruns remain prohibited.",
+  "ownsOnlyThisAdvisor": true,
+  "runtimeIdentity": {
+    "id": "87a4305a-07ba-4050-87cc-9e41355472c0",
+    "model": "claude-fable-5-1",
+    "modeId": "bypassPermissions",
+    "thinking": null,
+    "workspaceId": "wks_e56a74f6e1bc6cd6",
+    "observedAt": "2026-10-23T03:13:48.817Z"
+  },
+  "firstReview": {
+    "verdict": "修改后实施",
+    "file": "fable-review-original.md",
+    "hash": "fb7b6dbbfaa0c0a545890a05fdc73279619017267ea1f79dc41652f0a42a86b2",
+    "waitObserved": "idle",
+    "receivedAt": "2026-10-23T03:21:54.247343+00:00"
+  },
+  "followup": {
+    "sameAgent": true,
+    "brief": "followup-brief.txt",
+    "scope": "Only check the two revised clauses and identified boundary corrections; no new implementation/tests/benchmark."
+  },
+  "finalReview": {
+    "verdict": "无阻塞，可实施；恢复回执义务及限定research为非阻塞文字建议",
+    "file": "fable-final-review.md",
+    "hash": "569e0324ae80a55d0b51fa9985d735008afc14b192de74bce1b462721e951b32"
+  },
+  "cleanup": {
+    "agentId": "87a4305a-07ba-4050-87cc-9e41355472c0",
+    "model": "claude-fable-5-1",
+    "modeId": "bypassPermissions",
+    "archivedAt": "2026-10-23T03:23:28.605Z",
+    "archived": true,
+    "workspaceId": "wks_e56a74f6e1bc6cd6",
+    "onlyOwnedAgentArchived": true,
+    "benchmarkResourcesCreated": 0
+  }
+}

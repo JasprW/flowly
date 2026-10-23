@@ -1,0 +1,21 @@
+{
+  "command": "python3 docs/verification/constraint-benchmark-analysis-2026-10-23/verify-evidence.py",
+  "exitCode": 0,
+  "head": "fb24f9e6f95ee93e4a4b37d7a71826e273212a73",
+  "dirty": true,
+  "result": {
+    "status": "PASS",
+    "protectedFiles": 81,
+    "selectedTurns": 2,
+    "proposedRuleCount": 6,
+    "proposedCharacters": 1410,
+    "modelsRun": 0,
+    "productRulesChanged": false
+  },
+  "fileHashes": {
+    "evidence.json": "f39746483b3c965a10581fa66cb485126ae7a2ac5c05962028c7862134dad303",
+    "ownership.json": "9d57ee5110d5545dfd19a0a72d15ffc2710160ae349166c3309054ae97181052",
+    "report.md": "868b2cd21949c4351f925f67c825d8cffbd3127bdfd2d8046bedb224aba71fed",
+    "verify-evidence.py": "f18b5db45e6202ce5921200b1fa25f2a092452eb99946520acdfb8d01471fd66"
+  }
+}

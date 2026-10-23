@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-23T03:35:11.137074+00:00",
+  "head": "fb24f9e6f95ee93e4a4b37d7a71826e273212a73",
+  "dirty": true,
+  "node": "v26.9.0",
+  "checks": [
+    {
+      "command": "npx vitest run server/skill-source.test.ts server/agent-service.test.ts server/tool-server.test.ts",
+      "exitCode": 0,
+      "files": 3,
+      "tests": 62
+    },
+    {
+      "command": "python3 docs/verification/turn-checklist-wording-2026-10-23/check-preservation.py",
+      "exitCode": 0,
+      "result": {
+        "status": "PASS",
+        "changedClauses": [
+          2,
+          5
+        ],
+        "characters": 1583,
+        "skillDetailsUnchanged": true,
+        "generatorUnchanged": true,
+        "protectedEvidenceFiles": 87,
+        "otherWorkingFiles": 410,
+        "concurrentNonTargetChangesObserved": [
+          "docs/verification/mobile-perf-2026-10-23/__pycache__/assess.cpython-315.pyc",
+          "docs/verification/mobile-perf-2026-10-23/assess.py",
+          "docs/verification/mobile-perf-2026-10-23/cold3-flowly-board.json",
+          "docs/verification/mobile-perf-2026-10-23/cold3-host-menu.json",
+          "docs/verification/mobile-perf-2026-10-23/cold3-menu-recover-close.json",
+          "docs/verification/mobile-perf-2026-10-23/cold3-menu-recover-open.json",
+          "docs/verification/mobile-perf-2026-10-23/cold3-recovered-flowly-board.json",
+          "docs/verification/mobile-perf-2026-10-23/matrix-summary.txt",
+          "docs/verification/mobile-perf-2026-10-23/matrix.json",
+          "docs/verification/mobile-perf-2026-10-23/perf-android.json",
+          "docs/verification/mobile-perf-2026-10-23/privacy-scrub.json"
+        ]
+      }
+    },
+    {
+      "command": "git diff --check -- docs/TURN-CHECKLIST-SPEC.md shared/turn-checklist.ts skills/flowly/SKILL.md",
+      "exitCode": 0
+    }
+  ],
+  "files": {
+    "docs/TURN-CHECKLIST-SPEC.md": "12075c5a19c6c5964388f73fc09c1b118f785769e41fa213cdb3fed52cc6c8ad",
+    "shared/turn-checklist.ts": "ef12c16145f5252cbe4a77412d08f653b0b2dbc298f95e4e4806b972a816cc74",
+    "skills/flowly/SKILL.md": "f0e2f7c7e1c88676d92df1ac73e2f62fe8e4d5d2a6253b13ff3fd6ff6f708e52",
+    "server/skill-source.ts": "9600d7bc7c4a36c3521decc3b5033da1214bb59147d857bde73ac701b716d1b5"
+  },
+  "testOutputHash": "fdfe24c111d0ec3bd71628873fcd885a257f9451fd934cb9e86c7e593eaf3125",
+  "notRun": [
+    "B01",
+    "models/advisors",
+    "typecheck/full product suite",
+    "fixture/grader/cleanup",
+    "reload/install",
+    "commit/push"
+  ]
+}

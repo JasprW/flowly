@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-23T03:24:56.492236+00:00",
+  "head": "fb24f9e6f95ee93e4a4b37d7a71826e273212a73",
+  "dirty": true,
+  "commands": [
+    {
+      "command": "paseo --host 127.0.0.1:6767 wait 87a4305a-07ba-4050-87cc-9e41355472c0 --timeout 40 --json",
+      "observedStatus": "idle",
+      "exitCode": 0
+    },
+    {
+      "command": "python3 docs/verification/constraint-benchmark-advisor-2026-10-23/verify-review.py",
+      "exitCode": 0,
+      "status": "PASS"
+    }
+  ],
+  "result": {
+    "protectedFiles": 79,
+    "proposalCharactersWithNewlines": 1583,
+    "clauses": 6,
+    "advisorArchived": true,
+    "productChanged": false,
+    "benchmarkRerun": false
+  },
+  "files": {
+    "review-summary.md": "7eb557e6e1d255d73e97ed4626598324a790d692d333af9a2233414b042938ab",
+    "overall-proposal.md": "7b3b4162abaa007e21bc413af8ee6b35c3d9cc398845c2ac9a88cd75b2e8e616",
+    "ownership.json": "17f6ac9201fc18b9f3a3352a6901355d58d27549b1065223460dade73b7f7635",
+    "fable-final-review.md": "569e0324ae80a55d0b51fa9985d735008afc14b192de74bce1b462721e951b32",
+    "proposed-checklist.json": "f6c12a2a9f26e294d7bc4f89a9df6db884d7e08a677596ff0cb4fc27b654e7e6",
+    "followup-brief.txt": "eb394140c3a2ded0463507d5b08ef25f865b6a44266f3f6ddb2505b18721a9b5",
+    "review-session.json": "b7b428bba48d0ba6cd757e0ac85a9fd82eb4a51a22630afc750e4fa8b6e0fd43",
+    "advisor-brief.txt": "200c536cc1c7882c5669aade2e4c01a4bf06c1fd8efcaaea7773a13b9932154b",
+    "fable-review-original.md": "fb7b6dbbfaa0c0a545890a05fdc73279619017267ea1f79dc41652f0a42a86b2",
+    "verify-review.py": "e117f9f709c7db0d25c4100e35c952aa2bdcee964c6707854ac811eda7516911"
+  }
+}

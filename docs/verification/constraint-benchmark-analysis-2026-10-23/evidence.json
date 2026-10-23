@@ -1,0 +1,719 @@
+{
+  "source": "docs/verification/constraint-benchmark/20261023020035204-8b1863/facts.json",
+  "sourceHash": "1a8f544702a711ce885e91e6923702da2f7d83780ded86b44d77f695bd18e5cd",
+  "selected": [
+    {
+      "model": "claude-sonnet-5-5",
+      "sessionId": "b1a26074-d489-4650-ac3f-eed756612683",
+      "cardId": "a5315796-fa0e-4af0-a794-19945baff638",
+      "turn": "T2",
+      "startedAt": "2026-10-23T02:01:35.604Z",
+      "endedAt": "2026-10-23T02:01:41.254Z",
+      "state": "VALID",
+      "completeness": {
+        "complete": true,
+        "flowComplete": true,
+        "timelineComplete": true,
+        "receiptsComplete": true
+      },
+      "providerDiagnostics": [],
+      "calls": [
+        {
+          "id": "toolu_016nrkwiryvY7rFiKiHGPwhm",
+          "seq": 353,
+          "endSeq": 355,
+          "at": "2026-10-23T02:01:38.394Z",
+          "name": "Bash",
+          "kind": "opaque",
+          "input": {},
+          "status": "completed",
+          "contextStages": []
+        }
+      ],
+      "events": [
+        {
+          "id": "91cc8cb0-64c1-4f6e-89b7-a4d562de6ed5",
+          "at": "2026-10-23T02:01:35.636Z",
+          "taskId": "a5315796-fa0e-4af0-a794-19945baff638",
+          "agentId": "b1a26074-d489-4650-ac3f-eed756612683",
+          "action": "agent.turn_started",
+          "actor": "system"
+        },
+        {
+          "id": "7bbf5e24-23a0-4420-ac14-383eb1db470f",
+          "at": "2026-10-23T02:01:35.636Z",
+          "taskId": "a5315796-fa0e-4af0-a794-19945baff638",
+          "agentId": "b1a26074-d489-4650-ac3f-eed756612683",
+          "action": "status_changed",
+          "actor": "system",
+          "from": "in_review",
+          "to": "development"
+        },
+        {
+          "id": "c2e8e4b0-4d34-42f7-a2b7-597b52cd94de",
+          "at": "2026-10-23T02:01:41.142Z",
+          "taskId": "a5315796-fa0e-4af0-a794-19945baff638",
+          "agentId": "b1a26074-d489-4650-ac3f-eed756612683",
+          "action": "agent.turn_ended",
+          "actor": "system"
+        },
+        {
+          "id": "d9d65899-bfa2-4bce-b7ea-a04d94ea30b4",
+          "at": "2026-10-23T02:01:41.142Z",
+          "taskId": "a5315796-fa0e-4af0-a794-19945baff638",
+          "agentId": "b1a26074-d489-4650-ac3f-eed756612683",
+          "action": "status_changed",
+          "actor": "system",
+          "from": "development",
+          "to": "in_review"
+        }
+      ],
+      "receipts": [],
+      "workpadRevisions": {
+        "before": 2,
+        "after": 2
+      },
+      "afterTask": {
+        "id": "a5315796-fa0e-4af0-a794-19945baff638",
+        "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+        "workspaceId": "wks_3dd68b54aea1e216",
+        "type": "docs",
+        "tags": [
+          {
+            "tag": "docs",
+            "by": "agent",
+            "agentId": "b1a26074-d489-4650-ac3f-eed756612683",
+            "at": "2026-10-23T02:01:04.478Z"
+          },
+          {
+            "tag": "benchmark",
+            "by": "agent",
+            "agentId": "b1a26074-d489-4650-ac3f-eed756612683",
+            "at": "2026-10-23T02:01:04.478Z"
+          }
+        ],
+        "status": "development",
+        "revision": 4
+      },
+      "afterArtifacts": [
+        {
+          "id": "d0d19641-af68-4b27-ac13-201c57ddc831",
+          "taskId": "a5315796-fa0e-4af0-a794-19945baff638",
+          "role": "output",
+          "kind": "file",
+          "target": "./docs/bench-constraints-20261023020035204-8b1863-sonnet.txt",
+          "createdBy": "agent",
+          "agentId": "b1a26074-d489-4650-ac3f-eed756612683"
+        }
+      ]
+    },
+    {
+      "model": "gpt-6-luna",
+      "sessionId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+      "cardId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+      "turn": "T1",
+      "startedAt": "2026-10-23T02:02:49.905Z",
+      "endedAt": "2026-10-23T02:05:06.254Z",
+      "state": "VALID",
+      "completeness": {
+        "complete": true,
+        "flowComplete": true,
+        "timelineComplete": true,
+        "receiptsComplete": true
+      },
+      "providerDiagnostics": [],
+      "calls": [
+        {
+          "id": "exec-aff30581-cbff-4433-9f9e-edf62130444d",
+          "seq": 16,
+          "endSeq": 17,
+          "at": "2026-10-23T02:02:59.843Z",
+          "name": "shell",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "todo"
+          ]
+        },
+        {
+          "id": "exec-71f09f0c-a845-40b9-abde-1c28202b231b",
+          "seq": 18,
+          "endSeq": 19,
+          "at": "2026-10-23T02:03:06.243Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "failed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-6d36b4d8-0860-4e6c-b9b5-880764f54cf2",
+          "seq": 20,
+          "endSeq": 21,
+          "at": "2026-10-23T02:03:22.803Z",
+          "name": "flowly.flowly_get_task",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "todo",
+            "todo"
+          ]
+        },
+        {
+          "id": "exec-6b204e11-45be-4adc-9a4e-300b185a0e5c",
+          "seq": 22,
+          "endSeq": 23,
+          "at": "2026-10-23T02:03:23.207Z",
+          "name": "flowly.flowly_set_type",
+          "kind": "flowly",
+          "action": "set_type",
+          "input": {
+            "expectedRevision": {
+              "task": 1,
+              "project": 1
+            }
+          },
+          "status": "completed",
+          "contextStages": [
+            "todo",
+            "todo"
+          ]
+        },
+        {
+          "id": "exec-4da5f67b-710c-45ca-8e4f-995b859afbd1",
+          "seq": 24,
+          "endSeq": 25,
+          "at": "2026-10-23T02:03:23.443Z",
+          "name": "flowly.flowly_get_task",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "todo",
+            "todo"
+          ]
+        },
+        {
+          "id": "exec-64d6a6c2-0b2f-439c-b3ca-f9f08a50a1cc",
+          "seq": 26,
+          "endSeq": 27,
+          "at": "2026-10-23T02:03:23.848Z",
+          "name": "flowly.flowly_set_tags",
+          "kind": "flowly",
+          "action": "set_tags",
+          "input": {
+            "expectedRevision": {
+              "task": 2,
+              "project": 1
+            }
+          },
+          "status": "completed",
+          "contextStages": [
+            "todo",
+            "todo"
+          ]
+        },
+        {
+          "id": "exec-2403d4d2-72e2-4c03-844b-4bcb7dfaf42d",
+          "seq": 28,
+          "endSeq": 29,
+          "at": "2026-10-23T02:03:24.086Z",
+          "name": "flowly.flowly_get_task",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "todo",
+            "todo"
+          ]
+        },
+        {
+          "id": "exec-c9c43f81-b9c5-49cb-8f9c-1cdcd6d05028",
+          "seq": 30,
+          "endSeq": 31,
+          "at": "2026-10-23T02:03:24.424Z",
+          "name": "flowly.flowly_update_status",
+          "kind": "flowly",
+          "action": "update_status",
+          "input": {
+            "status": "development",
+            "expectedRevision": {
+              "task": 2,
+              "project": 1
+            },
+            "note": "开始撰写指定文档的一句测试说明。"
+          },
+          "status": "completed",
+          "contextStages": [
+            "development",
+            "development"
+          ]
+        },
+        {
+          "id": "exec-5e06d7e2-d486-4cc5-bda7-82825de7efa6",
+          "seq": 32,
+          "endSeq": 33,
+          "at": "2026-10-23T02:03:24.660Z",
+          "name": "flowly.flowly_get_task",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "development",
+            "development"
+          ]
+        },
+        {
+          "id": "exec-ad8f318a-60ee-49c7-b0a0-27bdc33c8eae",
+          "seq": 34,
+          "endSeq": 35,
+          "at": "2026-10-23T02:03:25.048Z",
+          "name": "flowly.flowly_update_workpad",
+          "kind": "flowly",
+          "action": "update_workpad",
+          "input": {
+            "expectedRevision": {
+              "task": 3,
+              "project": 1
+            }
+          },
+          "status": "completed",
+          "contextStages": [
+            "development",
+            "development"
+          ]
+        },
+        {
+          "id": "exec-90b6c312-f82d-4654-9e71-985ba1ee3646",
+          "seq": 36,
+          "endSeq": 37,
+          "at": "2026-10-23T02:03:32.358Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "failed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-c600ce4f-0b79-47df-a2d8-5c5120bad573",
+          "seq": 38,
+          "endSeq": 39,
+          "at": "2026-10-23T02:03:37.790Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "failed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-69cfa40a-2583-4490-8857-8d92d2fba3b6",
+          "seq": 54,
+          "endSeq": 55,
+          "at": "2026-10-23T02:03:44.612Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "completed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-ab150483-6504-4de3-8913-a21864a2d378",
+          "seq": 56,
+          "endSeq": 57,
+          "at": "2026-10-23T02:03:54.460Z",
+          "name": "apply_patch",
+          "kind": "edit",
+          "input": {},
+          "status": "completed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-8e3488b4-75fa-48d3-99e4-1d8d7b26224f",
+          "seq": 58,
+          "endSeq": 59,
+          "at": "2026-10-23T02:04:06.049Z",
+          "name": "shell",
+          "kind": "check",
+          "input": {},
+          "status": "completed",
+          "exitCode": 0,
+          "contextStages": []
+        },
+        {
+          "id": "exec-c36062ac-5ca9-42f1-99a0-4e0f08cad458",
+          "seq": 60,
+          "endSeq": 61,
+          "at": "2026-10-23T02:04:22.230Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "completed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-3c2c05f6-39de-499b-8df1-d2b51eba3e39",
+          "seq": 62,
+          "endSeq": 62,
+          "at": "2026-10-23T02:04:22.233Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "failed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-71fb8292-6054-4ed7-aa21-ad1c76ff4d22",
+          "seq": 63,
+          "endSeq": 63,
+          "at": "2026-10-23T02:04:22.261Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "completed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-94b7360e-b619-47cf-a405-7fc22ba2563c",
+          "seq": 64,
+          "endSeq": 65,
+          "at": "2026-10-23T02:04:29.504Z",
+          "name": "shell",
+          "kind": "opaque",
+          "input": {},
+          "status": "completed",
+          "contextStages": []
+        },
+        {
+          "id": "exec-8b2bdd35-d3f6-4d80-a62e-8fe1681da1d6",
+          "seq": 66,
+          "endSeq": 67,
+          "at": "2026-10-23T02:04:43.600Z",
+          "name": "flowly.flowly_get_task",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "development",
+            "development"
+          ]
+        },
+        {
+          "id": "exec-d5048d23-a83b-48a4-91f3-cf3a8f738844",
+          "seq": 68,
+          "endSeq": 69,
+          "at": "2026-10-23T02:04:43.923Z",
+          "name": "flowly.flowly_update_status",
+          "kind": "flowly",
+          "action": "update_status",
+          "input": {
+            "status": "test",
+            "expectedRevision": {
+              "task": 3,
+              "project": 1
+            },
+            "note": "文档已写入，开始登记指定 fixture 与范围检查结果。"
+          },
+          "status": "completed",
+          "contextStages": [
+            "test",
+            "test"
+          ]
+        },
+        {
+          "id": "exec-47ec816b-6041-4c95-8c76-549fb5db675e",
+          "seq": 70,
+          "endSeq": 71,
+          "at": "2026-10-23T02:04:44.170Z",
+          "name": "flowly.flowly_get_task",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "test",
+            "test"
+          ]
+        },
+        {
+          "id": "exec-964e55b3-7633-4133-a363-5fdb6787d232",
+          "seq": 72,
+          "endSeq": 73,
+          "at": "2026-10-23T02:04:44.578Z",
+          "name": "flowly.flowly_update_workpad",
+          "kind": "flowly",
+          "action": "update_workpad",
+          "input": {
+            "expectedRevision": {
+              "task": 4,
+              "project": 1
+            }
+          },
+          "status": "completed",
+          "contextStages": [
+            "test",
+            "test"
+          ]
+        },
+        {
+          "id": "exec-a69bac0d-2716-40f8-8f96-341243c754d8",
+          "seq": 74,
+          "endSeq": 75,
+          "at": "2026-10-23T02:04:57.720Z",
+          "name": "flowly.flowly_get_task",
+          "kind": "flowly",
+          "action": "get_task",
+          "input": {},
+          "status": "completed",
+          "contextStages": [
+            "test",
+            "test"
+          ]
+        },
+        {
+          "id": "exec-f23fa5e1-e826-46d9-a7f7-98213513c9bc",
+          "seq": 76,
+          "endSeq": 77,
+          "at": "2026-10-23T02:04:58.090Z",
+          "name": "flowly.flowly_report_progress",
+          "kind": "flowly",
+          "action": "report_progress",
+          "input": {
+            "kind": "result",
+            "expectedRevision": {
+              "task": 4,
+              "project": 1
+            },
+            "note": "已在 docs/bench-constraints-20261023020035204-8b1863-gpt.txt 添加一句测试说明。指定只读 fixture 检查通过（exitCode 0）；新增文件空白检查通过；git status 确认唯一变更为该文件。按要求未提交，卡片保持 Test。",
+            "nextMovesDeclared": true,
+            "outputsDeclared": true
+          },
+          "status": "completed",
+          "contextStages": [
+            "test",
+            "test"
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "2651dada-dbff-428d-b734-7449bf042a30",
+          "at": "2026-10-23T02:02:51.048Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "agent.turn_started",
+          "actor": "system"
+        },
+        {
+          "id": "7fa40c41-e8a9-4b1a-9c6d-896c00c91b42",
+          "at": "2026-10-23T02:03:22.985Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "type_set",
+          "actor": "agent"
+        },
+        {
+          "id": "54555afe-4630-4fe8-8663-357fa74162e5",
+          "at": "2026-10-23T02:03:23.623Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "tags_changed",
+          "actor": "agent"
+        },
+        {
+          "id": "042d5ba3-757e-4345-8c36-8e0c31fb7781",
+          "at": "2026-10-23T02:03:24.204Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "status_changed",
+          "actor": "agent",
+          "from": "todo",
+          "to": "development",
+          "reportKind": "progress"
+        },
+        {
+          "id": "dc5320d1-d9a3-4801-a47d-8ef94fe7b787",
+          "at": "2026-10-23T02:03:24.829Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "workpad_updated",
+          "actor": "agent"
+        },
+        {
+          "id": "ff3bf7e2-6c2f-46a6-bf19-542d825919f2",
+          "at": "2026-10-23T02:04:43.705Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "status_changed",
+          "actor": "agent",
+          "from": "development",
+          "to": "test",
+          "reportKind": "progress"
+        },
+        {
+          "id": "b1f62bae-d9f4-4e8e-9eea-69838a210299",
+          "at": "2026-10-23T02:04:44.363Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "workpad_updated",
+          "actor": "agent"
+        },
+        {
+          "id": "c4b873ce-56d1-424a-8fd5-932e11bb0f4d",
+          "at": "2026-10-23T02:04:57.858Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "artifact_added",
+          "actor": "agent"
+        },
+        {
+          "id": "639e92e4-7c68-4594-8b83-e70cb946e1f6",
+          "at": "2026-10-23T02:04:57.859Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "progress_reported",
+          "actor": "agent",
+          "reportKind": "result"
+        },
+        {
+          "id": "303c1d55-d683-4c81-a2b0-af985ff744eb",
+          "at": "2026-10-23T02:04:57.859Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "next_moves_suggested",
+          "actor": "agent",
+          "offered": 1
+        },
+        {
+          "id": "9518dde4-b18f-40a7-a505-1765a57ab9d3",
+          "at": "2026-10-23T02:05:06.122Z",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "action": "agent.turn_ended",
+          "actor": "system"
+        }
+      ],
+      "receipts": [
+        {
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "eventId": "7fa40c41-e8a9-4b1a-9c6d-896c00c91b42",
+          "action": "type",
+          "status": "todo",
+          "at": "2026-10-23T02:03:22.985Z",
+          "taskRevision": 2,
+          "projectRevision": 1
+        },
+        {
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "eventId": "54555afe-4630-4fe8-8663-357fa74162e5",
+          "action": "tags",
+          "status": "todo",
+          "at": "2026-10-23T02:03:23.623Z",
+          "taskRevision": 2,
+          "projectRevision": 1
+        },
+        {
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "eventId": "042d5ba3-757e-4345-8c36-8e0c31fb7781",
+          "action": "status",
+          "status": "development",
+          "at": "2026-10-23T02:03:24.204Z",
+          "taskRevision": 3,
+          "projectRevision": 1
+        },
+        {
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "eventId": "dc5320d1-d9a3-4801-a47d-8ef94fe7b787",
+          "action": "workpad",
+          "status": "development",
+          "at": "2026-10-23T02:03:24.829Z",
+          "workpadRevision": 1,
+          "taskRevision": 3,
+          "projectRevision": 1
+        },
+        {
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "eventId": "ff3bf7e2-6c2f-46a6-bf19-542d825919f2",
+          "action": "status",
+          "status": "test",
+          "at": "2026-10-23T02:04:43.705Z",
+          "taskRevision": 4,
+          "projectRevision": 1
+        },
+        {
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "eventId": "b1f62bae-d9f4-4e8e-9eea-69838a210299",
+          "action": "workpad",
+          "status": "test",
+          "at": "2026-10-23T02:04:44.363Z",
+          "workpadRevision": 2,
+          "taskRevision": 4,
+          "projectRevision": 1
+        },
+        {
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "eventId": "639e92e4-7c68-4594-8b83-e70cb946e1f6",
+          "action": "progress",
+          "status": "test",
+          "at": "2026-10-23T02:04:57.859Z",
+          "artifactIds": [
+            "db0d2371-4138-465a-b0ce-9f848e7a8206"
+          ],
+          "taskRevision": 4,
+          "projectRevision": 1
+        }
+      ],
+      "workpadRevisions": {
+        "before": null,
+        "after": 2
+      },
+      "afterTask": {
+        "id": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+        "projectId": "3db2ad5b-e6c4-4054-b2ed-a13a8dfa0663",
+        "workspaceId": "wks_c42c31413985b736",
+        "type": "docs",
+        "tags": [
+          {
+            "tag": "benchmark",
+            "by": "agent",
+            "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+            "at": "2026-10-23T02:03:23.623Z"
+          },
+          {
+            "tag": "docs",
+            "by": "agent",
+            "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78",
+            "at": "2026-10-23T02:03:23.623Z"
+          }
+        ],
+        "status": "test",
+        "revision": 4
+      },
+      "afterArtifacts": [
+        {
+          "id": "db0d2371-4138-465a-b0ce-9f848e7a8206",
+          "taskId": "dd2f1622-5680-46bb-a90c-723e43e5fee6",
+          "role": "output",
+          "kind": "file",
+          "target": "./docs/bench-constraints-20261023020035204-8b1863-gpt.txt",
+          "createdBy": "agent",
+          "agentId": "fc0559fc-063a-4900-bdb1-7cc1cf73da78"
+        }
+      ]
+    }
+  ]
+}

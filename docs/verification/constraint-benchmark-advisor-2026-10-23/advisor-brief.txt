@@ -1,0 +1,22 @@
+你是本次用户指定的 Fable Advisor，负责整体方案设计评审，不承担实施或测试。你没有父会话历史，先读此自包含评审稿：
+/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/docs/verification/constraint-benchmark-advisor-2026-10-23/overall-proposal.md
+
+用户任务：“结合到整体方案给fable advisor评审”。当前整体是 Flowly 插件内约束：校准统计 + 同一六项清单供skill/get_task + 原子outputs/先拒后确认 + B01 quick独立评分与安全清理。现有实现已PR#35/#38合入，剩余 Sonnet T2 业务零写/零收尾，GPT T1检查后才切Test、用result替代整体in_review。详细事实与证据在稿内链接，核心：
+docs/verification/constraint-benchmark-analysis-2026-10-23/report.md
+docs/verification/constraint-benchmark-analysis-2026-10-23/evidence.json
+docs/verification/constraint-benchmark/20261023020035204-8b1863/facts.json
+docs/verification/constraint-benchmark-scope-2026-10-23/regraded-report.md
+docs/DELIVERY-CONSTRAINTS-SPEC.md
+docs/TURN-CHECKLIST-SPEC.md
+docs/CONSTRAINT-BENCHMARK-SPEC.md
+shared/turn-checklist.ts
+server/skill-source.ts
+server/reminders.ts
+benchmarks/constraints/grade.mjs
+
+拟增量仅清单第2、5项措辞，保留现行阶段要求，明确检查前Test、最终回复前取得适当业务回执；未提交成果也可In review、纯验证可result。对Sonnet零业务写只能说降低风险，暂不加hooks、代补登记、回合后提示或自动改状态。旧原始成绩和独立scope重评均保留，整体仍FAIL。不要为了让B01过分而放宽规则，也不要把两个样本说成总体因果。
+
+请从整体边界和最简单可用方案角度独立挑战，重点回答稿§6的五个问题：哪些真必要、措辞是否扩大阶段/误伤partial/result/纯问答或用户暂停指令、零工具路径是否被不当承诺、验证/评分/送达证据是否混淆。给出“可实施/修改后实施/暂缓”、阻塞项、最短可用修改与边界；事实/推断/未验证分开，并给文件/行号。请给有理由的推荐，不只是顺着主会话。用中文输出最终审查。
+
+你与其他会话共享脏工作区，不能回退或改动他们的内容。你在创建时使用Claude full access等价bypassPermissions，但此次任务权限边界是只读评审：不得执行benchmark run/grade/cleanup，不启动被测模型、fixture、子会话，不安装/reload，不Git写入，不网络写入，不写Flowly卡片status/workpad/artifacts。主线程会保存你的输出并归档你。不需要为了审查再跑任何测试。只读命令可用。
+This is analysis only. Do NOT edit, create, or delete any files. Do NOT write code.
