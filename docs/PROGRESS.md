@@ -17,6 +17,19 @@
 - Switched the maintainer's data after the merge (user's go-ahead): 365 ms for 107 cards / 4552 events, the backup taken at the move equals the original board.json field for field, reads and writes work, Settings → Storage checked on desktop (compact only partly capturable with shot-lib). See `docs/verification/sqlite-min-2026-10-26/switch.md`.
 - Onboarding: tour More features gets Backups; What's new 1.7.0 gets one item with Open settings → Storage. No tip: nothing to point at during normal use.
 - Independent milestone verification (claude/claude-haiku-5-5) and the real-data copy rehearsal: see `docs/verification/sqlite-min-2026-10-26/`.
+## Insights redesign (card "Insights重设计") — 2026-10-22
+
+Spec: [INSIGHTS-REDESIGN-SPEC](INSIGHTS-REDESIGN-SPEC.md) (second version). The user rejected an output-statistics page ("it should not make people anxious or push them to grind") in favour of evaluating the workflow itself.
+
+- [x] Spec v2 reviewed and accepted; decisions in §13.
+- [x] Data: `agent.turn_ended.byUser` (`startedByUser`, injections filtered) and `agent.permission_requested.tool` (name only), in board events and the flow log.
+- [x] `shared/workflow-stats.ts`: per-card stats to the first Done (interventions, review rounds, three-way time split, model), window and 4-window baseline, models with "other", 8 Monday weeks with landed suggestions, R2/R3/R6 anomalies (R3 now 3 rounds), tokens per card over its active span. First version's `shared/work-stats.ts` and `client/charts.tsx` removed.
+- [x] RPC: `insights.project` and `insights.tokens` take `end`; `insights.digests` for the daily record.
+- [x] Client: single column, theme colors, no chart, no tabs; daily record collapsed.
+- [x] Onboarding: tour line and tip `insights-redesign` text; README (en, zh-CN); nine catalogs.
+- [x] `npm run typecheck`, `npm test`.
+- [ ] Luna 6 full-access UI verification (not run).
+- [ ] README screenshots `05-insights*.png` still show the old page.
 
 ## Configurable summary models — 2026-10-23
 

@@ -77,9 +77,9 @@ agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型
 
 ### 6. Project insights
 
-一页看完当天：完成 / 新建 / 返工的卡片数、回合数、agent 时长、commits、token（含缓存命中率）；**等你处理**的列表、基于规则的建议、AI 生成的日报、每张卡的 token 用量和 7 日趋势。
+Insights 评估的是工作流，不是你的产量：没有每日计数、目标和连续天数。对最近 7 天完成的卡，它显示每张卡需要你多少注意力（消息、权限请求、移卡）、来回几轮审阅、时间花在哪（agent 在做、等待审阅或回复、空闲）、每卡 token 与 agent 时长，以及按模型的对比。8 周趋势表只和你自己的过去比，并标出 Workflow insights 建议落地的那一周。下面依次是流程异常（停滞、反复返工、反复失败）、Workflow insights、Agent 使用习惯和每天的 AI 总结。
 
-![Project insights：指标、等你处理、建议、日报与 token 用量](docs/promo/screenshots/05-insights.png)
+![Project insights：每卡注意力与审阅轮数、时间去向、成本，按周](docs/promo/screenshots/05-insights.png)
 
 <details>
 <summary>深色主题</summary>
@@ -88,7 +88,7 @@ agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型
 
 </details>
 
-**Agent 使用习惯**（始终开启，不花 token）：Insights 页的一个小区块，按天和按模型显示最近 7 天 agent 交付时带下一步建议和 ideas 的比例、你采纳了多少条建议；某个模型或 session 在 10 次以上交付里一次都没有时会标出，规则失效当天就能看到。
+**Agent 使用习惯**（始终开启，不花 token）：Insights 页的一个区块，按天和按模型显示最近 7 天 agent 交付时带下一步建议和 ideas 的比例、你采纳了多少条建议；某个模型或 session 在 10 次以上交付里一次都没有时会标出，规则失效当天就能看到。
 
 **Workflow insights**（可选，默认关闭）：Flowly 会记录 agent 在卡片上执行的 shell 命令（已脱敏），并按你设定的周期（token 充裕可以每天，不充裕可以拉长到每两周），用你选的模型分析最近一周的记录，建议值得沉淀的东西：`paseo.json` 脚本和 worktree setup、agent 反复用内联代码完成的工作可以做成的仓库小工具、AGENTS.md 规则和 skill。每次运行的结果会替换上一次的建议，列表只反映最近一次分析；每条建议一键生成卡片；没有新活动的周期直接跳过，不调用模型。agent 的任务上下文会列出项目 `paseo.json` 中的脚本，让它直接运行，不再手敲命令。
 

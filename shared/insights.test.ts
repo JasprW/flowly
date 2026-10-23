@@ -138,11 +138,13 @@ test("R2 stalled: 48h without activity in a work lane, unless a session runs", (
   expect(rules({ tasks: stale, entries: [...entries, ev("a", "2026-10-15T10:00:00.000Z", "agent.turn_ended")] })).not.toContain("R2");
 });
 
-test("R3 rework hotspot: sent back twice and not finished", () => {
+test("R3 rework hotspot: three review rounds and not finished (INSIGHTS-REDESIGN-SPEC §3.7)", () => {
   const back = (at: string) => move("a", at, "in_review", "development");
-  expect(rules({ tasks: [task("a", { status: "development" })], entries: [back("2026-10-16T01:00:00.000Z")] })).not.toContain("R3");
-  expect(rules({ tasks: [task("a", { status: "development" })], entries: [back("2026-10-16T01:00:00.000Z"), back("2026-10-16T02:00:00.000Z")] })).toContain("R3");
-  expect(rules({ tasks: [task("a", { status: "done" })], entries: [back("2026-10-16T01:00:00.000Z"), back("2026-10-16T02:00:00.000Z")] })).not.toContain("R3");
+  const two = [back("2026-10-16T01:00:00.000Z"), back("2026-10-16T02:00:00.000Z")];
+  const three = [...two, back("2026-10-16T03:00:00.000Z")];
+  expect(rules({ tasks: [task("a", { status: "development" })], entries: two })).not.toContain("R3");
+  expect(rules({ tasks: [task("a", { status: "development" })], entries: three })).toContain("R3");
+  expect(rules({ tasks: [task("a", { status: "done" })], entries: three })).not.toContain("R3");
 });
 
 test("R4 priority inversion: an urgent card waits while lower priority work starts", () => {

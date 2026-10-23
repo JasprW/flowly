@@ -47,7 +47,7 @@ import { CommandLog } from "./server/command-log";
 import { WorkflowInsightsService, WorkflowStore } from "./server/workflow-insights";
 import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workflow-insights";
 import { sessionModel } from "./server/agent-model";
-import { turnPick, userTexts } from "./shared/agent-habits";
+import { startedByUser, turnPick, userTexts } from "./shared/agent-habits";
 import { MemoryService, setMemoryEverywhere } from "./server/memory";
 import { POSTHOG_KEY, TelemetryService } from "./server/telemetry";
 import { FLOWLY_VERSION } from "./shared/version";
@@ -132,6 +132,7 @@ export default function contribute(host: PluginServerContext) {
   void insights.reconcile().catch((e) => logFailure("Kanban flow log backfill failed:", e));
   server.handle(rpc.projectInsights, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.project(input, paseo), etag));
   server.handle(rpc.projectDigest, (input, { paseo }) => insights.digest(input, paseo));
+  server.handle(rpc.projectDigests, (input) => insights.digestHeadlines(input));
   server.handle(rpc.projectTokens, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.tokens(input, paseo), etag));
   server.handle(rpc.refreshDigest, (input, { paseo }) => insights.refresh(input, paseo));
   server.handle(rpc.readSummaries, () => summaries.overview());
@@ -150,6 +151,11 @@ export default function contribute(host: PluginServerContext) {
   const commands = new CommandLog(store.directory);
   const workflow = new WorkflowInsightsService(store, commands, new WorkflowStore(store.directory), flow, workflowValues, summaries.settings, aiLanguage);
   workflow.start();
+  // Insights trend rows note the weeks an accepted suggestion's card was finished (INSIGHTS-REDESIGN-SPEC §3.6).
+  insights.landed = async (projectId) =>
+    (await workflow.state.read()).findings
+      .filter((f) => f.projectId === projectId && f.status === "accepted" && !!f.acceptedTaskId)
+      .map((f) => ({ taskId: f.acceptedTaskId!, title: f.title }));
   // Turning the switch on reads the last week of sessions once (§3.3).
   let workflowWasOn: boolean | null = null;
   const stopWorkflowPrefs = workflowPrefs.subscribe((state) => {
@@ -587,7 +593,7 @@ export default function contribute(host: PluginServerContext) {
     const model = await sessionModel(paseo, event.agent);
     const texts = userTexts(event.timeline);
     await store.mutate((board) => {
-      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts) });
+      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(event.timeline) });
       if (auto) applyTurnEnded(store, board, identity, event.outcome);
     });
     // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
@@ -618,7 +624,8 @@ export default function contribute(host: PluginServerContext) {
     const identity = await managedTask(event.agent);
     if (!identity) return;
     await store.mutate((board) =>
-      recordLifecycle(store, board, identity, "agent.permission_requested"),
+      // INSIGHTS-REDESIGN-SPEC §7.2: only the tool's name, never its input.
+      recordLifecycle(store, board, identity, "agent.permission_requested", undefined, { tool: event.request.name || event.request.kind }),
     );
   });
   // Anonymous daily heartbeat (TELEMETRY-SPEC); off by the setting, DO_NOT_TRACK or FLOWLY_TELEMETRY=0.

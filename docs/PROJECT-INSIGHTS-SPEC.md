@@ -106,6 +106,8 @@ daemon 计算，最多 5 条，按严重度（warning > info）再按规则顺�
 
 ## 9. UI
 
+> 2026-10-22 起，页面布局、时间范围和项目工作统计以 [INSIGHTS-REDESIGN-SPEC](INSIGHTS-REDESIGN-SPEC.md) 为准；下面是原始版本，留作记录。
+
 - 入口：看板概览栏末尾的 “Insights” 按钮，以及快捷键 `i`。打开后看板区域换为 Insights 页，顶部 “‹ Board” 返回（Esc 同样返回）。
 - 页面（纵向滚动，宽度 ≤760 居中）：
   1. 日期切换：‹ 日期 ›，“Today”/“Yesterday” 显示为文字；不超过今天；

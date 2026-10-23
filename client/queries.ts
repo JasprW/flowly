@@ -298,14 +298,14 @@ export const localZone = () => {
  * Project Insights for one day. Read only while the page is open; re-read when
  * the board changes (`revision`) and once a minute so waiting times stay current.
  */
-export function useInsightsQuery(projectId: string, day: string | null, revision: number, enabled: boolean) {
+export function useInsightsQuery(projectId: string, end: string | null, revision: number, enabled: boolean) {
   const read = useRpc(rpc.projectInsights);
   const client = useQueryClient();
   const tz = localZone();
-  const key = ["flowly", "insights", projectId, day || "today"] as const;
+  const key = ["flowly", "insights", projectId, end || "today"] as const;
   const query = useQuery({
     queryKey: key,
-    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(day ? { day } : {}), ...(etag ? { etag } : {}) })),
+    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(end ? { end } : {}), ...(etag ? { etag } : {}) })),
     enabled,
     refetchInterval: enabled ? 60_000 : false,
     placeholderData: (previous) => previous,
@@ -329,15 +329,26 @@ export function useDigestQuery(projectId: string, day: string | null, enabled: b
   });
 }
 
-/** Tokens by day from local provider logs (PROJECT-INSIGHTS-SPEC §11); separate so the page never waits on log parsing. */
-export function useTokensQuery(projectId: string, day: string | null, enabled: boolean) {
+/** Stored digest headlines for a period (INSIGHTS-REDESIGN-SPEC §4); reading never starts a generation. */
+export function useDigestHeadlinesQuery(projectId: string, from: string | null, to: string | null, enabled: boolean) {
+  const read = useRpc(rpc.projectDigests);
+  return useQuery({
+    queryKey: ["flowly", "digest-headlines", projectId, from || "", to || ""],
+    queryFn: () => read({ projectId, from: from!, to: to! }),
+    enabled: enabled && !!from && !!to,
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Tokens per finished card from local provider logs (INSIGHTS-REDESIGN-SPEC §3.4); separate so the page never waits on log parsing. */
+export function useTokensQuery(projectId: string, end: string | null, enabled: boolean) {
   const read = useRpc(rpc.projectTokens);
   const client = useQueryClient();
   const tz = localZone();
-  const key = ["flowly", "insights-tokens", projectId, day || "today"] as const;
+  const key = ["flowly", "insights-tokens", projectId, end || "today"] as const;
   return useQuery({
     queryKey: key,
-    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(day ? { day } : {}), ...(etag ? { etag } : {}) })),
+    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(end ? { end } : {}), ...(etag ? { etag } : {}) })),
     enabled,
     refetchInterval: enabled ? 60_000 : false,
     placeholderData: (previous) => previous,

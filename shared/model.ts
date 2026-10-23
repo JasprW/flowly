@@ -385,6 +385,10 @@ export const eventSchema = z.object({
    * (index), or -1 for none. Absent when none was open or the message was not seen.
    */
   pick: z.number().int().min(-1).max(nextMoveLimits.count - 1).optional(),
+  /** agent.turn_ended: the turn began with a real user message, not an injected one (INSIGHTS-REDESIGN-SPEC §7.1). Absent when unknown. */
+  byUser: z.boolean().optional(),
+  /** agent.permission_requested: the tool's name as the provider reports it, without its input (INSIGHTS-REDESIGN-SPEC §7.2). */
+  tool: z.string().max(80).optional(),
   /** status_changed into In review by an agent: the workpad's open items then (WORKPAD-SPEC §5.3). */
   workpad: deliverySchema.optional(),
   /** status_changed into In review by an agent that acknowledged missing card setup (CARD-SETUP-SPEC §3.4). */

@@ -18,10 +18,11 @@ import { SUMMARIZER_LABELS, isSummarizer, summaryModelsOf, type SummaryEntry, ty
 import {
   TREND_DAYS,
   addDays,
-  analyze,
+  analyzePrepared,
   dayKey,
   dayStart,
   isDay,
+  prepare,
   tokenInsights,
   validZone,
   withoutRevertedResumes,
@@ -30,7 +31,8 @@ import {
   type FlowEntry,
   type ProjectInsights,
 } from "../shared/insights";
-import { habits, modellessAgents, withMoveDetails, type InsightsWithHabits } from "../shared/agent-habits";
+import { habits, modellessAgents, withMoveDetails } from "../shared/agent-habits";
+import { cardStats, cardTokens, workflowStats, type CardTokens, type DigestHeadline, type InsightsView } from "../shared/workflow-stats";
 import {
   DIGEST_DAYS,
   clipMaterial,
@@ -46,6 +48,8 @@ import {
 
 export const DIGEST_TIMEOUT_MS = 120_000;
 type DayInput = { projectId: string; tz: string; day?: string };
+/** INSIGHTS-REDESIGN-SPEC §8: `end` is the window's last day (today when absent or later). */
+type WindowInput = { projectId: string; tz: string; end?: string };
 
 /** `digests.json`: serialized writes, backup, atomic replacement; invalid data is preserved. */
 export class DigestStore {
@@ -215,54 +219,110 @@ export class InsightsService {
     return habits(full, { day, tz, modelOf: (agentId) => models.get(agentId) });
   }
 
-  async project(input: DayInput, paseo: PaseoApi): Promise<InsightsWithHabits> {
+  /** Accepted workflow-insight findings and the card that carried each out (INSIGHTS-REDESIGN-SPEC §3.6). */
+  landed: ((projectId: string) => Promise<{ taskId: string; title: string }[]>) | null = null;
+
+  /** Current models of sessions whose turns carry none (WORKFLOW-INSIGHTS-SPEC §12.5); empty on failure. */
+  private async agentModels(wanted: ReadonlySet<string>, workspaces: ReadonlySet<string>, paseo: PaseoApi) {
+    const models = new Map<string, string>();
+    if (!wanted.size) return models;
+    try {
+      let cursor: string | undefined;
+      do {
+        const page = await paseo.agents.list({ filter: { includeArchived: true }, page: { limit: 200, cursor } });
+        for (const { agent } of page.entries) {
+          const model = wanted.has(agent.id) && agent.workspaceId && workspaces.has(agent.workspaceId) ? modelId(agent as Parameters<typeof modelId>[0]) : "";
+          if (model) models.set(agent.id, model);
+        }
+        cursor = page.pageInfo.nextCursor ?? undefined;
+      } while (cursor);
+    } catch {
+      // Cards whose turns carry no model fall into "other".
+    }
+    return models;
+  }
+
+  private window(input: WindowInput) {
     const tz = validZone(input.tz);
     const now = this.now();
+    const today = dayKey(now, tz);
+    const end = input.end && isDay(input.end) && input.end < today ? input.end : today;
+    return { tz, now, today, end };
+  }
+
+  async project(input: WindowInput, paseo: PaseoApi): Promise<InsightsView> {
+    const { tz, now, today, end } = this.window(input);
     const { board, project, tasks, entries } = await this.context(input.projectId);
-    const day = input.day && isDay(input.day) ? input.day : dayKey(now, tz);
+    const workspaces = new Set(tasks.map((t) => t.workspaceId));
     const [running, git] = await Promise.all([
-      this.runningSessions(new Set(tasks.map((t) => t.workspaceId)), paseo).catch(() => ({ agents: new Set<string>(), workspaces: new Set<string>() })),
-      this.commits(project, day, tz),
+      this.runningSessions(workspaces, paseo).catch(() => ({ agents: new Set<string>(), workspaces: new Set<string>() })),
+      this.commits(project, today, tz),
     ]);
-    const insights = analyze({
+    const prepared = prepare({
       tasks,
       entries,
       now,
       tz,
-      day,
+      day: today,
       runningAgents: running.agents,
       runningWorkspaces: running.workspaces,
       commits: git.commits,
       repos: git.repos,
       gitError: git.error,
     });
-    return { ...insights, habits: await this.habits(entries, board, tasks, insights.day, tz, paseo) };
+    const insights = analyzePrepared(prepared);
+    const modelless = new Set(prepared.input.entries.filter((e) => e.action === "agent.turn_ended" && !e.model && e.agentId).map((e) => e.agentId!));
+    const models = await this.agentModels(modelless, workspaces, paseo);
+    const cards = cardStats({ histories: prepared.histories, sessions: prepared.sessions, modelOf: (id) => models.get(id) });
+    const landed = this.landed ? await this.landed(project.id).catch(() => []) : [];
+    const workflow = workflowStats({ cards, entries: prepared.input.entries, incomplete: insights.incomplete, end, today, tz, now, landed, insights: insights.insights });
+    return { ...insights, workflow, habits: await this.habits(entries, board, tasks, insights.day, tz, paseo) };
+  }
+
+  /** Stored digest headlines between two days, newest first; never generates one. */
+  async digestHeadlines(input: { projectId: string; from: string; to: string }): Promise<{ entries: DigestHeadline[] }> {
+    const state = await this.digests.read();
+    const entries = state.entries
+      .filter((e) => e.projectId === input.projectId && e.day >= input.from && e.day <= input.to)
+      .sort((a, b) => b.day.localeCompare(a.day))
+      .map((e) => ({ day: e.day, headline: e.headline, at: e.at }));
+    return { entries };
   }
 
   /**
    * Tokens by day for every session in the project's card workspaces (archived
    * and summarizer sessions included), read from local provider logs only.
    */
-  async tokens(input: DayInput, paseo: PaseoApi): Promise<TokenInsights> {
+  async tokens(input: WindowInput, paseo: PaseoApi): Promise<CardTokens> {
     if (!this.usage) throw new Error("Token usage is not available.");
-    const tz = validZone(input.tz);
-    const { tasks } = await this.context(input.projectId);
+    const { tz, now, today, end } = this.window(input);
+    const { tasks, entries } = await this.context(input.projectId);
     const owner = new Map(tasks.map((t) => [t.workspaceId, t.id]));
     const agents: (AgentLike & { taskId: string })[] = [];
+    const models = new Map<string, string>();
     let cursor: string | undefined;
     do {
       const page = await paseo.agents.list({ filter: { includeArchived: true }, page: { limit: 200, cursor } });
       for (const { agent } of page.entries) {
         const taskId = agent.workspaceId ? owner.get(agent.workspaceId) : undefined;
-        if (taskId) agents.push({ ...(agent as AgentLike), taskId });
+        if (!taskId) continue;
+        agents.push({ ...(agent as AgentLike), taskId });
+        const model = modelId(agent as Parameters<typeof modelId>[0]);
+        if (model) models.set(agent.id, model);
       }
       cursor = page.pageInfo.nextCursor ?? undefined;
     } while (cursor);
+    // The same cards and model attribution as insights.project, without the running-session lookup.
+    const prepared = prepare({ tasks, entries, now, tz, day: today, runningAgents: new Set(), runningWorkspaces: new Set(), commits: [], repos: 0, gitError: null });
+    const cards = cardStats({ histories: prepared.histories, sessions: prepared.sessions, modelOf: (id) => models.get(id) });
+    const stats = workflowStats({ cards, entries: prepared.input.entries, incomplete: 0, end, today, tz, now, landed: [], insights: [] });
     const usage = this.usage;
+    const wantedTasks = new Set(stats.cards.map((c) => c.taskId));
     const series = await Promise.all(
-      agents.map(async (a) => ({ taskId: a.taskId, buckets: await usage.buckets(a).catch(() => null) })),
+      agents.filter((a) => wantedTasks.has(a.taskId)).map(async (a) => ({ taskId: a.taskId, buckets: await usage.buckets(a).catch(() => null) })),
     );
-    return tokenInsights({ series, now: this.now(), tz, day: input.day });
+    const modelOfTask = new Map(cards.map((c) => [c.taskId, c.model]));
+    return cardTokens({ series, cards: stats.cards, modelOf: (id) => modelOfTask.get(id) || "", models: stats.models.map((m) => m.model) });
   }
 
   private key(input: DayInput) {

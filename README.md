@@ -79,9 +79,9 @@ Once an agent understands the work it fills in the card's metadata itself. It se
 
 ### 6. Project insights
 
-One page for the day: cards done, new and reworked, turns, agent time, commits and tokens (with cache hit rate), the list of what is **waiting on you**, rule-based suggestions, an AI-written daily summary, per-card token use and a 7-day trend.
+Insights evaluates the workflow, not your output: no daily counts, targets or streaks. For the cards finished in the last 7 days it shows how much of your attention each one took (messages, permission requests, card moves), how many review rounds, where the time went (agents working, waiting for review or a reply, idle), tokens and agent time per card, and the same by model. A table of the last 8 weeks compares against your own past and notes the weeks a Workflow insights suggestion landed. Workflow issues (stalled cards, repeated rework, repeated failures), Workflow insights, agent habits and an AI summary of each day follow.
 
-![Project insights: tiles, waiting on you, suggestions, summary and token use](docs/promo/screenshots/05-insights.png)
+![Project insights: attention and review rounds per card, where time goes, cost, by week](docs/promo/screenshots/05-insights.png)
 
 <details>
 <summary>Dark theme</summary>
@@ -90,7 +90,7 @@ One page for the day: cards done, new and reworked, turns, agent time, commits a
 
 </details>
 
-**Agent habits** (always on, no tokens): a small block on the Insights page shows, for the last seven days, how often agents' deliveries come with suggested next steps and ideas, by day and by model, how many suggestions you took, and flags a model or session that made none over ten or more deliveries, so a rule that stops being followed shows up within a day.
+**Agent habits** (always on, no tokens): a block on the Insights page shows, for the last seven days, how often agents' deliveries come with suggested next steps and ideas, by day and by model, how many suggestions you took, and flags a model or session that made none over ten or more deliveries, so a rule that stops being followed shows up within a day.
 
 **Workflow insights** (optional, off by default): Flowly keeps a redacted log of the shell commands agents run on your cards, and on the schedule you pick (daily when tokens are plentiful, up to every two weeks when they are not) a model you choose reads the last week of it. It suggests what is worth keeping: `paseo.json` scripts and worktree setup, small repo tools for work agents keep redoing with inline code, AGENTS.md rules and skills. Each run replaces the previous run's suggestions, so the list always shows the latest analysis; each suggestion becomes a card with one click; quiet weeks are skipped without calling the model. Agents see the project's `paseo.json` scripts in their task context and run them instead of retyping commands.
 

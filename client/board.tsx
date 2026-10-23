@@ -157,6 +157,7 @@ const tipText: Record<TipId, () => string> = {
   subagents: () => t("When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo."),
   "summary-models": () => t("Choose summary models and their fallback order in Settings → Models. The default is Haiku, then Luna."),
   "ai-language": () => t("AI-written text follows Settings → AI features → AI output language. It starts as your interface language."),
+  "insights-redesign": () => t("Insights now measures the workflow, not output: attention and review rounds per card, where time goes and cost, by week."),
   "first-memory-candidate": () => t("An agent suggested something to remember. Confirm it in Memory and new sessions on this project will know it; you can edit or delete it any time."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
   "card-display": () => t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
@@ -1058,6 +1059,8 @@ function BoardContent(
   });
   const togglePage = (next: "insights" | "ideas" | "memory") => {
     ignoredLink.current = linkKey;
+    // Opening the redesigned Insights is acting on its tip (INSIGHTS-REDESIGN-SPEC §8).
+    if (next === "insights" && onboarding.values && !onboarding.values.tipsSeen.includes("insights-redesign")) void onboarding.markTipSeen("insights-redesign");
     setPage((current) => (current === next ? null : next));
   };
   const closePage = useStableCallback(() => setPage(null));
@@ -1206,6 +1209,7 @@ function BoardContent(
           fullSidebar: !!task && (compact ? !!currentDetail && (!!currentDetail.artifacts.length || !!currentDetail.ideas.length) : !!fullBoard && (fullBoard.artifacts.some((a) => a.taskId === task.id) || fullBoard.ideas.some((i) => i.taskId === task.id))),
           hasSummary: !task && !!summaries.data?.latest.some((e) => projectTasks.some((x) => x.id === e.taskId)),
           workflowSuggestion: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
+          insightsHistory: features.insights && !task && projectTasks.filter((x) => x.status === "done").length >= 3,
           memoryCandidate: !task && !!memoryCandidates,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
@@ -1855,7 +1859,6 @@ function BoardContent(
                   <View style={{ padding: space[4] }}>{projectIdeasData.error ? <><Notice>{message(projectIdeasData.error)}</Notice><Button quiet onPress={() => void projectIdeasData.refetch()}>{t("Retry")}</Button></> : <Label muted>{t("Loading cards…")}</Label>}</View>
                 ) : page === "insights" && board ? (
                   <InsightsPage
-                    attention={projectAttention}
                     project={project}
                     tasks={projectTasks}
                     revision={board.revision}
