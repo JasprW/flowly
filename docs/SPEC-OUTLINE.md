@@ -1,5 +1,7 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-10-23 后台 workspace：memory review、Insights digest、workflow insights 改在每个项目专用的「Flowly background」workspace 里运行，用前恢复已归档的那个复用、没有才新建，用完归档；修复 single-root 下按目录匹配“项目根 workspace”会选中某张卡的 workspace、review tab 留在卡片里的问题。[spec](BACKGROUND-WORKSPACE-SPEC.md)。
+
 2026-10-23 Summary 模型列表：用户可添加多个模型、上移/下移设置回退优先级、移除或恢复默认 Haiku→Luna；兼容旧 Auto/单模型设置，同步所有使用 summary 设置的入口。[spec](SUMMARY-MODELS-SPEC.md)。
 
 2026-10-22 约束 benchmark（grader + B01 quick 实现）：按 Fable 审查与主会话复核收敛为独立 grader + B01 quick（三回合文件/验证/PR，两模型）。明确主动/最终评分、预期拒绝与同输入机械 stale、事实前置条件、服务端回执/产物/nextMoves 证据、共享 Git 管理区的归属与清理；保留现行 test 阶段要求。B02–B04、compare 和自动续跑后置，不加 hooks。[spec](CONSTRAINT-BENCHMARK-SPEC.md)。

@@ -321,7 +321,7 @@ agent 提候选前、复盘提炼时、人审阅时，都用同一组规则，�
 - **跳过**：
   - 卡片既没有 summary，也没有 workpad 困惑点或进展记录 → 没有素材，跳过；
   - 上次复盘之后既没有新 summary（`retros[].summaryId`），也没有新线索（`retros[].clueAt`）→ 跳过，避免卡片在 Done 和其他列之间来回移动时重复跑。
-- **运行位置**：项目根目录对应的原生 workspace，规则同 PROJECT-INSIGHTS-SPEC §7。不用卡片自己的 workspace，因为自动收尾可能紧接着就把它归档掉（MULTITASK-SPEC）。标签：`flowly=summarizer`、`flowly-project=<id>`、`flowly-task=<taskId>`；模型用 Summary model（Auto 同解析）；`waitForFinish(120000)`，`finally` 中**硬删除**（`server/summarizer-remove.ts` 的 `daemonRemoveAgent`，本地 `DaemonClient.deleteAgent`，与 card summarizer 同一条 AGENTS.md 例外，用户 2026-10-22 批准；只删本次刚创建的 id），删除失败则回退归档并记日志。运行的几十秒内它在项目根 workspace 里短暂可见，结束后列表与归档都不留痕。每个项目同时最多跑一个，其余排队。
+- **运行位置**：项目的「Flowly background」workspace（[BACKGROUND-WORKSPACE-SPEC](BACKGROUND-WORKSPACE-SPEC.md)：用前恢复已归档的那个复用，没有才新建，最后一个后台 run 结束后归档）。不用卡片自己的 workspace，因为自动收尾可能紧接着就把它归档掉（MULTITASK-SPEC），也不能按目录找“项目根 workspace”：single-root 下每张卡的 workspace 目录都是项目根，旧规则曾让所有 review 落进同一张卡（2026-10-23 修复）。标签：`flowly=summarizer`、`flowly-project=<id>`、`flowly-task=<taskId>`；模型用 Summary model（Auto 同解析）；`waitForFinish(120000)`，`finally` 中**硬删除**（`server/summarizer-remove.ts` 的 `daemonRemoveAgent`，本地 `DaemonClient.deleteAgent`，与 card summarizer 同一条 AGENTS.md 例外，用户 2026-10-22 批准；只删本次刚创建的 id），删除失败则回退归档并记日志。运行的几十秒内它在后台 workspace 里短暂可见，结束后 session 与 workspace 都不留在侧栏。每个项目同时最多跑一个，其余排队。
 - **输入**（≤10000 字）：
   - 项目名；卡片标题、类型、标签、描述（≤2000）；
   - 本卡的线索（§4.0），按时间排列，总长不超过 5000 字，超出时优先保留 `answer`；

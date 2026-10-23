@@ -8,7 +8,8 @@ import type { BoardStore } from "./store";
 import type { FlowLog } from "./flow-log";
 import type { CommandLog } from "./command-log";
 import { availableModels } from "./summaries";
-import { projectWorkspace } from "./insights";
+import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
+import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { validZone } from "../shared/insights";
 import { SUMMARIZER_LABELS, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import type { Board, Project } from "../shared/model";
@@ -161,6 +162,10 @@ export class WorkflowInsightsService {
     private now = () => Date.now(),
     private timeoutMs = RUN_TIMEOUT_MS,
     private home = homedir(),
+    /** Where the run happens: the project's background workspace, never a card's. */
+    private background: BackgroundWorkspaces = backgroundWorkspaces(board.directory),
+    /** Hard-deletes the run's session when done; archives it if that fails (AGENTS.md exception). */
+    private removeAgent: RemoveAgent = daemonRemoveAgent(),
   ) {}
 
   private pendingBackfill = false;
@@ -458,37 +463,39 @@ export class WorkflowInsightsService {
           .filter((f) => f.status === "accepted" || (f.status === "dismissed" && now - Date.parse(f.updatedAt) < 30 * DAY_MS))
           .map((f) => ({ target: f.target, title: f.title, status: f.status, proposal: f.proposal })),
       });
-      const workspaceId = await projectWorkspace(project, board, paseo, "workflow insights");
-      const agent = await paseo.workspaces.ref(workspaceId).agents.create({
-        config: { provider: model },
-        title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
-        labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
-        prompt: workflowPrompt(days, material, await this.language()),
-        outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
-      });
-      this.summarizer.set(agent.id, true);
-      let usage: RunUsage | undefined;
-      let parsed;
-      try {
-        const result = await agent.waitForFinish(this.timeoutMs);
-        if (result.status !== "idle")
-          throw new Error(
-            result.status === "timeout"
-              ? "The workflow insights model timed out."
-              : result.status === "permission"
-                ? "The workflow insights model asked for a permission."
-                : result.error || "The workflow insights model failed.",
-          );
-        parsed = parseWorkflowOutput(result.lastMessage);
-        if (!parsed) {
-          const retry = await agent.run(RETRY_PROMPT, { timeoutMs: 180_000 });
-          if (retry.status === "idle") parsed = parseWorkflowOutput(retry.lastMessage);
+      const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
+        const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+          config: { provider: model },
+          title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
+          labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
+          prompt: workflowPrompt(days, material, await this.language()),
+          outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
+        });
+        this.summarizer.set(agent.id, true);
+        let usage: RunUsage | undefined;
+        let parsed;
+        try {
+          const result = await agent.waitForFinish(this.timeoutMs);
+          if (result.status !== "idle")
+            throw new Error(
+              result.status === "timeout"
+                ? "The workflow insights model timed out."
+                : result.status === "permission"
+                  ? "The workflow insights model asked for a permission."
+                  : result.error || "The workflow insights model failed.",
+            );
+          parsed = parseWorkflowOutput(result.lastMessage);
+          if (!parsed) {
+            const retry = await agent.run(RETRY_PROMPT, { timeoutMs: 180_000 });
+            if (retry.status === "idle") parsed = parseWorkflowOutput(retry.lastMessage);
+          }
+          const u = agent.current()?.lastUsage;
+          if (u) usage = { inputTokens: u.inputTokens, cachedInputTokens: u.cachedInputTokens, outputTokens: u.outputTokens, totalCostUsd: u.totalCostUsd, contextTokens: u.contextWindowUsedTokens };
+        } finally {
+          await this.removeAgent(agent);
         }
-        const u = agent.current()?.lastUsage;
-        if (u) usage = { inputTokens: u.inputTokens, cachedInputTokens: u.cachedInputTokens, outputTokens: u.outputTokens, totalCostUsd: u.totalCostUsd, contextTokens: u.contextWindowUsedTokens };
-      } finally {
-        await agent.archive().catch(() => undefined);
-      }
+        return { usage, parsed };
+      });
       if (!parsed) throw new Error("The workflow insights model returned no JSON.");
       await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, cardIds });
     } catch (e) {

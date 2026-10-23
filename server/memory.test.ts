@@ -8,6 +8,7 @@ import { SummaryStore } from "./summaries";
 import { MemoryError, MemoryService, memoryContext, memoryOn, memoryStore, setMemoryEverywhere } from "./memory";
 import type { SummarySettings } from "../shared/summary";
 import type { MemoryEntry } from "../shared/memory";
+import { BackgroundWorkspaces } from "./background-workspace";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -24,18 +25,23 @@ async function setup() {
   const removed: string[] = [];
   const memory = new MemoryService(f.store, summaries, async () => settings, async () => "en", async () => undefined, () => Date.now(), 0, 1000, async (agent) => {
     removed.push(agent.id);
-  });
+  }, new BackgroundWorkspaces(f.store.directory, async () => "live"));
   f.service.memory = memory;
   const created: Created[] = [];
   const replies: (string | Error)[] = [];
   let archived = 0;
+  let wsArchived = 0;
   const model = {
     providers: {
       listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
       listModels: async () => ({ models: [{ id: "claude-haiku-5-5" }, { id: "claude-sonnet-5-5" }], error: null }),
     },
     workspaces: {
-      list: async () => ({ entries: [{ id: "root-ws", projectId: "native", workspaceDirectory: f.a }], pageInfo: { nextCursor: null } }),
+      create: async () => ({ id: "bg-ws" }),
+      archive: async () => {
+        wsArchived++;
+        return {};
+      },
       ref: (workspaceId: string) => ({
         agents: {
           create: async (o: { labels: Record<string, string>; prompt: string }) => {
@@ -71,7 +77,7 @@ async function setup() {
     });
   };
   const entries = async () => (await memory.store.read()).entries;
-  return { ...f, memory, summaries, settings, model, created, replies, archived: () => archived, removed, remember, entries };
+  return { ...f, memory, summaries, settings, model, created, replies, archived: () => archived, wsArchived: () => wsArchived, removed, remember, entries };
 }
 type Fixture = Awaited<ReturnType<typeof setup>>;
 const one = async (x: Fixture) => (await x.entries())[0];
@@ -310,10 +316,12 @@ test("the finished-card review stores at most one general candidate with evidenc
   expect(x.created).toHaveLength(1);
   expect(x.created[0].prompt).toContain("## AGENTS.md\n- Screenshots must not show the host sidebar.");
   expect(x.created[0].prompt).not.toContain("## CLAUDE.md");
-  expect(x.created[0]).toMatchObject({ workspaceId: "root-ws", labels: { flowly: "summarizer", "flowly-memory": "retro", "flowly-task": "t" } });
+  expect(x.created[0]).toMatchObject({ workspaceId: "bg-ws", labels: { flowly: "summarizer", "flowly-memory": "retro", "flowly-task": "t" } });
   expect(x.created[0].prompt).toContain("Root cause: two modals in one frame");
   expect(x.removed).toEqual(["review-1"]);
   expect(x.archived()).toBe(0);
+  // The background workspace is archived once the review is done.
+  expect(x.wsArchived()).toBe(1);
   const list = await x.entries();
   expect(list.map((e) => [e.title, e.source.by, e.evidence])).toEqual([["Two modals in one frame freeze Paseo", "retro", "Root cause: two modals in one frame"]]);
   expect((await x.memory.store.read()).errors).toEqual([]);

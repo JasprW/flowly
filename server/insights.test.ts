@@ -11,6 +11,7 @@ import { DigestStore, InsightsService } from "./insights";
 import type { SummarySettings } from "../shared/summary";
 import type { BoardEvent } from "../shared/model";
 import { insightsWithHabitsSchema } from "../shared/agent-habits";
+import { BackgroundWorkspaces } from "./background-workspace";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -19,7 +20,7 @@ afterEach(async () => {
 const settle = () => new Promise((r) => setTimeout(r, 30));
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
 
-async function setup(options: { rootWorkspace?: boolean } = {}) {
+async function setup() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "ultra-insights-")));
   roots.push(root);
   const board = new BoardStore(join(root, "data"));
@@ -35,6 +36,8 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
   });
   const created: { workspaceId: string; labels: Record<string, string>; prompt: string; parent?: string; config?: { provider: string } }[] = [];
   let archived = 0;
+  let wsArchived = 0;
+  const removed: string[] = [];
   const replies: string[] = [];
   let reply = JSON.stringify({ headline: "Login is ready for review", done: [], progressed: [{ text: "Login built", taskId: "t" }], issues: [], next: [] });
   const paseo = {
@@ -49,15 +52,17 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
       }),
     },
     workspaces: {
-      list: async () => ({
-        entries: options.rootWorkspace ? [{ id: "root-ws", projectId: "n", workspaceDirectory: root }] : [],
-        pageInfo: { nextCursor: null },
-      }),
+      create: async () => ({ id: "bg-ws" }),
+      archive: async () => {
+        wsArchived++;
+        return {};
+      },
       ref: (workspaceId: string) => ({
         agents: {
           create: async (o: { labels: Record<string, string>; prompt: string; parent?: string }) => {
             created.push({ workspaceId, ...o });
             return {
+              id: `digest-${created.length}`,
               waitForFinish: async () => ({ status: "idle", error: null, lastMessage: replies.shift() ?? reply }),
               archive: async () => {
                 archived++;
@@ -72,7 +77,9 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
   let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true };
   const digests = new DigestStore(board.directory);
   const git = new GitStats(async () => "");
-  const service = new InsightsService(board, flow, git, new SummaryStore(board.directory), digests, async () => settings, async () => "en", 1000, () => NOW);
+  const service = new InsightsService(board, flow, git, new SummaryStore(board.directory), digests, async () => settings, async () => "en", 1000, () => NOW, new BackgroundWorkspaces(board.directory, async () => "live"), async (agent) => {
+    removed.push(agent.id);
+  });
   return {
     root,
     board,
@@ -82,6 +89,8 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
     paseo,
     created,
     archived: () => archived,
+    wsArchived: () => wsArchived,
+    removed,
     replies,
     setReply: (text: string) => (reply = text),
     setSettings: (s: Partial<SummarySettings>) => (settings = { ...settings, ...s }),
@@ -126,24 +135,26 @@ test("project insights carry the agent habits; turns without a stamped model tak
 });
 
 test("a past day's digest is generated once on read; today's only on refresh", async () => {
-  const x = await setup({ rootWorkspace: true });
+  const x = await setup();
   const first = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
   expect(first).toMatchObject({ entry: null, running: true, empty: false });
   await settle();
   const second = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
   expect(second.entry).toMatchObject({ headline: "Login is ready for review", progressed: [{ text: "Login built", taskId: "t" }], model: "claude/claude-haiku-5-5" });
   expect(x.created.length).toBe(1);
-  expect(x.created[0]).toMatchObject({ workspaceId: "root-ws", labels: { flowly: "summarizer", "flowly-project": "p" } });
+  expect(x.created[0]).toMatchObject({ workspaceId: "bg-ws", labels: { flowly: "summarizer", "flowly-project": "p" } });
   expect(x.created[0].prompt).toContain("## Card t: Login");
   expect(x.created[0].prompt).toContain("Todo → In review (agent)");
-  expect(x.archived()).toBe(1);
+  // Hard-deleted, not archived (AGENTS.md exception).
+  expect(x.removed).toEqual(["digest-1"]);
+  expect(x.archived()).toBe(0);
 
   const today = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-16" }, x.paseo);
   expect(today).toMatchObject({ entry: null, running: false, empty: true });
   expect(x.created.length).toBe(1);
 });
 
-test("auto generation follows the setting; failures are recorded and the session archived; no workspace falls back to a card", async () => {
+test("auto generation follows the setting; failures are recorded and the session deleted; no workspace falls back to a card", async () => {
   const x = await setup();
   x.setSettings({ digestEnabled: false });
   const off = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
@@ -153,12 +164,14 @@ test("auto generation follows the setting; failures are recorded and the session
   await settle();
   const failed = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
   expect(failed.error?.message).toContain("no JSON");
-  expect(x.created[0].workspaceId).toBe("w");
-  expect(x.archived()).toBe(1);
+  // Never a card's workspace, even when the project root has none of its own.
+  expect(x.created[0].workspaceId).toBe("bg-ws");
+  expect(x.removed).toEqual(["digest-1"]);
+  expect(x.archived()).toBe(0);
 });
 
 test("project removal backs up and drops digests", async () => {
-  const x = await setup({ rootWorkspace: true });
+  const x = await setup();
   await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
   await settle();
   expect((await x.digests.read()).entries.length).toBe(1);
@@ -176,5 +189,6 @@ test("daily digest follows summary model priority and records the successful mod
   const result = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
   expect(result.entry?.model).toBe("claude/claude-haiku-5-5");
   expect(x.created.map((a) => a.config?.provider)).toEqual(["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"]);
-  expect(x.archived()).toBe(2);
+  expect(x.removed).toEqual(["digest-1", "digest-2"]);
+  expect(x.archived()).toBe(0);
 });

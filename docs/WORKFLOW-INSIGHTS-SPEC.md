@@ -157,9 +157,9 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 ### 4.3 模型调用
 
 - 与天级总结相同（PROJECT-INSIGHTS-SPEC §7）：
-  - 在项目根 workspace 创建临时 session，没有时用最近更新的卡片 workspace；
+  - 在项目的「Flowly background」workspace 创建临时 session（用前恢复/复用，用完归档，从不用卡片 workspace；[BACKGROUND-WORKSPACE-SPEC](BACKGROUND-WORKSPACE-SPEC.md)）；
   - 标签 `flowly=summarizer`（兼容既有旧标签）、`flowly-project=<id>`、`flowly-insight=workflow`；
-  - `waitForFinish(900000)`（15 分钟）；结束后在 `finally` 中归档。
+  - `waitForFinish(900000)`（15 分钟）；结束后在 `finally` 中**硬删除**该 session（`daemonRemoveAgent`，同 AGENTS.md 2026-10-22 例外，2026-10-23 扩大到本 run；只删本次刚创建的 id，删除失败回退归档并记日志）。
 - prompt（英文，agent-facing）要点：
   - 可选的五类目标：`paseo_script`、`worktree_setup`、`repo_tool`、`agents_md`、`skill`；
   - 每条结论都要引用卡片短 ID 和次数；不推荐已存在的东西，除非组合起来能省事；git 写操作和一次性探索不做成脚本；重点解读内联脚本的用途；最多 8 条；如实标注置信度；

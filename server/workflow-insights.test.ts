@@ -10,6 +10,7 @@ import { WorkflowInsightsService, WorkflowStore, projectScripts } from "./workfl
 import { BoardService } from "./service";
 import type { SummarySettings } from "../shared/summary";
 import type { CommandRecord, WorkflowSettings } from "../shared/workflow-insights";
+import { BackgroundWorkspaces } from "./background-workspace";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -33,6 +34,7 @@ async function setup() {
   });
   const created: { workspaceId: string; labels: Record<string, string>; prompt: string; provider: string }[] = [];
   let archived = 0;
+  const removed: string[] = [];
   const replies: string[] = [];
   const reply = (cards = ["aaaaaaaa", "bbbbbbbb"]) =>
     JSON.stringify({ findings: [{ target: "repo_tool", title: "i18n helper", evidence: "3 cards", proposal: "scripts/i18n.mjs", benefit: "fewer edits", confidence: "high", cards }], noise: "", verdict: "ok" });
@@ -54,7 +56,8 @@ async function setup() {
       }),
     },
     workspaces: {
-      list: async () => ({ entries: [], pageInfo: { nextCursor: null } }),
+      create: async () => ({ id: "bg-ws" }),
+      archive: async () => ({}),
       ref: (workspaceId: string) => ({
         agents: {
           create: async (o: { labels: Record<string, string>; prompt: string; config: { provider: string } }) => {
@@ -79,7 +82,9 @@ async function setup() {
   const log = new CommandLog(board.directory);
   const state = new WorkflowStore(board.directory);
   let now = NOW;
-  const service = new WorkflowInsightsService(board, log, state, flow, async () => settings, async () => summary, async () => "en", () => now, 1000, "/home/me");
+  const service = new WorkflowInsightsService(board, log, state, flow, async () => settings, async () => summary, async () => "en", () => now, 1000, "/home/me", new BackgroundWorkspaces(board.directory, async () => "live"), async (agent) => {
+    removed.push(agent.id);
+  });
   return {
     root,
     board,
@@ -94,6 +99,7 @@ async function setup() {
     timelines,
     agentLabels,
     archived: () => archived,
+    removed,
     setSettings: (s: Partial<WorkflowSettings>) => (settings = { ...settings, ...s }),
     setNow: (t: number) => (now = t),
   };
@@ -162,7 +168,7 @@ test("backfill reads card sessions' timelines once", async () => {
   expect((await x.log.read("p")).map((r) => r.actions[0]).sort()).toEqual(["make build", "npm run lint"]);
 });
 
-test("a manual run calls the model once, stores validated suggestions and archives its session", async () => {
+test("a manual run calls the model once, stores validated suggestions and deletes its session", async () => {
   const x = await setup();
   await x.log.append("p", records(6, 3));
   expect(x.service.run("p", x.paseo, true)).toEqual({ queued: true });
@@ -174,7 +180,9 @@ test("a manual run calls the model once, stores validated suggestions and archiv
   expect(view.findings[0]).toMatchObject({ title: "i18n helper", status: "open", cards: ["aaaaaaaa-1", "bbbbbbbb-2"] });
   expect(x.created[0].labels).toMatchObject({ flowly: "summarizer", "flowly-project": "p", "flowly-insight": "workflow" });
   expect(x.created[0].prompt).toContain("npm run typecheck");
-  expect(x.archived()).toBe(1);
+  // Hard-deleted, not archived (AGENTS.md exception).
+  expect(x.removed).toEqual(["run-1"]);
+  expect(x.archived()).toBe(0);
   // The next run replaces it instead of adding a second copy.
   await x.service.run("p", x.paseo, true);
   await settle(x.service);
@@ -368,6 +376,7 @@ for (const secondLookupFails of [false, true]) {
     expect((await x.service.view("p")).lastRun).toMatchObject({ status: "ok", model: secondLookupFails ? "claude/claude-haiku-5-5" : "custom/summary" });
     expect(inventories).toBe(2);
     expect(x.created).toHaveLength(1);
-    expect(x.archived()).toBe(1);
+    expect(x.removed).toEqual(["run-1"]);
+    expect(x.archived()).toBe(0);
   });
 }

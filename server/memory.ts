@@ -40,7 +40,7 @@ import {
 import type { BoardStore } from "./store";
 import type { SummaryStore } from "./summaries";
 import { runSummaryModels } from "./summary-models";
-import { projectWorkspace } from "./insights";
+import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 
 const DAY_MS = 86_400_000;
@@ -198,6 +198,8 @@ export class MemoryService {
     private timeoutMs = RETRO_TIMEOUT_MS,
     /** Hard-deletes the review's child session when done; archives it if that fails (AGENTS.md exception, §4.2). */
     private removeAgent: RemoveAgent = daemonRemoveAgent(),
+    /** Where the review runs: the project's background workspace, never a card's (§4.2). */
+    private background: BackgroundWorkspaces = backgroundWorkspaces(board.directory),
   ) {
     this.store = memoryStore(board.directory);
   }
@@ -687,11 +689,9 @@ export class MemoryService {
       return;
     }
     if (!manual && last && last.summaryId === m.latestId && last.clueAt === m.clueAt) return;
-    const board = await this.board.read();
     const models = summaryModelsOf(await this.summarySettings());
     const prompt = retroPrompt(m.text, await this.language());
-    const workspaceId = await projectWorkspace(m.project, board, paseo, "the finished-card review");
-    const { output } = await runSummaryModels(paseo, models, {
+    const { output } = await this.background.use(m.project, paseo, (workspaceId) => runSummaryModels(paseo, models, {
       create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
         config: { provider: model },
         title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
@@ -702,7 +702,7 @@ export class MemoryService {
       parse: (text) => parseRetroOutput(text).map(fitCandidate),
       remove: this.removeAgent,
       timeoutMs: this.timeoutMs,
-    });
+    }));
     await this.recordRetro(m, taskId, output);
   }
 
