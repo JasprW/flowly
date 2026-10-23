@@ -1,5 +1,20 @@
 # Implementation progress
 
+## Configurable summary models — 2026-10-23
+
+- User-requested ordered model list in Settings → Models and the welcome tour: add, move up/down, remove, reset to Haiku→Luna; preserve legacy Auto/single-model choices. Additive v1 `summaryModels`, no write-on-read migration.
+- Shared runtime fallback now covers Progress, outside-session insights, digest and finished-card memory review; unavailable candidates skipped, valid output stops, cleanup precedes retry, persistence stays outside retry. Existing workspace ownership preserved.
+- PASS independent full-access Luna: focused 167, typecheck, full 111 files / 958 tests. Reloaded. Real UI add/remove/reorder/duplicate/final-item/persistence and 820px compact desktop passed; real custom order skipped an unavailable candidate and ran Luna first. Original settings/onboarding restored exactly; test child and independent session deleted.
+- UNRUN full phone/native layout: at 580px the host navigated back to Community. Dark theme not separately exercised. Existing theme primitives reused.
+- Onboarding, READMEs, one-time tip and all catalogs updated. The optional What's new announcement remains with its separate uncommitted feature. [Spec](SUMMARY-MODELS-SPEC.md), [verification](verification/summary-models-2026-10-23.md).
+
+## Summary runtime fallback — 2026-10-22
+
+- Fixed card Progress Auto summaries: available candidates are tried once in order (Haiku → Luna), including quota/runtime/create/wait/timeout/permission/schema failures. Explicit model selections stay fixed. Successful output or valid `update=false` stops; only a successful model is saved, all failures keep the previous summary, and storage errors never trigger another model call.
+- Spec: [TASK-SUMMARY-SPEC §4/§8](TASK-SUMMARY-SPEC.md). Focused 41 tests PASS; independent Luna full-access typecheck PASS. Live reload + this card's Refresh observed Haiku then Luna, saved a Luna summary, and confirmed both created children were deleted. No settings changed or fixture projects created. Independent full suite PASS (110 files / 948 tests), plus a separate persistence-failure boundary PASS; details are in the verification report.
+- Onboarding: bug fix to existing Auto behavior, no new UI, setting, entry point, tour, tip or What's new item.
+- Evidence: [summary fallback](verification/summary-fallback-2026-10-22.md). Uncommitted; no commit/push requested. Adjacent digest, outside-session insights and memory review fallback is recorded as a follow-up idea.
+
 ## Agent idea management (card "扩展idea工具") — 2026-10-22
 
 Spec: [IDEAS-SPEC §3.1](IDEAS-SPEC.md). User request: agents manage their card's ideas themselves (dismiss, edit, delete), e.g. close an idea the user rejected.

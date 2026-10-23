@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 
-type Reply = { status?: "idle" | "error" | "permission" | "timeout"; text?: string; error?: string; gate?: Promise<void> };
+type Reply = { status?: "idle" | "error" | "permission" | "timeout"; text?: string; error?: string; gate?: Promise<void>; createError?: string; waitError?: string };
 
 async function setup(options: { claude?: boolean } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "ultra-summary-")));
@@ -40,7 +40,7 @@ async function setup(options: { claude?: boolean } = {}) {
           { provider: "codex", available: true },
         ],
       }),
-      listModels: async (p: string) => ({ models: p === "claude" ? [{ id: "claude-haiku-5-5" }] : [{ id: "gpt-6-luna" }], error: null }),
+      listModels: async (p: string) => ({ models: p === "claude" ? [{ id: "claude-haiku-5-5" }] : [{ id: "gpt-6-luna" }, { id: "gpt-6-sol" }], error: null }),
     },
     workspaces: {
       ref: (workspaceId: string) => ({
@@ -48,9 +48,11 @@ async function setup(options: { claude?: boolean } = {}) {
       create: async (o: { parent: string; config: { provider: string }; prompt: string; labels: Record<string, string> }) => {
         created.push({ workspaceId, parent: o.parent, provider: o.config.provider, prompt: o.prompt, labels: o.labels });
         const reply = replies.shift() || {};
+        if (reply.createError) throw new Error(reply.createError);
         return {
           waitForFinish: async () => {
             await reply.gate;
+            if (reply.waitError) throw new Error(reply.waitError);
             return { status: reply.status || "idle", final: null, error: reply.error || null, lastMessage: reply.text ?? null };
           },
           archive: async () => {
@@ -124,6 +126,52 @@ test("falls back to GPT-6-Luna when Claude is unavailable", async () => {
   expect(x.created[0].provider).toBe("codex/gpt-6-luna");
 });
 
+test.each<Reply>([
+  { status: "error", error: "You've hit your limit" },
+  { status: "idle", error: "Rate limit exceeded", text: JSON.stringify({ update: true, state: "stale" }) },
+  { status: "idle", text: "You've hit your limit" },
+  { status: "timeout" },
+  { status: "permission" },
+  { text: '{"update":true,"state":""}' },
+  { createError: "Quota exhausted during create" },
+  { waitError: "Provider connection failed" },
+])("Auto falls back after a model failure: %j", async (failure) => {
+  const x = await setup();
+  await x.store.setError("t", "old error");
+  x.replies.push(failure, { text: x.json("Luna succeeded") });
+  await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
+  expect(x.created.map((a) => a.provider)).toEqual(["claude/claude-haiku-5-5", "codex/gpt-6-luna"]);
+  expect(x.created[1]).toMatchObject({ workspaceId: "w", parent: "a1", prompt: x.created[0].prompt, labels: x.created[0].labels });
+  expect(await x.store.history("t")).toHaveLength(1);
+  expect(await x.store.latest("t")).toMatchObject({ model: "codex/gpt-6-luna", state: "Luna succeeded" });
+  expect((await x.store.read()).errors).toEqual([]);
+  expect(x.archived()).toBe(failure.createError ? 1 : 2);
+  expect(x.service.running()).toEqual([]);
+});
+
+test("Auto exhausts both models once, keeps the old summary, and records both failures", async () => {
+  const x = await setup();
+  await x.store.add({ taskId: "t", model: "old", agentIds: [], state: "previous", target: "", recap: "", next: "" });
+  x.replies.push({ status: "error", error: "Haiku limit reached" }, { status: "error", error: "Luna unavailable" });
+  await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
+  expect(x.created).toHaveLength(2);
+  expect(x.archived()).toBe(2);
+  expect(await x.store.history("t")).toHaveLength(1);
+  expect((await x.store.latest("t"))?.state).toBe("previous");
+  expect((await x.store.read()).errors[0].message).toBe("claude/claude-haiku-5-5: Haiku limit reached; codex/gpt-6-luna: Luna unavailable");
+});
+
+test("a valid update=false stops Auto without a fallback and clears old errors", async () => {
+  const x = await setup();
+  await x.store.add({ taskId: "t", model: "old", agentIds: [], state: "previous", target: "", recap: "", next: "" });
+  await x.store.setError("t", "old error");
+  x.replies.push({ text: x.json("ignored", false) });
+  await x.service.enqueue("t", "a1", x.turn("thanks"), x.paseo);
+  expect(x.created).toHaveLength(1);
+  expect(await x.store.history("t")).toHaveLength(1);
+  expect((await x.store.read()).errors).toEqual([]);
+});
+
 test("update=false keeps the previous version; the first summary is always written", async () => {
   const x = await setup();
   x.replies.push({ text: x.json("first", false) });
@@ -174,6 +222,7 @@ test("settled() resolves only after the card's queued runs have finished and arc
 
 test("failures are recorded, the old summary kept, and the session still archived", async () => {
   const x = await setup();
+  x.setSettings({ summaryModel: "claude/claude-haiku-5-5" });
   x.replies.push({ text: x.json("good") });
   await x.service.enqueue("t", "a1", x.turn("a"), x.paseo);
   for (const reply of [{ status: "timeout" as const }, { status: "permission" as const }, { text: "not json" }]) {
@@ -191,10 +240,10 @@ test("failures are recorded, the old summary kept, and the session still archive
 
 test("an unavailable configured model is an error without creating a session", async () => {
   const x = await setup();
-  x.setSettings({ summaryModel: "codex/gpt-6-sol" });
+  x.setSettings({ summaryModel: "codex/missing" });
   await x.service.enqueue("t", "a1", x.turn("a"), x.paseo);
   expect(x.created).toHaveLength(0);
-  expect((await x.store.read()).errors[0].message).toMatch(/not available/);
+  expect((await x.store.read()).errors[0].message).toMatch(/No configured summary model/);
 });
 
 test("archived cards and empty turns are skipped", async () => {
@@ -367,4 +416,15 @@ test("a hung append never holds up the card's next summary", async () => {
   await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
   await x.service.enqueue("t", "a1", x.turn("y"), x.paseo);
   expect((await x.store.latest("t"))?.state).toBe("two");
+});
+
+test("custom priority retries three models and saves only the successful model", async () => {
+  const x = await setup();
+  x.setSettings({ summaryModels: ["codex/gpt-6-sol", "claude/claude-haiku-5-5", "codex/gpt-6-luna"] });
+  x.replies.push({ status: "error", error: "limit 1" }, { status: "error", error: "limit 2" }, { text: x.json("third") });
+  await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
+  expect(x.created.map((a) => a.provider)).toEqual(["codex/gpt-6-sol", "claude/claude-haiku-5-5", "codex/gpt-6-luna"]);
+  expect(x.archived()).toBe(3);
+  expect(await x.store.history("t")).toHaveLength(1);
+  expect(await x.store.latest("t")).toMatchObject({ state: "third", model: "codex/gpt-6-luna" });
 });

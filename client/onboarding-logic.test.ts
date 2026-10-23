@@ -91,9 +91,17 @@ describe("tips", () => {
     const facts = { ...none, hasSummary: true, workflowSuggestion: true, hasArtifact: true };
     expect(nextTip({ tipsSeen: [], facts, blocked: false })).toBe("first-workflow-insight");
     expect(nextTip({ tipsSeen: ["first-workflow-insight"], facts, blocked: false })).toBe("ai-language");
-    expect(nextTip({ tipsSeen: ["first-workflow-insight", "ai-language"], facts, blocked: false })).toBe("first-artifact");
+    expect(nextTip({ tipsSeen: ["first-workflow-insight", "ai-language", "summary-models"], facts, blocked: false })).toBe("first-artifact");
     expect(nextTip({ tipsSeen: [], facts: { ...none, hasSummary: false }, blocked: false })).toBeNull();
   });
+ test("summary model priority is announced after AI language and only once", () => {
+  const facts = { ...none, hasSummary: true };
+  expect(nextTip({ tipsSeen: [], facts, blocked: false })).toBe("ai-language");
+  expect(nextTip({ tipsSeen: ["ai-language"], facts, blocked: false })).toBe("summary-models");
+  expect(nextTip({ tipsSeen: ["ai-language", "summary-models"], facts, blocked: false })).toBeNull();
+  expect(nextTip({ tipsSeen: [], facts: none, blocked: false })).toBeNull();
+ });
+
   test("session history is announced in an open card with a session, after the connectors tip, before section order", () => {
     const facts = { ...none, cardOpen: true, cardWithSession: true, fullSidebar: true };
     expect(nextTip({ tipsSeen: [], facts, blocked: false })).toBe("connectors");

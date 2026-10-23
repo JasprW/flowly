@@ -32,7 +32,7 @@ import { NextMoveRows } from "./server/next-move-rows";
 import { SessionInsightService, SessionInsightStore } from "./server/session-insights";
 import { SummaryService, SummaryStore } from "./server/summaries";
 import { UsageService } from "./server/usage";
-import { summarySettings, summarySettingsValues } from "./shared/summary";
+import { summarySettings, summarySettingsValues, summaryModelsOf } from "./shared/summary";
 import { FlowLog } from "./server/flow-log";
 import { ProjectFolders, snapshotPath } from "./server/project-folder";
 import { GitStats } from "./server/git-stats";
@@ -106,7 +106,7 @@ export default function contribute(server: PluginServerContext) {
     return {
       enabled: native.outside,
       parts: { progress: native.outsideProgress, nextMoves: native.outsideNextMoves, ideas: native.outsideIdeas },
-      model: summary.summaryModel,
+      model: summaryModelsOf(summary),
     };
   }, aiLanguage);
   // Untrimmed event log + project insights (PROJECT-INSIGHTS-SPEC).

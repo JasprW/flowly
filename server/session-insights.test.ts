@@ -36,7 +36,7 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
   const paseo = {
     providers: {
       listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
-      listModels: async () => ({ models: [{ id: "claude-haiku-5-5" }], error: null }),
+      listModels: async () => ({ models: [{ id: "claude-haiku-5-5" }, { id: "claude-sonnet-5-5" }], error: null }),
     },
     workspaces: {
       ref: (workspaceId: string) => ({
@@ -194,4 +194,13 @@ test("idea actions refuse a busy session (here) and a folder that is not a Git r
   await x.service.dismissIdea({ agentId: "a1", ideaId: id });
   expect((await x.store.read()).sessions[0].ideas[0].status).toBe("dismissed");
   expect(await x.service.view()).toEqual([]);
+});
+
+test("outside-session insights follows the ordered summary list and retries invalid output", async () => {
+  const x = await setup({ settings: { model: ["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"] } });
+  x.replies.push({ text: "limit reached" }, { text: x.json({}) });
+  await x.service.enqueue(x.agent, turn("x"), x.paseo);
+  expect(x.created.map((a) => a.config.provider)).toEqual(["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"]);
+  expect(x.archived()).toBe(2);
+  expect((await x.store.read()).sessions[0].summary?.model).toBe("claude/claude-haiku-5-5");
 });

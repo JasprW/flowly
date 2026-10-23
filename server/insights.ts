@@ -7,12 +7,12 @@ import type { BoardStore } from "./store";
 import type { FlowLog } from "./flow-log";
 import type { GitStats } from "./git-stats";
 import type { SummaryStore } from "./summaries";
-import { availableModels } from "./summaries";
+import { runSummaryModels } from "./summary-models";
 import type { AgentLike, UsageService } from "./usage";
 import { modelId } from "./agent-model";
 import { laneName } from "../shared/lanes";
 import { historyStatusLabel, type Board, type HistoryStatus, type Project } from "../shared/model";
-import { SUMMARIZER_LABELS, isSummarizer, resolveModel, type SummaryEntry, type SummarySettings } from "../shared/summary";
+import { SUMMARIZER_LABELS, isSummarizer, summaryModelsOf, type SummaryEntry, type SummarySettings } from "../shared/summary";
 import {
   TREND_DAYS,
   addDays,
@@ -298,31 +298,20 @@ export class InsightsService {
     const { text, taskIds, project, board } = await this.material(input);
     if (!text) throw new Error("No activity on this day.");
     const settings = await this.settings();
-    const model = resolveModel(settings.summaryModel, await availableModels(paseo, settings.summaryModel));
     const workspaceId = await this.workspaceFor(project, board, paseo);
     const prompt = digestPrompt({ project: project.title, day: input.day, today: input.day === dayKey(this.now(), tz), material: text, language: await this.language() });
-    const agent = await paseo.workspaces.ref(workspaceId).agents.create({
-      config: { provider: model },
-      title: `Kanban digest · ${project.title} · ${input.day}`.slice(0, 120),
-      labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
-      prompt,
-      outputSchema: digestJsonSchema as unknown as Record<string, unknown>,
+    const { model, output } = await runSummaryModels(paseo, summaryModelsOf(settings), {
+      create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
+        config: { provider: model },
+        title: `Kanban digest · ${project.title} · ${input.day}`.slice(0, 120),
+        labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
+        prompt,
+        outputSchema: digestJsonSchema as unknown as Record<string, unknown>,
+      }),
+      parse: (text) => parseDigest(text, taskIds),
+      remove: (agent) => agent.archive().then(() => undefined).catch(() => undefined),
+      timeoutMs: this.timeoutMs,
     });
-    let output;
-    try {
-      const result = await agent.waitForFinish(this.timeoutMs);
-      if (result.status !== "idle")
-        throw new Error(
-          result.status === "timeout"
-            ? "The digest model timed out."
-            : result.status === "permission"
-              ? "The digest model asked for a permission."
-              : result.error || "The digest model failed.",
-        );
-      output = parseDigest(result.lastMessage, taskIds);
-    } finally {
-      await agent.archive().catch(() => undefined);
-    }
     await this.digests.put({ ...output, projectId: project.id, day: input.day, tz: tz || "", at: new Date(this.now()).toISOString(), model });
   }
 

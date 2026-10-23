@@ -1,0 +1,81 @@
+{
+  "at": "2026-10-22T16:20:42.514Z",
+  "original": {
+    "status": "ready",
+    "revision": "9b25805f4f66a381a9f8fcc16a60d428e80146d958f24acfb19cf0988732a4bc",
+    "values": {
+      "summaryEnabled": true,
+      "summaryModel": "",
+      "digestEnabled": true,
+      "retroEnabled": true
+    }
+  },
+  "checks": [
+    {
+      "name": "default list persisted",
+      "detail": [
+        "claude/claude-haiku-5-5",
+        "codex/gpt-6-luna"
+      ],
+      "state": "pass"
+    },
+    {
+      "name": "move up changes persisted priority",
+      "state": "pass"
+    },
+    {
+      "name": "remove works; final model cannot be removed",
+      "state": "pass"
+    },
+    {
+      "name": "add provider/model appends without changing previous priority",
+      "state": "pass"
+    },
+    {
+      "name": "duplicate model is disabled",
+      "state": "pass"
+    },
+    {
+      "name": "move down persists priority",
+      "state": "pass"
+    },
+    {
+      "name": "list survives page reload",
+      "state": "pass"
+    },
+    {
+      "name": "compact desktop action controls remain within 820px viewport",
+      "detail": [
+        {
+          "x": 662,
+          "y": 579.5,
+          "width": 32,
+          "height": 32
+        },
+        {
+          "x": 698,
+          "y": 579.5,
+          "width": 32,
+          "height": 32
+        },
+        {
+          "x": 734,
+          "y": 579.5,
+          "width": 32,
+          "height": 32
+        }
+      ],
+      "state": "pass"
+    },
+    {
+      "name": "no browser page errors",
+      "state": "pass"
+    },
+    {
+      "name": "settings RPC rejects empty/duplicate lists without mutation",
+      "state": "pass"
+    }
+  ],
+  "restore": "PASS: original values restored exactly",
+  "onboardingRestore": "PASS: exact original onboarding values"
+}

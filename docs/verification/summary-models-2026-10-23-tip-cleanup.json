@@ -1,0 +1,10 @@
+{
+  "removedOnlyNewTestSeenTip": "summary-models",
+  "otherValuesPreserved": true,
+  "summary": {
+    "summaryEnabled": true,
+    "summaryModel": "",
+    "digestEnabled": true,
+    "retroEnabled": true
+  }
+}

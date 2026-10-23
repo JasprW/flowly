@@ -1,0 +1,50 @@
+import type { PaseoApi } from "@getpaseo/client";
+import { resolveModels, type SummaryModelChoice } from "../shared/summary";
+import type { RemovableAgent, RemoveAgent } from "./summarizer-remove";
+
+/** Fetch only providers named by the configured list (or the default Auto pair). */
+export async function availableModels(paseo: PaseoApi, configured: SummaryModelChoice) {
+  const choices = typeof configured === "string" ? (configured ? [configured] : []) : configured;
+  const wanted = choices.length ? choices.map((id) => id.slice(0, id.indexOf("/"))) : ["claude", "codex"];
+  const available = (await paseo.providers.listAvailable()).providers;
+  return Promise.all(available.filter((p) => wanted.includes(p.provider)).map(async (p) => {
+    if (!p.available) return { provider: p.provider, available: false, models: [] };
+    const result = await paseo.providers.listModels(p.provider).catch(() => null);
+    return { provider: p.provider, available: !!result && !result.error, models: result?.models || [] };
+  }));
+}
+
+type ModelAgent = RemovableAgent & {
+  waitForFinish(timeout: number): Promise<{ status: string; error?: string | null; lastMessage?: string | null }>;
+};
+
+/** Only model create/wait/parse/cleanup are retried; the caller persists after this returns. */
+export async function runSummaryModels<T>(
+  paseo: PaseoApi,
+  configured: SummaryModelChoice,
+  options: { create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number },
+): Promise<{ model: string; output: T }> {
+  const models = resolveModels(configured, await availableModels(paseo, configured));
+  const failures: string[] = [];
+  for (const model of models) {
+    try {
+      const agent = await options.create(model);
+      let output: T;
+      try {
+        const result = await agent.waitForFinish(options.timeoutMs);
+        if (result.status !== "idle" || result.error) throw new Error(
+          result.status === "timeout" ? "The summary model timed out."
+            : result.status === "permission" ? "The summary model asked for a permission."
+              : result.error || "The summary model failed.",
+        );
+        output = options.parse(result.lastMessage);
+      } finally {
+        await options.remove(agent);
+      }
+      return { model, output };
+    } catch (error) {
+      failures.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  throw new Error(failures.join("; "));
+}

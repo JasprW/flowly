@@ -1,0 +1,221 @@
+2a727e8af2d4908d1cc86f2905c641c1cb56b838
+## main...origin/main
+ M AGENTS.md
+ M README.md
+ M README.zh-CN.md
+ M client/board.tsx
+ M client/insights.tsx
+ M client/onboarding-logic.test.ts
+ M client/onboarding-logic.ts
+ M client/onboarding-state.ts
+ M client/queries.ts
+ M client/session-markdown.test.ts
+ M client/session-markdown.ts
+ M client/settings-pages.tsx
+ M client/summary-settings.tsx
+ M docs/ONBOARDING-SPEC.md
+ M docs/PROGRESS.md
+ M docs/PROJECT-INSIGHTS-SPEC.md
+ M docs/SPEC-OUTLINE.md
+ M docs/TASK-SUMMARY-SPEC.md
+ M index.server.ts
+ M package-lock.json
+ M package.json
+ M server/insights.ts
+ M server/progress-rules.test.ts
+ M server/progress-rules.ts
+ M server/summaries.test.ts
+ M server/summaries.ts
+ M shared/agent-habits.test.ts
+ M shared/agent-habits.ts
+ M shared/i18n/de.ts
+ M shared/i18n/es.ts
+ M shared/i18n/fr.ts
+ M shared/i18n/ja.ts
+ M shared/i18n/ko.ts
+ M shared/i18n/pt-BR.ts
+ M shared/i18n/ru.ts
+ M shared/i18n/zh-CN.ts
+ M shared/i18n/zh-TW.ts
+ M shared/insights.test.ts
+ M shared/insights.ts
+ M shared/model.ts
+ M shared/rpc.ts
+ M shared/settings.ts
+ M shared/summary.test.ts
+ M shared/summary.ts
+?? benchmarks/
+?? client/whats-new-window.tsx
+?? client/whats-new.test.ts
+?? client/whats-new.ts
+?? docs/CONSTRAINT-BENCHMARK-SPEC.md
+?? docs/INSIGHTS-REDESIGN-SPEC.md
+?? docs/WHATS-NEW-SPEC.md
+?? docs/verification/artemis-2026-10-22/
+?? docs/verification/constraint-benchmark-2026-10-22/
+?? docs/verification/constraint-benchmark-design-2026-10-22/
+?? docs/verification/constraint-benchmark/
+?? docs/verification/fixtures/insights/
+?? docs/verification/insights-redesign-2026-10-22.md
+?? docs/verification/insights-redesign-before-2026-10-22.png
+?? docs/verification/insights-redesign-v1-withdrawn-2026-10-22.png
+?? docs/verification/insights-redesign-v2-desktop-dark-2026-10-22.png
+?? docs/verification/insights-redesign-v2-desktop-light-2026-10-22.png
+?? docs/verification/insights-redesign-v2-narrow-2026-10-22.png
+?? docs/verification/summary-fallback-2026-10-22-live.json
+?? docs/verification/summary-fallback-2026-10-22-live.mjs
+?? docs/verification/summary-fallback-2026-10-22-luna.persistence.test.mjs
+?? docs/verification/summary-fallback-2026-10-22-tree.json
+?? docs/verification/summary-fallback-2026-10-22.md
+?? docs/verification/whats-new-2026-10-22.md
+?? docs/verification/whats-new-2026-10-22/
+?? docs/verification/workspace-change-ownership-2026-10-21.md
+?? shared/workflow-stats.test.ts
+?? shared/workflow-stats.ts
+## main...origin/main
+ M AGENTS.md
+ M README.md
+ M README.zh-CN.md
+ M client/board.tsx
+ M client/insights.tsx
+ M client/onboarding-logic.test.ts
+ M client/onboarding-logic.ts
+ M client/onboarding-state.ts
+ M client/queries.ts
+ M client/session-markdown.test.ts
+ M client/session-markdown.ts
+ M client/settings-pages.tsx
+ M client/summary-settings.tsx
+ M docs/ONBOARDING-SPEC.md
+ M docs/PROGRESS.md
+ M docs/PROJECT-INSIGHTS-SPEC.md
+ M docs/SPEC-OUTLINE.md
+ M docs/TASK-SUMMARY-SPEC.md
+ M index.server.ts
+ M package-lock.json
+ M package.json
+ M server/insights.ts
+ M server/progress-rules.test.ts
+ M server/progress-rules.ts
+ M server/summaries.test.ts
+ M server/summaries.ts
+ M shared/agent-habits.test.ts
+ M shared/agent-habits.ts
+ M shared/i18n/de.ts
+ M shared/i18n/es.ts
+ M shared/i18n/fr.ts
+ M shared/i18n/ja.ts
+ M shared/i18n/ko.ts
+ M shared/i18n/pt-BR.ts
+ M shared/i18n/ru.ts
+ M shared/i18n/zh-CN.ts
+ M shared/i18n/zh-TW.ts
+ M shared/insights.test.ts
+ M shared/insights.ts
+ M shared/model.ts
+ M shared/rpc.ts
+ M shared/settings.ts
+ M shared/summary.test.ts
+ M shared/summary.ts
+?? benchmarks/
+?? client/whats-new-window.tsx
+?? client/whats-new.test.ts
+?? client/whats-new.ts
+?? docs/CONSTRAINT-BENCHMARK-SPEC.md
+?? docs/INSIGHTS-REDESIGN-SPEC.md
+?? docs/WHATS-NEW-SPEC.md
+?? docs/verification/artemis-2026-10-22/
+?? docs/verification/constraint-benchmark-2026-10-22/
+?? docs/verification/constraint-benchmark-design-2026-10-22/
+?? docs/verification/constraint-benchmark/
+?? docs/verification/fixtures/insights/
+?? docs/verification/insights-redesign-2026-10-22.md
+?? docs/verification/insights-redesign-before-2026-10-22.png
+?? docs/verification/insights-redesign-v1-withdrawn-2026-10-22.png
+?? docs/verification/insights-redesign-v2-desktop-dark-2026-10-22.png
+?? docs/verification/insights-redesign-v2-desktop-light-2026-10-22.png
+?? docs/verification/insights-redesign-v2-narrow-2026-10-22.png
+?? docs/verification/summary-fallback-2026-10-22-live.json
+?? docs/verification/summary-fallback-2026-10-22-live.mjs
+?? docs/verification/summary-fallback-2026-10-22-luna.persistence.test.mjs
+?? docs/verification/summary-fallback-2026-10-22-tree.json
+?? docs/verification/summary-fallback-2026-10-22.md
+?? docs/verification/whats-new-2026-10-22.md
+?? docs/verification/whats-new-2026-10-22/
+?? docs/verification/workspace-change-ownership-2026-10-21.md
+?? shared/workflow-stats.test.ts
+?? shared/workflow-stats.ts
+## main...origin/main
+ M AGENTS.md
+ M README.md
+ M README.zh-CN.md
+ M client/board.tsx
+ M client/insights.tsx
+ M client/onboarding-logic.test.ts
+ M client/onboarding-logic.ts
+ M client/onboarding-state.ts
+ M client/queries.ts
+ M client/session-markdown.test.ts
+ M client/session-markdown.ts
+ M client/settings-pages.tsx
+ M client/summary-settings.tsx
+ M docs/ONBOARDING-SPEC.md
+ M docs/PROGRESS.md
+ M docs/PROJECT-INSIGHTS-SPEC.md
+ M docs/SPEC-OUTLINE.md
+ M docs/TASK-SUMMARY-SPEC.md
+ M index.server.ts
+ M package-lock.json
+ M package.json
+ M server/insights.ts
+ M server/progress-rules.test.ts
+ M server/progress-rules.ts
+ M server/summaries.test.ts
+ M server/summaries.ts
+ M shared/agent-habits.test.ts
+ M shared/agent-habits.ts
+ M shared/i18n/de.ts
+ M shared/i18n/es.ts
+ M shared/i18n/fr.ts
+ M shared/i18n/ja.ts
+ M shared/i18n/ko.ts
+ M shared/i18n/pt-BR.ts
+ M shared/i18n/ru.ts
+ M shared/i18n/zh-CN.ts
+ M shared/i18n/zh-TW.ts
+ M shared/insights.test.ts
+ M shared/insights.ts
+ M shared/model.ts
+ M shared/rpc.ts
+ M shared/settings.ts
+ M shared/summary.test.ts
+ M shared/summary.ts
+?? benchmarks/
+?? client/whats-new-window.tsx
+?? client/whats-new.test.ts
+?? client/whats-new.ts
+?? docs/CONSTRAINT-BENCHMARK-SPEC.md
+?? docs/INSIGHTS-REDESIGN-SPEC.md
+?? docs/WHATS-NEW-SPEC.md
+?? docs/verification/artemis-2026-10-22/
+?? docs/verification/constraint-benchmark-2026-10-22/
+?? docs/verification/constraint-benchmark-design-2026-10-22/
+?? docs/verification/constraint-benchmark/
+?? docs/verification/fixtures/insights/
+?? docs/verification/insights-redesign-2026-10-22.md
+?? docs/verification/insights-redesign-before-2026-10-22.png
+?? docs/verification/insights-redesign-v1-withdrawn-2026-10-22.png
+?? docs/verification/insights-redesign-v2-desktop-dark-2026-10-22.png
+?? docs/verification/insights-redesign-v2-desktop-light-2026-10-22.png
+?? docs/verification/insights-redesign-v2-narrow-2026-10-22.png
+?? docs/verification/summary-fallback-2026-10-22-live.json
+?? docs/verification/summary-fallback-2026-10-22-live.mjs
+?? docs/verification/summary-fallback-2026-10-22-luna.md
+?? docs/verification/summary-fallback-2026-10-22-luna.persistence.test.mjs
+?? docs/verification/summary-fallback-2026-10-22-tree.json
+?? docs/verification/summary-fallback-2026-10-22.md
+?? docs/verification/whats-new-2026-10-22.md
+?? docs/verification/whats-new-2026-10-22/
+?? docs/verification/workspace-change-ownership-2026-10-21.md
+?? shared/workflow-stats.test.ts
+?? shared/workflow-stats.ts

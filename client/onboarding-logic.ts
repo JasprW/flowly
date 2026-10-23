@@ -29,7 +29,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "first-memory-candidate", "settings-entry"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "summary-models", "first-memory-candidate", "settings-entry"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -102,6 +102,7 @@ const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
   connectors: "cardOpen",
   "session-history": "cardWithSession",
   "ai-language": "hasSummary",
+  "summary-models": "hasSummary",
   "first-memory-candidate": "memoryCandidate",
 };
 
@@ -109,7 +110,7 @@ const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-workflow-insight", "ai-language", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
+  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-workflow-insight", "ai-language", "summary-models", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 

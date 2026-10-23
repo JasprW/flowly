@@ -1,5 +1,7 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-10-23 Summary 模型列表：用户可添加多个模型、上移/下移设置回退优先级、移除或恢复默认 Haiku→Luna；兼容旧 Auto/单模型设置，同步所有使用 summary 设置的入口。[spec](SUMMARY-MODELS-SPEC.md)。
+
 2026-10-22 回合清单与统计校准：最小版建议 1+3，共用六项动作清单生成 skill 和 get_task.turnChecklist；旧会话读卡即可取得最新规则。审计脚本改为回合时间窗口、成功回执与实际 output 匹配、确认重试分类和显式样本分组；不加 hooks。[spec](TURN-CHECKLIST-SPEC.md)。
 
 2026-10-22 交付约束（已实现，Sonnet/GPT 真实验证通过；4 个本地测试分支待权限清理）：交付与结果调用支持 `outputs`（文件/PR/MR）原子登记，省略提醒、`[]` 显式无产物；`acknowledgeOpen` 先拒后放，绑定 session 与当前 card/workpad/HEAD，回合切换和服务重载后重新拒绝。MCP、CLI、skill 同步。[spec](DELIVERY-CONSTRAINTS-SPEC.md)。

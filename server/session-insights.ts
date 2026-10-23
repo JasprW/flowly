@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
 import type { LocaleCode } from "../shared/i18n";
-import { SUMMARIZER_LABELS, resolveModel, truncateTranscript, turnText } from "../shared/summary";
+import { SUMMARIZER_LABELS, type SummaryModelChoice, truncateTranscript, turnText } from "../shared/summary";
 import {
   SESSION_IDEAS_MAX,
   SESSION_INSIGHTS_MAX,
@@ -22,7 +22,8 @@ import {
   type SessionInsightsState,
 } from "../shared/session-insights";
 import { sessionSummaryRow } from "../shared/native-session";
-import { availableModels, within } from "./summaries";
+import { within } from "./summaries";
+import { runSummaryModels } from "./summary-models";
 import type { NextMoveRows } from "./next-move-rows";
 import { generatedBranchName, resolveWorktreeBaseRef } from "./service";
 
@@ -77,7 +78,7 @@ export class SessionInsightStore {
 
 /** The session the hook names, as far as insights need it. */
 export type OutsideAgent = { id: string; workspaceId: string | null; parentAgentId: string | null; title: string | null; cwd: string };
-export type InsightSettings = { enabled: boolean; parts: InsightParts; model: string };
+export type InsightSettings = { enabled: boolean; parts: InsightParts; model: SummaryModelChoice };
 
 type Batch = { text: string; endedAt: string; agent: OutsideAgent };
 export const INSIGHT_TIMEOUT_MS = 120_000;
@@ -186,41 +187,26 @@ export class SessionInsightService {
     const { agent } = batch;
     const before = (await this.store.read()).sessions.find((s) => s.agentId === agent.id);
     const open = (before?.ideas ?? []).filter((i) => i.status === "open");
-    const model = resolveModel(settings.model, await availableModels(paseo, settings.model));
     const language = await this.language();
     // A child of the session in its own workspace, like the card summarizer: no new project or workspace.
-    const child = await paseo.workspaces.ref(agent.workspaceId!).agents.create({
-      parent: agent.id,
-      config: { provider: model },
-      title: `Flowly insights · ${agent.title || "session"}`.slice(0, 120),
-      labels: { ...SUMMARIZER_LABELS, "flowly-session": agent.id },
-      prompt: insightPrompt({
-        title: agent.title || "",
-        cwd: agent.cwd,
-        previous: before?.summary ?? null,
-        transcript: truncateTranscript(batch.text),
-        openIdeas: open.map((i) => i.title),
-        openIdeaCount: open.length,
-        parts,
-        language,
-      }),
-      outputSchema: insightJsonSchema(parts) as unknown as Record<string, unknown>,
+    const prompt = insightPrompt({
+        title: agent.title || "", cwd: agent.cwd, previous: before?.summary ?? null,
+        transcript: truncateTranscript(batch.text), openIdeas: open.map((i) => i.title),
+        openIdeaCount: open.length, parts, language,
     });
-    let output;
-    try {
-      const result = await child.waitForFinish(this.timeoutMs);
-      if (result.status !== "idle")
-        throw new Error(
-          result.status === "timeout"
-            ? "The insight model timed out."
-            : result.status === "permission"
-              ? "The insight model asked for a permission."
-              : result.error || "The insight model failed.",
-        );
-      output = parseInsightOutput(result.lastMessage, parts);
-    } finally {
-      await this.remove(child);
-    }
+    const { model, output } = await runSummaryModels(paseo, settings.model, {
+      create: (model) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
+        parent: agent.id,
+        config: { provider: model },
+        title: `Flowly insights · ${agent.title || "session"}`.slice(0, 120),
+        labels: { ...SUMMARIZER_LABELS, "flowly-session": agent.id },
+        prompt,
+        outputSchema: insightJsonSchema(parts) as unknown as Record<string, unknown>,
+      }),
+      parse: (text) => parseInsightOutput(text, parts),
+      remove: this.remove,
+      timeoutMs: this.timeoutMs,
+    });
     const now = new Date().toISOString();
     // The person already started another turn: the suggestions are for the past one (the summary still counts).
     const stale = (this.started.get(agent.id) ?? "") > batch.endedAt;

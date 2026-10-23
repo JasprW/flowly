@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { View } from "react-native";
+import { Collapse } from "./disclosure";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
-import { AUTO_MODELS, modelLabel, summarySettings, summarySettingsValues } from "../shared/summary";
+import { AUTO_MODELS, summaryModelsOf, type SummarySettings, modelLabel, summarySettings, summarySettingsValues } from "../shared/summary";
 import {
   aiLanguageSettings,
   aiLanguageSettingsValues,
@@ -31,7 +33,7 @@ import { ModelDefaultGroup } from "./model-default";
 import { SettingRow, SettingSelect, SettingSwitch, SettingsGroup, SettingsPage } from "./settings-ui";
 import { useOnboarding } from "./onboarding-state";
 import { useStored } from "./stored-settings";
-import { Notice, useTheme } from "./ui";
+import { Button, IconButton, Notice, space, useTheme } from "./ui";
 import { compactNumber } from "../shared/usage";
 import { dollars, roundTokens, runCost, runTokens, type AiRun } from "../shared/ai-cost";
 import * as rpc from "../shared/rpc";
@@ -54,7 +56,7 @@ export function aiCostText(run: AiRun, model: string): string {
     : t(costTexts[run][0], { tokens, cost: dollars(cost), hundred: dollars(cost * 100), model: modelLabel(model) });
 }
 /** The model a summary-model run uses: the chosen one, or Auto's first. */
-export const summaryModelOf = (stored: string | undefined) => stored || AUTO_MODELS[0];
+export const summaryModelOf = (stored: SummarySettings | null | undefined) => summaryModelsOf(stored)[0];
 
 const AUTO = "";
 
@@ -157,15 +159,18 @@ export function ModelsPage({ active }: { active: boolean }) {
   );
 }
 
-/** Provider and model of the summarizer (TASK-SUMMARY-SPEC §4); "Auto" prefers Claude's cheap model, then Codex's. */
-export function SummaryModelGroup({ active, bare = false, extra }: { active: boolean; /** No title (the welcome tour's Progress block). */ bare?: boolean; /** Rows after the model rows. */ extra?: ReactNode }) {
+/** Ordered summary fallback models, shared by Settings and the welcome tour. */
+export function SummaryModelGroup({ active, bare = false, extra }: { active: boolean; bare?: boolean; extra?: ReactNode }) {
   const paseo = usePaseo();
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
-  const stored = summary.values?.summaryModel || AUTO;
-  const storedProvider = stored ? stored.slice(0, stored.indexOf("/")) : AUTO;
-  // The provider shown can run ahead of the stored model until a model is picked.
-  const [provider, setProvider] = useState(storedProvider);
-  useEffect(() => setProvider(storedProvider), [storedProvider]);
+  const selected = summaryModelsOf(summary.values);
+  const onboarding = useOnboarding();
+  const modelTipSeen = onboarding.values?.tipsSeen.includes("summary-models");
+  useEffect(() => {
+    if (active && onboarding.values && !modelTipSeen) void onboarding.markTipSeen("summary-models");
+  }, [active, onboarding.status, modelTipSeen]);
+  const [adding, setAdding] = useState(false);
+  const [provider, setProvider] = useState("");
   const providers = useQuery({ queryKey: ["flowly", "providers"], queryFn: () => paseo.providers.listAvailable(), enabled: active });
   const providerInfo = useQuery({ queryKey: ["flowly", "providerSnapshot"], queryFn: () => paseo.providers.snapshot(), enabled: active, staleTime: 60000 });
   const models = useQuery({
@@ -175,44 +180,57 @@ export function SummaryModelGroup({ active, bare = false, extra }: { active: boo
       if (result.error) throw new Error(result.error);
       return result;
     },
-    enabled: active && provider !== AUTO,
+    enabled: active && adding && !!provider,
   });
-  const autoLabel = t("Auto ({models})", { models: AUTO_MODELS.map(modelLabel).join(t(", then ")) });
-  const storedModel = stored && provider === storedProvider ? stored.slice(stored.indexOf("/") + 1) : "";
+  const save = (summaryModels: string[]) => summary.save({ summaryModels, summaryModel: "" });
+  const move = (index: number, step: number) => {
+    const next = [...selected];
+    [next[index], next[index + step]] = [next[index + step], next[index]];
+    save(next);
+  };
   return (
     <>
       <Problem text={summary.problem} />
-      <SettingsGroup title={bare ? undefined : t("Summary model")} description={bare ? undefined : t("Writes the task progress summaries and the daily digest. A cheap, fast model is enough.")}>
-        <SettingSelect
-          title={bare ? t("Progress model") : t("Provider")}
-          detail={aiCostText("progress", summaryModelOf(summary.values?.summaryModel))}
-          value={provider}
-          placeholder={autoLabel}
-          disabled={summary.busy}
-          loading={providers.isPending}
-          options={[{ value: AUTO, label: autoLabel, detail: t("Uses Claude when available, otherwise Codex") }, ...providerOptions(providers.data?.providers || [], providerInfo.data?.entries || [])]}
-          onChange={(next) => {
-            setProvider(next);
-            if (next === AUTO) summary.save({ summaryModel: "" });
-          }}
-        />
-        {provider !== AUTO && (
-          <SettingSelect
-            title={t("Model")}
-            value={storedModel}
-            placeholder={t("Choose a model")}
-            disabled={summary.busy}
-            loading={models.isPending}
-            options={modelOptions(models.data?.models || [])}
-            onChange={(model) => summary.save({ summaryModel: `${provider}/${model}` })}
+      <SettingsGroup
+        title={bare ? t("Progress models") : t("Summary models")}
+        description={t("Models are tried from top to bottom. If one fails, the same conversation is sent to the next model's provider.")}
+      >
+        {selected.map((id, index) => (
+          <SettingRow
+            key={id}
+            title={`${index + 1}. ${modelLabel(id)}`}
+            detail={id}
+            trailing={
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
+                <IconButton icon="ArrowUp" label={t("Move {model} up", { model: modelLabel(id) })} disabled={summary.busy || index === 0} onPress={() => move(index, -1)} />
+                <IconButton icon="ArrowDown" label={t("Move {model} down", { model: modelLabel(id) })} disabled={summary.busy || index === selected.length - 1} onPress={() => move(index, 1)} />
+                <IconButton icon="X" label={t("Remove {model}", { model: modelLabel(id) })} disabled={summary.busy || selected.length === 1} onPress={() => save(selected.filter((entry) => entry !== id))} />
+              </View>
+            }
           />
-        )}
+        ))}
+        <SettingRow title={t("Add model")} disabled={summary.busy} state={{ expanded: adding }} onPress={() => setAdding(!adding)} trailing={<Icon name={adding ? "ChevronUp" : "Plus"} size={16} />} />
+        <Collapse open={adding} id="summary-model-add">
+          <SettingSelect title={t("Provider")} value={provider} placeholder={t("Choose a provider")} disabled={summary.busy} loading={providers.isPending} options={providerOptions(providers.data?.providers || [], providerInfo.data?.entries || [])} onChange={setProvider} />
+          {!!provider && <SettingSelect
+            title={t("Model")} value="" placeholder={t("Choose a model")} disabled={summary.busy} loading={models.isPending}
+            options={modelOptions(models.data?.models || []).map((option) => ({ ...option, disabled: selected.includes(`${provider}/${option.value}`) }))}
+            onChange={(model) => {
+              const id = `${provider}/${model}`;
+              if (selected.includes(id)) return;
+              save([...selected, id]);
+              setAdding(false);
+              setProvider("");
+            }}
+          />}
+          <View style={{ padding: space[3], alignItems: "flex-start" }}><Button small quiet onPress={() => { setAdding(false); setProvider(""); }}>{t("Cancel")}</Button></View>
+        </Collapse>
+        <SettingRow title={t("Restore defaults")} disabled={summary.busy} onPress={() => save([...AUTO_MODELS])} trailing={<Icon name="RotateCcw" size={16} />} />
+        <SettingRow title={t("First model estimate")} detail={aiCostText("progress", summaryModelOf(summary.values))} />
         {extra}
       </SettingsGroup>
-      {provider !== AUTO && !storedModel && (
-        <Notice tone="info">{t("Pick a model to use this provider. Until then the stored choice stays: {choice}.", { choice: stored ? stored : autoLabel })}</Notice>
-      )}
-      {models.error && <Notice tone="warning">{t("Could not list models: {error}", { error: String((models.error as Error).message || models.error) })}</Notice>}
+      {providers.error && <Notice tone="warning">{t("Could not list models: {error}", { error: String(providers.error) })}</Notice>}
+      {models.error && <Notice tone="warning">{t("Could not list models: {error}", { error: String(models.error) })}</Notice>}
     </>
   );
 }
@@ -326,7 +344,7 @@ export function AiPage() {
         />
         <SettingSwitch
           title={t("Sessions outside Flowly")}
-          detail={`${t("Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.")} ${aiCostText("outside", summaryModelOf(summary.values?.summaryModel))}`}
+          detail={`${t("Also give sessions Flowly does not manage a progress row, suggested next steps and ideas. After each completed turn, the summary model reads the recent conversation (sent to that model's provider) in a short child session that is archived right after.")} ${aiCostText("outside", summaryModelOf(summary.values))}`}
           value={native.values?.outside ?? false}
           disabled={native.busy}
           onChange={(outside) => native.save({ outside })}
@@ -385,7 +403,7 @@ export function MemoryFeatureGroup({ bare = false, brief = false }: { bare?: boo
       />
       <SettingSwitch
         title={t("Find memories in finished cards")}
-        detail={[brief ? "" : t("When a card moves to Done, the summary model suggests at most one thing worth remembering for the project's later cards, and usually none. You confirm it."), aiCostText("memoryReview", summaryModelOf(summary.values?.summaryModel))].filter(Boolean).join(" ")}
+        detail={[brief ? "" : t("When a card moves to Done, the summary model suggests at most one thing worth remembering for the project's later cards, and usually none. You confirm it."), aiCostText("memoryReview", summaryModelOf(summary.values))].filter(Boolean).join(" ")}
         value={on && (summary.values?.retroEnabled ?? true)}
         disabled={summary.busy || !on}
         onChange={(retroEnabled) => summary.save({ retroEnabled })}
@@ -413,7 +431,7 @@ export function InsightsFeatureGroup({ bare = false, workflow = false, brief = f
       />
       <SettingSwitch
         title={t("Daily digest")}
-        detail={[brief ? "" : t("Write a past day's project summary when Insights opens it. Refresh in Insights always works."), aiCostText("digest", summaryModelOf(summary.values?.summaryModel))].filter(Boolean).join(" ")}
+        detail={[brief ? "" : t("Write a past day's project summary when Insights opens it. Refresh in Insights always works."), aiCostText("digest", summaryModelOf(summary.values))].filter(Boolean).join(" ")}
         value={on && (summary.values?.digestEnabled ?? true)}
         disabled={summary.busy || !on}
         onChange={(digestEnabled) => summary.save({ digestEnabled })}

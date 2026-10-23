@@ -1,0 +1,364 @@
+{
+  "at": "2026-10-22T16:19:25.721Z",
+  "taskId": "e5ea7edb-8453-4c19-8882-14aecc50c770",
+  "children": [
+    {
+      "id": "7ded0812-e375-4b92-8445-965e146354bb",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "status": "initializing",
+      "observedAt": "2026-10-22T16:19:28.320Z"
+    }
+  ],
+  "observations": [
+    {
+      "at": "2026-10-22T16:19:25.854Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:26.161Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:26.472Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:26.778Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:27.084Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:27.396Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:27.708Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:28.015Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:28.320Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:28.626Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:28.932Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:29.238Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:29.545Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:29.850Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:30.155Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:30.461Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:30.767Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:31.073Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:31.382Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:31.686Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:31.992Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:32.300Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:32.607Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:32.916Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:33.235Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:33.543Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:33.854Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:34.171Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:34.481Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:34.794Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:35.113Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:35.422Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:35.735Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:36.041Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:36.353Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:36.662Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:36.967Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:37.275Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:37.584Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:37.898Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:38.203Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:38.515Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:38.824Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:39.133Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:39.445Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:39.758Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:40.069Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:40.380Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:40.685Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:40.997Z",
+      "running": true,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    },
+    {
+      "at": "2026-10-22T16:19:41.312Z",
+      "running": false,
+      "latestId": "d0f64eba-d574-48c5-bbe9-c6a933a8cac8",
+      "model": "codex/gpt-6-luna"
+    }
+  ],
+  "settings": {
+    "status": "ready",
+    "revision": "9b25805f4f66a381a9f8fcc16a60d428e80146d958f24acfb19cf0988732a4bc",
+    "values": {
+      "summaryEnabled": true,
+      "summaryModel": "",
+      "digestEnabled": true,
+      "retroEnabled": true
+    }
+  },
+  "configured": [
+    "unavailable/skip",
+    "codex/gpt-6-luna",
+    "claude/claude-haiku-5-5"
+  ],
+  "beforeIds": [
+    "5033c156-d0db-4f6a-a88d-e63a51782427"
+  ],
+  "refresh": {
+    "queued": true
+  },
+  "result": {
+    "latest": {
+      "state": "多模型设置与回退已实现，等待紧凑布局和 Luna 验证",
+      "target": "修复摘要模型失败时不自动回退，并支持自定义多模型优先级。\n- 默认顺序为 Haiku → Luna\n- 支持添加、删除和调整模型顺序\n- 手动指定模型及旧配置保持兼容\n- 验证各摘要入口的回退与子会话清理",
+      "recap": "- Auto 回退及可排序多模型列表已实现，默认 Haiku → Luna\n- 兼容旧单模型配置；各摘要入口共享回退顺序\n- 定向测试覆盖多模型顺序、回退、成功停止及清理\n- 真实设置页已验证添加、删除、排序、禁用重复项和保存；原设置已恢复",
+      "next": "完成紧凑布局检查，并等待 full-access Luna 验证及真实回退检查",
+      "id": "d0f64eba-d574-48c5-bbe9-c6a933a8cac8",
+      "taskId": "e5ea7edb-8453-4c19-8882-14aecc50c770",
+      "at": "2026-10-22T16:19:41.047Z",
+      "model": "codex/gpt-6-luna",
+      "agentIds": [
+        "f17a488e-6d3c-4747-8dd4-21c320d14dc7"
+      ]
+    }
+  },
+  "childrenAfter": [
+    {
+      "id": "7ded0812-e375-4b92-8445-965e146354bb",
+      "exists": false
+    }
+  ],
+  "restore": "PASS: original values restored exactly"
+}

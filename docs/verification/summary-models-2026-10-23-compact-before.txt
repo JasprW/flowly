@@ -1,0 +1,27 @@
+Flowly
+Flowly
+1
+78
+tasks
+· 71 done
+1 running
+1 unread
+In review
+4
+Blocked
+2
+Ideas 14
+Memory 9
+Insights
+Blocked
+2
+Research
+手机端自动化测试
+Artemis 已安装成功，CLI 可用，但尚未控制到三星手机。 ADB 和 macOS USB 均未发现手机，Artemis 实际读屏也返回“无 Android 设备”。 自然语言任务还缺模型 API 凭据；录屏缺 scrcpy。 安装保留约 874 MB，方便继续；未修改手机或全局 MCP 配置。 诊断报告与继续步骤 卡片已标为 Blocked。等手机连接并允许 USB 调试后，可继续验证解锁、读屏和导航。
+5h ago
+1
+session内文本链接渲染
+等待决定：先做复制路径，还是评估换用内置 Markdown
+12h ago
+1
+Loading…

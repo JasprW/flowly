@@ -21,7 +21,7 @@ summary 是系统写的描述文字，**不改**卡片业务状态（lane），�
   - `config.provider`：设置中的 Summary model（§4）；
   - `title`：`Kanban summary · <卡片标题>`；`labels`：`{"flowly": "summarizer", "flowly-task": <taskId>}`；
   - `prompt` 与 `outputSchema`（§3）；
-  - `waitForFinish(120000)`；无论成功、失败、超时，都在 `finally` 中 `archive()` 该 session。
+  - `waitForFinish(120000)`；无论成功、失败、超时，都在 `finally` 中移除该 session（硬删除失败时回退归档，见 §10）。
   - 看板视图按标签隐藏 summarizer：卡片 session 列表、计数、最近输出、Attention、侧栏角标、`flowly_get_task` 的 sessions。项目 Remove 与 Wrap up 的“运行中 session”检查**不**隐藏它，运行中的 summarizer 仍会阻止这些破坏性操作。
   - 初版把 cwd 放在插件数据目录，实测（[验证](verification/task-summary.md)）Paseo 为该目录注册了原生 project 并每次新建 workspace，因此改为本方案；遗留的 project 已删除（`paseo project delete`，不删目录）。
 - summarizer 自己的回合结束不会递归触发：它没有看板身份（无 context 文件；`session_open` 只给已有凭据的 session 注入看板上下文）。
@@ -44,14 +44,17 @@ summary 是系统写的描述文字，**不改**卡片业务状态（lane），�
 
 ## 4. 设置
 
+2026-10-23 增量：用户可添加多个模型并调整优先级，默认仍 Haiku→Luna。完整兼容、UI 与共享调用合约见 [SUMMARY-MODELS-SPEC](SUMMARY-MODELS-SPEC.md)，取代下文旧的单模型编辑方式；`summaryModel` 保留作兼容输入。
+
 新增 host 设置 `task-summary`（v1），daemon `registerSettings` 读取，客户端在看板左下角设置按钮的弹层中编辑（§7）：
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `summaryEnabled` | `true` | 每轮自动更新 |
-| `summaryModel` | `""` | `provider/model`；空为 Auto |
+| `summaryModel` | `""` | 兼容旧 `provider/model`；空为 Auto |
+| `summaryModels` | 未存储时兼容旧值 | 有序、非空、去重的 `provider/model` 列表，优先于旧值；默认 Haiku→Luna |
 
-Auto：`claude/claude-haiku-5-5`；Claude provider 不可用或无此模型时用 `codex/gpt-6-luna`；都不可用时报错。设置页的模型选项来自 `providers.listAvailable` + `listModels`（可用 provider 的可选模型）。
+Auto：按 `claude/claude-haiku-5-5` → `codex/gpt-6-luna` 顺序尝试可用、可选的模型。模型列表中的可用不代表仍有额度：创建失败、额度耗尽/运行错误、超时、请求权限或输出不合 schema 时，清理本次子 session 后尝试下一个模型，每个候选最多一次。首个成功（包括 `update=false`）即停止；保存实际成功的模型。每次候选使用相同输入、父 session 和卡片 workspace，不新建项目或 workspace。旧的手动单模型或单项列表只尝试该模型；多项列表按保存顺序回退，不添加未配置的模型。都不可用或全部失败时报错。设置页的模型选项来自 `providers.listAvailable` + `listModels`（可用 provider 的可选模型）。
 
 ## 5. 数据
 
@@ -86,7 +89,7 @@ Auto：`claude/claude-haiku-5-5`；Claude provider 不可用或无此模型时�
 
 ## 8. 错误
 
-模型不可用、创建失败、超时、需要授权（`status=permission`）、输出不合 schema：记录到 `errors`，保留旧 summary，不自动重试。日志不打印 prompt 内容。
+模型列表的单个候选失败先按 §4 回退；全部候选失败（包括单项列表）才记录到 `errors`，保留旧 summary，不循环重试。错误按尝试顺序带模型名与失败原因（仍受 500 字符存储上限约束）。运行结果即使是 `idle`，若带 `error` 也视为失败，不接受其中可能残留的 JSON。只对模型调用与输出解析回退，持久化失败不再次调用模型。成功写入或有效 `update=false` 清除旧错误。日志不打印 prompt 内容。
 
 ## 9. 不做（扩展）
 
@@ -101,5 +104,6 @@ Auto：`claude/claude-haiku-5-5`；Claude provider 不可用或无此模型时�
 ## 11. 验收
 
 - 单元：回合文本转换与截断、输出解析容错、模型 Auto 解析、单飞与合并、`update=false` 不写、50 版本上限、错误记录与清除、项目移除备份、不改 board/task revision。
+- 回退回归（fake SDK）：运行错误/额度耗尽、idle 带 error、创建失败、wait 抛错、超时/权限/坏输出均尝试下一可用候选；成功或有效 `update=false` 停止；全部失败保留旧摘要、记录各候选模型原因；手动模型不回退；每次已创建的子 session 都清理。
 - 集成（fake SDK）：只有看板管理 session 触发；出错/超时也移除（硬删除，失败回退归档）summarizer session；失败回合不触发。
 - typecheck、全量测试；reload 本插件；Luna 6 全权限测试 session 用 fixture 卡片实测并清理。

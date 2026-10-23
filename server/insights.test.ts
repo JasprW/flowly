@@ -33,13 +33,14 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
       { id: "e2", taskId: "t", actor: "agent", action: "status_changed", from: "todo", to: "in_review", at: "2026-10-15T09:00:00.000Z" },
     );
   });
-  const created: { workspaceId: string; labels: Record<string, string>; prompt: string; parent?: string }[] = [];
+  const created: { workspaceId: string; labels: Record<string, string>; prompt: string; parent?: string; config?: { provider: string } }[] = [];
   let archived = 0;
+  const replies: string[] = [];
   let reply = JSON.stringify({ headline: "Login is ready for review", done: [], progressed: [{ text: "Login built", taskId: "t" }], issues: [], next: [] });
   const paseo = {
     providers: {
       listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
-      listModels: async () => ({ models: [{ id: "claude-haiku-5-5" }], error: null }),
+      listModels: async () => ({ models: [{ id: "claude-haiku-5-5" }, { id: "claude-sonnet-5-5" }], error: null }),
     },
     agents: {
       list: async () => ({
@@ -55,9 +56,9 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
       ref: (workspaceId: string) => ({
         agents: {
           create: async (o: { labels: Record<string, string>; prompt: string; parent?: string }) => {
-            created.push({ workspaceId, labels: o.labels, prompt: o.prompt, parent: o.parent });
+            created.push({ workspaceId, ...o });
             return {
-              waitForFinish: async () => ({ status: "idle", error: null, lastMessage: reply }),
+              waitForFinish: async () => ({ status: "idle", error: null, lastMessage: replies.shift() ?? reply }),
               archive: async () => {
                 archived++;
                 return {};
@@ -81,6 +82,7 @@ async function setup(options: { rootWorkspace?: boolean } = {}) {
     paseo,
     created,
     archived: () => archived,
+    replies,
     setReply: (text: string) => (reply = text),
     setSettings: (s: Partial<SummarySettings>) => (settings = { ...settings, ...s }),
   };
@@ -163,4 +165,16 @@ test("project removal backs up and drops digests", async () => {
   const backup = await x.digests.removeProject("p");
   expect(backup).toContain("p-digests-");
   expect((await x.digests.read()).entries).toEqual([]);
+});
+
+test("daily digest follows summary model priority and records the successful model", async () => {
+  const x = await setup();
+  x.setSettings({ summaryModels: ["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"] });
+  x.replies.push("quota limit");
+  await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
+  await settle();
+  const result = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
+  expect(result.entry?.model).toBe("claude/claude-haiku-5-5");
+  expect(x.created.map((a) => a.config?.provider)).toEqual(["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"]);
+  expect(x.archived()).toBe(2);
 });

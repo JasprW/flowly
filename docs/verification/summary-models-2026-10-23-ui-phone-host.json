@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-22T16:17:54.382Z",
+  "original": {
+    "status": "ready",
+    "revision": "9b25805f4f66a381a9f8fcc16a60d428e80146d958f24acfb19cf0988732a4bc",
+    "values": {
+      "summaryEnabled": true,
+      "summaryModel": "",
+      "digestEnabled": true,
+      "retroEnabled": true
+    }
+  },
+  "checks": [],
+  "failure": "TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Flowly settings', exact: true })\u001b[22m\n"
+}

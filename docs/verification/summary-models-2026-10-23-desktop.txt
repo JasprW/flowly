@@ -1,0 +1,86 @@
+Flowly
+Tinylink
+Attention
+1
+Recent activity
+Filter
+New task
+6
+tasks
+· 1 done
+Idle
+In review
+2
+Ideas 3
+Memory
+Insights
+Backlog
+1
+Low
+Chore
+Add Dockerfile and GitHub Actions workflow
+Todo
+1
+Feature
+Custom aliases for short links
+Design
+1
+Urgent
+Bug fix
+Expired links crash the server instead of returning an error
+Bug reproduced; waiting for user to choose 410 or 404
+4d ago
+Needs you
+Dismissed
+Development
+0
+No tasks
+Test
+0
+No tasks
+In review
+2
+High
+Feature
+Add rate limiting to POST /shorten
+Delivered to In review; 13/13 tests passing
+4d ago
+1
+2
+Feature
+Add click counter and GET /stats/:code
+Done and delivered to In review; 13/13 tests pass on HEAD
+4d ago
+1
+1
+0
+Blocked
+Done
+1
+No recent tasks
+Show 1 older task
+0
+Cancelled
+Flowly settings
+General
+Cards
+Models
+Workflow
+AI features
+Connections
+Models
+Which model new sessions start with, and which one writes summaries.
+Default model
+New sessions, and “Start an agent now” on a new task, start with this model. A project can set its own in its settings; that one wins.
+Provider
+Automatic
+Summary models
+Models are tried from top to bottom. If one fails, the same conversation is sent to the next model's provider.
+1. Haiku 5.5
+claude/claude-haiku-5-5
+2. GPT-6-Luna
+codex/gpt-6-luna
+Add model
+Restore defaults
+First model estimate
+About 55K tokens per agent turn: $0.006 with Haiku 5.5 at API prices, $0.56 for 100 turns.

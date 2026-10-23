@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
 import type { LocaleCode } from "../shared/i18n";
 import type { Board, Project, Task } from "../shared/model";
-import { SUMMARIZER_LABELS, resolveModel, type SummarySettings } from "../shared/summary";
+import { SUMMARIZER_LABELS, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import {
   RETRO_DELAY_MS,
   RETRO_LABEL,
@@ -39,7 +39,7 @@ import {
 } from "../shared/memory";
 import type { BoardStore } from "./store";
 import type { SummaryStore } from "./summaries";
-import { availableModels } from "./summaries";
+import { runSummaryModels } from "./summary-models";
 import { projectWorkspace } from "./insights";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 
@@ -678,10 +678,6 @@ export class MemoryService {
       }),
     };
   }
-  private async model(paseo: PaseoApi) {
-    const settings = await this.summarySettings();
-    return resolveModel(settings.summaryModel, await availableModels(paseo, settings.summaryModel));
-  }
   private async execute(taskId: string, paseo: PaseoApi, manual: boolean) {
     const m = await this.material(taskId);
     const state = await this.store.read();
@@ -692,28 +688,24 @@ export class MemoryService {
     }
     if (!manual && last && last.summaryId === m.latestId && last.clueAt === m.clueAt) return;
     const board = await this.board.read();
-    const model = await this.model(paseo);
+    const models = summaryModelsOf(await this.summarySettings());
+    const prompt = retroPrompt(m.text, await this.language());
     const workspaceId = await projectWorkspace(m.project, board, paseo, "the finished-card review");
-    const agent = await paseo.workspaces.ref(workspaceId).agents.create({
-      config: { provider: model },
-      title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
-      labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, ...RETRO_LABEL },
-      prompt: retroPrompt(m.text, await this.language()),
-      outputSchema: retroJsonSchema as unknown as Record<string, unknown>,
+    const { output } = await runSummaryModels(paseo, models, {
+      create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
+        config: { provider: model },
+        title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
+        labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, ...RETRO_LABEL },
+        prompt,
+        outputSchema: retroJsonSchema as unknown as Record<string, unknown>,
+      }),
+      parse: (text) => parseRetroOutput(text).map(fitCandidate),
+      remove: this.removeAgent,
+      timeoutMs: this.timeoutMs,
     });
-    let output: string | null | undefined;
-    try {
-      const result = await agent.waitForFinish(this.timeoutMs);
-      if (result.status !== "idle")
-        throw new Error(
-          result.status === "timeout" ? "The review model timed out." : result.status === "permission" ? "The review model asked for a permission." : result.error || "The review model failed.",
-        );
-      output = result.lastMessage;
-    } finally {
-      await this.removeAgent(agent);
-    }
-    await this.recordRetro(m, taskId, parseRetroOutput(output).map(fitCandidate));
+    await this.recordRetro(m, taskId, output);
   }
+
   private async recordRetro(m: Awaited<ReturnType<MemoryService["material"]>>, taskId: string, candidates: ReturnType<typeof fitCandidate>[]) {
     const added: MemoryEntry[] = [];
     const dropped: string[] = [];

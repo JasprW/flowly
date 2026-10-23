@@ -61,7 +61,7 @@ Title with detail "Your first three steps." (plus "Nothing is created until you 
 
 ### 5. One-time contextual tips (small, non-modal)
 
-A tip is a single dismissible banner row (icon, one sentence, **Got it**) under the overview bar; only **Got it** records it as seen. Priority when several apply: agent-question, needs-you, attention-dismiss, first-done, older-finished, next-move, first-workpad, subagents, first-idea, first-memory-candidate, first-workflow-insight, ai-language, first-artifact, first-ticket, first-tag, first-card, card-display, connectors, session-history, sidebar-order, project-menu, jira-connect. The empty-project hint takes the same slot and wins at the top of the relevant surface, using theme colours. At most one tip is visible at a time; a tip appears at most once per host (`tipsSeen`); dismissing or acting on the feature records it. Tips never block input, never move a focused input, and are not shown while the welcome tour is open or the settings callout (`settings-entry`) shows.
+A tip is a single dismissible banner row (icon, one sentence, **Got it**) under the overview bar; only **Got it** records it as seen. Priority when several apply: agent-question, needs-you, attention-dismiss, first-done, older-finished, next-move, first-workpad, subagents, first-idea, first-memory-candidate, first-workflow-insight, ai-language, summary-models, first-artifact, first-ticket, first-tag, first-card, card-display, connectors, session-history, sidebar-order, project-menu, jira-connect. The empty-project hint takes the same slot and wins at the top of the relevant surface, using theme colours. At most one tip is visible at a time; a tip appears at most once per host (`tipsSeen`); dismissing or acting on the feature records it. Tips never block input, never move a focused input, and are not shown while the welcome tour is open or the settings callout (`settings-entry`) shows.
 
 | Tip id | Shown when | Text |
 | --- | --- | --- |
@@ -85,6 +85,7 @@ A tip is a single dismissible banner row (icon, one sentence, **Got it**) under 
 | `connectors` | a card is open, so its Artifacts + is in view (CONNECTORS-SPEC §8.5; new id, so every existing user sees it once) | "The Artifacts + now adds Confluence pages and GitHub or GitLab issues and pull requests too, besides files, links and Jira tickets. Connect services in Settings → Connections." |
 | `session-history` | a card is open and it has a session (SESSION-PANE-SPEC §1) | "A session's output now starts at the beginning of its current turn. Press Load earlier at the top to read further back." |
 | `ai-language` | a card of the current project has an AI progress summary (AI-LANGUAGE-SPEC §7) | "AI-written text follows Settings → AI features → AI output language. It starts as your interface language." |
+| `summary-models` | the card has a summary; after `ai-language`; seen on visiting Summary models in Settings or the tour | "Choose summary models and their fallback order in Settings → Models. The default is Haiku, then Luna." |
 | `sidebar-order` | a card is open and it has at least one artifact or idea (DRAWER-SPEC, Section order) | "Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar." |
 | `project-menu` | desktop project tabs show two or more projects and no card is open (PROJECT-TABS-SPEC) | "Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove." |
 | `jira-connect` | the project has a card, no card is open, and no connection is configured (announces the feature; lowest priority) | "Work from Jira, Confluence, GitHub or GitLab: connect them in Settings → Connections, then start a card with From… or add items with the Artifacts +. Flowly only reads them." |
@@ -131,3 +132,5 @@ Covered by unit tests: the pure logic (fresh user shows; existing user silently 
 3. No sample project is created.
 4. Tips are a separate, optional stage and can be dropped without affecting the tour.
 5. Onboarding state is per host (setting), not per account.
+
+2026-10-23：Progress models 与 Settings → Models 共用有序多模型列表，见 [SUMMARY-MODELS-SPEC](SUMMARY-MODELS-SPEC.md)。

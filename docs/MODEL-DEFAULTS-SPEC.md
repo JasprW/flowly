@@ -25,7 +25,7 @@ A project default replaces the global one as a whole (provider, model and reason
 
 ## 4. UI
 
-- **Settings → Models**: *Default model* (Provider, Model, Reasoning) and *Summary model* (the existing summarizer provider/model, moved here from the old AI page). Provider's first choice is **Automatic** (no default). Choosing a provider also chooses its default model, so a default is always complete.
+- **Settings → Models**: *Default model* (Provider, Model, Reasoning) and *Summary models* (an ordered fallback list; see [SUMMARY-MODELS-SPEC](SUMMARY-MODELS-SPEC.md)). Provider's first choice is **Automatic** (no default). Choosing a provider also chooses its default model, so a default is always complete.
 - **Project settings → Default model**: the same three rows; the provider's first choice reads **Global default (…)** (the current global one, or Automatic) and means "no override".
 - The Reasoning row only appears when the model offers options; "Model default" keeps the model's own.
 

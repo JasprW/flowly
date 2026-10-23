@@ -10,7 +10,7 @@ import type { CommandLog } from "./command-log";
 import { availableModels } from "./summaries";
 import { projectWorkspace } from "./insights";
 import { validZone } from "../shared/insights";
-import { SUMMARIZER_LABELS, isSummarizer, resolveModel, type SummarySettings } from "../shared/summary";
+import { SUMMARIZER_LABELS, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import type { Board, Project } from "../shared/model";
 import {
   BACKFILL_DAYS,
@@ -390,7 +390,8 @@ export class WorkflowInsightsService {
     const auto = WORKFLOW_AUTO_MODELS.find(offered);
     if (auto) return auto;
     const summary = await this.summarySettings();
-    return resolveModel(summary.summaryModel, summary.summaryModel ? await availableModels(paseo, summary.summaryModel) : providers);
+    const choices = summaryModelsOf(summary);
+    return resolveModel(choices, await availableModels(paseo, choices));
   }
 
   /**

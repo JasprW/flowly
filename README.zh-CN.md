@@ -149,6 +149,8 @@ GitHub Actions 对 PR 和 main 运行 Node 22/24 的类型检查、测试和真�
 
 根目录代码只有 `index.client.tsx` 和 `index.server.ts`；其余在 `client/`、`server/` 和与运行环境无关的 `shared/` 中。设计、spec 与验收记录都在 [`docs/`](docs/)：建议先读 [`SPEC-OUTLINE.md`](docs/SPEC-OUTLINE.md)、[`SINGLE-ROOT-SPEC.md`](docs/SINGLE-ROOT-SPEC.md) 和 [`PROGRESS.md`](docs/PROGRESS.md)。给贡献者和 agent 的项目规则见 [`AGENTS.md`](AGENTS.md)。发布与宣传材料（文案、演示项目脚本、截图脚本）在 [`docs/promo/`](docs/promo/README.md)。
 
+设置 → 模型可选择多个摘要模型，通过上移/下移调整自动回退优先级，默认仍是 Haiku → Luna。
+
 ## 许可证
 
 [MIT](LICENSE) © 2026 Bofan Wang

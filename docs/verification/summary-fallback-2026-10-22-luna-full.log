@@ -1,0 +1,13 @@
+
+> paseo-flowly@1.4.0 test
+> vitest run --exclude 'docs/verification/**'
+
+
+ RUN  v4.1.11 /Users/bofan.wang/Developer/personal/paseo-utlra-kanban
+
+
+ Test Files  110 passed (110)
+      Tests  948 passed (948)
+   Start at  23:59:50
+   Duration  14.99s (transform 3.87s, setup 0ms, import 16.93s, tests 42.29s, environment 6ms)
+

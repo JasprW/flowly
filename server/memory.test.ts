@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 
-type Created = { workspaceId: string; labels: Record<string, string>; prompt: string };
+type Created = { workspaceId: string; labels: Record<string, string>; prompt: string; config?: { provider: string } };
 async function setup() {
   const f = await agentFixture();
   roots.push(f.root);
@@ -32,14 +32,14 @@ async function setup() {
   const model = {
     providers: {
       listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
-      listModels: async () => ({ models: [{ id: "claude-haiku-5-5" }], error: null }),
+      listModels: async () => ({ models: [{ id: "claude-haiku-5-5" }, { id: "claude-sonnet-5-5" }], error: null }),
     },
     workspaces: {
       list: async () => ({ entries: [{ id: "root-ws", projectId: "native", workspaceDirectory: f.a }], pageInfo: { nextCursor: null } }),
       ref: (workspaceId: string) => ({
         agents: {
           create: async (o: { labels: Record<string, string>; prompt: string }) => {
-            created.push({ workspaceId, labels: o.labels, prompt: o.prompt });
+            created.push({ workspaceId, ...o });
             const reply = replies.shift();
             return {
               id: `review-${created.length}`,
@@ -336,7 +336,7 @@ test("a failed review records the error and still hard-deletes the session", asy
   await new Promise((r) => setTimeout(r, 50));
   expect(x.removed).toEqual(["review-1"]);
   expect(x.archived()).toBe(0);
-  expect((await x.memory.store.read()).errors).toEqual([expect.objectContaining({ taskId: "t", message: "The review model returned no JSON." })]);
+  expect((await x.memory.store.read()).errors).toEqual([expect.objectContaining({ taskId: "t", message: expect.stringContaining("The review model returned no JSON.") })]);
   await expect(x.memory.manual("nope", x.model)).rejects.toThrow("Task not found.");
 });
 
@@ -363,4 +363,20 @@ test("the Settings switch turns memory off in every project; on, each project's 
     setMemoryEverywhere(true);
   }
   expect(memoryOn({ memory: true })).toBe(true);
+});
+
+test("finished-card review tries the ordered summary list and cleans both children", async () => {
+  const x = await setup();
+  x.settings.summaryModels = ["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"];
+  x.memory.attach(x.model);
+  await x.store.mutate((board) => {
+    board.tasks[0].status = "done";
+    board.workpads[0].confusions.push({ id: "c", text: "Unclear model selection", at: new Date().toISOString() } as never);
+  });
+  x.replies.push("quota limit", '{"candidates": []}');
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created.map((a) => a.config?.provider)).toEqual(["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"]);
+  expect(x.removed).toEqual(["review-1", "review-2"]);
+  expect((await x.memory.store.read()).errors).toEqual([]);
 });

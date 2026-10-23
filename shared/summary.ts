@@ -58,14 +58,20 @@ export const summaryOverviewSchema = z.object({
 });
 export type SummaryOverview = z.infer<typeof summaryOverviewSchema>;
 
+export const summaryModelsSchema = z.array(z.string().trim().regex(/^[^/\s]+\/[^\s]+$/, "Expected provider/model")).min(1)
+  .refine((models) => new Set(models).size === models.length, "Summary models must be unique.");
+export type SummaryModelChoice = string | readonly string[];
+
 export const summarySettings = defineSettings({
   id: "task-summary",
   scope: "host",
   version: 1,
   schema: z.object({
     summaryEnabled: z.boolean().default(true),
-    /** `provider/model`; empty picks the first available of AUTO_MODELS. */
+    /** `provider/model`; empty tries available AUTO_MODELS in order. */
     summaryModel: z.string().max(200).default(""),
+    /** Ordered fallback list; absent preserves legacy Auto/single-model settings. */
+    summaryModels: summaryModelsSchema.optional(),
     /** Generate a past day's project digest when Insights opens it (PROJECT-INSIGHTS-SPEC §7). */
     digestEnabled: z.boolean().default(true),
     /** Review cards moved into Done for project memory candidates (PROJECT-MEMORY-SPEC §4.2, §9). */
@@ -73,6 +79,11 @@ export const summarySettings = defineSettings({
   }),
 });
 export type SummarySettings = z.infer<typeof summarySettings.schema>;
+/** Effective list, with no write-on-read migration of legacy settings. */
+export function summaryModelsOf(settings?: Pick<SummarySettings, "summaryModel" | "summaryModels"> | null): string[] {
+  return settings?.summaryModels ? [...settings.summaryModels] : settings?.summaryModel ? [settings.summaryModel] : [...AUTO_MODELS];
+}
+
 /** Stored values may predate fields; the host does not apply schema defaults. */
 export function summarySettingsValues(values: unknown): SummarySettings {
   const parsed = summarySettings.schema.safeParse(values ?? {});
@@ -238,21 +249,31 @@ const previous = (p: unknown) =>
 
 type ModelList = { provider: string; available: boolean; models: { id: string; isSelectable?: boolean }[] }[];
 
-/** The configured `provider/model`, or the first available Auto model. */
-export function resolveModel(configured: string, providers: ModelList): string {
+/** The configured model only, or every available Auto candidate in preference order. */
+export function resolveModels(configured: SummaryModelChoice, providers: ModelList): string[] {
   const offered = (id: string) => {
     const slash = id.indexOf("/");
     if (slash < 1) return false;
     const provider = providers.find((p) => p.provider === id.slice(0, slash) && p.available);
     return !!provider?.models.some((m) => m.id === id.slice(slash + 1) && m.isSelectable !== false);
   };
-  if (configured) {
-    if (!offered(configured)) throw new Error(`Summary model ${configured} is not available.`);
-    return configured;
+  if (Array.isArray(configured)) {
+    const found = [...new Set(configured)].filter(offered);
+    if (!found.length) throw new Error(`No configured summary model is available: ${configured.join(", ")}.`);
+    return found;
   }
-  const found = AUTO_MODELS.find(offered);
-  if (!found) throw new Error("No summary model available: install Claude (Haiku 5.5) or Codex (GPT-6-Luna), or choose a model in settings.");
+  if (typeof configured === "string" && configured) {
+    if (!offered(configured)) throw new Error(`Summary model ${configured} is not available.`);
+    return [configured];
+  }
+  const found = AUTO_MODELS.filter(offered);
+  if (!found.length) throw new Error("No summary model available: install Claude (Haiku 5.5) or Codex (GPT-6-Luna), or choose a model in settings.");
   return found;
+}
+
+/** The configured `provider/model`, or the first available Auto model. */
+export function resolveModel(configured: SummaryModelChoice, providers: ModelList): string {
+  return resolveModels(configured, providers)[0];
 }
 
 /** "claude/claude-haiku-5-5" → "Haiku 5.5"-style short label for footers. */

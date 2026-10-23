@@ -12,7 +12,7 @@ import {
   lastTurn,
   outputJsonSchema,
   parseModelOutput,
-  resolveModel,
+  summaryModelsOf,
   summaryPrompt,
   summaryStateSchema,
   truncateTranscript,
@@ -23,6 +23,8 @@ import {
   type SummaryState,
 } from "../shared/summary";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
+import { runSummaryModels } from "./summary-models";
+export { availableModels } from "./summary-models";
 import { summaryRow } from "../shared/native-session";
 
 /** `summaries.json`: serialized writes, backup, atomic replacement; invalid data is preserved. */
@@ -240,7 +242,6 @@ export class SummaryService {
     const project = task && board.projects.find((p) => p.id === task.projectId);
     if (!task || !project || task.archivedAt || project.archivedAt) return null;
     const settings = await this.settings();
-    const model = resolveModel(settings.summaryModel, await availableModels(paseo, settings.summaryModel));
     const previous = await this.store.latest(taskId);
     const prompt = summaryPrompt({
       title: task.title,
@@ -250,31 +251,19 @@ export class SummaryService {
       transcript: truncateTranscript(batch.text),
       language: await this.language(),
     });
-    // A child of the session whose turn ended, in the card's own workspace: no
-    // new native project or workspace. Board views hide it by label.
-    const agent = await paseo.workspaces.ref(task.workspaceId).agents.create({
-      parent: batch.agentIds[batch.agentIds.length - 1],
-      config: { provider: model },
-      title: `Kanban summary · ${task.title}`.slice(0, 120),
-      labels: { ...SUMMARIZER_LABELS, "flowly-task": taskId },
-      prompt,
-      outputSchema: outputJsonSchema as unknown as Record<string, unknown>,
+    const { model, output } = await runSummaryModels(paseo, summaryModelsOf(settings), {
+      create: (model) => paseo.workspaces.ref(task.workspaceId).agents.create({
+        parent: batch.agentIds[batch.agentIds.length - 1],
+        config: { provider: model },
+        title: `Kanban summary · ${task.title}`.slice(0, 120),
+        labels: { ...SUMMARIZER_LABELS, "flowly-task": taskId },
+        prompt,
+        outputSchema: outputJsonSchema as unknown as Record<string, unknown>,
+      }),
+      parse: parseModelOutput,
+      remove: this.remove,
+      timeoutMs: this.timeoutMs,
     });
-    let output;
-    try {
-      const result = await agent.waitForFinish(this.timeoutMs);
-      if (result.status !== "idle")
-        throw new Error(
-          result.status === "timeout"
-            ? "The summary model timed out."
-            : result.status === "permission"
-              ? "The summary model asked for a permission."
-              : result.error || "The summary model failed.",
-        );
-      output = parseModelOutput(result.lastMessage);
-    } finally {
-      await this.remove(agent);
-    }
     if (!output.update && previous) {
       await this.store.clearError(taskId);
       return null;
@@ -324,19 +313,4 @@ export class SummaryService {
     void this.enqueue(taskId, best.agentId, best.items, paseo, best.at || undefined);
     return { queued: true };
   }
-}
-
-/** Available providers' selectable models, limited to those the choice can need. */
-export async function availableModels(paseo: PaseoApi, configured: string) {
-  const wanted = configured ? [configured.slice(0, configured.indexOf("/"))] : ["claude", "codex"];
-  const available = (await paseo.providers.listAvailable()).providers;
-  return Promise.all(
-    available
-      .filter((p) => wanted.includes(p.provider))
-      .map(async (p) => {
-        if (!p.available) return { provider: p.provider, available: false, models: [] };
-        const result = await paseo.providers.listModels(p.provider).catch(() => null);
-        return { provider: p.provider, available: !result?.error, models: result?.models || [] };
-      }),
-  );
 }

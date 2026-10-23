@@ -1,0 +1,29 @@
+{
+  "at": "2026-10-22T16:14:52.032Z",
+  "original": {
+    "status": "ready",
+    "revision": "5283e6e3fcdcf412904f30918491b99e8e90d5cc7448400caa7f2e44ebf1d68c",
+    "values": {
+      "summaryEnabled": true,
+      "summaryModel": "",
+      "digestEnabled": true,
+      "retroEnabled": true
+    }
+  },
+  "checks": [
+    {
+      "name": "default list persisted",
+      "detail": [
+        "claude/claude-haiku-5-5",
+        "codex/gpt-6-luna"
+      ],
+      "state": "pass"
+    },
+    {
+      "name": "move up changes persisted priority",
+      "state": "pass"
+    }
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n",
+  "restore": "PASS: original values restored exactly"
+}

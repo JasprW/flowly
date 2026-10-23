@@ -159,7 +159,7 @@ function BuiltInPage({ active, outside, onOutside }: { active: boolean; outside:
       <SummaryModelGroup active={active} bare extra={<AiLanguageRow />} />
       <SettingsGroup
         title={t("Also in sessions outside Flowly")}
-        description={`${t("For sessions Flowly doesn't manage, the summary model runs once after each of their turns and reads the recent conversation (sent to that model's provider).")} ${aiCostText("outside", summaryModelOf(summary.values?.summaryModel))}`}
+        description={`${t("For sessions Flowly doesn't manage, the summary model runs once after each of their turns and reads the recent conversation (sent to that model's provider).")} ${aiCostText("outside", summaryModelOf(summary.values))}`}
       >
         {part("progress", t("Progress"))}
         {part("nextMoves", t("Next steps"))}

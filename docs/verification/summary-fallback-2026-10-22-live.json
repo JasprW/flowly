@@ -1,0 +1,267 @@
+{
+  "at": "2026-10-22T15:59:14.066Z",
+  "taskId": "e5ea7edb-8453-4c19-8882-14aecc50c770",
+  "children": [
+    {
+      "id": "7fd2b644-72af-451e-ae25-5d6c3a0eb864",
+      "provider": "claude",
+      "model": "claude-haiku-5-5",
+      "status": "running",
+      "observedAt": "2026-10-22T15:59:16.434Z"
+    },
+    {
+      "id": "728b0aed-a324-44ef-99c3-069371e725b5",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "status": "initializing",
+      "observedAt": "2026-10-22T15:59:20.422Z"
+    }
+  ],
+  "observations": [
+    {
+      "at": "2026-10-22T15:59:14.272Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:14.579Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:14.889Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:15.196Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:15.505Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:15.815Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:16.128Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:16.434Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:16.743Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:17.049Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:17.355Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:17.661Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:17.966Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:18.272Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:18.578Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:18.886Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:19.195Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:19.501Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:19.810Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:20.116Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:20.422Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:20.727Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:21.033Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:21.338Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:21.645Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:21.953Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:22.262Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:22.567Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:22.873Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:23.177Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:23.483Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:23.789Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:24.095Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:24.402Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:24.712Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:25.024Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:25.336Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:25.649Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:25.956Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:26.261Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:26.568Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:26.880Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:27.192Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:27.498Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:27.815Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:28.120Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:28.432Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:28.737Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:29.043Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:29.355Z",
+      "running": true
+    },
+    {
+      "at": "2026-10-22T15:59:29.676Z",
+      "running": false,
+      "latestId": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "model": "codex/gpt-6-luna"
+    }
+  ],
+  "settings": {
+    "status": "ready",
+    "revision": "5283e6e3fcdcf412904f30918491b99e8e90d5cc7448400caa7f2e44ebf1d68c",
+    "values": {
+      "summaryEnabled": true,
+      "summaryModel": "",
+      "digestEnabled": true,
+      "retroEnabled": true
+    }
+  },
+  "beforeIds": [],
+  "refresh": {
+    "queued": true
+  },
+  "result": {
+    "latest": {
+      "state": "回退实现完成，等待独立 Luna 验证及真实运行检查",
+      "target": "修复 Progress summary 在 Haiku 失败时未回退到 Luna。\n- Auto 按 Haiku → Luna 顺序尝试\n- 手动指定模型保持原行为\n- 验证失败场景、成功停止及子会话清理",
+      "recap": "- 根因是 Haiku 达到额度上限仍被视为可用，调用失败后未尝试 Luna\n- Auto 回退逻辑已实现，手动模型选择不变\n- 41 项定向测试通过，覆盖失败类型、成功停止、保留旧摘要及清理\n- 保存四个源码与测试文件哈希，限定真实检查仅使用本卡",
+      "next": "等待 full-access Luna 独立验证完成，再检查真实回退与子会话清理",
+      "id": "5033c156-d0db-4f6a-a88d-e63a51782427",
+      "taskId": "e5ea7edb-8453-4c19-8882-14aecc50c770",
+      "at": "2026-10-22T15:59:29.417Z",
+      "model": "codex/gpt-6-luna",
+      "agentIds": [
+        "f17a488e-6d3c-4747-8dd4-21c320d14dc7"
+      ]
+    }
+  },
+  "childrenAfter": [
+    {
+      "id": "7fd2b644-72af-451e-ae25-5d6c3a0eb864",
+      "exists": false
+    },
+    {
+      "id": "728b0aed-a324-44ef-99c3-069371e725b5",
+      "exists": false
+    }
+  ]
+}
