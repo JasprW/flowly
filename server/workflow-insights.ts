@@ -391,7 +391,8 @@ export class WorkflowInsightsService {
     if (auto) return auto;
     const summary = await this.summarySettings();
     const choices = summaryModelsOf(summary);
-    return resolveModel(choices, await availableModels(paseo, choices));
+    const inventory = await availableModels(paseo, choices).catch(() => providers);
+    return resolveModel(choices, inventory);
   }
 
   /**

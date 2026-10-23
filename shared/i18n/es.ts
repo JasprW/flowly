@@ -1335,7 +1335,7 @@ const catalog: Catalog = {
   "Fix flaky CI": "Arreglar la CI inestable",
   "Fixed the login redirect: the sign-in callback now keeps `next` and sends people back to the page they came from.": "Redirección corregida: el callback de inicio de sesión ahora conserva `next` y devuelve a cada uno a la página de la que venía.",
   "Follow-ups the agent found, yours to decide.": "Trabajo de seguimiento que encontró el agente; tú decides.",
-  "For sessions Flowly doesn't manage, the summary model runs once after each of their turns and reads the recent conversation (sent to that model's provider).": "En las sesiones que Flowly no gestiona, el modelo de resúmenes se ejecuta una vez tras cada uno de sus turnos y lee la conversación reciente (se envía al proveedor de ese modelo).",
+  "After each turn in sessions Flowly doesn't manage, summary models read the recent conversation in priority order. If one fails, the same conversation is sent to the next model's provider.": "Después de cada turno en sesiones que Flowly no gestiona, los modelos de resumen leen la conversación reciente por orden de prioridad. Si uno falla, se envía la misma conversación al proveedor del siguiente modelo.",
   "Found while running the tests.": "Encontrado al ejecutar las pruebas.",
   "How often a card came back from In review.": "Cuántas veces una tarjeta volvió de In review.",
   "Interventions": "Intervenciones",

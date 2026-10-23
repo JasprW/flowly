@@ -1335,7 +1335,7 @@ const catalog: Catalog = {
   "Fix flaky CI": "불안정한 CI 수정",
   "Fixed the login redirect: the sign-in callback now keeps `next` and sends people back to the page they came from.": "로그인 리디렉션을 고쳤습니다. 로그인 콜백이 이제 `next`를 유지해 원래 페이지로 돌려보냅니다.",
   "Follow-ups the agent found, yours to decide.": "에이전트가 찾은 후속 작업, 결정은 당신이.",
-  "For sessions Flowly doesn't manage, the summary model runs once after each of their turns and reads the recent conversation (sent to that model's provider).": "Flowly가 관리하지 않는 세션에서는 턴이 끝날 때마다 요약 모델이 한 번 실행되어 최근 대화를 읽습니다(해당 모델의 제공자에게 전송됨).",
+  "After each turn in sessions Flowly doesn't manage, summary models read the recent conversation in priority order. If one fails, the same conversation is sent to the next model's provider.": "Flowly가 관리하지 않는 세션에서는 각 턴이 끝나면 요약 모델이 우선순위에 따라 최근 대화를 읽습니다. 모델이 실패하면 같은 대화를 다음 모델의 제공업체로 보냅니다.",
   "Found while running the tests.": "테스트하다가 발견.",
   "How often a card came back from In review.": "카드가 검토에서 되돌아온 횟수.",
   "Interventions": "개입 횟수",

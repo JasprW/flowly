@@ -1335,7 +1335,7 @@ const catalog: Catalog = {
   "Fix flaky CI": "修复不稳定的 CI",
   "Fixed the login redirect: the sign-in callback now keeps `next` and sends people back to the page they came from.": "登录跳转已修好：登录回调现在会保留 `next`，把人送回原来的页面。",
   "Follow-ups the agent found, yours to decide.": "agent 发现的后续工作，由你决定。",
-  "For sessions Flowly doesn't manage, the summary model runs once after each of their turns and reads the recent conversation (sent to that model's provider).": "对 Flowly 不管理的 session，每完成一轮，摘要模型就运行一次，读取最近的对话（发送给该模型的提供方）。",
+  "After each turn in sessions Flowly doesn't manage, summary models read the recent conversation in priority order. If one fails, the same conversation is sent to the next model's provider.": "Flowly 不管理的会话每轮结束后，摘要模型会按优先级读取最近的对话。若某个模型失败，同一段对话会发送给下一个模型的提供方。",
   "Found while running the tests.": "跑测试时发现。",
   "How often a card came back from In review.": "卡片从评审中被退回的次数。",
   "Interventions": "介入次数",

@@ -89,6 +89,7 @@ async function setup() {
     paseo,
     created,
     replies,
+    summary,
     reply,
     timelines,
     agentLabels,
@@ -350,3 +351,23 @@ test("a busy project with two cards is analyzed on schedule", async () => {
   expect((await x.service.view("p")).lastRun).toMatchObject({ status: "ok", manual: false });
   expect(x.created).toHaveLength(1);
 });
+
+for (const secondLookupFails of [false, true]) {
+  test(`summary fallback ${secondLookupFails ? "reuses the first inventory after lookup failure" : "discovers a summary-only provider"}`, async () => {
+    const x = await setup();
+    x.summary.summaryModels = ["custom/summary", "claude/claude-haiku-5-5"];
+    let inventories = 0;
+    x.paseo.providers.listAvailable = async () => {
+      if (++inventories === 2 && secondLookupFails) throw new Error("provider list unavailable");
+      return { providers: [{ provider: "claude", available: true }, { provider: "custom", available: true }] } as never;
+    };
+    x.paseo.providers.listModels = async (provider) => ({ models: [{ id: provider === "custom" ? "summary" : "claude-haiku-5-5" }], error: null }) as never;
+    await x.log.append("p", records(6, 3));
+    x.service.run("p", x.paseo, true);
+    await settle(x.service);
+    expect((await x.service.view("p")).lastRun).toMatchObject({ status: "ok", model: secondLookupFails ? "claude/claude-haiku-5-5" : "custom/summary" });
+    expect(inventories).toBe(2);
+    expect(x.created).toHaveLength(1);
+    expect(x.archived()).toBe(1);
+  });
+}

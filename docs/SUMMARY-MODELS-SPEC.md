@@ -12,7 +12,7 @@ Unavailable configured models stay visible and removable/reorderable so temporar
 
 Each available model is tried at most once per run. Create/wait/runtime errors (including idle+error), timeout, permission requests and invalid output move to the next candidate after cleanup. Every candidate gets the same prepared input and original workspace/parent scope. First valid output stops, including a valid no-update/no-candidate result. Only the successful model is recorded. If all fail, retain previous output and report model-specific failures within existing error bounds. Persistence errors never retry a model.
 
-The shared list applies to card Progress, outside-session progress/next moves/ideas, daily digests and finished-card memory reviews. Their existing enablement, prompts, storage and resource ownership stay intact. Workflow insights keeps its separate model setting/Auto preference; only its existing last-resort use of the summary setting reads the new list's first available model.
+The shared list applies to card Progress, outside-session progress/next moves/ideas, daily digests and finished-card memory reviews. Their existing enablement, prompts, storage and resource ownership stay intact. Workflow insights keeps its separate model setting/Auto preference; only its existing last-resort use of the summary setting reads the new list's first available model. If its second provider-inventory query fails, reuse the first successful inventory; a successful second query remains authoritative so summary-only providers stay eligible.
 
 ## Settings contract and compatibility
 

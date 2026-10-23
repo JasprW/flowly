@@ -122,6 +122,8 @@ The first time you open Flowly, a short welcome tour explains projects, cards an
 
 Pick the model new sessions start with under **Settings → Models**. A project can set its own default in its settings, which wins over the global one; with neither, new sessions start from the latest session's settings.
 
+Summary models are an ordered fallback list in Settings → Models: add models and move them up or down to set priority; the default is Haiku → Luna.
+
 ![Settings → Models: default model and summary model](docs/promo/screenshots/settings/models.png)
 
 ### Data and safety
@@ -150,8 +152,6 @@ GitHub Actions checks every PR and main push (Node 22/24, types, tests and a rea
 To add or change text, wrap it in `t()` / `tn()` and add the translation to every file in [`shared/i18n/`](shared/i18n/); `npm test` lists what is missing. See [`docs/I18N-SPEC.md`](docs/I18N-SPEC.md).
 
 Root code is limited to `index.client.tsx` and `index.server.ts`; everything else lives in `client/`, `server/` and runtime-neutral `shared/`. Design decisions, specs and acceptance evidence are in [`docs/`](docs/): start with [`SPEC-OUTLINE.md`](docs/SPEC-OUTLINE.md), [`SINGLE-ROOT-SPEC.md`](docs/SINGLE-ROOT-SPEC.md) and [`PROGRESS.md`](docs/PROGRESS.md). Project rules for contributors and agents are in [`AGENTS.md`](AGENTS.md). Release and promo material (copy, demo project script, screenshot script) lives in [`docs/promo/`](docs/promo/README.md).
-
-Summary models are an ordered fallback list in Settings → Models: add models and move them up or down to set priority; the default is Haiku → Luna.
 
 ## License
 

@@ -1335,7 +1335,7 @@ const catalog: Catalog = {
   "Fix flaky CI": "Починить нестабильный CI",
   "Fixed the login redirect: the sign-in callback now keeps `next` and sends people back to the page they came from.": "Редирект после входа исправлен: колбэк теперь сохраняет `next` и возвращает на исходную страницу.",
   "Follow-ups the agent found, yours to decide.": "Последующая работа, найденная агентом, — решать вам.",
-  "For sessions Flowly doesn't manage, the summary model runs once after each of their turns and reads the recent conversation (sent to that model's provider).": "Для сессий, которыми Flowly не управляет, модель для сводок запускается один раз после каждого их хода и читает недавний разговор (он отправляется поставщику этой модели).",
+  "After each turn in sessions Flowly doesn't manage, summary models read the recent conversation in priority order. If one fails, the same conversation is sent to the next model's provider.": "После каждого хода в сеансах, которыми Flowly не управляет, модели сводки читают недавний разговор в порядке приоритета. Если одна модель завершится с ошибкой, тот же разговор отправляется провайдеру следующей модели.",
   "Found while running the tests.": "Найдено при запуске тестов.",
   "How often a card came back from In review.": "Сколько раз карточка возвращалась из In review.",
   "Interventions": "Вмешательства",
