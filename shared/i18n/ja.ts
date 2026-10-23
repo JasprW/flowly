@@ -23,6 +23,8 @@ const catalog: Catalog = {
   "Permissions": "権限",
   "Provider default": "プロバイダーのデフォルト",
   "Use the provider's configured permission mode": "プロバイダーに設定された権限モードを使用",
+  "Same as latest session": "直近のセッションと同じ",
+  "Use the latest session's permission mode when it uses this provider, else the provider's own": "直近のセッションがこのプロバイダーなら、その権限モードを使用。そうでなければプロバイダーの設定を使用",
   "Moved to {name}": "{name} に移動しました",
   "Open details": "詳細を開く",
   "Start session": "セッションを開始",

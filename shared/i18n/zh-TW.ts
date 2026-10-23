@@ -23,6 +23,8 @@ const catalog: Catalog = {
   "Permissions": "許可權",
   "Provider default": "供應商預設",
   "Use the provider's configured permission mode": "使用供應商配置的許可權模式",
+  "Same as latest session": "與最近工作階段相同",
+  "Use the latest session's permission mode when it uses this provider, else the provider's own": "最近工作階段使用此提供者時沿用其權限模式，否則使用提供者自己的",
   "Moved to {name}": "已移至 {name}",
   "Open details": "開啟詳情",
   "Start session": "開始工作階段",

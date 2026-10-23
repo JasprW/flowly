@@ -23,6 +23,8 @@ const catalog: Catalog = {
   "Permissions": "权限",
   "Provider default": "提供方默认",
   "Use the provider's configured permission mode": "使用提供方配置的权限模式",
+  "Same as latest session": "与最近会话相同",
+  "Use the latest session's permission mode when it uses this provider, else the provider's own": "最近会话使用该提供方时沿用其权限模式，否则使用提供方自己的",
   "Moved to {name}": "已移至 {name}",
   "Open details": "打开详情",
   "Start session": "开始会话",

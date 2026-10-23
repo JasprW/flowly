@@ -23,6 +23,8 @@ const catalog: Catalog = {
   "Permissions": "Разрешения",
   "Provider default": "По умолчанию для провайдера",
   "Use the provider's configured permission mode": "Использовать режим разрешений, настроенный у провайдера",
+  "Same as latest session": "Как в последней сессии",
+  "Use the latest session's permission mode when it uses this provider, else the provider's own": "Использовать режим разрешений последней сессии, если она использует этого провайдера, иначе — режим провайдера",
   "Moved to {name}": "Перемещено в «{name}»",
   "Open details": "Открыть подробности",
   "Start session": "Запустить сессию",

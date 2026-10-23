@@ -27,7 +27,7 @@ A project default replaces the global one as a whole (provider, model and reason
 
 - **Settings → Models**: *Default model* (Provider, Model, Reasoning) and *Summary models* (an ordered fallback list; see [SUMMARY-MODELS-SPEC](SUMMARY-MODELS-SPEC.md)). Provider's first choice is **Automatic** (no default). Choosing a provider also chooses its default model, so a default is always complete.
 - **Project settings → Default model**: the same three rows; the provider's first choice reads **Global default (…)** (the current global one, or Automatic) and means "no override".
-- A **Permissions** row (the provider's modes; "Provider default" keeps none) follows Reasoning; changing the provider clears it, since mode ids belong to a provider.
+- A **Permissions** row (the provider's modes; "Same as latest session" keeps none: the form then keeps the latest session's mode when it uses the same provider, else the provider default) follows Reasoning; changing the provider clears it, since mode ids belong to a provider.
 - The Reasoning row only appears when the model offers options; "Model default" keeps the model's own.
 
 ## 5. Acceptance

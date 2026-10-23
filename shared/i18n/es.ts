@@ -23,6 +23,8 @@ const catalog: Catalog = {
   "Permissions": "Permisos",
   "Provider default": "Predeterminado del proveedor",
   "Use the provider's configured permission mode": "Usar el modo de permisos configurado del proveedor",
+  "Same as latest session": "Igual que la última sesión",
+  "Use the latest session's permission mode when it uses this provider, else the provider's own": "Usar el modo de permisos de la última sesión si usa este proveedor; si no, el del proveedor",
   "Moved to {name}": "Movida a {name}",
   "Open details": "Abrir detalles",
   "Start session": "Iniciar sesión",

@@ -23,6 +23,8 @@ const catalog: Catalog = {
   "Permissions": "권한",
   "Provider default": "제공자 기본값",
   "Use the provider's configured permission mode": "제공자에 설정된 권한 모드를 사용합니다",
+  "Same as latest session": "최근 세션과 동일",
+  "Use the latest session's permission mode when it uses this provider, else the provider's own": "최근 세션이 이 제공자를 쓰면 그 권한 모드를, 아니면 제공자의 기본값을 사용",
   "Moved to {name}": "{name}(으)로 이동했습니다",
   "Open details": "상세 열기",
   "Start session": "세션 시작",
