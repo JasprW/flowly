@@ -152,7 +152,7 @@ export function ModelsPage({ active }: { active: boolean }) {
         disabled={models.busy}
         noneLabel={t("Automatic")}
         noneDetail={t("Start from the latest session's settings")}
-        onChange={(next: AgentModel | null) => models.save({ defaultProvider: next?.provider ?? "", defaultModel: next?.model ?? "", defaultThinking: next?.thinking ?? "" })}
+        onChange={(next: AgentModel | null) => models.save({ defaultProvider: next?.provider ?? "", defaultModel: next?.model ?? "", defaultThinking: next?.thinking ?? "", defaultMode: next?.mode ?? "" })}
       />
       <SummaryModelGroup active={active} />
     </SettingsPage>

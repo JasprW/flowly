@@ -6,6 +6,8 @@ export const agentModelSchema = z.strictObject({
   model: z.string().min(1).max(200),
   /** Reasoning option id of the model; absent keeps the model's own default. */
   thinking: z.string().min(1).max(100).optional(),
+  /** Permission mode id of the provider; absent keeps the latest session's (same provider) or the provider default. */
+  mode: z.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/).optional(),
 });
 export type AgentModel = z.infer<typeof agentModelSchema>;
 
@@ -33,13 +35,18 @@ export function startingAgent(last: LastSession, chosen: AgentModel | null | und
   return {
     provider: chosen.provider,
     model: chosen.model,
-    mode: last && last.provider === chosen.provider ? last.mode : "",
+    mode: chosen.mode ?? (last && last.provider === chosen.provider ? last.mode : ""),
     thinking: chosen.thinking ?? "",
   };
 }
 
-/** Flat host-setting values (`defaultProvider`/`defaultModel`/`defaultThinking`) as a model, or null while incomplete. */
-export function agentModelFromValues(values: { defaultProvider?: string; defaultModel?: string; defaultThinking?: string } | null | undefined): AgentModel | null {
+/** Flat host-setting values (`defaultProvider`/`defaultModel`/`defaultThinking`/`defaultMode`) as a model, or null while incomplete. */
+export function agentModelFromValues(values: { defaultProvider?: string; defaultModel?: string; defaultThinking?: string; defaultMode?: string } | null | undefined): AgentModel | null {
   if (!values?.defaultProvider || !values.defaultModel) return null;
-  return { provider: values.defaultProvider, model: values.defaultModel, ...(values.defaultThinking ? { thinking: values.defaultThinking } : {}) };
+  return {
+    provider: values.defaultProvider,
+    model: values.defaultModel,
+    ...(values.defaultThinking ? { thinking: values.defaultThinking } : {}),
+    ...(values.defaultMode ? { mode: values.defaultMode } : {}),
+  };
 }

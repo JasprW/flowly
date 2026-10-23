@@ -238,6 +238,7 @@ export const modelSettings = defineSettings({
     defaultProvider: z.string().max(100).default(""),
     defaultModel: z.string().max(200).default(""),
     defaultThinking: z.string().max(100).default(""),
+    defaultMode: z.string().max(100).default(""),
   }),
 });
 export type ModelSettings = z.infer<typeof modelSettings.schema>;

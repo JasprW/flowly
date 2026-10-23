@@ -26,12 +26,17 @@ describe("startingAgent", () => {
     expect(startingAgent(last, codex)).toEqual({ provider: "codex", model: "gpt-6-luna", mode: "", thinking: "" });
     expect(startingAgent(null, codex)).toEqual({ provider: "codex", model: "gpt-6-luna", mode: "", thinking: "" });
   });
+  it("uses the default's own permission mode over the latest session's", () => {
+    expect(startingAgent(last, { ...claude, mode: "acceptEdits" })?.mode).toBe("acceptEdits");
+    expect(startingAgent(null, { ...codex, mode: "full-access" })?.mode).toBe("full-access");
+  });
 });
 
 describe("stored values", () => {
   it("builds a model only when provider and model are both set", () => {
     expect(agentModelFromValues({ defaultProvider: "claude", defaultModel: "m", defaultThinking: "" })).toEqual({ provider: "claude", model: "m" });
     expect(agentModelFromValues({ defaultProvider: "claude", defaultModel: "m", defaultThinking: "high" })).toEqual({ provider: "claude", model: "m", thinking: "high" });
+    expect(agentModelFromValues({ defaultProvider: "claude", defaultModel: "m", defaultMode: "plan" })).toEqual({ provider: "claude", model: "m", mode: "plan" });
     expect(agentModelFromValues({ defaultProvider: "claude", defaultModel: "" })).toBeNull();
     expect(agentModelFromValues({})).toBeNull();
     expect(agentModelFromValues(undefined)).toBeNull();
