@@ -223,7 +223,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 
 ### 12.1 范围
 
-- “外部 session”：未被 Flowly 管理（不在 `sessions.managed` 里）、未归档、有 workspace、不是子 agent（`parentAgentId` 为空）、不是 Flowly 自己的辅助 session（summarizer）的 session。包括：卡片 workspace 里未加入卡片的 session（P2）、Flowly 项目里不属于卡片的 session（P3）、不在任何 Flowly 项目里的 session（P4）。
+- “外部 session”：未被 Flowly 管理（不在 `sessions.managed` 里）、未归档、有 workspace、不是子 agent（`parentAgentId` 为空）、不是 Flowly 自己的辅助 session（summarizer，按 `flowly=summarizer` 标签判断；memory review、digest、workflow insights 都带这个标签。2026-10-23 前代码漏了这条判断，会给这些用完即删的 session 跑洞察，留下报错记录）的 session。包括：卡片 workspace 里未加入卡片的 session（P2）、Flowly 项目里不属于卡片的 session（P3）、不在任何 Flowly 项目里的 session（P4）。
 - 管理 session 维持 §5–§7 的卡片路径，不变。
 - Flowly 内部的行为与样式不变（§3），唯一新增是设置项（§12.6）。
 

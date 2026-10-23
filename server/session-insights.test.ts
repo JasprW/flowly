@@ -94,7 +94,7 @@ test("a completed turn of an outside session runs one archived child insight ses
   expect((await x.service.view())[0]).toMatchObject({ agentId: "a1", suggestion: { id: s.suggestion!.id }, ideas: [{ title: "Add rate limit" }] });
 });
 
-test("off by default switch, no parts, subagents, sessions without a workspace and empty turns do nothing", async () => {
+test("off by default switch, no parts, subagents, sessions without a workspace, Flowly's own sessions and empty turns do nothing", async () => {
   const x = await setup({ settings: { enabled: false } });
   await x.service.enqueue(x.agent, turn("x"), x.paseo);
   x.set({ enabled: true, parts: { progress: false, nextMoves: false, ideas: false } });
@@ -103,7 +103,10 @@ test("off by default switch, no parts, subagents, sessions without a workspace a
   await x.service.enqueue({ ...x.agent, parentAgentId: "p" }, turn("x"), x.paseo);
   await x.service.enqueue({ ...x.agent, workspaceId: null }, turn("x"), x.paseo);
   await x.service.enqueue(x.agent, [{ type: "reasoning" }], x.paseo);
+  // Flowly's own temporary sessions (memory review, digest, workflow insights): no insight, no stored entry.
+  await x.service.enqueue({ ...x.agent, labels: { flowly: "summarizer", "flowly-memory": "retro" } }, turn("x"), x.paseo);
   expect(x.created).toEqual([]);
+  expect((await x.service.view()).length).toBe(0);
 });
 
 test("each switch only asks for and stores its own part", async () => {

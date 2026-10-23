@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
 import type { LocaleCode } from "../shared/i18n";
-import { SUMMARIZER_LABELS, type SummaryModelChoice, truncateTranscript, turnText } from "../shared/summary";
+import { SUMMARIZER_LABELS, isSummarizer, type SummaryModelChoice, truncateTranscript, turnText } from "../shared/summary";
 import {
   SESSION_IDEAS_MAX,
   SESSION_INSIGHTS_MAX,
@@ -77,16 +77,20 @@ export class SessionInsightStore {
 }
 
 /** The session the hook names, as far as insights need it. */
-export type OutsideAgent = { id: string; workspaceId: string | null; parentAgentId: string | null; title: string | null; cwd: string };
+export type OutsideAgent = { id: string; workspaceId: string | null; parentAgentId: string | null; title: string | null; cwd: string; labels?: Readonly<Record<string, string>> | null };
 export type InsightSettings = { enabled: boolean; parts: InsightParts; model: SummaryModelChoice };
 
 type Batch = { text: string; endedAt: string; agent: OutsideAgent };
 export const INSIGHT_TIMEOUT_MS = 120_000;
 const ROW_TIMEOUT_MS = 10_000;
 
-/** A session the outside path handles (NATIVE-SESSION-SPEC §12.1); the caller has already ruled out managed ones. */
+/**
+ * A session the outside path handles (NATIVE-SESSION-SPEC §12.1); the caller has already ruled out managed ones.
+ * Flowly's own temporary sessions (memory review, digest, workflow insights) are not the person's work: they are
+ * deleted as soon as they finish, so an insight run for them only fails or races that delete.
+ */
 export function isOutsideCandidate(agent: OutsideAgent) {
-  return !!agent.workspaceId && !agent.parentAgentId;
+  return !!agent.workspaceId && !agent.parentAgentId && !isSummarizer(agent);
 }
 
 function emptyInsight(agent: OutsideAgent, now: string): SessionInsight {
