@@ -866,3 +866,13 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - PASS：离线3 files / 62 tests（skill-source、agent-service、tool-server）；规范/生成一致性与旧证据hash核对。保留旧benchmark原始/独立重评，不改评分。
 - 未运行：B01、被测模型/审查会话、fixture/grader、全量测试、安装/reload、Git发布；未加hooks/改服务端行为/API/UI。仓库skill已生成，不宣称运行中的服务已加载新规则或模型遵守改善。无onboarding/tip/What's new改动。
 - [本轮归属、检查与保留证据](verification/turn-checklist-wording-2026-10-23/report.md)。
+
+## 2026-10-23 External links use the main browser
+
+Flowly uses Paseo's external opener for URL artifacts, connector preview links, and session Markdown links.
+Desktop links open the system default browser. The existing error messages remain.
+This change adds no controls or workflow concepts, so it needs no welcome-tour change or one-time tip.
+
+Validation: typechecking, 943 tests, and four release checks pass.
+The installed plugin also passes typechecking and reports `running` after reload.
+Desktop and phone clicks remain untested because this session cannot target the user's separate app window.
