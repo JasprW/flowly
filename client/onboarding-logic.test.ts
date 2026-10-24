@@ -173,8 +173,8 @@ describe("tips", () => {
 });
 
 test("stored onboarding settings tolerate missing or invalid fields", () => {
-  expect(onboardingSettingsValues(undefined)).toEqual({ welcomeSeen: false, tipsSeen: [] });
-  expect(onboardingSettingsValues({ welcomeSeen: true })).toEqual({ welcomeSeen: true, tipsSeen: [] });
+  expect(onboardingSettingsValues(undefined)).toEqual({ welcomeSeen: false, tipsSeen: [], whatsNewSeen: "" });
+  expect(onboardingSettingsValues({ welcomeSeen: true })).toEqual({ welcomeSeen: true, tipsSeen: [], whatsNewSeen: "" });
   expect(onboardingSettingsValues({ welcomeSeen: "yes" }).welcomeSeen).toBe(false);
 });
 

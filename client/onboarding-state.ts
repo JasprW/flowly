@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@getpaseo/plugin/client";
 import { onboardingSettings, onboardingSettingsValues, type OnboardingSettings } from "../shared/settings";
 import { tipIds, withTipSeen, type TipId } from "./onboarding-logic";
+import { latestRelease, seenAfter } from "./whats-new";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -56,7 +57,8 @@ export function useOnboarding() {
     status: settings.status,
     values,
     /** The tour covers this release's What's new, so a new user is not shown it next (WHATS-NEW-SPEC §2). */
-    markWelcomeSeen: () => update(() => ({ welcomeSeen: true })),
+    markWelcomeSeen: () => update((current) => ({ welcomeSeen: true, whatsNewSeen: seenAfter(current.whatsNewSeen, latestRelease) })),
+    markWhatsNewSeen: () => update((current) => ({ whatsNewSeen: seenAfter(current.whatsNewSeen, latestRelease) })),
     /** Someone who already uses the board: no tour and no first-time tips. */
     markExistingUserSeen: () => update(() => ({ welcomeSeen: true, tipsSeen: [...tipIds] })),
     markTipSeen: (id: TipId) => update((current) => ({ tipsSeen: withTipSeen(current.tipsSeen, id) })),

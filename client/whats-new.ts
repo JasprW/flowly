@@ -1,0 +1,154 @@
+/** What's new after an update (WHATS-NEW-SPEC). Pure data and decisions; no React, no storage. */
+import { msg } from "../shared/i18n";
+import type { SettingsSection } from "./summary-settings";
+
+export interface WhatsNewItem {
+  icon: string;
+  /** One sentence, msg()-marked; translated at render. */
+  text: string;
+  action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" };
+}
+
+export interface WhatsNewRelease {
+  /** The release that ships these changes, `major.minor.patch`. */
+  version: string;
+  items: WhatsNewItem[];
+}
+
+/**
+ * Releases, newest first (§4): the window opens on the first and pages back to older ones.
+ * Starts at 1.5.0; nothing older is listed. Add a release on top when it ships changes worth
+ * telling existing users about (§9); a release without items is left out.
+ */
+export const whatsNew: WhatsNewRelease[] = [
+  {
+    version: "1.6.0",
+    items: [
+      {
+        icon: "Brain",
+        text: msg("Project memory: decisions and pitfalls you confirm on one card carry over to later cards' sessions, and finished cards can suggest new ones."),
+      },
+      {
+        icon: "SlidersHorizontal",
+        text: msg("Project memory and Insights now each have one switch for all projects."),
+        action: { label: msg("Open settings"), to: "settings", section: "ai" },
+      },
+      {
+        icon: "MessagesSquare",
+        text: msg("Progress, suggested next steps and Ideas can also run in sessions Flowly doesn't manage. They are off for you; when on, each of their turns runs the summary model once."),
+        action: { label: msg("Open settings"), to: "settings", section: "ai" },
+      },
+      {
+        icon: "ListOrdered",
+        text: msg("Choose multiple summary models and set their fallback priority in Settings → Models."),
+        action: { label: msg("Open settings"), to: "settings", section: "models" },
+      },
+      {
+        icon: "ShieldCheck",
+        text: msg("New sessions can start in a default permission mode, set for all projects or per project."),
+        action: { label: msg("Open settings"), to: "settings", section: "models" },
+      },
+      {
+        icon: "PlugZap",
+        text: msg("Azure DevOps work items can now be card inputs, next to Jira, Confluence, GitHub and GitLab."),
+        action: { label: msg("Open settings"), to: "settings", section: "connections" },
+      },
+      {
+        icon: "CircleHelp",
+        text: msg("The welcome tour now sets your languages and AI features in one place."),
+        action: { label: msg("Take the tour"), to: "tour" },
+      },
+    ],
+  },
+  {
+    version: "1.5.0",
+    items: [
+      {
+        icon: "Activity",
+        text: msg("Workflow insights (opt-in): from the commands agents run, Flowly suggests scripts, setup steps and rules worth keeping."),
+        action: { label: msg("Open settings"), to: "settings", section: "ai" },
+      },
+      {
+        icon: "Sparkles",
+        text: msg("One AI output language now decides the language of everything AI writes: progress, digests, insights, next steps and ideas."),
+        action: { label: msg("Open settings"), to: "settings", section: "ai" },
+      },
+      {
+        icon: "ListChecks",
+        text: msg("Agents set each card's type, tags and workpad (acceptance criteria and checks) before they start."),
+      },
+      {
+        icon: "GitPullRequest",
+        text: msg("Agents can add their own pull requests to a card's outputs; new review comments mark them unread."),
+      },
+      {
+        icon: "FileText",
+        text: msg("Card descriptions are shown as Markdown."),
+      },
+    ],
+  },
+];
+
+/** The oldest release listed (§13 W4). */
+export const WHATS_NEW_FROM = "1.5.0";
+/** At most this many items per release, so a page stays short. */
+export const WHATS_NEW_MAX_ITEMS = 7;
+
+/** The release the window opens on and that decides whether it opens by itself. */
+export const latestRelease: WhatsNewRelease | null = whatsNew.find((r) => r.items.length) ?? null;
+
+/** Page index after an Older (+1) / Newer (-1) step, kept inside the list. */
+export function stepRelease(index: number, direction: 1 | -1, count: number): number {
+  return Math.max(0, Math.min(count - 1, index + direction));
+}
+
+const versionPattern = /^\d+\.\d+\.\d+$/;
+export const validVersion = (v: string) => versionPattern.test(v);
+
+/** Numeric `major.minor.patch` order; "" (never seen) and malformed values sort before any release. */
+export function compareVersions(a: string, b: string): number {
+  const parts = (v: string) => (validVersion(v) ? v.split(".").map(Number) : [-1, -1, -1]);
+  const x = parts(a);
+  const y = parts(b);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+
+/** What `whatsNewSeen` becomes when the window closes, or when the first-run tour closes (§2). */
+export function whatsNewVersion(release: WhatsNewRelease | null): string {
+  return release && release.items.length ? release.version : "";
+}
+
+/** The stored `whatsNewSeen` after this release was seen; never moves back. */
+export function seenAfter(current: string, release: WhatsNewRelease | null): string {
+  const version = whatsNewVersion(release);
+  return version && compareVersions(version, current) > 0 ? version : current;
+}
+
+/** "1.6.0" → "1.6", "1.6.2" stays. */
+export function versionLabel(version: string): string {
+  return version.replace(/\.0$/, "");
+}
+
+export type WhatsNewDecision = "wait" | "show" | "none";
+
+/**
+ * Whether to open What's new now (§2): only for existing users (the welcome tour is seen),
+ * only when this release has items newer than the one last seen, and never over something else.
+ */
+export function whatsNewDecision(input: {
+  settingsStatus: string;
+  boardLoaded: boolean;
+  welcomeSeen: boolean;
+  whatsNewSeen: string;
+  release: WhatsNewRelease | null;
+  /** Another dialog, an open card, the tour or the settings callout is in the way. */
+  blocked: boolean;
+}): WhatsNewDecision {
+  if (input.settingsStatus !== "ready" || !input.boardLoaded) return "wait";
+  // A new user gets the tour, which already covers these; an unmarked existing user is marked first.
+  if (!input.welcomeSeen) return "none";
+  const version = whatsNewVersion(input.release);
+  if (!version || compareVersions(version, input.whatsNewSeen) <= 0) return "none";
+  return input.blocked ? "wait" : "show";
+}

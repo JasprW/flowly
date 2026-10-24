@@ -131,6 +131,8 @@ import {
 } from "./shortcuts";
 import { ConceptStrip, GuideBanner, WelcomeTour, useOnboarding } from "./onboarding";
 import { nextTip, settingsHintDue, welcomeDecision, type TipId } from "./onboarding-logic";
+import { latestRelease, whatsNew, whatsNewDecision, type WhatsNewItem } from "./whats-new";
+import { WhatsNewWindow } from "./whats-new-window";
 import { t, tn } from "../shared/i18n";
 import { workpadEnabled, workpadSignal } from "../shared/workpad";
 import { cardDisplay } from "../shared/card-display";
@@ -315,6 +317,8 @@ function BoardContent(
     [welcomeFirstRun, setWelcomeFirstRun] = useState(false),
     // The tour closed during this visit, so the settings callout may show (ONBOARDING-SETUP-SPEC §5).
     [tourClosed, setTourClosed] = useState(false),
+    // What's new after an update (WHATS-NEW-SPEC): opened by itself once per release, or from Settings.
+    [whatsNewOpen, setWhatsNewOpen] = useState(false),
     // The user just moved a card into Done/Cancelled (drives the wrap-up tip).
     [movedToFinished, setMovedToFinished] = useState(false),
     [escapeRequest, setEscapeRequest] = useState<{ taskId: string; key: string } | null>(null),
@@ -1143,6 +1147,31 @@ function BoardContent(
       tourClosed,
       blocked: !onboarding.values || welcomeOpen || dialogOpen || menu === "settings" || (compact && !!task),
     });
+  // What's new (WHATS-NEW-SPEC §2): existing users only, once per release, never over anything else.
+  const whatsNewDue = whatsNewDecision({
+    settingsStatus: onboarding.status,
+    boardLoaded: !!board,
+    welcomeSeen: onboarding.values?.welcomeSeen ?? false,
+    whatsNewSeen: onboarding.values?.whatsNewSeen ?? "",
+    release: latestRelease,
+    blocked: dialogOpen || !!taskId || welcomeOpen || welcome === "show" || settingsHint,
+  });
+  const whatsNewShown = useRef(false);
+  useEffect(() => {
+    if (inPanel || whatsNewDue !== "show" || whatsNewShown.current) return;
+    whatsNewShown.current = true;
+    setWhatsNewOpen(true);
+  }, [whatsNewDue, inPanel]);
+  const afterWhatsNew = useAfterModalClose();
+  const closeWhatsNew = () => {
+    setWhatsNewOpen(false);
+    void onboarding.markWhatsNewSeen();
+  };
+  const whatsNewAction = (action: NonNullable<WhatsNewItem["action"]>) => {
+    closeWhatsNew();
+    // Settings and the tour are modals too: open them once this one has gone.
+    afterWhatsNew(() => (action.to === "settings" ? openSettingsAt(action.section) : setWelcomeOpen(true)));
+  };
   const seeSettingsHint = () => {
     if (settingsHint) void onboarding.markTipSeen("settings-entry");
   };
@@ -1174,7 +1203,7 @@ function BoardContent(
           workflowSuggestion: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
           memoryCandidate: !task && !!memoryCandidates,
         },
-        blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint,
+        blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
       });
   const dismissTip = (id: TipId) => {
     if (id === "first-done") setMovedToFinished(false);
@@ -2407,6 +2436,11 @@ function BoardContent(
             if (tourTimer.current) clearTimeout(tourTimer.current);
             tourTimer.current = setTimeout(() => setWelcomeOpen(true), 450);
           }}
+          onWhatsNew={() => {
+            setMenu(null);
+            if (tourTimer.current) clearTimeout(tourTimer.current);
+            tourTimer.current = setTimeout(() => setWhatsNewOpen(true), 450);
+          }}
         />
         <WelcomeTour
           open={welcomeOpen}
@@ -2424,6 +2458,9 @@ function BoardContent(
             });
           }}
         />
+        {whatsNew.length > 0 && (
+          <WhatsNewWindow open={whatsNewOpen} theme={props.theme} releases={whatsNew} onClose={closeWhatsNew} onAction={whatsNewAction} />
+        )}
         {wrapPromptTask && (
           <WrapupModal
             key={wrapPromptTask.id}

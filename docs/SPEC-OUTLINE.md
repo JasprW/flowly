@@ -33,6 +33,7 @@
 2026-10-16 新用户 onboarding（设计待评审，未实现）：首次打开时的四页欢迎引导（project / 卡片 / session 与 Paseo 的对应关系、基本流程、特色功能、开始使用），空状态增强，可重看入口，以及可选的一次性情境提示；仅新增 host 级 `onboarding` 设置，不改看板数据、RPC 或 agent 工具。[设计 spec](ONBOARDING-SPEC.md)。
 
 2026-10-22 欢迎导览重设计：5 页，导览内完成语言、进展模型、外部 session 的进展/下一步/想法（首次导览关闭时写入，默认开）、项目记忆与 Insights 总开关（新 host 设置 `features`）；关闭后提示设置入口。[设计 spec](ONBOARDING-SETUP-SPEC.md)。
+2026-10-22 更新后的 What's new：老用户每个有条目的版本弹一次（默认最新版本，可往回翻到 1.5.0，设置里可再次打开），新用户随首次导览记为已看。[设计 spec](WHATS-NEW-SPEC.md)。
 2026-10-16 改名：展示名由 Ultra Kanban 改为 **Flowly**（不设中文名；定位为 agent 原生工作流，看板是界面）。插件 ID 同日改为 `flowly`（数据目录与设置由 `migrateLegacyPluginData` 复制迁移）；工具与 skill 命名由 2026-10-19 的 [Flowly 命名修订](FLOWLY-NAMING-SPEC.md)继续统一；历史验证证据中的旧名保持原样。
 
 2026-10-16 默认模型：设置新增 Models 页（新会话默认模型、摘要模型），项目设置可单独指定默认模型并优先于全局；都未设置时沿用最近一个会话。设置界面同时重做为卡片式分组。[增量 spec](MODEL-DEFAULTS-SPEC.md)和[验证](verification/model-defaults.md)。

@@ -175,7 +175,7 @@ function SettingsNavRow({ icon, label, selected, stacked, onPress }: { icon: str
 }
 
 /** Left column of sections, right column with the selected section's settings; the sections become a strip on top in narrow windows. */
-function SettingsPanes({ open, initial, onTour }: { open: boolean; initial?: SettingsSection; onTour(): void }) {
+function SettingsPanes({ open, initial, onTour, onWhatsNew }: { open: boolean; initial?: SettingsSection; onTour(): void; onWhatsNew(): void }) {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const stacked = Math.min(modalMaxWidth, width - 32) < 560;
@@ -187,7 +187,7 @@ function SettingsPanes({ open, initial, onTour }: { open: boolean; initial?: Set
   const bodyHeight = Math.min(560, Math.max(340, height - 200));
   const pane =
     section === "general" ? (
-      <GeneralPage onTour={onTour} />
+      <GeneralPage onTour={onTour} onWhatsNew={onWhatsNew} />
     ) : section === "cards" ? (
       <CardsPage />
     ) : section === "models" ? (
@@ -233,19 +233,19 @@ function SettingsPanes({ open, initial, onTour }: { open: boolean; initial?: Set
 }
 
 /** Flowly settings, in two columns: sections on the left (language and guide, card workflow, AI summaries, ideas), their settings on the right. */
-export function SettingsModal({ open, section, theme, onClose, onTour }: { open: boolean; section?: SettingsSection; theme: PluginTheme; onClose(): void; onTour(): void }) {
+export function SettingsModal({ open, section, theme, onClose, onTour, onWhatsNew }: { open: boolean; section?: SettingsSection; theme: PluginTheme; onClose(): void; onTour(): void; onWhatsNew(): void }) {
   useShortcutBlock(open);
   return (
     <RNModal visible={open} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <Theme.Provider value={theme}>
-        <SettingsWindow open={open} section={section} onClose={onClose} onTour={onTour} />
+        <SettingsWindow open={open} section={section} onClose={onClose} onTour={onTour} onWhatsNew={onWhatsNew} />
       </Theme.Provider>
     </RNModal>
   );
 }
 
 /** Own window instead of the host Modal, whose width is fixed: backdrop, title bar and the two-column body. */
-function SettingsWindow({ open, section, onClose, onTour }: { open: boolean; section?: SettingsSection; onClose(): void; onTour(): void }) {
+function SettingsWindow({ open, section, onClose, onTour, onWhatsNew }: { open: boolean; section?: SettingsSection; onClose(): void; onTour(): void; onWhatsNew(): void }) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   return (
@@ -274,7 +274,7 @@ function SettingsWindow({ open, section, onClose, onTour }: { open: boolean; sec
           </Label>
           <IconButton icon="X" label={t("Close")} onPress={onClose} />
         </View>
-        <SettingsPanes open={open} initial={section} onTour={onTour} />
+        <SettingsPanes open={open} initial={section} onTour={onTour} onWhatsNew={onWhatsNew} />
       </View>
     </View>
   );

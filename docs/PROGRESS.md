@@ -47,6 +47,17 @@ Spec first: [TURN-CHECKLIST-SPEC](TURN-CHECKLIST-SPEC.md). User authorized the m
 - [x] Onboarding not changed: no new UI, setting or user action; these are agent instruction/API and offline audit changes.
 
 
+## What's new after an update (card "插件更新后弹出“新功能”提示") — 2026-10-22
+
+Spec: [WHATS-NEW-SPEC](WHATS-NEW-SPEC.md) (design confirmed by the user: reopen from Settings; 2026-10-24 the window opens on the newest release and pages back to 1.5.0).
+
+- [x] `onboarding.whatsNewSeen` host setting; `client/whats-new.ts` (entry + `whatsNewDecision` / `seenAfter`), `client/whats-new-window.tsx`, board wiring (blocks tips; buttons open Settings → AI features or the tour 450 ms after closing), Settings → General → What's new; first-run tour close also stores the release as seen.
+- [x] 6 new strings in all 9 catalogs.
+- [x] `npm run typecheck`, `npm test` (`client/whats-new.test.ts`: only once, no items, new user, waits, version order).
+- [x] Real UI after reload (2026-10-22): opened once by itself, reopen from Settings, Open settings → AI features.
+- [x] 2026-10-24 (W4): releases list newest first back to 1.5.0; the window opens on the newest and pages to older ones; 1.6.0 (7 items) and 1.5.0 (5 items) entries, 9 more strings in all catalogs; typecheck, `npm test` 1034 PASS, reload + headless paging and Take the tour PASS. Release notes draft: [v1.6.0](release-notes/v1.6.0.md).
+- [ ] Narrow/phone layout and the real first-run path: not run.
+
 ## Welcome tour redesign: explain and set the basics (card "重设计onboarding流程") — 2026-10-22
 
 Spec: [ONBOARDING-SETUP-SPEC](ONBOARDING-SETUP-SPEC.md) (design confirmed by the user before implementation). The tour now also sets the interface and AI output language, the progress model, outside-session progress / next steps / ideas, and Project memory / Insights.

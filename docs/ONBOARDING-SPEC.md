@@ -92,13 +92,17 @@ A tip is a single dismissible banner row (icon, one sentence, **Got it**) under 
 
 Tips are the lowest-priority part of this feature and can ship after the tour (see Delivery).
 
+### 6. What's new after an update
+
+Existing users (tour seen) get a small *What's new* window once per release that has items in `client/whats-new.ts`: one sentence per change with an optional Open settings / Take the tour button. It opens on the newest release and pages back to older ones (from 1.5.0), and can be reopened from Settings → General. New users skip it: closing the first-run tour also stores the current release as seen. Full behavior: [WHATS-NEW-SPEC](WHATS-NEW-SPEC.md).
+
 ## Data contract
 
 New host-scoped setting in `shared/settings.ts`, same pattern as `ideasSettings` (read through a `…Values()` helper that tolerates missing fields):
 
 ```
 id: "onboarding", scope: "host", version: 1
-schema: { welcomeSeen: boolean = false, tipsSeen: string[] (max 100, ids ≤ 40 chars; was 20 until 2026-10-21, when 20 tips made each new tip evict the oldest) = [] }
+schema: { welcomeSeen: boolean = false, tipsSeen: string[] (max 100, ids ≤ 40 chars; was 20 until 2026-10-21, when 20 tips made each new tip evict the oldest) = [], whatsNewSeen: string (max 20; the release whose What's new was last seen, WHATS-NEW-SPEC) = "" }
 ```
 
 The daemon only registers the setting (`server.registerSettings(onboardingSettings)`). No board schema, RPC, tool or skill change; no migration; agent-facing text is untouched. Settings are per host, so a user on a second device sees the tour once there too; this is accepted.
