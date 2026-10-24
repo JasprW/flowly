@@ -311,7 +311,7 @@ export class ToolServer {
         );
         const readExternal = {
           description:
-            "Read an external input of this card (an artifact with an external field in get_task): a Jira ticket, Confluence page, or GitHub/GitLab issue, pull or merge request. Returns Markdown: metadata, the description or page content and the latest comments; for pull/merge requests also the branches, head commit and changed file names (no diff: fetch the branch with git to see the code). The item is part of the task: read it before you start and again when get_task marks it unread. Read-only: Flowly never changes the item, and its status is for reference only (do not set the card stage from it). Only this card's external inputs can be read; to read a linked item, first add its link with flowly_add_artifact role=input.",
+            "Read an external input of this card (an artifact with an external field in get_task): a Jira ticket, Confluence page, GitHub/GitLab issue, pull or merge request, or Azure DevOps work item. Returns Markdown: metadata, the description or page content and the latest comments; for pull/merge requests also the branches, head commit and changed file names (no diff: fetch the branch with git to see the code). The item is part of the task: read it before you start and again when get_task marks it unread. Read-only: Flowly never changes the item, and its status is for reference only (do not set the card stage from it). Only this card's external inputs can be read; to read a linked item, first add its link with flowly_add_artifact role=input.",
           inputSchema: readExternalInputSchema,
           outputSchema: externalReadSchema,
           annotations: { readOnlyHint: true, openWorldHint: true },

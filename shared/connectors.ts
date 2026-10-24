@@ -7,10 +7,10 @@ import { z } from "zod";
  * picker searches. Nothing here talks to a service.
  */
 
-export const connectorFamilies = ["jira", "confluence", "github", "gitlab"] as const;
+export const connectorFamilies = ["jira", "confluence", "github", "gitlab", "azure"] as const;
 export type ConnectorFamily = (typeof connectorFamilies)[number];
 
-export const connectorProviders = ["jira-dc", "jira-cloud", "confluence-dc", "confluence-cloud", "github", "gitlab"] as const;
+export const connectorProviders = ["jira-dc", "jira-cloud", "confluence-dc", "confluence-cloud", "github", "gitlab", "azure-devops"] as const;
 export type ConnectorProvider = (typeof connectorProviders)[number];
 export const connectorProviderSchema = z.enum(connectorProviders);
 
@@ -29,6 +29,7 @@ export const providerInfo: Record<
   "confluence-cloud": { family: "confluence", email: true },
   github: { family: "github", email: false, defaultBaseUrl: "https://github.com" },
   gitlab: { family: "gitlab", email: false, defaultBaseUrl: "https://gitlab.com" },
+  "azure-devops": { family: "azure", email: false },
 };
 export const familyOf = (provider: ConnectorProvider) => providerInfo[provider].family;
 export const familyProviders = (family: ConnectorFamily) => connectorProviders.filter((p) => providerInfo[p].family === family);
@@ -67,7 +68,7 @@ export type ConnectionInput = z.input<typeof connectionInput>;
 export const externalRefSchema = z.object({
   connectionId: z.string(),
   provider: connectorProviderSchema,
-  /** SHOPSR-123, owner/repo#12, group/proj!34, or a Confluence page id. */
+  /** SHOPSR-123, owner/repo#12, group/proj!34, AB#123 (Azure DevOps), or a Confluence page id. */
   key: z.string().max(300),
   remoteId: z.string().max(64),
   /** Absent in Jira records written before other connectors: an issue. */
@@ -303,6 +304,35 @@ export function remoteRepo(remote: string, baseUrl: string): string | null {
   return repoPath(path.replace(/\.git$/, "").replace(/\/+$/, ""));
 }
 
+/* ---------- Azure DevOps ---------- */
+
+/** Work item ids are unique within an organization (or collection), so "AB#123" names one; AB is Azure Boards' own prefix. */
+const azureId = (value: string | null | undefined) => (value && /^\d{1,9}$/.test(value) ? value : null);
+export const azureKey = (id: string) => `AB#${id}`;
+
+/**
+ * .../_workitems/edit/<id> below the organization address (dev.azure.com/<org>,
+ * <org>.visualstudio.com, or a Server collection), with or without a project
+ * segment, or any board/backlog page that carries ?workitem=<id>.
+ */
+export function azureFromUrl(value: string, baseUrl: string): { itemType: "issue"; key: string } | null {
+  const at = below(value, baseUrl);
+  if (!at) return null;
+  const edit = /^(?:\/[^/]+)*\/_workitems\/edit\/(\d{1,9})\/?$/i.exec(at.rest);
+  const id = azureId(edit?.[1] || at.params.get("workitem"));
+  return id ? { itemType: "issue", key: azureKey(id) } : null;
+}
+
+/** AB#123 (any case). A bare number is only a key when the user is searching in a picker (classifyQuery). */
+export function azureIdOfKey(text: string) {
+  return azureId(/^AB#(\d{1,9})$/i.exec(text.trim())?.[1]);
+}
+
+export const azureItemUrl = (baseUrl: string, key: string) => {
+  const id = azureIdOfKey(key);
+  return id ? `${baseUrl}/_workitems/edit/${id}` : "";
+};
+
 /* ---------- Dispatch ---------- */
 
 /** The item a link of `connection` points at; null when it is not one. Display-name page links need a lookup. */
@@ -321,6 +351,7 @@ export function recognizeUrl(
     return "id" in page ? { itemType: "page", key: page.id } : { itemType: "page", ...page };
   }
   if (family === "github") return githubFromUrl(value, connection.baseUrl);
+  if (family === "azure") return azureFromUrl(value, connection.baseUrl);
   return gitlabFromUrl(value, connection.baseUrl);
 }
 
@@ -333,6 +364,10 @@ export function parseKey(value: string, provider: ConnectorProvider): { itemType
     return key ? { itemType: "issue", key } : null;
   }
   if (family === "confluence") return pageId(text) ? { itemType: "page", key: text } : null;
+  if (family === "azure") {
+    const id = azureIdOfKey(text);
+    return id ? { itemType: "issue", key: azureKey(id) } : null;
+  }
   const parts = splitRepoKey(text);
   if (!parts) return null;
   if (family === "github") return parts.sep === "#" ? { itemType: "issue", key: `${parts.repo}#${parts.number}` } : null;
@@ -345,6 +380,7 @@ export function itemUrl(connection: Pick<Connection, "provider" | "baseUrl">, it
   if (family === "jira") return browseUrl(connection.baseUrl, key);
   if (family === "confluence") return pageUrl(connection.baseUrl, key);
   if (family === "github") return githubItemUrl(connection.baseUrl, key, itemType);
+  if (family === "azure") return azureItemUrl(connection.baseUrl, key);
   return gitlabItemUrl(connection.baseUrl, key, itemType);
 }
 
@@ -382,6 +418,11 @@ export function classifyQuery(raw: string, connection: Pick<Connection, "provide
   if (fromUrl) return "key" in fromUrl ? { kind: "key", itemType: fromUrl.itemType, key: fromUrl.key } : { kind: "lookup", space: fromUrl.space, title: fromUrl.title };
   const key = parseKey(value, connection.provider);
   if (key) return { kind: "key", ...key };
+  if (family === "azure") {
+    // Ids are unique per organization: "123" and "#123" name the work item.
+    const id = azureId(/^#?(\d+)$/.exec(value)?.[1]);
+    return id ? { kind: "key", itemType: "issue", key: azureKey(id) } : { kind: "text", text: value.slice(0, connectorLimits.query) };
+  }
   if (family !== "confluence") {
     const number = /^([#!]?)(\d{1,9})$/.exec(value);
     if (number && (family === "gitlab" || number[1] !== "!"))
@@ -407,6 +448,7 @@ export function itemLabel(provider: ConnectorProvider, itemType: ItemType) {
   const family = familyOf(provider);
   if (family === "jira") return "Jira ticket";
   if (family === "confluence") return "Confluence page";
+  if (family === "azure") return "Azure DevOps work item";
   const name = family === "github" ? "GitHub" : "GitLab";
   return `${name} ${itemType === "pull" ? "pull request" : itemType === "merge_request" ? "merge request" : "issue"}`;
 }

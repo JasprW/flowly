@@ -43,13 +43,14 @@ export function useConnections(enabled = true) {
 }
 
 /** Service names are brands: shown as written in every language. */
-export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab" };
+export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps" };
 
 /** The row icon of an item: its kind, not its service. */
 export function itemIcon(provider: ConnectorProvider, itemType: ItemType) {
   if (itemType === "page") return "BookOpen";
   if (itemType === "pull" || itemType === "merge_request") return "GitPullRequest";
-  return familyOf(provider) === "jira" ? "Ticket" : "CircleDot";
+  const family = familyOf(provider);
+  return family === "jira" ? "Ticket" : family === "azure" ? "ClipboardList" : "CircleDot";
 }
 
 /** "Jira ticket", "GitLab merge request", for row details. */
@@ -57,6 +58,7 @@ export function itemKindLabel(provider: ConnectorProvider, itemType: ItemType) {
   const family = familyOf(provider);
   if (family === "jira") return t("Jira ticket");
   if (family === "confluence") return t("Confluence page");
+  if (family === "azure") return t("Azure DevOps work item");
   const service = familyNames[family];
   if (itemType === "pull") return t("{service} pull request", { service });
   if (itemType === "merge_request") return t("{service} merge request", { service });
@@ -69,6 +71,7 @@ export const linkTitles: Record<ConnectorFamily, string> = {
   confluence: msg("Confluence page"),
   github: msg("GitHub issue or pull request"),
   gitlab: msg("GitLab issue or merge request"),
+  azure: msg("Azure DevOps work item"),
 };
 
 const searchHints: Record<ConnectorFamily, string> = {
@@ -76,6 +79,7 @@ const searchHints: Record<ConnectorFamily, string> = {
   confluence: msg("Page link, id or words from the title"),
   github: msg("owner/repo#12, #12, a link or words from the title"),
   gitlab: msg("group/project!34, #12, !34, a link or words from the title"),
+  azure: msg("Work item number, AB#123, a link or words from the title"),
 };
 
 const recentTitles: Record<ConnectorFamily, string> = {
@@ -83,6 +87,7 @@ const recentTitles: Record<ConnectorFamily, string> = {
   confluence: msg("Pages I viewed or edited recently"),
   github: msg("Open issues and pull requests I'm involved in"),
   gitlab: msg("Open issues and merge requests assigned to me or awaiting my review"),
+  azure: msg("Open work items assigned to me"),
 };
 
 const emptyRecent: Record<ConnectorFamily, string> = {
@@ -90,6 +95,7 @@ const emptyRecent: Record<ConnectorFamily, string> = {
   confluence: msg("You haven't viewed or edited any pages recently."),
   github: msg("No open issues or pull requests involve you."),
   gitlab: msg("Nothing open is assigned to you or awaiting your review."),
+  azure: msg("No open work items are assigned to you."),
 };
 
 /** Identity of an item across connections of one service: keys repeat between services (team/app#12 on GitHub and GitLab). */
@@ -426,6 +432,7 @@ const providerLabels: Record<ConnectorProvider, string> = {
   "confluence-cloud": msg("Cloud"),
   github: "GitHub",
   gitlab: "GitLab",
+  "azure-devops": "Azure DevOps",
 };
 
 const groupDescriptions: Record<ConnectorFamily, string> = {
@@ -433,6 +440,7 @@ const groupDescriptions: Record<ConnectorFamily, string> = {
   confluence: msg("Self-hosted Confluence uses a personal access token. Confluence Cloud uses your account email and an API token; its address ends in /wiki."),
   github: msg("github.com or GitHub Enterprise Server, with a personal access token that can read issues and pull requests."),
   gitlab: msg("gitlab.com or a self-managed GitLab, with a personal access token with the read_api scope."),
+  azure: msg("Azure DevOps Services or Server, with a personal access token that can read work items. Use the organization address, e.g. https://dev.azure.com/your-organization."),
 };
 
 const addTitles: Record<ConnectorFamily, string> = {
@@ -440,6 +448,7 @@ const addTitles: Record<ConnectorFamily, string> = {
   confluence: msg("Add a Confluence connection"),
   github: msg("Add a GitHub connection"),
   gitlab: msg("Add a GitLab connection"),
+  azure: msg("Add an Azure DevOps connection"),
 };
 
 /**
@@ -456,7 +465,7 @@ export function ConnectionsPage() {
   return (
     <SettingsPage
       title={t("Connections")}
-      description={t("Connect Jira, Confluence, GitHub or GitLab to add their tickets, pages, issues and pull requests to cards as inputs. Flowly only reads them; it never changes anything there. Tokens stay on the computer running Paseo.")}
+      description={t("Connect Jira, Confluence, GitHub, GitLab or Azure DevOps to add their tickets, pages, issues, work items and pull requests to cards as inputs. Flowly only reads them; it never changes anything there. Tokens stay on the computer running Paseo.")}
     >
       {connections.error && <Notice>{message(connections.error)}</Notice>}
       {connectorFamilies.map((family) => (
@@ -494,6 +503,8 @@ function tokenHint(provider: ConnectorProvider, hosted: boolean) {
       return hosted
         ? t("Create one at github.com → Settings → Developer settings → Personal access tokens. Fine-grained: read-only Issues, Pull requests and Metadata.")
         : t("Create one in GitHub → Settings → Developer settings → Personal access tokens, with read access to issues and pull requests.");
+    case "azure-devops":
+      return t("Create one in Azure DevOps → User settings → Personal access tokens, with the Work Items (Read) scope.");
     default:
       return t("Create one in GitLab → Preferences → Access tokens with the read_api scope.");
   }
@@ -506,6 +517,7 @@ const addressPlaceholders: Record<ConnectorProvider, string> = {
   "confluence-cloud": "https://your-team.atlassian.net/wiki",
   github: "https://github.example.com",
   gitlab: "https://gitlab.example.com",
+  "azure-devops": "https://dev.azure.com/your-organization",
 };
 
 function ConnectionEditor({ family, connection, onClose }: { family: ConnectorFamily; connection: Connection | null; onClose(): void }) {

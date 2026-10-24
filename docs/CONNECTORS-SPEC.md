@@ -300,3 +300,19 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 - **GitLab 14.x 的改动文件**（真实联调发现，git.garena.com 为 14.10）：`/diffs` 自 15.7 起才有；返回 404 时回退 `/changes`，只取文件名，不取 patch。
 - **删除连接同时清理磁盘缓存**（Luna 验收第 9 项发现）：删除后立即写回 `cache.json`；缓存加载时丢弃已不存在的连接的条目。
 - 未改：`external-reads.json` 读坏时从空开始（与原 `ticket-reads.json` 相同，只是已读标记，不是用户数据）。
+
+## 13. Azure DevOps（2026-10-24，卡片“增加 Azure DevOps connector”）
+
+第五个 provider 族 `azure`（provider id `azure-devops`），沿用本 spec 的全部规则：只读、外部状态不驱动卡片、默认 input、令牌只在 daemon。范围只有 **work item**（Boards）；Azure Repos 的 PR、Pipelines、Wiki、Test Plans 不做。目标是“从 ADO 工单创建任务”：New task 的 **From Azure DevOps** 与 Artifacts 的 + 菜单都会出现这个服务。
+
+- **连接**：一个连接 = 一个组织（Services：`https://dev.azure.com/<org>`、旧式 `https://<org>.visualstudio.com`；Server：`https://host/tfs/<collection>`）。个人访问令牌（Work Items: Read），请求头 `Authorization: Basic base64(":"+PAT)`。校验 `GET /_apis/connectionData`，账户显示 `名字 (登录名)`。没有默认地址，设置页要求填写组织地址。
+- **key**：`AB#123`（Azure Boards 自带的写法）。工作项 id 在组织内唯一，所以不需要项目路径。裸 key 只认 `AB#123`；选择器里 `123` / `#123` 也直接当 key，文字用标题搜索。`itemType` 仍是 `issue`，卡片面显示 `AB#123`，agent 上下文写 “Azure DevOps work item”。
+- **识别**：连接地址之下的 `…/_workitems/edit/<id>`（带或不带项目段、末尾斜杠均可），以及任何带 `?workitem=<id>` 的看板/Backlog 页面。其他组织的链接、PR 链接不识别。
+- **我的最近**：WIQL `[System.AssignedTo] = @Me` 且状态不在 Closed/Done/Removed/Completed/Resolved，按 `ChangedDate` 倒序取 10 个。**文字搜索**：WIQL `[System.Title] CONTAINS '<文字>'`，单引号加倍转义。WIQL 要求 POST，是本框架第一个 POST：`ReadOnlyHttp` 新增 `query()`，只允许 `queryEndpoints`（目前仅 `/_apis/wit/wiql`）；其余路径仍只能 GET，写操作依旧不存在。
+- **读取**：`GET /_apis/wit/workitems/:id`（全部字段）与 `GET /<项目>/_apis/wit/workItems/:id/comments`（最近 20 条）。Markdown：标题、状态、类型、指派、创建人、优先级、项目/区域/迭代、标签、父项，然后 Description / Repro steps / Acceptance criteria（HTML 经 `storageToMarkdown` 转换）和评论。
+- **指纹**：标题、Description、Repro steps、Acceptance criteria、评论 id+修改时间；状态、指派、优先级变化不算。评论是否推进 `ChangedDate` 不确定，所以 `updatedCoversContent: false`（与 Confluence 相同），每次重新读取全文。
+- **API 版本**：Services 用 `7.1`（评论 `7.1-preview.4`），Server 用 `5.0`（评论 `5.1-preview.3`）；Server 路径尚未用真实实例验证。
+- **错误**：401/203 登录页 → AUTH；403（connectionData 以外）与 404 → NOT_FOUND；429/5xx → UNAVAILABLE。
+- **界面**：品牌图标按 §8.3 的做法，用 Simple Icons 的 Azure DevOps 路径（CC0）渲染成 48 px PNG，颜色 #0078D4，以 data URI 打包（约 0.8 KB）。设置 → Connections 增加第五个分组。
+- **测试**：`server/connectors/azure.test.ts`（mock fetch：Basic 头、登录页、链接/AB# 识别、WIQL 与引号转义、Markdown、指纹、403、只有 WIQL 一个 POST）、`shared/connectors.test.ts`（链接、Server/旧域名、key、查询分类）。**未做**：真实组织联调（需要用户的组织地址和 PAT）。
+- onboarding：更新欢迎页功能行、`jira-connect` tip 文案和 README；不新增 tip id（连接与使用方式没有变化，已有 tip 覆盖）。

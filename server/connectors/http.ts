@@ -43,6 +43,11 @@ export type HttpOptions = {
   root: string;
   /** Path patterns (relative to `root`, before the query) a request may use. */
   endpoints: readonly RegExp[];
+  /**
+   * Read-only query endpoints that take their query in a POST body (Azure DevOps
+   * WIQL). Only these paths may be POSTed to; anything else is refused.
+   */
+  queryEndpoints?: readonly RegExp[];
   headers: Record<string, string>;
   /** The service's name in messages: "Jira", "GitLab". */
   label: string;
@@ -54,8 +59,16 @@ export type HttpOptions = {
 
 export class ReadOnlyHttp {
   constructor(readonly options: HttpOptions) {}
-  async get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<{ data: T; headers: Headers }> {
-    const { root, endpoints, label } = this.options;
+  get<T>(path: string, params: Record<string, string | number | undefined> = {}) {
+    return this.send<T>("GET", path, params);
+  }
+  /** A read-only query sent as JSON (only the `queryEndpoints`). */
+  query<T>(path: string, body: unknown, params: Record<string, string | number | undefined> = {}) {
+    return this.send<T>("POST", path, params, body);
+  }
+  private async send<T>(method: "GET" | "POST", path: string, params: Record<string, string | number | undefined>, body?: unknown): Promise<{ data: T; headers: Headers }> {
+    const { root, label } = this.options;
+    const endpoints = method === "GET" ? this.options.endpoints : this.options.queryEndpoints || [];
     if (!endpoints.some((pattern) => pattern.test(path))) throw new ExternalError("EXTERNAL_INVALID", `Refused a request outside the read-only endpoints: ${path}`);
     const url = new URL(root + path);
     for (const [k, v] of Object.entries(params)) if (v !== undefined) url.searchParams.set(k, String(v));
@@ -68,15 +81,21 @@ export class ReadOnlyHttp {
       let response: Response;
       try {
         // Redirects are never followed (the token must not go elsewhere); a moved item answers 3xx.
-        response = await this.options.fetchImpl(url, { method: "GET", headers: { Accept: "application/json", ...this.options.headers }, redirect: "manual", signal: abort.signal });
+        response = await this.options.fetchImpl(url, {
+          method,
+          headers: { Accept: "application/json", ...(method === "POST" ? { "Content-Type": "application/json" } : {}), ...this.options.headers },
+          ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
+          redirect: "manual",
+          signal: abort.signal,
+        });
       } catch (error) {
         throw unreachable(error);
       }
       if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400))
         throw new ExternalError("EXTERNAL_NOT_FOUND", `${label} says this moved (HTTP ${response.status || 3}xx), e.g. a renamed repository. Add its current link instead.`);
       if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw this.options.failure?.(response, body, path) || failure(response, body, label);
+        const text = await response.text().catch(() => "");
+        throw this.options.failure?.(response, text, path) || failure(response, text, label);
       }
       // A login page instead of JSON means the token was not accepted.
       if (!(response.headers.get("content-type") || "").includes("json"))
