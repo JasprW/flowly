@@ -1,19 +1,17 @@
 import { useTaskDetail } from "./card-detail-query";
 import { perfStart, perfEnd, usePerfRender } from "./perf";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
 import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
 import { useRpc } from "@getpaseo/plugin/client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import { modelLabel, targetText, type SummaryEntry, type SummaryOverview } from "../shared/summary";
 import { CardBody, CardField, CardFootnote, CardHeadline, ContentCard } from "./content-card";
-import { Collapse, Disclosure, Section, type SectionState } from "./disclosure";
+import { Section, type SectionState } from "./disclosure";
 import { summariesKey, useSummariesQuery } from "./queries";
 import { workpadEnabled, workpadOf } from "../shared/workpad";
-import { Button, Label, TurnChevron, font, message, radius, relativeTime, space, useTheme, noFocusRing } from "./ui";
-import { formatLocale, t, tn } from "../shared/i18n";
-import { compactDateTime } from "../shared/compact-time";
+import { Button, Label, font, message, relativeTime } from "./ui";
+import { t } from "../shared/i18n";
 
 export { summariesKey };
 
@@ -24,7 +22,7 @@ export function cardProgress(overview: SummaryOverview | undefined, taskId: stri
   return overview?.latest.find((e) => e.taskId === taskId) || null;
 }
 
-/** Drawer "Progress": state, recap and next step, with refresh and version history. */
+/** Drawer "Progress": state, recap and next step, with refresh. */
 export function TaskProgress({ taskId, active, section }: { taskId: string; active: boolean; section: SectionState }) {
   usePerfRender("switch.progress.commit");
   const switchStart = perfStart();
@@ -36,17 +34,10 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
   const hideTarget =
     workpadEnabled(detail?.project) && !!detail?.workpad?.acceptance.length;
   const refreshRpc = useRpc(rpc.refreshSummary);
-  const historyRpc = useRpc(rpc.summaryHistory);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const latest = cardProgress(overview.data, taskId);
   const running = !!overview.data?.running.includes(taskId);
   const error = overview.data?.errors.find((e) => e.taskId === taskId);
-  const history = useQuery({
-    queryKey: ["flowly", "summary-history", taskId, latest?.id],
-    queryFn: () => historyRpc({ taskId }),
-    enabled: active && historyOpen,
-  });
   const refresh = async () => {
     setRequesting(true);
     try {
@@ -58,7 +49,6 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
       setRequesting(false);
     }
   };
-  const older = (history.data || []).filter((e) => e.id !== latest?.id);
   perfEnd("switch.progress.own", switchStart);
   return (
     <Section
@@ -92,30 +82,6 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
           {t("Last update failed {time}: {error}", { time: relativeTime(error.at), error: error.message })}
         </Label>
       )}
-      {!!latest && (
-        <Disclosure
-          title={t("History")}
-          summary={history.data ? tn(history.data.length, "{n} version", "{n} versions") : undefined}
-          open={historyOpen}
-          onChange={setHistoryOpen}
-          disabled={!active}
-          flush
-        >
-          {history.isPending ? (
-            <Label muted size={font.sm}>{t("Loading…")}</Label>
-          ) : history.error ? (
-            <Label muted size={font.sm}>{message(history.error)}</Label>
-          ) : !older.length ? (
-            <Label muted size={font.sm}>{t("No earlier versions.")}</Label>
-          ) : (
-            <View style={{ gap: space[1] }}>
-              {older.map((entry) => (
-                <HistoryItem key={entry.id} entry={entry} />
-              ))}
-            </View>
-          )}
-        </Disclosure>
-      )}
     </Section>
   );
 }
@@ -129,41 +95,5 @@ export function SummaryBody({ entry }: { entry: Pick<SummaryEntry, "state" | "ta
       {!!entry.recap && <CardField title={t("Recap")} text={entry.recap} />}
       {!!entry.next && <CardField title={t("Next")} text={entry.next} />}
     </CardBody>
-  );
-}
-
-function HistoryItem({ entry }: { entry: SummaryEntry }) {
-  const { colors } = useTheme();
-  const [open, setOpen] = useState(false);
-  return (
-    <View style={{ borderRadius: radius.md, borderWidth: 1, borderColor: colors.border }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${relativeTime(entry.at)}: ${entry.state}`}
-        accessibilityState={{ expanded: open }}
-        onPress={() => setOpen(!open)}
-        style={({ pressed }) => ({ ...noFocusRing,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: space[2],
-          padding: space[2],
-          opacity: pressed ? 0.7 : 1,
-        })}
-      >
-        <TurnChevron open={open} size={14} color={colors.foregroundMuted} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Label size={font.md} selectable={false}>
-            {entry.state}
-          </Label>
-        </View>
-        <Label muted size={font.sm} selectable={false}>
-          {compactDateTime(entry.at, formatLocale())}
-        </Label>
-      </Pressable>
-      {/* Under the version's title, past the chevron, so the fields line up with it. */}
-      <Collapse open={open} id="version" style={{ paddingLeft: space[2] + 14 + space[2], paddingRight: space[2], paddingBottom: space[3] }}>
-        <SummaryBody entry={{ state: "", target: entry.target, recap: entry.recap, next: entry.next }} />
-      </Collapse>
-    </View>
   );
 }
