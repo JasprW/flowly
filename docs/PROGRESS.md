@@ -868,3 +868,7 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - [本轮归属、检查与保留证据](verification/turn-checklist-wording-2026-10-23/report.md)。
 
 2026-10-24：统一紧凑布局性能路径，保留独立Overview/CardDetail、fresh授权、连续动画与450ms交接；按可用宽度760分界，移除性能门控的平台特化，清理旧CardBoardContext/Proxy。见[统一规范](RESPONSIVE-PERFORMANCE-SPEC.md)、[两阶段读模型](NATIVE-OVERVIEW-SPEC.md)和[瘦身规范](CARD-QUERY-SLIM-SPEC.md)。验证结果见[交付记录](verification/responsive-ship-2026-10-24/README.md)。
+
+## 2026-10-24 动画流畅度有限优化
+
+先写[MOBILE-SMOOTHNESS-SPEC](MOBILE-SMOOTHNESS-SPEC.md)，同三星冻结源码对照点阵静止、共享lease候选及反向baseline。只让新点阵时钟复用高度lease，保留网格；独立mounted又复现反转中一次额外启停，v2仅用microtask复查既有guard消除，无新timer/状态/框架。连续220/160ms、fresh、450ms及宽度统一保持。最终收起26.13/28.21ms（原39.28/39.62），展开仍59.07/25.15ms，区段40–48ms、Idea125ms起终态未证实均保留，非整体FPS收益。41窗37有效/4排除，旧140capture/37窗Luna独立审计PASS，最终161capture/41窗父复算PASS；新增4窗独立审计UNRUN。此前共享dirty树V2 typecheck、Luna mounted8/root focused22/full125文件1024项PASS，374源hash稳定。正常插件重载与三星ready、owned入口/runtime/工具/会话清理PASS，17MiB压缩证据保留，其他会话工作/共享缓存保留；用户后续授权发运仅限本修复及规范，隔离树另行验收。详见[本轮记录](MOBILE-SMOOTHNESS-SPEC.md#6-执行结果与边界)。

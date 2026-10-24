@@ -278,18 +278,32 @@ export function PulseDot({ color, size = 8, active = true }: { color: string; si
  */
 /** One lap of the running comet / one sweep of the row shimmer. */
 export const marqueePeriod = 2400;
-const marquee = { users: 0, value: new Animated.Value(0), loop: null as Animated.CompositeAnimation | null };
+const marquee = { users: 0, value: new Animated.Value(0), loop: null as Animated.CompositeAnimation | null, unwatch: null as (() => void) | null };
+/** Keep the grid mounted; only the one shared clock yields to height motion. */
+function syncMarquee() {
+  marquee.loop?.stop();
+  marquee.loop = null;
+  if (!marquee.users || heightMotionBusy()) return;
+  // A reversal releases the old lease before acquiring its replacement.
+  void Promise.resolve().then(() => {
+    if (!marquee.users || heightMotionBusy() || marquee.loop) return;
+    marquee.loop = Animated.loop(timing(marquee.value, 1, marqueePeriod, undefined, linear));
+    marquee.loop.start();
+  });
+}
 export function useMarquee(active: boolean) {
   const reduced = useContext(ReduceMotion);
   const on = active && !reduced;
   useEffect(() => {
     if (!on) return;
     if (marquee.users++ === 0) {
-      marquee.loop = Animated.loop(timing(marquee.value, 1, marqueePeriod, undefined, linear));
-      marquee.loop.start();
+      marquee.unwatch = subscribeHeightMotion(syncMarquee);
+      syncMarquee();
     }
     return () => {
       if (--marquee.users === 0) {
+        marquee.unwatch?.();
+        marquee.unwatch = null;
         marquee.loop?.stop();
         marquee.loop = null;
         marquee.value.setValue(0);
