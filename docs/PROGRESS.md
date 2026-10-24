@@ -883,3 +883,7 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 ## 2026-10-24 动画流畅度有限优化
 
 先写[MOBILE-SMOOTHNESS-SPEC](MOBILE-SMOOTHNESS-SPEC.md)，同三星冻结源码对照点阵静止、共享lease候选及反向baseline。只让新点阵时钟复用高度lease，保留网格；独立mounted又复现反转中一次额外启停，v2仅用microtask复查既有guard消除，无新timer/状态/框架。连续220/160ms、fresh、450ms及宽度统一保持。最终收起26.13/28.21ms（原39.28/39.62），展开仍59.07/25.15ms，区段40–48ms、Idea125ms起终态未证实均保留，非整体FPS收益。41窗37有效/4排除，旧140capture/37窗Luna独立审计PASS，最终161capture/41窗父复算PASS；新增4窗独立审计UNRUN。此前共享dirty树V2 typecheck、Luna mounted8/root focused22/full125文件1024项PASS，374源hash稳定。正常插件重载与三星ready、owned入口/runtime/工具/会话清理PASS，17MiB压缩证据保留，其他会话工作/共享缓存保留；用户后续授权发运仅限本修复及规范，隔离树另行验收。详见[本轮记录](MOBILE-SMOOTHNESS-SPEC.md#6-执行结果与边界)。
+
+## 2026-10-24 宽屏点阵连续性修正
+
+连续开卡反复重放是全局高度让路后phase0恢复的可见代价。按MOBILE-SMOOTHNESS-SPEC §7仅在宿主窗口<760让装饰时钟让路；宽屏保留同一loop/phase，lease和resize通知不重启。只改motion.tsx，无新增缓存、timer、框架或RPC；fresh归属、连续220/160ms与450ms交接保持。既有三星局部收起约39→26–28ms，展开不稳定，无桌面/FPS收益结论。已有typecheck、Luna mounted11/11、focused5文件37项通过，首次旧文档断言失败留存；本地Flowly重载running，真实UI/FPS未运行。用户要求停止后续测试直接合入，未再跑候选全量或设备矩阵；仅选择本修复和规范按PR流程发运。无需tour/tip/What's new。证据保留于verification/marquee-width-2026-10-24。
