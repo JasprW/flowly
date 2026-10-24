@@ -37,6 +37,8 @@ Checks: npm run typecheck before reload; independent full-access codex/gpt-6-lun
 
 ## Continuous-height performance follow-up
 
+2026-10-24: the new running dot-matrix sweep now shares the existing height-motion priority lease with PulseDot. Pause only its clock, keep the mesh and content mounted, and resume a fresh 2.4s lap after all overlapping height tweens release. Continuous 220/160ms geometry, fresh authorization and450ms handoff stay unchanged. No width/platform performance fork or extra scheduler is introduced. [Scope, checks and bounded results](MOBILE-SMOOTHNESS-SPEC.md#6-执行结果与边界).
+
 User requires visible height motion and less stutter, not a return to instant geometry. First collect a bounded same-Samsung Android system trace of content/section transitions (gfx/view/RN atrace plus scheduler, no network bodies/messages), and early0.7s gfx windows. Separate JS scheduling/commit from native layout/draw. Evaluate one local counter-control at a time, initially whether ContentCard's in-flow long text is remeasured under every animated height constraint (Collapse already measures an absolute stable-width body). Only retain a minimal change supported by the trace or same-device reverse control.
 
 Preserve220/160ms continuous height,104pt clamp/8pt threshold, first-measure immediate behavior, stable input/content identity, reversal/Reduce Motion, native chevrons, pointer/a11y close gating and cleanup. Fresh route/card/workspace/session authorization and450ms handoff cannot be weakened. No global LayoutAnimation/private modules/dependencies. Diagnostic code, if needed, is bounded and removed before final check/install; no per-frame console/network logging.
