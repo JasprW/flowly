@@ -102,3 +102,31 @@ v1同步trace首个捕获vsync后500ms RenderThread on-CPU为baseline323.41ms、
 
 本规范上面的设备runner、renderer、trace及分析命令记录一次性本地验收方法；脚本和原始设备数据
 保存在本地取证目录，不作为随仓库分发的工具或可下载附件。仓库常规检查为`npm run typecheck`、`npm test`。
+
+## 7. 用户反馈修正：宽屏保留共享动画连续性
+
+用户实测连续点开多张卡时，运行态点阵反复从头播放。原因是任意高度lease都会停止全局共享loop，
+允许恢复后显式phase0；这是当前策略的可见代价，不是精确暂停续播。既有三星有限样本只支持局部
+正文收起最长帧约39ms→26–28ms，展开不稳定；没有宽屏A/B或整体FPS收益证据，不能为此牺牲宽屏连续性。
+本节取代前文“所有宽度一律让路”，历史设备数据及其边界保留。
+
+共享装饰时钟是当前宿主窗口级资源：按React Native Dimensions提供的窗口逻辑宽度，复用
+isCompactLayout的760分界，不按单张卡片/窄抽屉的宽度判断。窗口宽度未知按0视作紧凑；
+看板/菜单/直达详情原有的容器布局判断不变。不按Android/iOS/Web或桌面身份分叉。
+
+- 窗宽>=760：高度动作不暂停点阵或呼吸点。保留同一个运行中的loop和phase，连续开卡、关闭、
+  反转及高度lease通知不stop/start或归零；新增点阵消费者共享现有时钟。最后一个消费者真正退出仍清理/归零。
+- 窗宽<760：保留当前高度优先、重叠/反转microtask检查、暂停不卸载网格、结束后phase0新一圈。
+  本轮不引入native相位回读、剩余时长补播或第二套时钟。
+- 复用现有高度状态监听，只在有消费者时维持一个窗口尺寸订阅，最后一个订阅者退出时移除。
+  改变窗口宽度立即重算busy；宽→宽或无高度动画的resize不能重启loop；窄→宽仅从暂停恢复一次，
+  后续旧lease释放不能再重启。resize不打断高度动画本身。
+- Reduce Motion、220/160ms连续高度、fresh归属、450ms交接、正文/输入/滚动身份不变。
+  不新增RPC、网络、依赖、缓存、设置、timer、逐帧回调或动画框架；无tour/tip/What's new。
+
+实现只改motion.tsx并同步既有规范。先typecheck，再full-access codex/gpt-6-luna mounted覆盖
+760边界、宽屏多次导航/高度动作零额外启停/归零、resize中lease、紧凑反转、Reduce Motion及订阅清理；
+必要focused包含geometry/running-geometry/query-activity/card-detail-query/session-link-query。
+命令及前后source hashes记录在verification/marquee-width-2026-10-24。
+只reload flowly，不重启daemon，不创建业务资源；若无法明确绑定非fullscreen窗口，真实UI保持UNRUN。
+不拿mock的loop计数证明像素连续性或FPS。没有新的手机性能预算，不重复无关全量/平台矩阵。用户随后明确要求停止补测并合入：保留已完成结果，停止新增本地验证，只按仓库PR流程选择性发运本修复和规范，不带入其他会话改动。

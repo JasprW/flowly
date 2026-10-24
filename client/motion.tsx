@@ -8,8 +8,9 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { AccessibilityInfo, Animated, Easing, Platform, type ViewProps } from "react-native";
+import { AccessibilityInfo, Animated, Dimensions, Easing, Platform, type ViewProps } from "react-native";
 import { reduceMotionNow, subscribeReduceMotion } from "./reduce-motion";
+import { isCompactLayout } from "./geometry";
 
 export const motionDuration = { feedback: 120, forward: 220, reverse: 160 } as const;
 /** Entrances decelerate into place; exits accelerate away (no lingering, near-invisible tail). */
@@ -19,21 +20,31 @@ const ReduceMotion = createContext(true);
 
 // A height tween needs JS and a layout commit for every frame. Decorative
 // loops otherwise keep recording/drawing even the retained, covered board.
-// Give geometry priority; overlapping/reversed tweens each own an idempotent lease.
+// Compact windows give geometry priority; wide windows keep decorative motion continuous.
+// Overlapping/reversed tweens each own an idempotent lease.
 let heightMotions = 0;
 const heightMotionListeners = new Set<() => void>();
-const heightMotionBusy = () => heightMotions > 0;
+let heightWindowSubscription: ReturnType<typeof Dimensions.addEventListener> | null = null;
+const heightMotionBusy = () => heightMotions > 0 && isCompactLayout(Dimensions.get("window").width);
+const notifyHeightMotion = () => heightMotionListeners.forEach((listener) => listener());
 const subscribeHeightMotion = (listener: () => void) => {
   heightMotionListeners.add(listener);
-  return () => { heightMotionListeners.delete(listener); };
+  heightWindowSubscription ??= Dimensions.addEventListener("change", notifyHeightMotion);
+  return () => {
+    heightMotionListeners.delete(listener);
+    if (!heightMotionListeners.size) {
+      heightWindowSubscription?.remove();
+      heightWindowSubscription = null;
+    }
+  };
 };
 function holdHeightMotion() {
-  if (++heightMotions === 1) heightMotionListeners.forEach((listener) => listener());
+  if (++heightMotions === 1) notifyHeightMotion();
   let held = true;
   return () => {
     if (!held) return;
     held = false;
-    if (--heightMotions === 0) heightMotionListeners.forEach((listener) => listener());
+    if (--heightMotions === 0) notifyHeightMotion();
   };
 }
 
@@ -281,6 +292,7 @@ export const marqueePeriod = 2400;
 const marquee = { users: 0, value: new Animated.Value(0), loop: null as Animated.CompositeAnimation | null, unwatch: null as (() => void) | null };
 /** Keep the grid mounted; only the one shared clock yields to height motion. */
 function syncMarquee() {
+  if (marquee.loop && !heightMotionBusy()) return;
   marquee.loop?.stop();
   marquee.loop = null;
   if (!marquee.users || heightMotionBusy()) return;

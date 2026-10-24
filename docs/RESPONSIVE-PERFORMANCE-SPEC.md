@@ -23,7 +23,7 @@ native-only 和 web bypass 性能门控。本轮不执行验证，不安装或�
 | Ideas / Memory | 所有紧凑布局沿用首批2条、近底部每批+2、Show more兜底；宽屏保留现有列表。筛选/排序/完整计数及编辑行保留规则不变 |
 | Sidebar Attention角标 | 所有布局统一读取现有轻量attention.count；删除仅为Web角标读取完整Board/agents/receipts的分支 |
 | TaskForm | 所有平台统一在现有进入转场settled后启动重内容及请求；Title/Description节点、取消与Create门控保持 |
-| 呼吸点 | 任一连续高度动画进行时都暂时常亮，结束/取消后恢复；不再为Web绕过这一优先级规则 |
+| 共享点阵/呼吸点 | 宿主窗口<760时高度动画优先；>=760保留同一时钟连续播放，不因开卡/高度或resize通知重启。按窗口宽度统一，不按OS判断；见MOBILE-SMOOTHNESS-SPEC §7 |
 
 平台输入法、键盘坐标、文件选择、快捷键和 React Native Animated 的驱动兼容仍按各自API工作；
 这些属于能力适配，不用于选择不同性能策略。不得为消除平台名字而破坏API调用约束。

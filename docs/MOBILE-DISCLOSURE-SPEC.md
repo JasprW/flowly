@@ -1,7 +1,7 @@
 # Mobile drawer disclosure motion — 2026-10-23
 
 2026-10-24 当前决策见 [统一宽度策略](RESPONSIVE-PERFORMANCE-SPEC.md)：连续高度动画
-期间的呼吸点暂停在所有平台生效，不再为Web绕过；连续220/160ms、反转、Reduce Motion
+期间的装饰暂停仅作用于宿主窗口<760，宽屏点阵/呼吸点连续播放；同宽所有平台一致，见[MOBILE-SMOOTHNESS-SPEC §7](MOBILE-SMOOTHNESS-SPEC.md#7-用户反馈修正宽屏保留共享动画连续性)。连续220/160ms、反转、Reduce Motion
 及450ms交接保持。动画驱动仍使用各运行环境支持的API。
 
 ## Problem and bounded scope
