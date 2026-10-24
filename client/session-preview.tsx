@@ -72,6 +72,7 @@ import { SessionTranscript, type TranscriptHandle, type TranscriptNotice } from 
 import { useSessionReads } from "./session-reads";
 import { sessionAttention } from "../shared/session-attention";
 import { Enter, MotionReveal, PulseDot, motionDuration, useMotionValue, useReducedMotion, useSettled, lerp } from "./motion";
+import { RunningDots } from "./running-motion";
 import { useKeyboardInset } from "./keyboard";
 import { composerEnterAction, createDraftBuffer, createDraftReporter, restoredDraft, type ComposerKey } from "./session-input";
 import { t, tn } from "../shared/i18n";
@@ -862,6 +863,8 @@ function SessionPreviewView({
           minWidth: 0,
         }}
       >
+        {/* A running session's header carries the same dot sweep as its row in the card (MOTION-SPEC, running state). */}
+        {state?.active && !active?.archivedAt && <RunningDots color={tone} seed={sessionId} />}
         <IconButton icon="ArrowLeft" label={t("Back to task")} onPress={onBack} />
         <View style={{ flex: 1, minWidth: 0, paddingHorizontal: space[1] }}>
           <Label medium size={font.base} lines={1}>
