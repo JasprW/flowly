@@ -1136,7 +1136,9 @@ function BoardContent(
   const closeWelcome = (pointAtSettings = true) => {
     setWelcomeOpen(false);
     setWelcomeFirstRun(false);
-    if (!onboarding.values?.welcomeSeen) void onboarding.markWelcomeSeen();
+    // Only the first-run tour records itself (and this release's What's new) as seen; a manual open changes nothing,
+    // also while settings are still loading (ONBOARDING-SPEC §4, WHATS-NEW-SPEC §2).
+    if (welcomeFirstRun) void onboarding.markWelcomeSeen();
     // Point at Settings once the tour's modal has gone (two modals never switch in one frame).
     if (pointAtSettings) afterTour(() => setTourClosed(true));
   };
@@ -1154,7 +1156,7 @@ function BoardContent(
     welcomeSeen: onboarding.values?.welcomeSeen ?? false,
     whatsNewSeen: onboarding.values?.whatsNewSeen ?? "",
     release: latestRelease,
-    blocked: dialogOpen || !!taskId || welcomeOpen || welcome === "show" || settingsHint,
+    blocked: dialogOpen || !!actionTask || !!taskId || welcomeOpen || welcome === "show" || settingsHint,
   });
   const whatsNewShown = useRef(false);
   useEffect(() => {
