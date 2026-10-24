@@ -555,11 +555,15 @@ function BoardContent(
   } : undefined, [task, project, compact, currentDetail, fullBoard?.events, detailData.error]);
   const drawer = useMotionPresence(drawerTarget, drawerTarget ? `${drawerTarget.project.id}|${drawerTarget.task.id}` : "");
   // Desktop: the open card's lane is centred in the board left of the drawer when the drawer would hide it, on
-  // opening, on moving to another lane, and on coming back to the board from a page (DRAWER-SPEC). An In review /
-  // Blocked chip pressed in the same moment (it also leaves the page) keeps its own lane.
+  // opening, on moving to another lane, and on coming back to the board from a page (DRAWER-SPEC). Only the last:
+  // an In review / Blocked chip pressed in the same moment (it also leaves the page) keeps its own lane.
+  const revealedCard = useRef("");
   useEffect(() => {
+    const key = task ? `${task.id}|${task.status}` : "";
+    const sameCard = key === revealedCard.current;
+    revealedCard.current = key;
     if (compact || page || !task) return;
-    setReveal((r) => (!r.center && Date.now() - r.at < 300 ? r : { status: task.status, n: r.n + 1, at: Date.now(), center: true }));
+    setReveal((r) => (sameCard && !r.center && Date.now() - r.at < 300 ? r : { status: task.status, n: r.n + 1, at: Date.now(), center: true }));
   }, [compact, page, task?.id, task?.status]);
   const tasks = (board?.tasks || []).filter(
     (t) => t.projectId === project?.id && (archived || !t.archivedAt),
