@@ -7,6 +7,7 @@ import { PriorityIcon, TypeIcon, priorityAccent, priorityLabels } from "./status
 import type { Point } from "./geometry";
 import type { SessionAttentionSummary } from "../shared/session-attention";
 import { PulseDot, motionDuration, useMotionValue } from "./motion";
+import { RunningDots } from "./running-motion";
 import { useCardOutput, type CardOutput, type OutputSession } from "./card-output";
 import { menuHandlers, useMenuOpener, type MenuEntry } from "./context-menu";
 import { shallowEqual } from "./stable";
@@ -210,6 +211,8 @@ export function TaskCard({
   const showActions = !drag || touch || hovered || selected;
   const accent = display.priority ? priorityAccent(colors, task.priority) : null;
   const lines = activityLines(display.activity, !!progress?.state, !!output);
+  // A session is working: the card edge carries a slow marquee (MOTION-SPEC, running state).
+  const live = running > 0 || !!(signals?.running || signals?.starting);
   return (
     <Animated.View
       {...(drag && !disabled ? pan.panHandlers : {})}
@@ -254,6 +257,7 @@ export function TaskCard({
         opacity,
       }}
     >
+      {live && <RunningDots radius={radius.lg - 1} color={colors.accent} seed={task.id} />}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={[

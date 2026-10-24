@@ -6,6 +6,7 @@ import { Dot, Label, font, relativeTime, space, tint, touch, useTheme, noFocusRi
 import { sessionState } from "./session-state";
 import { sessionTone } from "./status";
 import { PulseDot } from "./motion";
+import { RunningDots } from "./running-motion";
 import type { sessionAttention } from "../shared/session-attention";
 import { t } from "../shared/i18n";
 
@@ -72,6 +73,7 @@ export function SessionCard({
         };
       }}
     >
+      {state.active && !agent.archivedAt && <RunningDots color={tone} seed={agent.id} />}
       <View style={{ width: 10, alignItems: "center" }}>
         <PulseDot color={tone} size={8} active={state.active} />
       </View>

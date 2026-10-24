@@ -271,6 +271,34 @@ export function PulseDot({ color, size = 8, active = true }: { color: string; si
   );
 }
 
+/**
+ * One slow 0 → 1 loop shared by every "running" marquee on screen: the phases stay in step, and a board of running
+ * cards costs one native animation, not one each. It starts with the first user and stops (value reset) with the last.
+ * One timing looped on the native driver, never a looped `sequence` (PERFORMANCE-SPEC §3).
+ */
+/** One lap of the running comet / one sweep of the row shimmer. */
+export const marqueePeriod = 2400;
+const marquee = { users: 0, value: new Animated.Value(0), loop: null as Animated.CompositeAnimation | null };
+export function useMarquee(active: boolean) {
+  const reduced = useContext(ReduceMotion);
+  const on = active && !reduced;
+  useEffect(() => {
+    if (!on) return;
+    if (marquee.users++ === 0) {
+      marquee.loop = Animated.loop(timing(marquee.value, 1, marqueePeriod, undefined, linear));
+      marquee.loop.start();
+    }
+    return () => {
+      if (--marquee.users === 0) {
+        marquee.loop?.stop();
+        marquee.loop = null;
+        marquee.value.setValue(0);
+      }
+    };
+  }, [on]);
+  return on ? marquee.value : null;
+}
+
 /** Mount-in rise for newly appearing items (callouts, queued rows, menus). */
 export function Enter({ children, distance = 6, style }: { children: ReactNode; distance?: number; style?: ViewProps["style"] }) {
   const reduced = useContext(ReduceMotion);
