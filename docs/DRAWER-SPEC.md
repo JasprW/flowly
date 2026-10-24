@@ -8,6 +8,8 @@ Status: authorized by the user's 2026-10-14 sidebar redesign request. This repla
 
 2026-10-19 sidebar tweaks (card "UI/UX 调整"): see [Section order and Artifacts paging](#section-order-and-artifacts-paging) below. Progress → History rows now start at the section's left edge (the `Disclosure` `flush` option) and an opened version's fields line up with its title.
 
+2026-10-24 open card's lane beside the sidebar (user request, card "UI/UX常规修修补补"): on desktop, opening a card narrows the board, which could leave the card's lane under or past the sidebar's edge. When a card is opened (from the board, a link, Ideas, Memory or Insights), moves to another lane, or the board comes back from a page with a card open, the board scrolls (animated, after the sidebar has narrowed it) so that lane is centred in the board's visible part; a lane already fully visible stays put. The overview bar's In review / Blocked chips keep scrolling their lane to the left edge, and a chip pressed while a page closes keeps its lane. A request is not replayed when the board mounts again more than a second later. Phones are unchanged (the card covers the board). Code: `laneRevealOffset` in `client/geometry.ts`, the `reveal` prop of `DesktopColumns`.
+
 ## Layout and behavior
 
 1. Fixed header: task title and Close/Back icon; one wrapped action group contains the current Status selector, Edit and Archive/Restore. Remove Narrower/Wider/Reset buttons and the drawer `onWidthChange` prop. Desktop width uses the existing boundary grip and clamps; its adjustable accessibility actions expose the same operation and effective width bounds without extra buttons. Compact remains full width.

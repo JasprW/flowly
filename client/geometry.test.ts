@@ -10,6 +10,7 @@ import {
   edgeScroll,
   isCompactLayout,
   keyboardOverlap,
+  laneRevealOffset,
 } from "./geometry";
 
 const viewport = { x: 100, y: 80, width: 600, height: 500 };
@@ -47,6 +48,24 @@ describe("board interaction geometry", () => {
     expect(edgeScroll({ x: 690, y: 60 }, viewport, 100, 1200)).toBe(100);
     expect(edgeScroll({ x: 400, y: 100 }, viewport, 100, 1200)).toBe(100);
     expect(edgeScroll({ x: 690, y: 100 }, viewport, 0, 200)).toBe(0);
+  });
+  test("lane reveal: chips scroll to the lane's left edge, an open card's lane is centred only when not fully visible", () => {
+    const lane = { x: 1180, width: 280 };
+    // Overview bar chip: left edge with the board padding.
+    expect(laneRevealOffset(lane, 0, 600, 2000, { inset: 12 })).toBe(1168);
+    // Open card: its lane lies right of a 600-wide board, so it is centred.
+    expect(laneRevealOffset(lane, 0, 600, 2000, { center: true })).toBe(1020);
+    // Partly hidden behind the drawer's edge counts as not visible.
+    expect(laneRevealOffset(lane, 700, 600, 2000, { center: true })).toBe(1020);
+    // Already fully visible: the board does not move.
+    expect(laneRevealOffset(lane, 1000, 600, 2000, { center: true })).toBeNull();
+    // Clamped to the scrollable range at both ends.
+    expect(laneRevealOffset({ x: 12, width: 280 }, 400, 600, 2000, { center: true })).toBe(0);
+    expect(laneRevealOffset({ x: 1708, width: 280 }, 0, 600, 2000, { center: true })).toBe(1400);
+    // A lane wider than the board is centred on its middle.
+    expect(laneRevealOffset({ x: 900, width: 400 }, 0, 300, 2000, { center: true })).toBe(950);
+    // Nothing to do when the target is the current offset.
+    expect(laneRevealOffset(lane, 1168, 600, 2000, { inset: 12 })).toBeNull();
   });
   test("drawer resize keeps a readable drawer and at least 300 points of board", () => {
     expect(drawerWidth(100, 1200)).toBe(340);

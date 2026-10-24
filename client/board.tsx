@@ -325,7 +325,7 @@ function BoardContent(
     // `idea`: Start session prefilled from an idea on the Ideas page (IDEAS-SPEC §6.3).
     [startRequest, setStartRequest] = useState<{ taskId: string; key: string; idea?: Idea } | null>(null),
     [mobileStatus, setMobileStatus] = useState<Status>("todo"),
-    [reveal, setReveal] = useState<{ status: Status; n: number }>({ status: "todo", n: 0 }),
+    [reveal, setReveal] = useState<{ status: Status; n: number; at: number; center?: boolean }>({ status: "todo", n: 0, at: 0 }),
     [actionTask, setActionTask] = useState<Task | null>(null),
     [projectForm, setProjectForm] = useState<"new" | "edit" | null>(null),
     [removing, setRemoving] = useState<Project | null>(null),
@@ -554,6 +554,13 @@ function BoardContent(
     events: compact ? currentDetail?.events || noEvents : fullBoard?.events.filter((e) => e.taskId === task.id) || noEvents,
   } : undefined, [task, project, compact, currentDetail, fullBoard?.events, detailData.error]);
   const drawer = useMotionPresence(drawerTarget, drawerTarget ? `${drawerTarget.project.id}|${drawerTarget.task.id}` : "");
+  // Desktop: the open card's lane is centred in the board left of the drawer when the drawer would hide it, on
+  // opening, on moving to another lane, and on coming back to the board from a page (DRAWER-SPEC). An In review /
+  // Blocked chip pressed in the same moment (it also leaves the page) keeps its own lane.
+  useEffect(() => {
+    if (compact || page || !task) return;
+    setReveal((r) => (!r.center && Date.now() - r.at < 300 ? r : { status: task.status, n: r.n + 1, at: Date.now(), center: true }));
+  }, [compact, page, task?.id, task?.status]);
   const tasks = (board?.tasks || []).filter(
     (t) => t.projectId === project?.id && (archived || !t.archivedAt),
   );
@@ -1715,7 +1722,10 @@ function BoardContent(
             onLane={(status) => {
               setPage(null);
               if (compact) setMobileStatus(status);
-              else if (collapsedColumns.includes(status)) toggleCollapse(status);
+              else {
+                if (collapsedColumns.includes(status)) toggleCollapse(status);
+                setReveal((r) => ({ status, n: r.n + 1, at: Date.now() }));
+              }
             }}
           />
           </View>
