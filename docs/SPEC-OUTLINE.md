@@ -274,3 +274,5 @@ R2、R3 均建立在 R1 的关联及持久化能力上；R4 按模块分别评�
 2026-10-21 GitHub CI/CD: PR/main CI, installed-package smoke and OIDC npm/GitHub
 releases from validated version tags. [Spec](CI-CD-SPEC.md),
 [operations](CI-CD.md). No product UI or task automation change.
+
+2026-10-24：统一紧凑布局性能路径，保留独立Overview/CardDetail、fresh授权、连续动画与450ms交接；按可用宽度760分界，移除性能门控的平台特化，清理旧CardBoardContext/Proxy。见[统一规范](RESPONSIVE-PERFORMANCE-SPEC.md)、[两阶段读模型](NATIVE-OVERVIEW-SPEC.md)和[瘦身规范](CARD-QUERY-SLIM-SPEC.md)。验证结果见[交付记录](verification/responsive-ship-2026-10-24/README.md)。

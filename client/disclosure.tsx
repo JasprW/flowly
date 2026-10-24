@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useState, type ReactNode } from "react";
+import { Fragment, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type ReactNode } from "react";
 import { Animated, Pressable, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useMotionPresence, lerp } from "./motion";
@@ -44,26 +44,29 @@ export function Disclosure({ title, summary, open, disabled, flush, onChange, ch
 
 /** A chevron that turns from right to down with the same progress as `Collapse`. */
 export function Chevron({ open, title, color, size = 16 }: { open: boolean; title: string; color: string; size?: number }) {
-  const presence = useMotionPresence(open ? true : undefined, open ? title : "", false);
+  const presence = useMotionPresence(open ? true : undefined, open ? title : "");
+  const moving = !!presence.item && !presence.settled;
   return (
-    <Animated.View style={{ transform: [{ rotate: lerp(presence.progress, ["0deg", "90deg"]) }] }}>
+    <Animated.View style={{ transform: [{ rotate: moving ? lerp(presence.progress, ["0deg", "90deg"]) : open ? "90deg" : "0deg" }] }}>
       <Icon name="ChevronRight" size={size} color={color} />
     </Animated.View>
   );
 }
 
-/**
- * Measured-height reveal shared by Disclosure and collapsible sections
- * (DRAWER-SPEC, Motion). Height shares this value with opacity, so it uses
- * the JS driver on all platforms; closed content is unmounted after the exit.
- */
-export function Collapse({ open, id, style, children }: {
+type CollapseProps = {
   open: boolean;
   /** Identity of the content; a new id restarts the reveal. */
   id: string;
   style?: object;
   children: ReactNode;
-}) {
+};
+
+/** Local measured-height accordion; text keeps its width and natural size. */
+export function Collapse(props: CollapseProps) {
+  return <HeightCollapse {...props} />;
+}
+
+function HeightCollapse({ open, id, style, children }: CollapseProps) {
   // Mounted open (a section shown expanded): stay in the normal layout until measured, so nothing jumps.
   const [height, setHeight] = useState<number | null>(() => (open ? null : 0));
   const presence = useMotionPresence(open ? true : undefined, open ? id : "", false);
@@ -141,6 +144,24 @@ export function ShowMore({ count, onPress }: { count: number; onPress(): void })
 
 /** How the drawer controls a section (open state lives in the drawer). */
 export type SectionState = { open: boolean; onToggle(): void };
+
+/** Keep memoized sibling sections untouched when only one section toggles. */
+export function useSectionStates<T extends string>(opened: Record<T, boolean>, set: Dispatch<SetStateAction<Record<T, boolean>>>) {
+  const previous = useRef<Partial<Record<T, SectionState>>>({});
+  return useMemo(() => {
+    const next = {} as Record<T, SectionState>;
+    (Object.keys(opened) as T[]).forEach((id) => {
+      const old = previous.current[id];
+      next[id] = old?.open === opened[id] ? old : {
+        open: opened[id],
+        onToggle: old?.onToggle || (() => set((current) => ({ ...current, [id]: !current[id] }))),
+      };
+    });
+    previous.current = next;
+    return next;
+  }, [opened, set]);
+}
+
 
 /** Rows shown at first and added by each Show more. */
 export const pageSize = 5;

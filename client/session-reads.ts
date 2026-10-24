@@ -5,7 +5,7 @@ import type { MarkSessionReadInput, MarkSessionUnreadInput } from "../shared/ses
 
 const noReceipts: never[] = [];
 
-export function useSessionReads() {
+export function useSessionReads(enabled = true) {
   const read = useRpc(readSessionReceipts),
     mark = useRpc(markSessionRead),
     unmark = useRpc(markSessionUnread);
@@ -13,6 +13,7 @@ export function useSessionReads() {
     queryKey: ["flowly", "sessionReads"],
     queryFn: () => read({}),
     refetchInterval: 5000,
+    enabled,
   });
   return {
     query,

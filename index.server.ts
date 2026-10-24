@@ -1,3 +1,4 @@
+import { readCardDetail, readProjectCardIndex, readProjectIdeas } from "./server/card-detail";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import type { PaseoApi } from "@getpaseo/client";
 import { BoardStore, columnOrder } from "./server/store";
@@ -7,6 +8,7 @@ import * as rpc from "./shared/rpc";
 import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
+import { readAttentionCount } from "./server/attention-count";
 import { WrapupService } from "./server/wrapup";
 import { WorkspaceRestoreService } from "./server/workspace-restore";
 import { SessionImageService } from "./server/session-images";
@@ -14,6 +16,9 @@ import { SessionTailService } from "./server/session-tail";
 import { ArchivedSessionsService } from "./server/archived-sessions";
 import { ifChanged } from "./server/etag";
 import { BoardDeltas } from "./server/board-delta";
+import { chipBoard } from "./server/chip-board";
+import { cardBoard } from "./server/card-board";
+import { boardOverview, OverviewDeltas } from "./server/board-overview";
 import { perfLine } from "./shared/perf";
 import { catalogs } from "./shared/i18n-all";
 import { deviceLocale, type LocaleCode } from "./shared/i18n";
@@ -208,6 +213,7 @@ export default function contribute(server: PluginServerContext) {
     });
   void syncReads(true);
   server.handle(rpc.readSessionReceipts, () => sessionReads.read());
+  server.handle(rpc.readAttentionCount, (_, { paseo }) => readAttentionCount(store, sessionReads, paseo));
   server.handle(rpc.markSessionRead, (input, { paseo }) =>
     readService.mark(input, paseo),
   );
@@ -290,6 +296,23 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.readBoardChanged, async (input, { paseo }) => {
     tools.attach(paseo);
     return boardDeltas.read(await store.view(), input);
+  });
+  const chipDeltas = new BoardDeltas();
+  const overviewDeltas = new OverviewDeltas();
+  server.handle(rpc.readOverviewChanged, async (input, { paseo }) => {
+    tools.attach(paseo);
+    return overviewDeltas.read(boardOverview(await store.view()), input);
+  });
+  server.handle(rpc.readCardDetailChanged, async (input, { paseo }) => { tools.attach(paseo); return readCardDetail(await store.view(), input); });
+  server.handle(rpc.readProjectCardIndexChanged, async (input, { paseo }) => { tools.attach(paseo); return readProjectCardIndex(await store.view(), input); });
+  server.handle(rpc.readProjectIdeasChanged, async (input, { paseo }) => { tools.attach(paseo); return readProjectIdeas(await store.view(), input); });
+  server.handle(rpc.readCardBoard, async (input, { paseo }) => {
+    tools.attach(paseo);
+    return cardBoard(await store.view(), input);
+  });
+  server.handle(rpc.readChipBoardChanged, async (input, { paseo }) => {
+    tools.attach(paseo);
+    return chipDeltas.read(chipBoard(await store.view()), input);
   });
   server.handle(rpc.managedSessions, () => tools.managedSessions());
   server.handle(rpc.nativeChips, async () => {

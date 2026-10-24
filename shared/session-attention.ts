@@ -83,6 +83,18 @@ export function sessionAttention(
   receipts: readonly SessionReadReceipt[] = [],
   events: readonly BoardEvent[] = [],
 ) {
+  const latest = events.filter(e => e.agentId === agent.id && e.taskId === taskId &&
+    (e.action === "agent.turn_started" || e.action === "agent.turn_ended")).at(-1);
+  return sessionAttentionFromTurn(agent, taskId, receipts, latest);
+}
+
+/** Same live-state/receipt rules, with the daemon's named last-turn fact. */
+export function sessionAttentionFromTurn(
+  agent: AttentionAgent,
+  taskId: string,
+  receipts: readonly SessionReadReceipt[] = [],
+  latest?: { action: string; at: string },
+) {
   const token = nativeAttentionToken(agent);
   const archived = !!agent.archivedAt;
   const record = receipts.find(
@@ -104,14 +116,6 @@ export function sessionAttention(
     !archived &&
     (agent.status === "error" ||
       (agent.requiresAttention === true && agent.attentionReason === "error"));
-  const latest = events
-    .filter(
-      (e) =>
-        e.agentId === agent.id &&
-        e.taskId === taskId &&
-        (e.action === "agent.turn_started" || e.action === "agent.turn_ended"),
-    )
-    .at(-1);
   const promptAt = agent.lastUserMessageAt
     ? Date.parse(agent.lastUserMessageAt)
     : Number.NEGATIVE_INFINITY;
@@ -152,6 +156,19 @@ export function sessionAttentionSummary(
   receipts: readonly SessionReadReceipt[] = [],
   events: readonly BoardEvent[] = [],
 ) {
+  return summarizeSessions(agents, task, a => sessionAttention(a, task.id, receipts, events));
+}
+
+export function sessionAttentionSummaryFromTurns(
+  agents: readonly AttentionAgent[],
+  task: { id: string; workspaceId: string },
+  receipts: readonly SessionReadReceipt[],
+  turns: ReadonlyMap<string, { latestTurn?: { action: string; at: string } }>,
+) {
+  return summarizeSessions(agents, task, a => sessionAttentionFromTurn(a, task.id, receipts, turns.get(a.id)?.latestTurn));
+}
+
+function summarizeSessions(agents: readonly AttentionAgent[], task: { id: string; workspaceId: string }, stateOf: (agent: AttentionAgent) => ReturnType<typeof sessionAttention>) {
   const current = [
     ...new Map(
       agents
@@ -159,9 +176,7 @@ export function sessionAttentionSummary(
         .map((a) => [a.id, a]),
     ).values(),
   ].filter((a) => !a.archivedAt);
-  const states = current.map((a) =>
-    sessionAttention(a, task.id, receipts, events),
-  );
+  const states = current.map(stateOf);
   return {
     total: current.length,
     running: states.filter((s) => s.running).length,

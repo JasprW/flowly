@@ -17,6 +17,26 @@ const enterEasing = Easing.out(Easing.cubic);
 const exitEasing = Easing.in(Easing.quad);
 const ReduceMotion = createContext(true);
 
+// A height tween needs JS and a layout commit for every frame. Decorative
+// loops otherwise keep recording/drawing even the retained, covered board.
+// Give geometry priority; overlapping/reversed tweens each own an idempotent lease.
+let heightMotions = 0;
+const heightMotionListeners = new Set<() => void>();
+const heightMotionBusy = () => heightMotions > 0;
+const subscribeHeightMotion = (listener: () => void) => {
+  heightMotionListeners.add(listener);
+  return () => { heightMotionListeners.delete(listener); };
+};
+function holdHeightMotion() {
+  if (++heightMotions === 1) heightMotionListeners.forEach((listener) => listener());
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    if (--heightMotions === 0) heightMotionListeners.forEach((listener) => listener());
+  };
+}
+
 export function MotionProvider({ children }: { children: ReactNode }) {
   const [reduced, setReduced] = useState(true);
   useEffect(() => {
@@ -114,6 +134,7 @@ export function useMotionPresence<T>(item: T | undefined | null, key: string, na
   useLayoutEffect(() => {
     const run = ++generation.current;
     let alive = true;
+    const changing = key !== heldKey.current || !key || !entered;
     if (key && key !== heldKey.current) {
       heldKey.current = key;
       progress.setValue(reduced ? 1 : 0);
@@ -132,10 +153,12 @@ export function useMotionPresence<T>(item: T | undefined | null, key: string, na
       return () => { alive = false; };
     }
     setEntered(false);
+    const release = !nativeDriver && changing && held.current ? holdHeightMotion() : () => {};
     const animation = key
       ? timing(progress, 1, motionDuration.forward, nativeDriver)
       : timing(progress, 0, motionDuration.reverse, nativeDriver, exitEasing);
     play(animation, progress, key ? 1 : 0, nativeDriver, (finished) => {
+      release();
       if (!finished) return;
       if (key) {
         if (alive && generation.current === run) setEntered(true);
@@ -144,6 +167,7 @@ export function useMotionPresence<T>(item: T | undefined | null, key: string, na
     return () => {
       alive = false;
       animation.stop();
+      release();
     };
   }, [key, reduced, progress, nativeDriver]);
   return { item: item || (retained ? held.current : undefined), active: !!item, progress, settled: !!item && entered };
@@ -225,10 +249,11 @@ const linear = (t: number) => t;
  */
 export function PulseDot({ color, size = 8, active = true }: { color: string; size?: number; active?: boolean }) {
   const reduced = useContext(ReduceMotion);
+  const heightBusy = useSyncExternalStore(subscribeHeightMotion, () => active && !reduced && heightMotionBusy(), () => false);
   const [value] = useState(() => new Animated.Value(0));
   const [opacity] = useState(() => value.interpolate({ inputRange: pulseInput, outputRange: pulseOutput }));
   useEffect(() => {
-    if (!active || reduced) {
+    if (!active || reduced || heightBusy) {
       value.setValue(0);
       return;
     }
@@ -238,7 +263,7 @@ export function PulseDot({ color, size = 8, active = true }: { color: string; si
       loop.stop();
       value.setValue(0);
     };
-  }, [active, reduced, value]);
+  }, [active, reduced, heightBusy, value]);
   return (
     <Animated.View
       style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, opacity }}
@@ -279,8 +304,8 @@ export function Enter({ children, distance = 6, style }: { children: ReactNode; 
 
 /**
  * Animated height for clamp/expand. The first measured target is applied
- * immediately (no reveal on mount); later targets animate on the JS driver
- * (height is a layout property) and interrupt any running animation.
+ * immediately (no reveal on mount). Height needs the JS driver on all platforms;
+ * keep it local to the clipping box and interrupt an earlier target on reversal.
  */
 export function useMotionHeight(target: number | null) {
   const reduced = useContext(ReduceMotion);
@@ -295,11 +320,16 @@ export function useMotionHeight(target: number | null) {
       value.setValue(target);
       return;
     }
+    if (target === previous.current) return;
     const opening = target > (previous.current ?? 0);
     previous.current = target;
+    const release = holdHeightMotion();
     const animation = timing(value, target, opening ? motionDuration.forward : motionDuration.reverse, false, opening ? enterEasing : exitEasing);
-    animation.start();
-    return () => animation.stop();
+    animation.start(() => release());
+    return () => {
+      animation.stop();
+      release();
+    };
   }, [value, target, reduced]);
   return value;
 }

@@ -1,3 +1,5 @@
+import type { BoardOverview } from "../shared/overview";
+import { CardDetailProvider, detailQueryOptions, detailUnavailable, invalidateCardViews, useCardDetailQuery, useProjectIdeasQuery } from "./card-detail-query";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Animated, Platform, Pressable, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
@@ -49,6 +51,7 @@ import { StatusIcon, priorityLabels } from "./status";
 import { AttentionButton } from "./attention-button";
 import {
   allAttentionFromSources,
+  attentionItemsWithFacts,
   attentionOpenToken,
   lastSessionSettings,
   type AttentionItem,
@@ -63,7 +66,8 @@ import { waitingOn } from "../shared/links";
 import { LinkPicker } from "./task-links";
 import { TaskDrawer } from "./drawer";
 import { DeleteTaskDialog } from "./task-delete";
-import { useBoardQuery, useLiveAgents, useMemoryCountsQuery, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
+import { useBoardQuery, useOverviewQuery, useFreshBoard, useLiveAgents, useMemoryCountsQuery, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
+import { overviewKey, preferOverviewMetadata, projectOpenIdeaCount } from "./overview-query";
 import { useStableCallback, useStableTheme } from "./stable";
 import { isLegacyScope } from "../shared/scope";
 import { LaneList } from "./lane-list";
@@ -87,14 +91,15 @@ import { statusChanges } from "./changes";
 import { Popover, type PopoverPlace } from "./popover";
 import { ContextMenuProvider, eventPoint, menuHandlers, suppressNativeMenu, useMenuOpener, type MenuEntry } from "./context-menu";
 import { DesktopColumns, OlderToggle, type Placement } from "./columns";
-import { olderFinished } from "./finished-cards";
+import { olderFinished, olderFinishedFromDates } from "./finished-cards";
 import { ResizeGrip } from "./resize";
 import { drawerWidth, isCompactLayout } from "./geometry";
 import { useSessionReads } from "./session-reads";
-import { sessionAttentionSummary } from "../shared/session-attention";
+import { sessionAttentionSummary, sessionAttentionSummaryFromTurns } from "../shared/session-attention";
 import { MotionProvider, MotionReveal, useMotionPresence, lerp } from "./motion";
 import { SortableList } from "./sortable-list";
 import { useBoardView } from "./board-view";
+import { BoardOutputActive, boardIsActive } from "./query-activity";
 import { OverviewBar } from "./overview-bar";
 import { InsightsPage } from "./insights";
 import { IdeasPage } from "./ideas-page";
@@ -109,7 +114,7 @@ import { projectTagStats, tagPrefixes, taskMatchesSearch, taskMatchesTagFilter }
 import {
   parseIdeaLink,
   parseSessionLink,
-  resolveSessionLink,
+  resolveSessionLink, resolveCardDetailLink,
   sessionLinkKey,
   type SessionEntry,
 } from "./session-link";
@@ -188,16 +193,17 @@ export function BoardScreen(props: PluginSurfaceProps & { workspaceId?: string; 
 }
 
 function BoardSurface(props: PluginSurfaceProps & { workspaceId?: string; params?: PluginScreenParams }) {
-  // Tablets get anchored menus with the desktop board; phones keep the bottom sheet.
+  // Wide surfaces get anchored menus; compact surfaces keep the bottom sheet.
   const windowWidth = useWindowDimensions().width;
+  const [surfaceWidth, setSurfaceWidth] = useState(0);
   // The host may hand over a new theme object on unrelated renders; a new
   // context value would re-render every themed component (PERFORMANCE-SPEC §3).
   const theme = useStableTheme(props.theme);
   return (
     <MotionProvider>
       <Theme.Provider value={theme}>
-        <ContextMenuProvider compact={isCompactLayout(props.layout.compact, props.layout.platform, windowWidth)}>
-          <BoardContent {...props} theme={theme} />
+        <ContextMenuProvider compact={isCompactLayout(surfaceWidth || windowWidth)}>
+          <BoardContent {...props} theme={theme} surfaceWidth={surfaceWidth} onSurfaceWidth={setSurfaceWidth} />
         </ContextMenuProvider>
       </Theme.Provider>
     </MotionProvider>
@@ -208,18 +214,24 @@ function BoardContent(
   props: PluginSurfaceProps & {
     workspaceId?: string;
     params?: PluginScreenParams;
+    surfaceWidth: number;
+    onSurfaceWidth: (width: number) => void;
   },
 ) {
   usePerfRender("board.render");
   const toast = useToast();
-  const read = useRpc(rpc.readBoard),
-    updateProject = useRpc(rpc.updateProject),
+  const routeWidth = useWindowDimensions().width;
+  const { surfaceWidth, onSurfaceWidth: setSurfaceWidth } = props;
+  const readFreshBoard = useFreshBoard();
+  const readCard = useRpc(rpc.readCardDetailChanged);
+  const updateProject = useRpc(rpc.updateProject),
     updateTask = useRpc(rpc.updateTask),
     reorder = useRpc(rpc.moveTask),
     placeTask = useRpc(rpc.placeTask),
     paseo = usePaseo();
   const queryClient = useQueryClient();
   const linkMount = useId();
+  const [detailTarget, setDetailTarget] = useState<{ id: string; workspaceId: string; projectId: string } | null>(null);
   const input = useMemo(() => {
     try {
       return { link: parseSessionLink(props.params), error: "" };
@@ -235,9 +247,12 @@ function BoardContent(
   const linkKey = input.link
     ? JSON.stringify([props.host.id, sessionLinkKey(input.link)])
     : "";
-  const resolvedLink = useQuery({
+  const directCard = isCompactLayout(surfaceWidth || routeWidth) && !!input.link;
+  const resolvedLink = useQuery<Awaited<ReturnType<typeof resolveSessionLink>> | Awaited<ReturnType<typeof resolveCardDetailLink>>>({
     queryKey: ["flowly", "cardLink", linkMount, linkKey],
-    queryFn: () => resolveSessionLink(paseo, () => read({}), input.link!),
+    queryFn: () => directCard
+      ? resolveCardDetailLink(paseo, () => queryClient.fetchQuery(detailQueryOptions(queryClient, props.host.id, input.link!.taskId, input.link!.workspaceId, readCard)), input.link!)
+      : resolveSessionLink(paseo, readFreshBoard, input.link!),
     enabled: !!input.link,
     gcTime: 0,
     staleTime: Infinity,
@@ -245,7 +260,7 @@ function BoardContent(
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const appliedLink = useRef("");
+  const appliedLink = useRef(""), ignoredLink = useRef("");
   // "Start a new task" from the native Ideas chip (NATIVE-SESSION-SPEC §7.3), applied once per request.
   const ideaInput = useMemo(() => {
     try {
@@ -260,11 +275,6 @@ function BoardContent(
   const [sessionEntry, setSessionEntry] = useState<
     (SessionEntry & { taskId: string }) | null
   >(null);
-  const { query: readState, receipts } = useSessionReads();
-  // Unchanged reads are a tiny etag round trip; agents stream (PERFORMANCE-SPEC §3).
-  const data = useBoardQuery({ refetchInterval: 3000 });
-  const resources = useResourcesQuery({ refetchInterval: 15000 });
-  const agents = useLiveAgents();
   const view = useBoardView();
   // Moving a card into Done/Cancelled asks whether to wrap it up, unless the
   // daemon does it automatically (Auto wrap up setting).
@@ -292,7 +302,7 @@ function BoardContent(
     setWrapPrompt(id);
   };
   const [projectId, setProject] = useState(""),
-    [taskId, setTask] = useState(""),
+    [taskId, setTaskState] = useState(""),
     [search, setSearchState] = useState(""),
     [priority, setPriorityState] = useState("all"),
     [taskType, setTaskTypeState] = useState("all"),
@@ -321,13 +331,18 @@ function BoardContent(
     [removing, setRemoving] = useState<Project | null>(null),
     [deleting, setDeleting] = useState<Task | null>(null),
     [linking, setLinking] = useState<Task | null>(null),
-    [taskForm, setTaskForm] = useState<{ task?: Task; status: Status; seed?: TaskSeed } | null>(
+    [taskForm, setTaskFormState] = useState<{ task?: Task; status: Status; seed?: TaskSeed } | null>(
       null,
     ),
     [error, setError] = useState(""),
     [pending, setPending] = useState(false),
-    [surfaceWidth, setSurfaceWidth] = useState(0),
     [preferredWidth, setPreferredWidth] = useState(440);
+  // Manual navigation supersedes the current link; its late success/error may only cache data.
+  const setTask = (id: string) => { ignoredLink.current = linkKey; setTaskState(id); };
+  const setTaskForm = useStableCallback((next: typeof taskForm) => {
+    if (next) perfMark("task-form.open");
+    setTaskFormState(next);
+  });
   const mutationLock = useRef(false);
   // Filters are remembered (board-view settings): restored once, then written through.
   const filtersRestored = useRef(false);
@@ -374,11 +389,19 @@ function BoardContent(
     });
   };
   useEffect(() => {
+    ignoredLink.current = "";
     setSessionEntry(null);
     setMenu(null);
     setActionTask(null);
-    if (input.error || resolvedLink.error) setTask("");
-  }, [linkKey, input.error, resolvedLink.error]);
+    setTaskState("");
+  }, [linkKey, input.error]);
+  useEffect(() => {
+    if (!resolvedLink.error || ignoredLink.current === linkKey) return;
+    setSessionEntry(null);
+    setMenu(null);
+    setActionTask(null);
+    setTaskState("");
+  }, [linkKey, resolvedLink.error]);
   const attentionToken = attentionOpenToken(props.params);
 
   useEffect(() => {
@@ -392,66 +415,87 @@ function BoardContent(
       !target ||
       !input.link ||
       sessionLinkKey(target.link) !== sessionLinkKey(input.link) ||
+      ignoredLink.current === linkKey || resolvedLink.isFetching ||
       appliedLink.current === linkKey
     )
       return;
-    let cancelled = false;
-    void (async () => {
-      await queryClient.cancelQueries({
-        queryKey: ["flowly", "board"],
-        exact: true,
-      });
-      if (cancelled) return;
-      appliedLink.current = linkKey;
-      queryClient.setQueryData(["flowly", "board"], target.board);
-      setProject(target.project.id);
-      setTask(target.task.id);
-      setSearch("");
-      setPriority("all");
-      setTaskType("all");
-      setTagFilter([]);
-      setArchived(
-        (current) =>
-          current || !!target.project.archivedAt || !!target.task.archivedAt,
-      );
-      setMobileStatus(target.task.status);
-      setError("");
-      // The chip opens the card's overview, not the session it was tapped in:
-      // an empty session entry returns an already open card to its details.
-      setSessionEntry({
-        taskId: target.task.id,
-        sessionId: "",
-        requestId: target.link.requestId,
-      });
-    })().catch((error) => {
-      if (!cancelled) {
-        setTask("");
-        setError(message(error));
-      }
+    // Native opens from a scoped view; desktop uses the shared fresh query.
+    // Neither path replaces the complete board cache or its etag.
+    appliedLink.current = linkKey;
+    // Native detail is complete for this card; no background full-board catch-up.
+    setProject(target.project.id);
+    setTaskState(target.task.id);
+    setSearch("");
+    setPriority("all");
+    setTaskType("all");
+    setTagFilter([]);
+    setArchived(
+      (current) =>
+        current || !!target.project.archivedAt || !!target.task.archivedAt,
+    );
+    setMobileStatus(target.task.status);
+    setError("");
+    // The chip opens the card's overview, not the session it was tapped in:
+    // an empty session entry returns an already open card to its details.
+    setSessionEntry({
+      taskId: target.task.id,
+      sessionId: "",
+      requestId: target.link.requestId,
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [resolvedLink.data, linkKey, queryClient]);
+  }, [resolvedLink.data, resolvedLink.dataUpdatedAt, resolvedLink.isFetching, linkKey]);
   const { colors } = props.theme;
-  const compact = isCompactLayout(
-    props.layout.compact,
-    props.layout.platform,
-    surfaceWidth,
-  );
+  const compact = isCompactLayout(surfaceWidth || routeWidth);
+  // Keep the compact tree/scroll position, but leave hidden work to the visible detail/page.
+  const boardActive = boardIsActive(compact, taskId, page, !!taskForm);
+  // Stage 1: only an explicitly opened full-data feature may start this query.
+  const fullFeature = !!(taskForm || projectForm || removing || deleting || wrapPrompt ||
+    (ideaInput.link && appliedIdea.current !== ideaInput.link.requestId) || props.workspaceId);
+  const fullData = useBoardQuery({
+    refetchInterval: compact ? (fullFeature && !taskId ? 3000 : undefined) : boardActive ? 3000 : undefined,
+    enabled: compact ? fullFeature : boardActive && (!directCard || resolvedLink.isSuccess || ignoredLink.current === linkKey),
+  });
+  const overviewData = useOverviewQuery(props.host.id, {
+    enabled: compact && !taskId && !fullFeature && (!directCard || resolvedLink.isSuccess || ignoredLink.current === linkKey),
+    refetchInterval: compact && !taskId && !fullFeature ? 3000 : undefined,
+  });
+  const data = compact ? overviewData : fullData;
+  // Prioritize compact first-screen data over auxiliary decode/render work.
+  // This is scheduling only; imperative fresh ownership reads remain independent.
+  const auxiliaryActive = boardActive && (!compact || !!data.data);
+  const { query: readState, receipts } = useSessionReads(auxiliaryActive);
+  const resources = useResourcesQuery({ refetchInterval: 15000, enabled: auxiliaryActive });
+  const agents = useLiveAgents({ enabled: auxiliaryActive });
   const width = drawerWidth(preferredWidth, surfaceWidth || 1000);
   // While the drawer is being dragged the board keeps one width, the widest it can have (the
   // drawer overlays it), so columns neither reflow nor leave a blank gap when the drawer narrows.
   const [resizing, setResizing] = useState(false);
   const resizingFrom = resizing ? Math.max(0, surfaceWidth - 340 - 8 - 16) || null : null;
-  const board = data.data;
+  // Match the current route and open drawer before exposing any scoped data.
+  // Back drops it; a newer full-board deletion must never resurrect the card.
+  const directDetail = directCard && input.link && !input.error && !resolvedLink.error &&
+    resolvedLink.data && sessionLinkKey(resolvedLink.data.link) === sessionLinkKey(input.link) &&
+    taskId === resolvedLink.data.task.id ? resolvedLink.data.detail : undefined;
+  const detailTask = overviewData.data?.tasks.find(t => t.id === taskId) ?? (detailTarget?.id === taskId ? detailTarget : undefined) ?? directDetail?.task;
+  const detailData = useCardDetailQuery(props.host.id, taskId, detailTask?.workspaceId || "", compact && !!taskId);
+  const currentDetail = detailUnavailable(detailData.error) ? undefined : detailData.data ?? directDetail;
+  const fullBoard = fullData.data;
+  // Cold direct links can display their own metadata without fabricating a complete Board/overview.
+  const detailMetadata = currentDetail ? { revision: currentDetail.revision, tasks: [currentDetail.task], projects: [currentDetail.project], links: currentDetail.links, attentionDismissals: currentDetail.attentionDismissal ? [currentDetail.attentionDismissal] : [] } : undefined;
+  const board = compact ? preferOverviewMetadata(overviewData.data, fullBoard) ?? detailMetadata : fullBoard;
+  const projected = board && "cards" in board ? board as BoardOverview : undefined;
+  const complete = board === fullBoard ? fullBoard : undefined;
+  const events = complete?.events || noEvents;
+  const factsByTask = useMemo(() => new Map((projected?.cards || []).map(c => [c.taskId, c])), [projected?.cards]);
+  const sessionFacts = useMemo(() => new Map((projected?.cards || []).map(c => [c.taskId, new Map(c.sessions.map(s => [s.agentId, s]))])), [projected?.cards]);
+  const boardPending = !board && (compact && fullFeature ? fullData.isPending : data.isPending);
+  const boardError = data.error || (fullFeature ? fullData.error : null) || (taskId ? detailData.error : null);
   const linked = props.workspaceId
     ? board?.tasks.find((t) => t.workspaceId === props.workspaceId)
     : undefined;
   useEffect(() => {
     if (linked) {
       setProject(linked.projectId);
-      setTask(linked.id);
+      setTaskState(linked.id);
     }
   }, [linked?.id]);
   // A dropped project shows in place until the refreshed board agrees.
@@ -489,11 +533,11 @@ function BoardContent(
   const project = pickProject(projects, projectId, lastViewedProject());
   // Returning to the board in this app run reopens the project viewed last; a cold start opens the first.
   useEffect(() => rememberViewedProject(project?.id), [project?.id]);
-  const chooseProject = (id: string) => setProject(id);
+  const chooseProject = (id: string) => { ignoredLink.current = linkKey; setProject(id); };
   useEffect(() => {
     setActionTask(null);
   }, [project?.id]);
-  const task = board?.tasks.find(
+  const task = currentDetail?.task.id === taskId && currentDetail.task.projectId === project?.id ? currentDetail.task : board?.tasks.find(
     (t) => t.id === taskId && t.projectId === project?.id,
   );
   // Phone with a card open: the board stays mounted and laid out under the
@@ -505,9 +549,10 @@ function BoardContent(
     accessibilityElementsHidden: boardHidden,
     importantForAccessibility: boardHidden ? ("no-hide-descendants" as const) : ("auto" as const),
   };
-  const drawerTarget = useMemo(() => task && project ? {
-    task, project, events: board?.events.filter((e) => e.taskId === task.id) || [],
-  } : undefined, [task, project, board?.events]);
+  const drawerTarget = useMemo(() => task && project && !detailUnavailable(detailData.error) ? {
+    task, project: currentDetail?.task.id === task.id ? currentDetail.project : project,
+    events: compact ? currentDetail?.events || noEvents : fullBoard?.events.filter((e) => e.taskId === task.id) || noEvents,
+  } : undefined, [task, project, compact, currentDetail, fullBoard?.events, detailData.error]);
   const drawer = useMotionPresence(drawerTarget, drawerTarget ? `${drawerTarget.project.id}|${drawerTarget.task.id}` : "");
   const tasks = (board?.tasks || []).filter(
     (t) => t.projectId === project?.id && (archived || !t.archivedAt),
@@ -542,7 +587,10 @@ function BoardContent(
   // record no turn events contribute the time they last went idle, remembered
   // across their next turn so the card holds its place while it runs.
   const settledAgents = useRef(new Map<string, { workspaceId: string; at: string }>());
-  const turnEnds = useMemo(() => latestTurnEnds(board?.events || []), [board?.events]);
+  const turnEnds = useMemo(() => projected ? {
+    byTask: new Map(projected.cards.flatMap(c => c.turnEndedAt ? [[c.taskId, c.turnEndedAt] as const] : [])),
+    agents: new Set(projected.cards.flatMap(c => c.sessions.filter(s => s.hadTurnEnd).map(s => s.agentId))),
+  } : latestTurnEnds(events), [projected?.cards, events]);
   const taskActivity = useMemo(() => {
     for (const a of agents.data || [])
       if (a.workspaceId && a.updatedAt && !turnEnds.agents.has(a.id) && a.status !== "running" && a.status !== "initializing")
@@ -557,14 +605,18 @@ function BoardContent(
   const hideFinishedDays = view.values?.hideFinishedAfterDays ?? 14;
   const older = useMemo(
     () =>
-      olderFinished(
+      projected ? olderFinishedFromDates(
+        (board?.tasks || []).filter(t => t.projectId === project?.id),
+        new Map(projected.cards.map(c => [c.taskId, c.finishedAt])),
+        hideFinishedDays, Date.now(), taskId,
+      ) : olderFinished(
         (board?.tasks || []).filter((t) => t.projectId === project?.id),
-        board?.events || [],
+        events,
         hideFinishedDays,
         Date.now(),
         taskId,
       ),
-    [board?.tasks, board?.events, project?.id, hideFinishedDays, taskId],
+    [board?.tasks, events, projected?.cards, project?.id, hideFinishedDays, taskId],
   );
   const [olderShown, setOlderShown] = useState<Status[]>([]);
   useEffect(() => setOlderShown([]), [project?.id]);
@@ -606,9 +658,10 @@ function BoardContent(
     [],
   );
   const managedRead = useRpc(rpc.managedSessions);
-  const summaries = useSummaries();
+  const summaries = useSummaries(auxiliaryActive);
   const managed = useQuery({
     queryKey: ["flowly", "managed"],
+    enabled: auxiliaryActive,
     queryFn: () => managedRead({}),
     refetchInterval: 10000,
   });
@@ -620,8 +673,10 @@ function BoardContent(
   // Dismissed cards stay out of every count until something new happens (ATTENTION-DISMISS-SPEC).
   const allAttention = useMemo(
     () =>
-      allAttentionFromSources({ board, agents: agents.data, receipts, readUnavailable }) || [],
-    [board, agents.data, receipts, readUnavailable],
+      projected
+        ? agents.data ? attentionItemsWithFacts(projected, agents.data, receipts, readUnavailable, (task, agentId) => sessionFacts.get(task.id)?.get(agentId)) : []
+        : allAttentionFromSources({ board: complete, agents: agents.data, receipts, readUnavailable }) || [],
+    [projected, complete, agents.data, receipts, readUnavailable, sessionFacts],
   );
   const attention = useMemo(() => allAttention.filter((i) => !i.dismissed), [allAttention]);
   const dismissedAttention = useMemo(() => allAttention.filter((i) => i.dismissed), [allAttention]);
@@ -706,7 +761,12 @@ function BoardContent(
     Number(taskType !== "all") +
     Number(tagFilter.length > 0);
   const refresh = () => {
-    void data.refetch();
+    if (compact && taskId && !fullFeature) {
+      void invalidateCardViews(queryClient);
+    } else if (compact && fullFeature) {
+      void fullData.refetch();
+      void queryClient.invalidateQueries({ queryKey: overviewKey(props.host.id), refetchType: "none" });
+    } else void data.refetch();
     void resources.refetch();
     void agents.refetch();
     void readState.refetch();
@@ -835,7 +895,7 @@ function BoardContent(
   // (each card used to filter every event and agent on every render).
   const cardIndex = useMemo(() => {
     const eventsByTask = new Map<string, BoardEvent[]>();
-    for (const e of board?.events || []) {
+    for (const e of events) {
       const list = eventsByTask.get(e.taskId);
       if (list) list.push(e);
       else eventsByTask.set(e.taskId, [e]);
@@ -849,23 +909,27 @@ function BoardContent(
     }
     const workspaceIds = new Set((resources.data?.workspaces || []).map((w) => w.id));
     return { eventsByTask, agentsByWorkspace, workspaceIds };
-  }, [board?.events, agents.data, resources.data]);
+  }, [events, agents.data, resources.data]);
   const openIdeaCount = useMemo(() => {
     const counts = new Map<string, number>();
-    if (ideasOn) for (const i of board?.ideas || []) if (i.status === "open") counts.set(i.taskId, (counts.get(i.taskId) || 0) + 1);
+    if (ideasOn) {
+      if (projected) for (const c of projected.cards) counts.set(c.taskId, c.openIdeas);
+      else for (const i of complete?.ideas || []) if (i.status === "open") counts.set(i.taskId, (counts.get(i.taskId) || 0) + 1);
+    }
     return counts;
-  }, [board?.ideas, ideasOn]);
+  }, [projected?.cards, complete?.ideas, ideasOn]);
   // Ticket, issue and PR keys per card for the card face (CONNECTORS-SPEC §2): the oldest first, then "+n"; pages are left out.
   const externalKeys = useMemo(() => {
+    if (projected) return new Map(projected.cards.flatMap(c => c.external ? [[c.taskId, c.external] as const] : []));
     const keys = new Map<string, { key: string; family: ReturnType<typeof familyOf> }[]>();
-    for (const a of board?.artifacts || []) {
+    for (const a of complete?.artifacts || []) {
       const key = a.external ? faceKey(a.external) : null;
       if (key) keys.set(a.taskId, [...(keys.get(a.taskId) || []), { key, family: familyOf(a.external!.provider) }]);
     }
     return new Map([...keys].map(([id, list]) => [id, { text: list.length > 1 ? `${list[0]!.key} +${list.length - 1}` : list[0]!.key, family: list[0]!.family }]));
-  }, [board?.artifacts]);
+  }, [projected?.cards, complete?.artifacts]);
   // Each card's workpad, for its checks signal (WORKPAD-SPEC §6.1).
-  const workpadIndex = useMemo(() => new Map((board?.workpads || []).map((w) => [w.taskId, w])), [board?.workpads]);
+  const workpadIndex = useMemo(() => new Map((complete?.workpads || []).map((w) => [w.taskId, w])), [complete?.workpads]);
   // Unresolved blockers per card, for the "Waiting on" signal (CARD-LINKS-SPEC §5.1).
   const waitingIndex = useMemo(() => {
     const index = new Map<string, { count: number; titles: string }>();
@@ -911,14 +975,15 @@ function BoardContent(
     }
     const link = ideaInput.link;
     if (!link || !board || appliedIdea.current === link.requestId) return;
-    const idea = board.ideas.find((i) => i.id === link.ideaId);
+    if (!fullBoard) return;
+    const idea = fullBoard.ideas.find((i) => i.id === link.ideaId);
     const card = idea && board.tasks.find((x) => x.id === idea.taskId);
     // Never another idea: a gone or closed one is an error on the board.
     if (!idea || idea.status !== "open" || !card) {
       if (ideaRetried.current !== link.requestId) {
         ideaRetried.current = link.requestId;
         // Found after the re-read: the new board runs this effect again. Still missing (or an unchanged board): say so.
-        void data.refetch().then((result) => {
+        void fullData.refetch().then((result) => {
           if (appliedIdea.current === link.requestId) return;
           if (result.data?.ideas.some((i) => i.id === link.ideaId && i.status === "open")) return;
           appliedIdea.current = link.requestId;
@@ -935,7 +1000,7 @@ function BoardContent(
     setPage(null);
     setProject(card.projectId);
     createFromIdea(idea);
-  }, [ideaInput, board]);
+  }, [ideaInput, board, fullBoard]);
   // WORKFLOW-INSIGHTS-SPEC §5.2: the new-task form, prefilled from a suggestion.
   const createFromFinding = useStableCallback((finding: Finding) =>
     setTaskForm({
@@ -968,12 +1033,17 @@ function BoardContent(
     }),
   );
   const linkFrom = useStableCallback((source: Task) => setLinking(source));
-  const openTaskById = useStableCallback((id: string) => setTask(id));
+  const openTaskById = useStableCallback((id: string) => {
+    const target = currentDetail?.relatedTasks.find(t => t.id === id) ?? board?.tasks.find(t => t.id === id);
+    if (target) { setDetailTarget(target); setProject(target.projectId); }
+    setTask(id);
+  });
   const togglePage = (next: "insights" | "ideas" | "memory") => {
+    ignoredLink.current = linkKey;
     setPage((current) => (current === next ? null : next));
   };
   const closePage = useStableCallback(() => setPage(null));
-  const openMemoryPage = useStableCallback(() => setPage("memory"));
+  const openMemoryPage = useStableCallback(() => { ignoredLink.current = linkKey; setPage("memory"); });
   // Turning Ideas off closes its page.
   useEffect(() => {
     if (!ideasOn) setPage((current) => (current === "ideas" ? null : current));
@@ -997,10 +1067,12 @@ function BoardContent(
     const list = (t && cardIndex.agentsByWorkspace.get(t.workspaceId)) || noAgents;
     return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
   });
-  const projectIdeaList = useMemo(() => (board?.ideas || []).filter((i) => i.projectId === project?.id), [board?.ideas, project?.id]);
-  const projectOpenIdeas = useMemo(() => projectIdeaList.filter((i) => i.status === "open").length, [projectIdeaList]);
+  const projectIdeasData = useProjectIdeasQuery(props.host.id, project?.id || "", compact && page === "ideas" && !taskId);
+  const projectIdeaList = useMemo(() => compact ? projectIdeasData.data?.ideas || [] : (fullBoard?.ideas || []).filter((i) => i.projectId === project?.id), [compact, projectIdeasData.data, fullBoard?.ideas, project?.id]);
+  const projectOpenIdeas = useMemo(() => projectOpenIdeaCount(projected || fullBoard, project?.id),
+    [projected?.cards, projected?.tasks, fullBoard?.ideas, project?.id]);
   // Project memory candidates waiting for review (PROJECT-MEMORY-SPEC §8.1); the chip hides when the project turned memory off.
-  const memoryCounts = useMemoryCountsQuery(!!project && features.memory);
+  const memoryCounts = useMemoryCountsQuery(boardActive && !!project && features.memory);
   const memoryOn = features.memory && !!project && project.memory !== false;
   const memoryCandidates = memoryOn ? (memoryCounts.data?.[project!.id] ?? 0) : null;
   const projectTasks = useMemo(() => (board?.tasks || []).filter((t) => t.projectId === project?.id), [board?.tasks, project?.id]);
@@ -1012,7 +1084,7 @@ function BoardContent(
     return list.some((a) => { const parent = parentOf(a); return !!parent && sessions.has(parent); });
   }, [projectTasks, agents.data]);
   // Only to announce connectors to users without a connection (tip "jira-connect").
-  const connections = useConnections();
+  const connections = useConnections(auxiliaryActive);
   const projectAttention = useMemo(() => attention.filter((i) => i.project.id === project?.id), [attention, project?.id]);
   // First-run guidance (ONBOARDING-SPEC): the welcome tour, empty-board hint and one-time tips.
   const onboarding = useOnboarding();
@@ -1020,7 +1092,7 @@ function BoardContent(
   const workflowPrefs = useSettings(workflowInsightsSettings);
   const workflowOn = workflowPrefs.status === "ready" && workflowSettingsValues(workflowPrefs.values).enabled;
   const workflowTipDue = !!project && workflowOn && !!onboarding.values && !onboarding.values.tipsSeen.includes("first-workflow-insight");
-  const workflowView = useWorkflowInsightsQuery(project?.id || "", workflowTipDue, false);
+  const workflowView = useWorkflowInsightsQuery(project?.id || "", boardActive && workflowTipDue, false);
   const inPanel = !!props.workspaceId;
   const dialogOpen = !!menu || !!projectForm || !!taskForm || !!removing || !!deleting || !!wrapPrompt || !!linking;
   const welcome = welcomeDecision({
@@ -1073,20 +1145,20 @@ function BoardContent(
           agentQuestion: projectAttention.some((i) => i.asks > 0),
           openIdea: ideasOn && projectOpenIdeas > 0,
           movedToFinished,
-          hasArtifact: !task && board.artifacts.some((a) => a.projectId === project.id),
+          hasArtifact: !task && (projected ? projectTasks.some(x => factsByTask.get(x.id)?.hasArtifacts) : !!complete?.artifacts.some(a => a.projectId === project.id)),
           hasAgentTag: !task && projectTasks.some((x) => !x.archivedAt && !!x.tags?.some((tag) => tag.by === "agent")),
-          nextMove: projectTasks.some((x) => !x.archivedAt && hasOpenNextMoves(cardIndex.eventsByTask.get(x.id) || noEvents)),
+          nextMove: projectTasks.some((x) => !x.archivedAt && (projected ? factsByTask.get(x.id)?.hasNextMoves : hasOpenNextMoves(cardIndex.eventsByTask.get(x.id) || noEvents))),
           olderHidden: older.size > 0 && !(olderShown.includes("done") && olderShown.includes("cancelled")),
-          hasTicket: !task && board.artifacts.some((a) => a.projectId === project.id && !!a.external),
+          hasTicket: !task && (projected ? projectTasks.some(x => factsByTask.get(x.id)?.hasExternal) : !!complete?.artifacts.some(a => a.projectId === project.id && !!a.external)),
           cardOpen: !!task,
           noConnection: !task && projectTasks.some((x) => !x.archivedAt) && connections.data?.connections.length === 0,
           projectTabs: !task && !compact && projects.length > 1,
-          hasWorkpad: !task && workpadEnabled(project) && board.workpads.some((w) => w.projectId === project.id),
+          hasWorkpad: !task && workpadEnabled(project) && (projected ? projectTasks.some(x => factsByTask.get(x.id)?.hasWorkpad) : !!complete?.workpads.some(w => w.projectId === project.id)),
           busyBoard: !task && projectTasks.filter((x) => !x.archivedAt).length >= 6,
           hasSubagent: projectHasSubagent,
           crowdedAttention: attention.length >= 3 && dismissedAttention.length === 0,
           cardWithSession: !!task && !!cardIndex.agentsByWorkspace.get(task.workspaceId)?.length,
-          fullSidebar: !!task && (board.artifacts.some((a) => a.taskId === task.id) || board.ideas.some((i) => i.taskId === task.id)),
+          fullSidebar: !!task && (compact ? !!currentDetail && (!!currentDetail.artifacts.length || !!currentDetail.ideas.length) : !!fullBoard && (fullBoard.artifacts.some((a) => a.taskId === task.id) || fullBoard.ideas.some((i) => i.taskId === task.id))),
           hasSummary: !task && !!summaries.data?.latest.some((e) => projectTasks.some((x) => x.id === e.taskId)),
           workflowSuggestion: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
           memoryCandidate: !task && !!memoryCandidates,
@@ -1132,30 +1204,31 @@ function BoardContent(
   // card of the lane in the same frame as its animation.
   const cardDerived = useMemo(
     () => new WeakMap<Task, Omit<LiveTaskCardProps, "selected" | "flash" | "drag" | "dragging" | "disabled" | "display" | "onOpen" | "onActions" | "menuFor">>(),
-    [cardIndex, receipts, summaryState, attentionByTask, managedIds, summaries.data, !!board, openIdeaCount, externalKeys, project, workpadIndex, waitingIndex],
+    [cardIndex, receipts, summaryState, attentionByTask, managedIds, summaries.data, !!board, openIdeaCount, externalKeys, project, workpadIndex, waitingIndex, factsByTask, sessionFacts],
   );
   const derivedFor = (t: Task) => {
     let derived = cardDerived.get(t);
     if (derived) return derived;
     const sessions = cardIndex.agentsByWorkspace.get(t.workspaceId) || noAgents;
     const events = cardIndex.eventsByTask.get(t.id) || noEvents;
+    const facts = factsByTask.get(t.id);
     derived = {
       task: t,
       legacy: !!project && isLegacyScope(t, project),
       available: cardIndex.workspaceIds.has(t.workspaceId),
-      wrapped: (t.status === "done" || t.status === "cancelled") && !!currentWrapup(events, t.id),
+      wrapped: (t.status === "done" || t.status === "cancelled") && (facts ? facts.wrapped : !!currentWrapup(events, t.id)),
       running: sessions.filter((a) => a.status === "running").length,
       sessions: sessions.length,
-      summary: sessionAttentionSummary(sessions, t, receipts, events),
+      summary: facts ? sessionAttentionSummaryFromTurns(sessions, t, receipts, sessionFacts.get(t.id)!) : sessionAttentionSummary(sessions, t, receipts, events),
       summaryState,
       attentionDismissed: !!attentionByTask.get(t.id)?.dismissed,
       outputSession: pickOutputSession(sessions, t.workspaceId, managedIds),
       progress: cardProgress(summaries.data, t.id),
-      questions: board ? cardQuestions(t, events).length : 0,
+      questions: facts ? facts.questions : board ? cardQuestions(t, events).length : 0,
       ideas: openIdeaCount.get(t.id) || 0,
       externalKey: externalKeys.get(t.id)?.text,
       externalFamily: externalKeys.get(t.id)?.family,
-      workpad: project && workpadEnabled(project) ? workpadSignal(t, workpadIndex.get(t.id), events) : null,
+      workpad: project && workpadEnabled(project) ? facts ? facts.workpad : workpadSignal(t, workpadIndex.get(t.id), events) : null,
       waiting: waitingIndex.get(t.id)?.count || 0,
       waitingTitles: waitingIndex.get(t.id)?.titles || "",
     };
@@ -1315,12 +1388,12 @@ function BoardContent(
   }, [shortcutsOn]);
 
   useEffect(() => {
-    if (data.isPending) return;
+    if (boardPending) return;
     const parsed = parseBoardIntent(props.params);
     if (!parsed || consumedIntents.has(parsed.key)) return;
     consumedIntents.add(parsed.key);
     runIntent(parsed.intent);
-  }, [props.params?.intent, props.params?.at, data.isPending]);
+  }, [props.params?.intent, props.params?.at, boardPending]);
   const attentionDetail = (item: AttentionItem) =>
     `${item.project.title} · ${laneName(item.project, item.task.status)} · ${[
       item.questions && tn(item.questions, "{n} question", "{n} questions"),
@@ -1384,13 +1457,21 @@ function BoardContent(
   );
   const attentionList = (
     <>
-      {readUnavailable && (
+      {readUnavailable && agents.data !== undefined && (
         <View style={{ paddingBottom: space[2] }}>
           <Notice tone="warning">
             {t("Read state is unavailable, so finished-but-unread sessions are not listed. Approvals and errors still are.")}</Notice>
         </View>
       )}
-      <AttentionRows
+      {!board ? (
+        <View style={{ paddingVertical: space[6], alignItems: "center" }}>
+          {boardError ? <Notice>{message(boardError)}</Notice> : <Label muted>{t("Loading board…")}</Label>}
+        </View>
+      ) : agents.data === undefined ? (
+        <View style={{ paddingVertical: space[6], alignItems: "center" }}>
+          <Label muted>{agents.isError ? t("Session state unavailable") : t("Loading sessions…")}</Label>
+        </View>
+      ) : <AttentionRows
         items={attention}
         render={attentionRow}
         empty={
@@ -1399,7 +1480,7 @@ function BoardContent(
             <Label muted>{dismissedAttention.length ? t("Nothing new needs your attention.") : t("Nothing needs your attention.")}</Label>
           </View>
         }
-      />
+      />}
       {!!dismissedCount && (
         <View style={{ paddingTop: space[2], borderTopWidth: 1, borderTopColor: colors.border, marginTop: space[2] }}>
           <Row
@@ -1445,6 +1526,7 @@ function BoardContent(
           }
         />
       )}
+      <CardDetailProvider hostId={props.host.id} task={drawer.item.task} native={compact} active={drawer.active} initialRead={false} fullBoard={fullBoard}>
       <TaskDrawer
         key={drawer.item.task.id}
         active={drawer.active}
@@ -1484,9 +1566,11 @@ function BoardContent(
         sectionOrder={(view.values?.drawerOrder || []).join(",")}
         sectionOpen={JSON.stringify(view.values?.drawerOpen || {})}
       />
+      </CardDetailProvider>
     </Animated.View>
   );
   return (
+    <BoardOutputActive.Provider value={boardActive}>
     <SettingsOpenerContext.Provider value={openSettingsAt}>
     <Theme.Provider value={props.theme}>
       <View
@@ -1650,9 +1734,9 @@ function BoardContent(
             onDismiss={() => dismissTip(tip)}
           />
         )}
-        {(data.error || error) && (
+        {(boardError || error) && (
           <View style={{ paddingHorizontal: space[3], paddingTop: space[3], gap: space[2] }}>
-            <Notice>{error || message(data.error)}</Notice>
+            <Notice>{error || message(boardError)}</Notice>
             <View style={{ flexDirection: "row" }}>
               <Button
                 quiet
@@ -1666,23 +1750,23 @@ function BoardContent(
             </View>
           </View>
         )}
-        {!!input.link && resolvedLink.isPending && (
+        {!!input.link && resolvedLink.isPending && ignoredLink.current !== linkKey && (
           <View style={{ paddingHorizontal: space[4], paddingTop: space[3] }}>
             <Label muted>{t("Opening linked card…")}</Label>
           </View>
         )}
-        {!!(input.error || resolvedLink.error) && (
+        {!!(input.error || (ignoredLink.current !== linkKey && resolvedLink.error)) && (
           <View style={{ paddingHorizontal: space[3], paddingTop: space[3], gap: space[2] }}>
             <Notice>{input.error || message(resolvedLink.error)}</Notice>
             {!input.error && (
               <View style={{ flexDirection: "row" }}>
-                <Button quiet icon="RefreshCw" onPress={() => void resolvedLink.refetch()}>
+                <Button quiet icon="RefreshCw" onPress={() => { ignoredLink.current = ""; appliedLink.current = ""; setTaskState(""); void resolvedLink.refetch(); }}>
                   {t("Retry linked card")}</Button>
               </View>
             )}
           </View>
         )}
-        {data.isPending ? (
+        {boardPending ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <Label muted>{t("Loading board…")}</Label>
           </View>
@@ -1719,11 +1803,13 @@ function BoardContent(
                     : { width: resizingFrom, flexGrow: 0, flexShrink: 0, minHeight: 0, overflow: "hidden" }
                 }
               >
-                {page === "insights" && board ? (
+                {page === "ideas" && compact && (!projectIdeasData.data || projectIdeasData.error) ? (
+                  <View style={{ padding: space[4] }}>{projectIdeasData.error ? <><Notice>{message(projectIdeasData.error)}</Notice><Button quiet onPress={() => void projectIdeasData.refetch()}>{t("Retry")}</Button></> : <Label muted>{t("Loading cards…")}</Label>}</View>
+                ) : page === "insights" && board ? (
                   <InsightsPage
+                    attention={projectAttention}
                     project={project}
                     tasks={projectTasks}
-                    attention={projectAttention}
                     revision={board.revision}
                     compact={compact}
                     active={!(compact && drawer.active)}
@@ -2274,12 +2360,14 @@ function BoardContent(
           />
         )}
         {linking && project && (
+          <CardDetailProvider hostId={props.host.id} task={linking} native={compact} active fullBoard={fullBoard}>
           <LinkPicker
             key={linking.id}
             task={linking}
             project={project}
             onClose={() => setLinking(null)}
           />
+          </CardDetailProvider>
         )}
         {compact && drawerView}
         {!(compact && task) && (
@@ -2353,6 +2441,7 @@ function BoardContent(
       </View>
     </Theme.Provider>
     </SettingsOpenerContext.Provider>
+    </BoardOutputActive.Provider>
   );
 }
 

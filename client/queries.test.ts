@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import type { PaseoAgent, PaseoAgentUpdate } from "@getpaseo/client";
 import { applyAgentUpdates, applyBoardPatch, createChangedReader, readBoardDelta } from "./queries";
 import { BoardDeltas } from "../server/board-delta";
@@ -166,4 +166,27 @@ test("a patch without a cached board is re-read in full", async () => {
   const read = vi.fn().mockResolvedValueOnce({ etag: "e", patch: { revision: 1, events: [] } }).mockResolvedValueOnce(full);
   expect(await readBoardDelta(read as never, undefined, "e0")).toBe(full);
   expect(read).toHaveBeenLastCalledWith({});
+});
+
+const scopedBoard = (revision: number, tasks: { id: string }[] = [{ id: "target" }]) =>
+  ({ revision, tasks } as unknown as Parameters<typeof applyBoardPatch>[0]);
+
+test("a silent poll observer still fetches and updates an independently observed board", async () => {
+  const client = new QueryClient();
+  const queryKey = ["silent-board-poll"];
+  client.setQueryData(queryKey, scopedBoard(1));
+  const read = vi.fn(async () => scopedBoard(2, []));
+  const options = { queryKey, queryFn: read, enabled: false };
+  const root = new QueryObserver(client, options);
+  void root.trackResult(root.getCurrentResult()).data;
+  const polling = new QueryObserver(client, { ...options, notifyOnChangeProps: [] });
+  const rootChanged = vi.fn(), pollChanged = vi.fn();
+  const stopRoot = root.subscribe(rootChanged), stopPoll = polling.subscribe(pollChanged);
+  try {
+    await polling.refetch();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(pollChanged).not.toHaveBeenCalled();
+    expect(rootChanged).toHaveBeenCalledTimes(1);
+    expect(root.getCurrentResult().data?.tasks).toEqual([]);
+  } finally { stopRoot(); stopPoll(); client.clear(); }
 });

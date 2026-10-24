@@ -1,11 +1,13 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
 import type { PaseoAgent, PaseoApi, PaseoAgentUpdate } from "@getpaseo/client";
 import * as rpc from "../shared/rpc";
 import { isSummarizer } from "../shared/summary";
 import { listAgents } from "./resources";
-import { readBoardDelta, type Board } from "./board-read";
+import { readBoardDelta, type Board, type BoardRead } from "./board-read";
+import type { BoardOverview } from "../shared/overview";
+import { overviewKey, readOverviewDelta, type OverviewRead } from "./overview-query";
 
 /**
  * Shared query definitions (PERFORMANCE-SPEC §3). Every reader of a key uses the
@@ -66,14 +68,44 @@ export const activityKey = ["flowly", "activity"] as const;
 
 export { applyBoardPatch, readBoardDelta, type BoardPatch } from "./board-read";
 
-export function useBoardQuery(options: { refetchInterval?: number; retry?: number; enabled?: boolean } = {}) {
+/** One fresh reader for the board and chip navigation; fetchQuery joins an in-flight poll. */
+export function boardQueryOptions(client: QueryClient, read: BoardRead) {
+  return {
+    queryKey: boardKey,
+    queryFn: () => readChanged(client, boardKey, (etag, why) => readBoardDelta(read, client.getQueryData<Board>(boardKey), etag, why)),
+    staleTime: 0,
+  };
+}
+
+/** A cached board alone never authorizes a chip link. Always read, or join a current read. */
+export function useFreshBoard() {
+  const read = useRpc(rpc.readBoardChanged);
+  const client = useQueryClient();
+  return useCallback(() => client.fetchQuery({ ...boardQueryOptions(client, read), retry: false }), [client, read]);
+}
+
+export function useBoardQuery(options: { refetchInterval?: number; retry?: number; enabled?: boolean; notifyOnChangeProps?: UseQueryOptions<Board>["notifyOnChangeProps"] } = {}) {
   const read = useRpc(rpc.readBoardChanged);
   const client = useQueryClient();
   return useQuery({
-    queryKey: boardKey,
-    queryFn: () => readChanged(client, boardKey, (etag, why) => readBoardDelta(read, client.getQueryData<Board>(boardKey), etag, why)),
+    ...boardQueryOptions(client, read),
     ...options,
   });
+}
+
+export function overviewQueryOptions(client: QueryClient, hostId: string, read: OverviewRead) {
+  const key = overviewKey(hostId);
+  return {
+    queryKey: key,
+    queryFn: () => readChanged(client, key, etag => readOverviewDelta(read, client.getQueryData<BoardOverview>(key), etag)),
+    staleTime: 0,
+  };
+}
+
+export function useOverviewQuery(hostId: string, options: { enabled: boolean; refetchInterval?: number }) {
+  const read = useRpc(rpc.readOverviewChanged);
+  const client = useQueryClient();
+  return useQuery({ ...overviewQueryOptions(client, hostId, read), ...options });
 }
 
 export function useResourcesQuery(options: { refetchInterval?: number; enabled?: boolean } = {}) {
@@ -207,6 +239,7 @@ function openAgentStream(paseo: PaseoApi, client: QueryClient, onReady: () => vo
  */
 export function useLiveAgents<T = PaseoAgent[]>(
   options: {
+    enabled?: boolean;
     stream?: boolean;
     refetchInterval?: number;
     retry?: number;
@@ -224,6 +257,7 @@ export function useLiveAgents<T = PaseoAgent[]>(
   const query = useQuery<PaseoAgent[], Error, T>({
     queryKey: activityKey,
     queryFn: () => listAgents(paseo),
+    enabled: options.enabled,
     ...(options.select ? { select: options.select } : {}),
     refetchInterval: () =>
       options.poll === false
@@ -234,7 +268,7 @@ export function useLiveAgents<T = PaseoAgent[]>(
     ...(options.retry !== undefined ? { retry: options.retry } : {}),
   });
   useEffect(() => {
-    if (options.stream === false) return;
+    if (options.stream === false || options.enabled === false) return;
     let stream = streams.get(paseo);
     if (!stream) {
       stream = openAgentStream(paseo, client, () => void client.invalidateQueries({ queryKey: activityKey }));
@@ -247,7 +281,7 @@ export function useLiveAgents<T = PaseoAgent[]>(
       stream!.stop();
       if (streams.get(paseo) === stream) streams.delete(paseo);
     };
-  }, [paseo, client, options.stream]);
+  }, [paseo, client, options.stream, options.enabled]);
   return query;
 }
 

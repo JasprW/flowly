@@ -1,8 +1,10 @@
+import { useCardDetailQuery, useTaskDetail } from "./card-detail-query";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isNoMoves, nextMovesAction } from "../shared/next-moves";
 import { workpadCheckedAction, workpadEnabled, workpadUpdatedAction } from "../shared/workpad";
 import type { PaseoAgent } from "@getpaseo/client";
 import { Pressable, View } from "react-native";
+import { drawerNeedsBoard } from "./query-activity";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import {
   usePaseo,
@@ -45,9 +47,9 @@ import { useSessionReads } from "./session-reads";
 import { sessionAttention } from "../shared/session-attention";
 import type { SessionEntry } from "./session-link";
 import { Enter, MotionReveal, useSettled } from "./motion";
-import { perfLap } from "./perf";
+import { perfLap, perfStart, perfEnd, usePerfRender } from "./perf";
 import { TaskMetadata } from "./task-metadata";
-import { Chevron, Collapse, Disclosure, Section, type SectionState } from "./disclosure";
+import { Chevron, Collapse, Disclosure, Section, useSectionStates } from "./disclosure";
 import { WrapupModal } from "./wrapup";
 import { currentWrapup } from "../shared/wrapup-state";
 import { useComposer } from "./composer";
@@ -153,6 +155,8 @@ function TaskDrawerView({
   /** The stored open/closed choices as JSON, compared by value (DRAWER-SPEC, Section order). */
   sectionOpen?: string;
 }) {
+  usePerfRender("switch.drawer.commit");
+  const switchStart = perfStart();
   const toast = useToast();
   const theme = useTheme();
   const { colors } = theme;
@@ -177,6 +181,12 @@ function TaskDrawerView({
     [pendingSessions, setPendingSessions] = useState<Record<string, boolean>>(
       {},
     );
+  // The retained compact root is paused; visible card props still need remote edits/deletions.
+  const pollBoard = drawerNeedsBoard(compact, active, selected);
+  // Only keep the shared poll alive. The root/data readers deliver changed props;
+  // fetching flags must not re-render this entire retained detail tree.
+  const detailState = useTaskDetail();
+  useCardDetailQuery(hostId, task.id, task.workspaceId, detailState.native && pollBoard, pollBoard ? 3000 : undefined, true);
   const lock = useRef(false);
   const order = useMemo(() => drawerSectionOrder(sectionOrder ? sectionOrder.split(",") : []), [sectionOrder]);
   // Which sections are open: the user's defaults each time the sidebar opens, then their own toggles.
@@ -186,11 +196,7 @@ function TaskDrawerView({
   useEffect(() => {
     if (active) setOpened(openDefaults);
   }, [active, openDefaults]);
-  const sectionStates = useMemo(() => {
-    const states = {} as Record<AnyDrawerSection, SectionState>;
-    for (const id of Object.keys(opened) as AnyDrawerSection[]) states[id] = sectionStateOf(id, opened[id], setOpened);
-    return states;
-  }, [opened]);
+  const sectionStates = useSectionStates(opened, setOpened);
   // Heavy sections and their reads start once the open transition is over.
   const settled = useSettled(task.id);
   const ready = active && settled;
@@ -788,6 +794,7 @@ function TaskDrawerView({
         );
     }
   };
+  perfEnd("switch.drawer.own", switchStart);
   return (
     <View
       style={{
@@ -868,6 +875,8 @@ function TaskDrawerView({
           <Divider />
           <ScrollView
             {...verticalScroll}
+            // Avoid recording offscreen section views on compact surfaces.
+            removeClippedSubviews={compact}
             style={{ flex: 1, minHeight: 0 }}
             nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
@@ -996,7 +1005,8 @@ function TaskDrawerView({
             {!!task.description && (
               <SessionMarkdown text={task.description} />
             )}
-            {order.map((id) => <Fragment key={id}>{section(id)}</Fragment>)}
+            {!!detailState.error && <Notice>{message(detailState.error)}</Notice>}
+            {!detailState.detail ? <Button quiet onPress={detailState.retry}>{detailState.error ? t("Retry") : t("Loading cards…")}</Button> : order.map((id) => <Fragment key={id}>{section(id)}</Fragment>)}
             {settled && (
             // Below the sessions, so mounting them after the transition moves nothing above.
             <Enter distance={4} style={{ gap: space[5] }}>
@@ -1162,11 +1172,6 @@ function SubagentToggle({ id, summary, open, onPress }: { id: string; summary: s
       <Chevron open={open} title={id} color={colors.foregroundMuted} size={14} />
     </Pressable>
   );
-}
-
-/** A section's open state and a toggle that only flips that section. */
-function sectionStateOf(id: AnyDrawerSection, open: boolean, set: (update: (current: Record<AnyDrawerSection, boolean>) => Record<AnyDrawerSection, boolean>) => void): SectionState {
-  return { open, onToggle: () => set((current) => ({ ...current, [id]: !current[id] })) };
 }
 
 function sameDrawerProps(a: TaskDrawerProps, b: TaskDrawerProps) {

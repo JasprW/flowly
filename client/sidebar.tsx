@@ -3,37 +3,22 @@ import { LocaleRoot } from "./i18n";
 import { useRpc, type PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
-import { readSessionReceipts } from "../shared/rpc";
-import { attentionBadgeText, attentionFromSources, attentionScreenParams } from "./attention";
-import { useBoardQuery, useLiveAgents } from "./queries";
+import { readAttentionCount } from "../shared/rpc";
+import { attentionBadgeText, attentionScreenParams } from "./attention";
 import { CountPill, Theme, noFocusRing } from "./ui";
 import { tn } from "../shared/i18n";
 
 /**
- * Restrained background refresh. The queries share the board's keys, so while
- * the board is open both read one cache (the board's faster interval wins).
+ * Restrained background refresh. Every surface reads the same lightweight count.
  */
 const SIDEBAR_POLL_MS = 15_000;
 
 /** Same sources and rule as the board Attention button; null while unavailable or failed. */
 function useAttentionCount() {
-  const reads = useRpc(readSessionReceipts);
-  const poll = { refetchInterval: SIDEBAR_POLL_MS, retry: 1 } as const;
-  // Unchanged boards cost an etag round trip; no live agent stream for a badge.
-  const board = useBoardQuery(poll);
-  const agents = useLiveAgents({ ...poll, stream: false });
-  const receipts = useQuery({
-    queryKey: ["flowly", "sessionReads"],
-    queryFn: () => reads({}),
-    ...poll,
-  });
-  const items = attentionFromSources({
-    board: board.isError ? null : board.data,
-    agents: agents.isError ? null : agents.data,
-    receipts: receipts.data?.receipts || [],
-    readUnavailable: receipts.isPending || receipts.isError,
-  });
-  return items ? items.length : null;
+  const count = useRpc(readAttentionCount);
+  const badge = useQuery({ queryKey: ["flowly", "attention-count"], queryFn: () => count({}),
+    refetchInterval: SIDEBAR_POLL_MS, retry: 1 });
+  return badge.isError ? null : badge.data?.count ?? null;
 }
 
 export function SidebarEntry(props: PluginSidebarItemProps) {

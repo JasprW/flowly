@@ -18,7 +18,7 @@ const patchKeys = {
 } as const;
 
 /** Replaced and added items, removed ids, and (only when it differs) the final order; unchanged items keep their objects. */
-function patchItems<T>(items: readonly T[], patch: { set: T[]; remove: string[]; order?: string[] } | undefined, key: (item: T) => string): readonly T[] {
+export function patchItems<T>(items: readonly T[], patch: { set: T[]; remove: string[]; order?: string[] } | undefined, key: (item: T) => string): readonly T[] {
   if (!patch) return items;
   const removed = new Set(patch.remove),
     replacement = new Map(patch.set.map((item) => [key(item), item] as const)),

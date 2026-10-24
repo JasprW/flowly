@@ -4,12 +4,12 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import type { Task } from "../shared/model";
-import { projectTagStats, tagValues } from "../shared/tags";
-import { boardKey, useBoardQuery } from "./queries";
+import { tagValues } from "../shared/tags";
+import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
 import { TagEditor } from "./tag-input";
 import { useStableCallback } from "./stable";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { Notice, message, space, touch, useTheme } from "./ui";
+import { Button, Label, Notice, message, space, touch, useTheme } from "./ui";
 import { t } from "../shared/i18n";
 
 /**
@@ -32,7 +32,7 @@ export const TaskTags = memo(function TaskTags({
 }) {
   const { colors } = useTheme();
   const queryClient = useQueryClient();
-  const board = useBoardQuery();
+  const { index, indexError, retryIndex } = useTaskDetail();
   const save = useRpc(rpc.updateTaskTags);
   const saved = useMemo(() => tagValues(task), [task.tags]);
   // Shown while a save is in flight; dropped when the board brings the saved tags.
@@ -45,8 +45,8 @@ export const TaskTags = memo(function TaskTags({
   const tags = shown ?? saved;
   const agentTags = useMemo(() => new Set((task.tags || []).filter((x) => x.by === "agent").map((x) => x.tag)), [task.tags]);
   const suggestions = useMemo(
-    () => projectTagStats(board.data?.tasks || [], task.projectId).map((x) => x.tag),
-    [board.data?.tasks, task.projectId],
+    () => (index?.tags || []).map((x) => x.tag),
+    [index?.tags],
   );
   const writable = !readOnly && !task.archivedAt;
   const change = useStableCallback(async (edit: { add?: string[]; remove?: string[] }, next: string[]) => {
@@ -61,7 +61,7 @@ export const TaskTags = memo(function TaskTags({
       setError(message(e));
     } finally {
       pendingSaves.current--;
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
       if (!pendingSaves.current) setShown(null);
     }
   });
@@ -89,6 +89,7 @@ export const TaskTags = memo(function TaskTags({
           />
         </View>
       </View>
+      {!!indexError ? <Button quiet onPress={retryIndex}>{t("Retry")}</Button> : !index && <Label muted>{t("Checking…")}</Label>}
       {!!error && <Notice>{error}</Notice>}
     </View>
   );

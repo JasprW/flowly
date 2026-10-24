@@ -1,3 +1,4 @@
+import { perfStart, perfEnd, usePerfRender } from "./perf";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { PaseoAgent } from "@getpaseo/client";
 import {
@@ -155,6 +156,8 @@ function SessionPreviewView({
   /** Move the card to Done (an action next move); the drawer owns revision and wrap-up. */
   onMoveToDone?(): void;
 }) {
+  usePerfRender("switch.preview.commit");
+  const switchStart = perfStart();
   const theme = useTheme(),
     { colors } = theme,
     paseo = usePaseo(),
@@ -836,6 +839,7 @@ function SessionPreviewView({
       notices.push({ key: "attention", tone: "info", text: t("This host did not provide a readable attention timestamp. Open in Paseo to acknowledge this session.") });
   } else if (error) notices.push({ key: "error", text: error });
 
+  perfEnd("switch.preview.own", switchStart);
   return (
     <View
       ref={keyboard.ref}

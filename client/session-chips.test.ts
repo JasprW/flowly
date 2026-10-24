@@ -536,3 +536,16 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     expect(chipState("a1")).toBeNull();
   });
 });
+
+
+test("native startup requests the private slim board, never the full board endpoint", async () => {
+  const x = fakeClient();
+  const stop = registerSessionChips(x.client as never, 5000, 0);
+  await vi.advanceTimersByTimeAsync(100);
+  const names = x.client.rpc.mock.calls.map(([definition]) => definition.name);
+  expect(names).toContain("sessions.chip-board-changed");
+  expect(names).not.toContain("board.read-changed");
+  expect(names).not.toContain("board.read");
+  expect(x.calls.pills).toBe(2);
+  stop();
+});

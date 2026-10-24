@@ -1,3 +1,4 @@
+import { usePerfRender } from "./perf";
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
@@ -23,6 +24,7 @@ import { eventPoint, useMenuOpener } from "./context-menu";
 import { Chevron, Collapse, Section } from "./disclosure";
 import { Modal } from "./modal";
 import { Enter } from "./motion";
+import { keepPageRows, usePageRows } from "./page-rows";
 import { memoryCountsKey, memoryKey, useMemoryQuery } from "./queries";
 import { IdeaRow, useExitList, useHeld } from "./task-ideas";
 import { Actions, AiMark, Button, Choices, CueRing, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
@@ -149,6 +151,7 @@ export const MemoryCard = memo(function MemoryCard({
   now,
   cueConfirm = false,
   onEdit,
+  onEditorOpen,
 }: {
   entry: MemoryEntry;
   /** The project's entries, for "Replaces" (§8.1). */
@@ -161,6 +164,8 @@ export const MemoryCard = memo(function MemoryCard({
   cueConfirm?: boolean;
   /** Edit was pressed on a candidate (the welcome tour stops its autoplay). */
   onEdit?(): void;
+  /** Keep this row mounted while background results are reordered. */
+  onEditorOpen?(): void;
 }) {
   const { colors } = useTheme();
   const openMenu = useMenuOpener();
@@ -202,7 +207,7 @@ export const MemoryCard = memo(function MemoryCard({
       ? t("Not used yet")
       : "";
   const menu = (): Parameters<NonNullable<typeof openMenu>>[2] => [
-    { id: "edit", label: t("Edit"), icon: "Pencil", onPress: () => setEditing(true) },
+    { id: "edit", label: t("Edit"), icon: "Pencil", onPress: () => { onEditorOpen?.(); setEditing(true); } },
     entry.pinned
       ? { id: "unpin", label: t("Unpin"), icon: "PinOff", onPress: () => void actions.pin(entry, false) }
       : { id: "pin", label: t("Pin: every new session sees it"), icon: "Pin", onPress: () => void actions.pin(entry, true) },
@@ -221,6 +226,7 @@ export const MemoryCard = memo(function MemoryCard({
         disabled={disabled || busy}
         onPress={() => {
           onEdit?.();
+          onEditorOpen?.();
           setEditing(true);
         }}
       >
@@ -241,7 +247,7 @@ export const MemoryCard = memo(function MemoryCard({
         <IconButton icon="Ellipsis" disabled={disabled || busy} label={t("Memory actions for {title}", { title: entry.title })} onPress={(event) => openMenu(eventPoint(event), entry.title, menu())} />
       ) : (
         <>
-          <Button small quiet icon="Pencil" disabled={disabled || busy} onPress={() => setEditing(true)}>{t("Edit")}</Button>
+          <Button small quiet icon="Pencil" disabled={disabled || busy} onPress={() => { onEditorOpen?.(); setEditing(true); }}>{t("Edit")}</Button>
           <Button small quiet icon="Archive" disabled={disabled || busy} onPress={() => void actions.archive(entry)}>{t("Archive")}</Button>
           <Button small quiet danger icon="Trash2" disabled={disabled || busy} onPress={() => setDeleting(true)}>{t("Delete…")}</Button>
         </>
@@ -465,6 +471,7 @@ export const MemoryPage = memo(function MemoryPage({
   onOpenTask(id: string): void;
   onBack(): void;
 }) {
+  usePerfRender("project.memory.render");
   const { colors } = useTheme();
   const query = useMemoryQuery(project.id, true);
   const view = query.data;
@@ -490,9 +497,18 @@ export const MemoryPage = memo(function MemoryPage({
     .filter((e) => (filter === "all" ? true : filter === "stale" ? isStale(e, now) : e.kind === filter))
     .filter((e) => !needle || `${e.title}\n${e.body}\n${e.tags.join(" ")}\n${e.keywords.join(" ")}`.toLowerCase().includes(needle))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.confirmedAt || b.createdAt).localeCompare(a.confirmedAt || a.createdAt));
+  const pending = candidates.filter((entry) => !actions.hidden.has(entry.id));
+  const closed = tab === "archived" ? archived : dismissed;
+  const pageRows = usePageRows(JSON.stringify([project.id, tab, filter, needle]), tab === "memory" ? pending.length + shown.length : closed.length, compact);
+  const [keptRows, setKeptRows] = useState<ReadonlySet<string>>(() => new Set());
+  const keepRow = (id: string) => setKeptRows((previous) => previous.has(id) ? previous : new Set([...previous, id]));
+  const pendingWindow = keepPageRows(pending, pageRows.limit, keptRows);
+  const activeWindow = keepPageRows(shown, Math.max(0, pageRows.limit - pending.length), keptRows);
+  const closedWindow = keepPageRows(closed, pageRows.limit, keptRows);
+  const remaining = tab === "memory" ? pending.length + shown.length - pendingWindow.length - activeWindow.length : closed.length - closedWindow.length;
   const source = (e: MemoryEntry) => (e.source.taskId ? <SourceLine task={cards.get(e.source.taskId)} nameOf={nameOf} onOpenTask={onOpenTask} /> : undefined);
   const card = (e: MemoryEntry, leaving: boolean) => (
-    <MemoryCard entry={e} entries={entries} actions={actions} disabled={disabled || leaving} source={source(e)} now={now} />
+    <MemoryCard entry={e} entries={entries} actions={actions} disabled={disabled || leaving} source={source(e)} now={now} onEditorOpen={() => keepRow(e.id)} />
   );
   // The title outlives the last card's exit, so keep its count until the card has gone.
   const reviewCount = useRef(0);
@@ -510,7 +526,7 @@ export const MemoryPage = memo(function MemoryPage({
         <View style={{ flex: 1 }} />
         <View style={{ width: compact ? 56 : 72 }} />
       </View>
-      <ScrollView {...verticalScroll} keyboardShouldPersistTaps="handled" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ ...verticalContent, padding: space[3], paddingBottom: space[6] * 2, alignItems: "center" }}>
+      <ScrollView {...verticalScroll} keyboardShouldPersistTaps="handled" onScroll={pageRows.onScroll} scrollEventThrottle={100} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ ...verticalContent, padding: space[3], paddingBottom: space[6] * 2, alignItems: "center" }}>
         <View style={{ width: "100%", maxWidth: 760, gap: space[3] }}>
           {query.error && <Notice>{message(query.error)}</Notice>}
           {view && !view.enabled && <Notice tone="info">{t("Project memory is off for this project. Turn it on in the project's settings; what is here is kept.")}</Notice>}
@@ -530,7 +546,7 @@ export const MemoryPage = memo(function MemoryPage({
           />
           {tab === "memory" ? (
             <>
-          <MemoryRows entries={candidates} actions={actions} render={card} before={<SectionTitle icon="Inbox" title={t("To review · {n}", { n: reviewCount.current })} ai />} />
+          <MemoryRows entries={pendingWindow} actions={actions} render={card} before={<SectionTitle icon="Inbox" title={t("To review · {n}", { n: reviewCount.current })} ai />} />
           <View style={{ gap: space[2] }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
               <SectionTitle icon="BookMarked" title={t("Memory · {n}", { n: active.length })} />
@@ -582,10 +598,10 @@ export const MemoryPage = memo(function MemoryPage({
                 {/* Typing in the search box starts a fresh list instead of collapsing every row that stops matching. */}
                 <MemoryRows
                   key={needle}
-                  entries={shown}
+                  entries={activeWindow}
                   actions={actions}
                   render={card}
-                  empty={
+                  empty={shown.length ? undefined :
                     <View style={{ alignItems: "center", gap: space[2], paddingVertical: space[6] }}>
                       <Icon name="BookMarked" size={22} color={colors.foregroundMuted} />
                       <Label muted size={font.md}>
@@ -604,7 +620,7 @@ export const MemoryPage = memo(function MemoryPage({
             <Enter key={tab} distance={0}>
               <View>
                 <MemoryRows
-                  entries={tab === "archived" ? archived : dismissed}
+                  entries={closedWindow}
                   actions={actions}
                   render={card}
                   empty={
@@ -617,6 +633,7 @@ export const MemoryPage = memo(function MemoryPage({
               </View>
             </Enter>
           )}
+          {remaining > 0 && <Button small quiet onPress={pageRows.more}>{t("Show more ({n})", { n: remaining })}</Button>}
           {!!view && view.recall.queries > 0 && (
             <Label muted size={font.xs}>{t("Recall: {queries} searches, {empty} found nothing (30 days)", { queries: view.recall.queries, empty: view.recall.empty })}</Label>
           )}

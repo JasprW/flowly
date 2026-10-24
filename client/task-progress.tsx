@@ -1,3 +1,5 @@
+import { useTaskDetail } from "./card-detail-query";
+import { perfStart, perfEnd, usePerfRender } from "./perf";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
@@ -7,7 +9,7 @@ import * as rpc from "../shared/rpc";
 import { modelLabel, targetText, type SummaryEntry, type SummaryOverview } from "../shared/summary";
 import { CardBody, CardField, CardFootnote, CardHeadline, ContentCard } from "./content-card";
 import { Collapse, Disclosure, Section, type SectionState } from "./disclosure";
-import { summariesKey, useBoardQuery, useSummariesQuery } from "./queries";
+import { summariesKey, useSummariesQuery } from "./queries";
 import { workpadEnabled, workpadOf } from "../shared/workpad";
 import { Button, Label, TurnChevron, font, message, radius, relativeTime, space, useTheme, noFocusRing } from "./ui";
 import { formatLocale, t, tn } from "../shared/i18n";
@@ -24,14 +26,15 @@ export function cardProgress(overview: SummaryOverview | undefined, taskId: stri
 
 /** Drawer "Progress": state, recap and next step, with refresh and version history. */
 export function TaskProgress({ taskId, active, section }: { taskId: string; active: boolean; section: SectionState }) {
+  usePerfRender("switch.progress.commit");
+  const switchStart = perfStart();
   const toast = useToast();
   const queryClient = useQueryClient();
   const overview = useSummaries(active);
   // The workpad's acceptance criteria replace the summary's Target (WORKPAD-SPEC §6.2).
-  const board = useBoardQuery();
-  const projectId = board.data?.tasks.find((x) => x.id === taskId)?.projectId;
+  const { detail } = useTaskDetail();
   const hideTarget =
-    workpadEnabled(board.data?.projects.find((p) => p.id === projectId)) && !!workpadOf(board.data?.workpads, taskId)?.acceptance.length;
+    workpadEnabled(detail?.project) && !!detail?.workpad?.acceptance.length;
   const refreshRpc = useRpc(rpc.refreshSummary);
   const historyRpc = useRpc(rpc.summaryHistory);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -56,6 +59,7 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
     }
   };
   const older = (history.data || []).filter((e) => e.id !== latest?.id);
+  perfEnd("switch.progress.own", switchStart);
   return (
     <Section
       id={taskId}

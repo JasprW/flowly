@@ -1,0 +1,50 @@
+{
+  "base": "0e5caf4d03363cc5ce227e8e957730c5e13b4cb1",
+  "sourceManifestSha256": "b9e936cad3b99b787c35111c7b3dfb22a7c8792682d089de578e1c94baf12abe",
+  "sourceCount": 366,
+  "typecheck": {
+    "status": "PASS",
+    "exitCode": 0
+  },
+  "focused": {
+    "status": "PASS",
+    "exitCode": 0,
+    "files": 12,
+    "tests": 64
+  },
+  "full": {
+    "status": "PASS",
+    "exitCode": 0,
+    "files": 122,
+    "tests": 988
+  },
+  "independentAgent": {
+    "provider": "codex",
+    "model": "gpt-6-luna",
+    "mode": "full-access",
+    "agentId": "c8edaf4a-abb7-428c-9e31-ce3e33877635",
+    "sessionId": "01a16d6f-4009-7a61-809d-e8ca63a47ca8"
+  },
+  "sourceStable": true,
+  "ui": {
+    "Samsung": "functional PASS, Paseo0.12.0",
+    "Web": "functional PASS,1600/1000px window",
+    "runtime": "Reloaded shared root, isolated candidate differences documented",
+    "unrun": [
+      "real iOS",
+      "IME composition",
+      "FPS/frame latency",
+      "pixel animation continuity",
+      "exact device candidate bundle identity",
+      "live mutations/message delivery"
+    ]
+  },
+  "earlyFailuresRetained": [
+    "candidate dependency-selection typecheck failures",
+    "first focused wrapper exit unrecorded",
+    "unrelated Path copied translation failures",
+    "compact hidePrivate harness invalid blank view",
+    "offscreen phone control attempts"
+  ],
+  "newBusinessResources": 0
+}

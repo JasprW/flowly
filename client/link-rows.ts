@@ -13,7 +13,7 @@ export const groups: { id: Group; title: string }[] = [
   { id: "waited", title: msg("Was waiting on") },
 ];
 
-export const groupOf = (view: Pick<LinkView, "relation" | "other">): Group =>
+export const groupOf = (view: Pick<LinkView<Pick<Task, "status" | "archivedAt">>, "relation" | "other">): Group =>
   view.relation === "blocked_by" ? (isResolved(view.other) ? "waited" : "waiting") : view.relation;
 
 /**
@@ -21,7 +21,7 @@ export const groupOf = (view: Pick<LinkView, "relation" | "other">): Group =>
  * not itself, title containing `query`. `linked` marks cards the server would
  * refuse as already linked for `relation`.
  */
-export function linkCandidates(tasks: readonly Task[], links: readonly Link[], task: Task, relation: Relation, query: string) {
+export function linkCandidates<T extends Pick<Task, "id" | "projectId" | "title" | "archivedAt">>(tasks: readonly T[], links: readonly Link[], task: Task, relation: Relation, query: string) {
   const needle = query.trim().toLowerCase();
   return tasks
     .filter((t) => t.projectId === task.projectId && t.id !== task.id && !t.archivedAt)

@@ -1,5 +1,10 @@
 # App performance: smooth animation, fast session cards, typing that keeps up
 
+2026-10-24 用户决策更新：[按可用宽度统一性能策略](RESPONSIVE-PERFORMANCE-SPEC.md)
+取代下文历史优化中的平台门控。紧凑/宽屏只按可用宽度判断；裁剪、轻量读模型、
+隐藏查询暂停、渐进列表与转场门控不再按Android/iOS/Web选择。底层API适配保持。
+本轮按用户要求不运行验证，旧测量仅代表其当时的快照。
+
 Status: card “性能优化” (2026-10-15). User report: in the app, animations stutter, session cards load slowly, and the input lags, drops characters and sometimes closes the keyboard. Goal: close to native smoothness. This amends the motion, session UX and session input specs; business contracts (single root, card/workspace/session ownership, CAS writes, exact follow-up text) are unchanged.
 
 ## 1. Diagnosis
@@ -112,7 +117,7 @@ Unit: `client/queries.test.ts` (churn-only updates keep the cached list and anyt
 
 ### Follow-up: cold start (user: the app reloads the plugin at every launch; start-up speed is how soon the plugin is visible)
 
-How the host loads a plugin (read from its `compiler.js` and renderer): the daemon bundles `index.client.tsx` with esbuild into **one unminified CommonJS file** (no code splitting, `async/await` lowered), sends the text to the app inside the plugin catalog (through the relay's E2EE on a phone), and the app runs `globalThis.eval` on it at every launch and connection. There is no lazy chunk: every byte is transferred, parsed and executed before `contribute()` can register the sidebar item and screens. The cost of a start is therefore bundle size plus whatever the plugin does when it registers.
+How the host loads a plugin by default (read from its `compiler.js` and renderer): the daemon bundles `index.client.tsx` with esbuild into **one unminified CommonJS file** (no code splitting, `async/await` lowered), sends the text to the app inside the plugin catalog (through the relay's E2EE on a phone), and the app runs `globalThis.eval` on it at every launch and connection. There is no lazy chunk: every byte is transferred, parsed and executed before `contribute()` can register the sidebar item and screens. The cost of a start is therefore bundle size plus whatever the plugin does when it registers.
 
 - **Bundle 2.12 MB → 0.95 MB (−55%).** Measured by compiling `index.client.tsx` with the daemon's own esbuild options. 1.18 MB were the nine UI-language catalogs; every client carried all of them although it shows one (and English needs none). The client bundle now has none: the daemon serves the current language's catalog on demand (`i18n.catalog`), see I18N-SPEC "Delivery". English users download nothing extra; others fetch 78–127 KB after start instead of 1.18 MB inside the bundle. Surfaces wait at most 400 ms for the catalog (`LocaleRoot`), so the plugin is visible as soon as the board can render, English at worst; Command Center titles are rebuilt when the device language's catalog arrives. On V8 the compile step of the bundle fell from 11.5 ms to 7.4 ms; Hermes parses from source and is much slower, so the real gain is larger.
 - **Start-up work moved off the first paint.** The Composer-pill (session chip) poll ran its first round at plugin load: a board read plus a list of every live agent plus a scan of every archived agent on the host (hundreds of KB, decoded on the JS thread) while the app was still painting. Its first round now waits 2.5 s (`CHIPS_START_DELAY_MS`); chips appear that much later and are unchanged afterwards.
@@ -141,6 +146,24 @@ Findings:
 
 Checked and left as is: `board.read.same` (200–700 ms on the phone, mostly the relay round trip; the response is tiny, so it does not load the JS thread) and `board.render` (about 80 ms per board change, also for a two-card lane). A per-card derivation cache keyed by each card's own events and sessions was tried and reverted: no measurable change, so the cost is elsewhere (candidates: the O(events) passes over the 2840 events per board change, the header counts); it needs a profiler run, not a guess.
 
+### Follow-up: Task chip navigation shares the fresh board query (2026-10-23)
+
+The native workspace chip entered Flowly quickly but waited on `Opening linked card…`: first target observations were 8.934/7.342 s on Samsung SM-S911B. `resolvedLink` always called `board.read {}` (2.1 MB), then cancelled the shared board poll and overwrote its query data, invalidating that reader's etag; the next poll downloaded another full board (`board.read.full.cache-replaced`, 3844.2 ms). Ordinary same-card opening mounted in 152.6 ms.
+
+The route now calls `useFreshBoard`, sharing `boardQueryOptions`/boardKey/readBoardDelta with the board. `staleTime:0` forces a fresh round trip even with a warm/Infinity-default cache, and concurrent callers join the existing fetch. The exact actor still refreshes in parallel; missing/moved resources and read/lookup failures still reject. Applying the current link changes only local navigation state; no cancel or setQueryData, so the etag survives. Cold QueryClient needs one full read, coalesced across route and board.
+
+After reload on the same phone, same-card first observations were 2.611/2.550 s; first chip after reopening the phone client was 2.135 s (this is a client restart measurement, not proof the board cache was empty at click). Hierarchy reads take ~1 s, so these are sampled upper bounds, not frame timings. Android reports no navigation-induced cache-replaced full read. Regression tests cover coalescing, fresh warm reads/patches, next-poll etag and fail-closed membership checks. [Diagnosis](verification/chip-latency-2026-10-23/README.md), [fix verification](verification/chip-latency-2026-10-23/fix/README.md). No new user feature or guidance change.
+
+### Follow-up: native Task chip opens a scoped card first (2026-10-23)
+
+Native card links now use fresh `sessions.card-board` plus the exact session refresh, then display the drawer before the complete board query. This scoped view includes the target card's details/history and attached entities; it never overwrites `boardKey` or its etag. Drawer sections may use it while the background board loads; a full board with at least its revision takes over, including removals. Back drops the scoped view so an unfinished full board shows its existing loading state. Desktop keeps the shared fresh board path. See [native contract](NATIVE-SESSION-SPEC.md) and [verification](verification/direct-card-2026-10-23/README.md).
+
+### Follow-up: slim native chip cold read (2026-10-23)
+
+The global native chip poll still fetched the complete board on app start, even while the board was not open: 2.11 MB here, plus a 330 KB live session directory. `sessions.chip-board-changed` now serves a read-only projection with its own delta/etag cache: card/project identity and status, open ideas, and each actor's last suggestion/turn-start boundary; no descriptions/history/workpads/artifacts. This response is 144 KB here (93% smaller). Only the native poll uses it; full-board navigation and latest membership checks remain unchanged. Native Next steps freshness rules are unchanged.
+
+Same Samsung cold-start first-chip observations: 17.94/18.548 s before → 15.810/15.409 s after on the original path. A temporary USB direct-path test with the same code was 5.416 s, and was cleaned up: the remaining startup delay is materially tied to the host connection/transport, not something the Flowly query change solved. In the last original-path run Progress was visible at 6.438 s and current Next steps with the chip at 15.409 s; earlier rows were not in that viewport, so no comparable before timing for those rows is claimed. [Contract](NATIVE-SESSION-SPEC.md), [evidence](verification/native-cold-start-2026-10-23/README.md).
+
 ## 4. Constraints kept
 
 - No second Paseo connection: the subscription uses the supplied SDK. No new dependency, no DOM, no private host import.
@@ -162,3 +185,60 @@ Results: [verification](verification/performance.md).
 
 - PASS needed: typecheck; focused unit tests for the etag reader (unchanged keeps the cached object, a foreign `setQueryData` forces a full read), live-agent patching (upsert/insert/archive/remove/summarizer filtering), the tail reducer (fields, clipping, key stability) and the send-clear/restore helper; full suite; plugin reload; live RPC check of `board.read-changed` and `sessions.tail` against this daemon.
 - UNRUN unless done on a device: perceived smoothness, frame rate, IME and keyboard behavior on real iOS/Android phones and tablets over LAN and relay. Synthetic tests do not prove frame rate.
+
+### Mobile covered-board queries and first TaskForm (2026-10-23)
+
+Native SidebarEntry uses daemon `attention.count {}` → `{count:number|null}` instead of board/agent payloads, with the same shared Attention rule and 15s refresh. Retained native compact boards disable their own query/stream observers and card-output reads while covered; direct links still start a fresh full board in the background. TaskForm keeps its Title/Description mounted and defers optional controls/queries until `useSettled`, preserving Create guards, native input ownership, fresh authorization and 450ms modal handoff. [Complete contract and checks](MOBILE-QUERY-MODAL-SPEC.md).
+
+## Android task/session switch frames (2026-10-23)
+
+Android compact task detail uses native ScrollView offscreen clipping to reduce display-list recording during detail remounts. React child state and fresh ownership rules are unchanged. Opt-in switch preparation/commit spans and early gfxinfo capture distinguish native recording from data waits; see [finite switch-frame specification](MOBILE-SWITCH-FRAMES-SPEC.md). Clipping must be checked by scrolling lower sections back into view and by reversal.
+
+## Native disclosure update — 2026-10-23
+
+[Mobile disclosure specification](MOBILE-DISCLOSURE-SPEC.md) supersedes native measured-height wording: section bodies use one layout change plus native fade/translate; Progress/Idea Show more/less uses numeric height plus native body fade. Native chevrons rotate on native driver. Web keeps measured-height animation.104pt clamp, footer/actions, content identity, Reduce Motion, rapid reversal/cleanup and all business guards are unchanged.
+
+2026-10-23 user review correction: phones restore continuous local measured-height disclosure; the native one-layout/fade amendment is superseded by [MOBILE-DISCLOSURE-SPEC](MOBILE-DISCLOSURE-SPEC.md#user-review-correction-visible-height-animation). Height uses interruptible JS Animated (native driver cannot animate height); native chevrons, Reduce Motion, fresh checks and450ms handoff remain. No global LayoutAnimation.
+
+2026-10-23 disclosure follow-up: keep scoped query results lazily tracked (withCardBoard); never spread tracked query results inside wrappers. Poll-only observers explicitly use notifyOnChangeProps:[] while independent data observers receive changes/deletions. Native decorative PulseDot loops yield while JS height motion owns a lease, then resume after all leases release. Continuous height/fresh authorization remain; see MOBILE-DISCLOSURE-SPEC and mobile-disclosure-perf-2026-10-23 evidence.
+
+## Mobile project Ideas/Memory initial mounting — 2026-10-23
+
+Bounded Samsung traces show bulk React/native card mounting on project-page entry, not evidence for rewriting disclosure height motion. Native compact Ideas/Memory initially mount two cards across each page, then add two when scrolling within half a viewport of the loaded bottom. Existing Show more (remaining count) is also available for short content/accessibility. Already mounted rows stay mounted, preserving input/disclosure/exit animation state; no timers or background pre-mount of the complete list. Counts, search, filters and sorting use the complete dataset. Changing project/tab/filter/search resets the mount budget; ordinary data changes do not. Memory allocates the shared budget to candidates before active entries. Web/tablet behavior is unchanged (including Ideas closed-list50-row pagination). Render spans project.ideas.render/project.memory.render use existing opt-in timing logs only; no new network work.
+
+Validation: exact frozen source manifests before/after baseline/control/candidate reload and sampling; same Samsung, same project/lane, three opens per page with isolated gfxinfo, synchronized finite Perfetto and idle control; content/vertical scrolling/Show more/filter/Back checks. Hook mounted tests must cover native batching, key resets, stale callback, web bypass, retained row identities and short-content fallback; focused invariants and typecheck before reload. Independent full-access codex/gpt-6-luna tests/audit. No FPS claim or exact JS function attribution from scheduling alone. Continuous220/160ms disclosure, fresh ownership and450ms modal handoff remain unchanged.
+
+Project page row-budget boundary: ignore queued callbacks from another key or prior dataset total; check again inside the updater. Within one key, revealed budget never decreases when data shrinks or a stale callback runs. Visible length is still capped by current total; growing data restores the retained prefix.
+
+Memory 编辑过且仍在当前筛选结果的行额外保留挂载，避免后台新候选挤出前缀后卸载原生输入；计数按实际窗口，初始两条预算不变。
+
+## Native first-board query priority — 2026-10-23
+
+On native, BoardContent starts its ordinary full-board query first. Its six auxiliary readers (session read receipts, resources, live agents, summaries, managed sessions and connections) are enabled only while the root is active and a board value is available. A cached board is sufficient for this scheduling decision: it never authorizes an action. Web keeps the existing parallel reads. Once enabled, query keys, etags, intervals and stream behavior are unchanged; hiding the native compact root still pauses its observers. A failed initial board read does not start these auxiliary readers. Explicit fresh reads, direct-card/session ownership refresh and the direct-card background full read remain independent of this gate.
+
+The board can now appear before session state arrives. Attention must show the existing Loading sessions… state while its agent list is unavailable, or Session state unavailable on initial agent failure; it must not show the empty Attention result or claim that approvals/errors are present without agent data. Its read-state warning is shown only once agent data is available. Complete history and workpads remain in the full-board response. No data projection, timeout, authorization, disclosure animation, input ownership or 450ms modal handoff changes.
+
+Acceptance/checks: retain fixed baseline/candidate source manifests; typecheck before reload; focused query/cache/fresh-link/visibility checks and one independent full-access codex/gpt-6-luna full suite on the final tree; two Samsung cold starts plus Attention loading/result, task/Back and modal navigation smoke. Compare plugin-internal RPC/schema/data-effect intervals separately from UIAutomator selector delays. Report the combined wire/E2EE/host JSON/JS-queue interval honestly: scheduler CPU alone cannot separate those functions, a React effect is not native paint, and first-query priority does not prove FPS or whole-app startup improvement. Evidence: verification/mobile-cold-segments-2026-10-23.
+
+
+## Native overview read model — 2026-10-23
+
+Native compact ordinary overview now uses a separate BoardOverview DTO/query key/etag. The daemon reuses event rules to produce named facts; live agents/receipts remain immediate. Description search, counts and input/motion semantics remain. Complete Board is activated only by an explicit full-data feature; stage 1 still pays its first-card full-read cost. The prior native first-full-query priority section remains historical; this amendment supersedes it for native compact overview. Web retains complete Board. [Two-stage contract and dependency inventory](NATIVE-OVERVIEW-SPEC.md). Verified on three interleaved Samsung pairs: RPC→React effect median 5978.5→1287.4ms, JSON main response 2330221→166938B, overview/idle full-board calls 0. First explicit card still reads 2330221B and takes 6.16–7.23s to its full-data effect. These are internal stages, not native paint or whole-app startup; live Attention switching is unverified because both versions showed unavailable session state. [Evidence](verification/native-overview-2026-10-23/README.md).
+
+
+## Isolated client payload loading PoC — 2026-10-24
+
+The default product entry remains unchanged. [CLIENT-PAYLOAD-POC-SPEC](CLIENT-PAYLOAD-POC-SPEC.md) defines a separately reviewable loader, minified client payload RPC and one process-local version/code cache. Contribute starts no network: demand or a 2500ms earliest grace deadline loads code; cached setup RPC waits outside contribute. A visible shell keeps entry/Error/Retry, exact hash version mismatch refuses execution, and cleanup isolates late results. Cache stores no business/authorization results; fresh ownership, continuous disclosure motion and the 450ms handoff remain.
+
+Actual instrumented daemon catalog code was 1,262,031B versus 17,168B loader; executable minified payload 636,177B and its JSON response 650,879B. Every new JS process adds one payload RPC; same-context reconnects observed cache.hit and zero extra payload requests. Two fixed-source Samsung pairs showed earlier contribute (control-to-entry medians 8.112s→4.648s), but later actual Sidebar implementation commit (8.345s→12.218s). Warm network-restore-command to actual Sidebar medians 14.293s→10.268s are combined host/reconnect intervals, not isolated transfer/native paint. Payload RPC began 4.705–6.294s after entry despite a 2.5s earliest deadline; existing markers do not separate timer delivery, loading-state render and microtask queueing, so do not assign the delay to a function without profiling. The PoC is not promoted. First explicit card still used the old full path (candidate RPC→effect 7.086–8.297s); CardDetail stage2 was not implemented in that PoC sample; the independent stage-2 delivery is recorded below. [Results, tests, raw boundaries and restoration](verification/client-payload-poc-2026-10-24/README.md).
+
+
+原生详情第二阶段（2026-10-24）：普通开卡/chip 直达不再启动完整 board；CardDetail 与 projects.card-index 使用独立类型/key/etag。抽屉子区段通过显式 context 读取，唯一可见 detail interval 为 3 秒；session preview/关闭时暂停。项目 Ideas 使用独立 project query，Memory/Insights 不再以 full board 为前置。完整单卡正文、fresh 写/导航校验、连续动画和 450ms 交接不变。具体边界见 NATIVE-OVERVIEW-SPEC §5/§7。
+
+阶段2固定源三星对照见 [CardDetail报告](verification/card-detail-2026-10-24/README.md)：RPC→schema前区段中位数约5.660s→0.789s，schema约389ms→27ms，但schema→effect仍约1.8s；这些是有限壁钟分段，尚不能区分传输/解密/JSON或函数级挂载成本。原生入口/宿主bundle加载没有在本阶段优化。
+
+## CardDetail interval owner notifications — 2026-10-24
+
+A hook that owns only the visible drawer's3s interval must not subscribe the whole drawer to fetching/result flags. TaskDrawer passes `pollOnly=true` to useCardDetailQuery/detailQueryOptions, which sets `notifyOnChangeProps: []` for that observer only. Separate display/context observers still track data/error/pending, and cache changes, failures, etag reads and fresh authorization are unchanged. No shared/global notification scheduler is changed. Real QueryObserver demonstrates the prior same-etag read's two callbacks; the correction silences the interval owner while display still receives changed data/errors.
+
+Bounded Samsung attribution found sub-millisecond schema→query-cache work, with most residual wall time between cache, render and layout commit. Production React Profiler did not invoke callbacks; component-body/timer markers cannot assign all remaining work to Flowly or host functions. The auxiliary-query gate control showed no supported benefit and was rejected. See [attribution spec](CARD-DETAIL-APPLY-SPEC.md) and [results](verification/card-detail-apply-2026-10-24/README.md); no first-card/FPS gain is implied by fixing repeat notifications.

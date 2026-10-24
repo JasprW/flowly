@@ -12,7 +12,8 @@ import { eventPoint, useMenuOpener } from "./context-menu";
 import { Modal } from "./modal";
 import { IdeaRow, useExitList } from "./task-ideas";
 import { Section, type SectionState } from "./disclosure";
-import { boardKey, useBoardQuery } from "./queries";
+import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
+import type { CardReference } from "../shared/card-detail";
 import { TypeIcon } from "./status";
 import { Choices, IconButton, Label, Notice, TextBox, Theme, font, message, radius, space, touch, useTheme, noFocusRing } from "./ui";
 import { t } from "../shared/i18n";
@@ -39,22 +40,22 @@ export function TaskLinks({
   onFollowUp(task: Task): void;
   section: SectionState;
 }) {
-  const board = useBoardQuery();
+  const { detail } = useTaskDetail();
   const toast = useToast();
   const queryClient = useQueryClient();
   const openMenu = useMenuOpener();
   const deleteLink = useRpc(rpc.deleteLink);
   const [removing, setRemoving] = useState<ReadonlySet<string>>(() => new Set());
   const views = useMemo(
-    () => (board.data ? linksOf(board.data, task.id).filter((v) => v.other && !removing.has(v.link.id)) : []),
-    [board.data, task.id, removing],
+    () => (detail ? linksOf({ links: detail.links, tasks: detail.relatedTasks }, task.id).filter((v) => v.other && !removing.has(v.link.id)) : []),
+    [detail, task.id, removing],
   );
   const rows = useExitList(useMemo(() => views.map((v) => ({ ...v, id: v.link.id })), [views]));
-  const remove = async (view: LinkView) => {
+  const remove = async (view: LinkView<CardReference>) => {
     setRemoving((current) => new Set(current).add(view.link.id));
     try {
       await deleteLink({ id: view.link.id });
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
     } catch (e) {
       toast.show(message(e), { variant: "error" });
     } finally {
@@ -119,11 +120,11 @@ const LinkRow = memo(function LinkRow({
   onOpenTask,
   onRemove,
 }: {
-  view: LinkView;
+  view: LinkView<CardReference>;
   lane: string;
   disabled: boolean;
   onOpenTask(id: string): void;
-  onRemove(view: LinkView): void;
+  onRemove(view: LinkView<CardReference>): void;
 }) {
   const { colors } = useTheme();
   const other = view.other!;
@@ -154,18 +155,18 @@ const LinkRow = memo(function LinkRow({
   );
 });
 
-const groupTitle = (view: LinkView) => t(groups.find((g) => g.id === groupOf(view))!.title);
+const groupTitle = (view: LinkView<CardReference>) => t(groups.find((g) => g.id === groupOf(view))!.title);
 
 /**
  * Above the description: "From idea on <card>" or "Follow-up of <card>"
  * (CARD-LINKS-SPEC §5.3), from the card's follow_up_of links.
  */
 export function LinkOrigin({ taskId, onOpenTask }: { taskId: string; onOpenTask(id: string): void }) {
-  const board = useBoardQuery();
+  const { detail } = useTaskDetail();
   const { colors } = useTheme();
   const sources = useMemo(
-    () => (board.data ? linksOf(board.data, taskId).filter((v) => v.relation === "follow_up_of" && v.other) : []),
-    [board.data, taskId],
+    () => (detail ? linksOf({ links: detail.links, tasks: detail.relatedTasks }, taskId).filter((v) => v.relation === "follow_up_of" && v.other) : []),
+    [detail, taskId],
   );
   const [first] = sources;
   if (!first) return null;
@@ -199,7 +200,7 @@ const pickRelations = (): { value: Relation; label: string }[] => [
 /** "Link to a card…" (CARD-LINKS-SPEC §5.4): pick a relation, then a card of the project. */
 export function LinkPicker({ task, project, onClose }: { task: Task; project: Project; onClose(): void }) {
   const theme = useTheme();
-  const board = useBoardQuery();
+  const { detail, index, indexError, error: detailError, pending: detailPending, retry, retryIndex } = useTaskDetail();
   const toast = useToast();
   const queryClient = useQueryClient();
   const createLink = useRpc(rpc.createLink);
@@ -208,18 +209,18 @@ export function LinkPicker({ task, project, onClose }: { task: Task; project: Pr
     [pending, setPending] = useState(""),
     [error, setError] = useState("");
   const candidates = useMemo(() => {
-    if (!board.data) return [];
+    if (!detail || !index) return [];
     const lanes = enabledStatuses(project);
-    return linkCandidates(board.data.tasks, board.data.links, task, relation, query).sort(
+    return linkCandidates(index.cards, detail.links, task, relation, query).sort(
       (a, b) => lanes.indexOf(a.task.status) - lanes.indexOf(b.task.status) || a.task.position - b.task.position,
     );
-  }, [board.data, task, relation, query, project]);
-  const pick = async (other: Task) => {
+  }, [detail, index, task, relation, query, project]);
+  const pick = async (other: CardReference) => {
     setPending(other.id);
     setError("");
     try {
       await createLink(linkFor(relation, task.id, other.id));
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
       toast.show(t("Linked"), { variant: "success" });
       onClose();
     } catch (e) {
@@ -259,7 +260,9 @@ export function LinkPicker({ task, project, onClose }: { task: Task; project: Pr
             />
             {!!error && <Notice tone="danger">{error}</Notice>}
             <View style={{ gap: 2 }}>
-              {board.isPending ? (
+              {indexError || detailError ? (
+                <Pressable style={noFocusRing} onPress={() => { retry(); retryIndex(); }}><Notice>{message(indexError || detailError)}</Notice><Label>{t("Retry")}</Label></Pressable>
+              ) : !index || detailPending ? (
                 <Label muted>{t("Loading cards…")}</Label>
               ) : !candidates.length ? (
                 <Label muted size={font.sm}>{query.trim() ? t("No matching cards.") : t("No other cards in this project.")}</Label>

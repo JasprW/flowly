@@ -1,3 +1,4 @@
+import { usePerfRender } from "./perf";
 import { memo, useMemo, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
@@ -7,6 +8,7 @@ import { eventPoint, useMenuOpener } from "./context-menu";
 import { groupByCard, ideaTabCounts, visibleIdeas, type IdeaQuery, type IdeaSort, type IdeaTab } from "./idea-rows";
 import { SourceLine } from "./content-card";
 import { Enter } from "./motion";
+import { usePageRows } from "./page-rows";
 import { StatusIcon } from "./status";
 import { ClosedIdea, IdeaCard, IdeaRow, sessionName, useExitList, useIdeaActions, type IdeaSession } from "./task-ideas";
 import { AiMark, Button, Choices, Label, TextBox, font, radius, space, tint, touch, useTheme, verticalContent, verticalScroll, noFocusRing } from "./ui";
@@ -51,6 +53,7 @@ export const IdeasPage = memo(function IdeasPage({
   onNewSession(idea: Idea): void;
   onBack(): void;
 }) {
+  usePerfRender("project.ideas.render");
   const { colors } = useTheme();
   const openMenu = useMenuOpener();
   const [tab, setTab] = useState<IdeaTab>("open");
@@ -60,7 +63,7 @@ export const IdeasPage = memo(function IdeasPage({
   const [scopes, setScopes] = useState<ReadonlySet<"here" | "new">>(() => new Set());
   const [finishedOnly, setFinishedOnly] = useState(false);
   const [shown, setShown] = useState(PAGE);
-  const actions = useIdeaActions({ sessionsOf, onCreate, onNewSession });
+  const actions = useIdeaActions({ sessionsOf, onCreate, onNewSession, ideas, tasks });
   const { hidden } = actions;
   const lanes = useMemo(() => enabledStatuses(project), [project]);
   const cards = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -77,6 +80,7 @@ export const IdeasPage = memo(function IdeasPage({
     // `query` is rebuilt every render; its parts are the dependencies.
     [effective, tasks, lanes, tab, search, scopes, finishedOnly, cardFilter, sort],
   );
+  const pageRows = usePageRows(JSON.stringify([project.id, tab, search, [...scopes], finishedOnly, cardFilter, sort, grouped]), list.length, compact);
   const filtered = !!(search.trim() || scopes.size || finishedOnly || cardFilter);
   const clearFilters = () => {
     setSearch("");
@@ -121,11 +125,11 @@ export const IdeasPage = memo(function IdeasPage({
         </View>
       </IdeaRow>
     ));
-  const closedRows = tab === "open" ? noIdeas : list.slice(0, shown);
+  const closedRows = tab === "open" ? noIdeas : list.slice(0, compact ? pageRows.limit : shown);
   const renderGroups = <T extends { taskId: string }>(rows: readonly T[], render: (rows: T[]) => ReactNode) =>
     groupByCard(rows).map((group) => (
       <View key={group.taskId} style={{ gap: space[1.5], marginBottom: space[2] }}>
-        <GroupHeader task={cards.get(group.taskId)} count={group.ideas.length} nameOf={nameOf} onOpenTask={onOpenTask} />
+        <GroupHeader task={cards.get(group.taskId)} count={compact ? list.filter((idea) => idea.taskId === group.taskId).length : group.ideas.length} nameOf={nameOf} onOpenTask={onOpenTask} />
         {render(group.ideas)}
       </View>
     ));
@@ -168,6 +172,8 @@ export const IdeasPage = memo(function IdeasPage({
       <ScrollView
         {...verticalScroll}
         keyboardShouldPersistTaps="handled"
+        onScroll={pageRows.onScroll}
+        scrollEventThrottle={100}
         style={{ flex: 1, minHeight: 0 }}
         contentContainerStyle={{ ...verticalContent, padding: space[3], paddingBottom: space[6] * 2, alignItems: "center" }}
       >
@@ -248,7 +254,7 @@ export const IdeasPage = memo(function IdeasPage({
               {tab === "open" ? (
                 // Mounted per visit, so rows already open do not rise in again.
                 <OpenList
-                  list={list}
+                  list={compact ? list.slice(0, pageRows.limit) : list}
                   empty={emptyState}
                   render={(rows) =>
                     grouped ? renderGroups(rows.map((r) => ({ ...r, taskId: r.item.taskId })), renderOpen) : renderOpen(rows)
@@ -265,10 +271,10 @@ export const IdeasPage = memo(function IdeasPage({
                   }
                 />
               )}
-              {tab !== "open" && list.length > shown && (
+              {(compact ? pageRows.remaining > 0 : tab !== "open" && list.length > shown) && (
                 <View style={{ alignItems: "center" }}>
-                  <Button small quiet onPress={() => setShown(shown + PAGE)}>
-                    {t("Show more ({n})", { n: list.length - shown })}
+                  <Button small quiet onPress={compact ? pageRows.more : () => setShown(shown + PAGE)}>
+                    {t("Show more ({n})", { n: compact ? pageRows.remaining : list.length - shown })}
                   </Button>
                 </View>
               )}

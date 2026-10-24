@@ -1,7 +1,15 @@
+import { cardDetailSchema, projectCardIndexSchema, projectIdeasSchema } from "./card-detail";
 import { attentionDismissInput, attentionDismissalSchema, attentionRestoreInput } from "./attention-dismiss";
 import { defineRpc } from "@getpaseo/plugin";
+import { overviewResponseSchema } from "./overview";
 import { sessionInsightViewSchema } from "./session-insights";
 import { z } from "zod";
+/** Lightweight sidebar: no board/events/agents cross the phone connection. */
+export const readAttentionCount = defineRpc({
+  name: "attention.count",
+  input: z.strictObject({}),
+  output: z.strictObject({ count: z.number().int().nonnegative().nullable() }),
+});
 import {
   ideaAdoption,
   ideaEdit,
@@ -43,16 +51,23 @@ import {
 import { summaryEntrySchema, summaryOverviewSchema } from "./summary";
 import { taskUsageSchema } from "./usage";
 import { TURN_MAX_ENTRIES, tailPageSchema, timelineCursorSchema } from "./session-tail";
-import { tokenInsightsSchema } from "./insights";
 import { digestViewSchema } from "./digest";
 import { memoryEntrySchema, memoryInputFields, memoryKeywordsSchema, memoryTagsSchema, memoryViewSchema } from "./memory";
 import { perfReportSchema } from "./perf";
 import { localeCodes } from "./i18n";
 import { workflowOverviewSchema, workflowViewSchema } from "./workflow-insights";
+import { tokenInsightsSchema } from "./insights";
 import { insightsWithHabitsSchema } from "./agent-habits";
 
 /** `{ etag }` in; the value is omitted when it still matches (PERFORMANCE-SPEC §3). */
 const etagInput = z.strictObject({ etag: z.string().max(200).optional() });
+/** Compact overview is a separate DTO/cache; it never satisfies a fresh full-board read. */
+export const readOverviewChanged = defineRpc({ name: "board.overview-changed", input: etagInput, output: overviewResponseSchema });
+
+/** Independent compact detail/project scopes, never interchangeable with Board. */
+export const readCardDetailChanged = defineRpc({ name: "cards.detail-changed", input: etagInput.extend({ taskId: z.string().min(1).max(200), workspaceId: z.string().min(1).max(200) }), output: z.strictObject({ etag: z.string(), value: cardDetailSchema.optional() }) });
+export const readProjectCardIndexChanged = defineRpc({ name: "projects.card-index-changed", input: etagInput.extend({ projectId: z.string().min(1).max(200) }), output: z.strictObject({ etag: z.string(), value: projectCardIndexSchema.optional() }) });
+export const readProjectIdeasChanged = defineRpc({ name: "projects.ideas-changed", input: readProjectCardIndexChanged.input, output: z.strictObject({ etag: z.string(), value: projectIdeasSchema.optional() }) });
 
 export const readSessionReceipts = defineRpc({
   name: "sessions.read-state",
@@ -113,6 +128,18 @@ export const readBoardChanged = defineRpc({
   input: etagInput.extend({ since: z.strictObject({ count: z.number().int().nonnegative(), lastId: z.string().max(200) }).optional() }),
   /** `patch`: apply to the board behind the request's etag. `delta`: `value.events` holds only the events after `since`. */
   output: z.object({ etag: z.string(), value: boardSchema.optional(), delta: z.boolean().optional(), patch: boardPatchSchema.optional() }),
+});
+/** Read-only native-chip projection: no descriptions/history/workpads; separate etag namespace from the full board. */
+export const readChipBoardChanged = defineRpc({
+  name: "sessions.chip-board-changed",
+  input: readBoardChanged.input,
+  output: readBoardChanged.output,
+});
+/** Fresh single-card view for native navigation; never store under the complete board key. */
+export const readCardBoard = defineRpc({
+  name: "sessions.card-board",
+  input: z.strictObject({ taskId: z.string().min(1).max(200), workspaceId: z.string().min(1).max(200) }),
+  output: boardSchema,
 });
 export const createProject = defineRpc({
   name: "projects.create",

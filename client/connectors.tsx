@@ -37,9 +37,9 @@ import { BrandIcon } from "./brand-icons";
 
 export const connectionsKey = ["flowly", "connections"] as const;
 
-export function useConnections() {
+export function useConnections(enabled = true) {
   const list = useRpc(rpc.listConnections);
-  return useQuery({ queryKey: connectionsKey, queryFn: () => list({}), staleTime: 60_000, retry: false });
+  return useQuery({ queryKey: connectionsKey, queryFn: () => list({}), enabled, staleTime: 60_000, retry: false });
 }
 
 /** Service names are brands: shown as written in every language. */

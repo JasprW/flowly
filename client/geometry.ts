@@ -50,14 +50,9 @@ export function drawerWidth(preferred: number, surfaceWidth: number): number {
   return Math.max(340, Math.min(max, preferred));
 }
 
-export function isCompactLayout(
-  hostCompact: boolean,
-  platform: string,
-  width: number,
-): boolean {
-  // Native surfaces start unmeasured; stay compact until a tablet-sized width is known.
-  if (width <= 0) return hostCompact || platform !== "web";
-  return hostCompact || width < 760;
+export function isCompactLayout(width: number): boolean {
+  // Use the same layout everywhere; unmeasured surfaces start compact.
+  return width < 760;
 }
 
 export type CardBounds = { id: string; y: number; height: number };

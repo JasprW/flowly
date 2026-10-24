@@ -1,3 +1,4 @@
+import { perfStart, perfEnd, usePerfRender } from "./perf";
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { ActivityIndicator, Animated, Platform, Pressable, View, type ListRenderItemInfo } from "react-native";
 import { FlatList, Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
@@ -82,6 +83,8 @@ function SessionTranscriptView({
   inset,
   onStreamError,
 }: TranscriptProps) {
+  usePerfRender("switch.transcript.commit");
+  const switchStart = perfStart();
   const { colors } = useTheme();
   const paseo = usePaseo();
   const agent = useMemo(() => paseo.agents.ref(agentId), [paseo, agentId]);
@@ -259,6 +262,7 @@ function SessionTranscriptView({
       {bottom}
     </ScrollView>
   );
+  perfEnd("switch.transcript.own", switchStart);
   return (
     // Clips what the keyboard lift moves under the session header.
     <View style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" }}>

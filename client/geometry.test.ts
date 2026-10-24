@@ -54,16 +54,13 @@ describe("board interaction geometry", () => {
     expect(drawerWidth(720, 800)).toBe(488);
     expect(drawerWidth(440, 760)).toBe(440);
   });
-  test("native and narrow surfaces use a vertical list even when host compact is false", () => {
-    expect(isCompactLayout(false, "ios", 1000)).toBe(false);
-    expect(isCompactLayout(false, "android", 760)).toBe(false);
-    expect(isCompactLayout(false, "ios", 759)).toBe(true);
-    expect(isCompactLayout(false, "ios", 0)).toBe(true);
-    expect(isCompactLayout(true, "ios", 1200)).toBe(true);
-    expect(isCompactLayout(false, "web", 0)).toBe(false);
-    expect(isCompactLayout(false, "web", 759)).toBe(true);
-    expect(isCompactLayout(false, "web", 760)).toBe(false);
-    expect(isCompactLayout(true, "web", 1600)).toBe(true);
+  test("only available width selects compact layout; unmeasured surfaces start compact", () => {
+    expect(isCompactLayout(0)).toBe(true);
+    expect(isCompactLayout(390)).toBe(true);
+    expect(isCompactLayout(759)).toBe(true);
+    expect(isCompactLayout(760)).toBe(false);
+    expect(isCompactLayout(1000)).toBe(false);
+    expect(isCompactLayout(1600)).toBe(false);
   });
 });
 

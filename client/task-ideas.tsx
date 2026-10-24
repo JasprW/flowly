@@ -11,7 +11,8 @@ import { CardBody, CardField, CardHeadline, CardMeta, CardMetaRow, CardText, Con
 import { Disclosure, Section, type SectionState } from "./disclosure";
 import { lerp, motionDuration, useReducedMotion } from "./motion";
 import { exitRows } from "./idea-rows";
-import { boardKey, useBoardQuery } from "./queries";
+import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
+import type { CardReference } from "../shared/card-detail";
 import { useStableCallback } from "./stable";
 import { PriorityIcon, TypeIcon, priorityLabels } from "./status";
 import { Button, CueRing, Label, font, message, radius, relativeTime, space, touch, useTheme, noFocusRing } from "./ui";
@@ -48,17 +49,17 @@ export function TaskIdeas({
   onAllIdeas?(): void;
   section: SectionState;
 }) {
-  const board = useBoardQuery();
+  const { detail } = useTaskDetail();
   const [closedOpen, setClosedOpen] = useState(false);
-  const actions = useIdeaActions({ sessionsOf: () => sessions, onCreate, onNewSession });
+  const actions = useIdeaActions({ sessionsOf: () => sessions, onCreate, onNewSession, ideas: detail?.ideas || [], tasks: detail?.relatedTasks || [] });
   const { hidden, restoring } = actions;
-  const ideas = useMemo(() => (board.data?.ideas || []).filter((i) => i.taskId === taskId), [board.data?.ideas, taskId]);
+  const ideas = useMemo(() => (detail?.ideas || []).filter((i) => i.taskId === taskId), [detail?.ideas, taskId]);
   const open = useMemo(() => ideas.filter((i) => i.status === "open" && !hidden.has(i.id)), [ideas, hidden]);
   const closed = ideas.filter((i) => i.status !== "open" || hidden.has(i.id)).reverse();
   const rows = useExitList(open);
   const closedRows = useExitList(closed);
   if (!ideas.length) return null;
-  const titleOf = (id: string) => board.data?.tasks.find((t) => t.id === id)?.title;
+  const titleOf = (id: string) => detail?.relatedTasks.find((t) => t.id === id)?.title;
   return (
     <Section
       id={taskId}
@@ -118,13 +119,15 @@ export function useIdeaActions({
   sessionsOf,
   onCreate,
   onNewSession,
+  ideas, tasks,
 }: {
+  ideas: readonly Idea[];
+  tasks: readonly CardReference[];
   /** The idea's card's sessions, newest first (archived included). */
   sessionsOf(taskId: string): readonly IdeaSession[];
   onCreate(idea: Idea): void;
   onNewSession(idea: Idea): void;
 }) {
-  const board = useBoardQuery();
   const toast = useToast();
   const queryClient = useQueryClient();
   const openMenu = useMenuOpener();
@@ -134,7 +137,6 @@ export function useIdeaActions({
   const [restoring, setRestoring] = useState("");
   // Ideas restored here: their row opens its slot and the card comes back in, even if it was on the list at first render.
   const restored = useRef(new Set<string>()).current;
-  const ideas = board.data?.ideas;
   // A closing is settled once the board shows it; drop it from the optimistic set.
   useEffect(() => {
     if (!hidden.size) return;
@@ -145,7 +147,7 @@ export function useIdeaActions({
     setHidden((current) => new Set(current).add(idea.id));
     try {
       await adoptIdea({ id: idea.id, agentId: session.id });
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
       toast.show(t("Sent to {session}", { session: session.title || t("the session") }), { variant: "success" });
     } catch (e) {
       setHidden((current) => without(current, [idea.id]));
@@ -161,7 +163,7 @@ export function useIdeaActions({
    */
   const choose = useStableCallback((idea: Idea, at: Point) => {
     if (!openMenu) return onCreate(idea);
-    const card = board.data?.tasks.find((t) => t.id === idea.taskId);
+    const card = tasks.find((t) => t.id === idea.taskId);
     if (!card || !continuesInCard(card))
       return openMenu(at, t("Good idea"), [
         { id: "card", label: t("Start a new task · Suggested"), icon: "SquarePlus", onPress: () => onCreate(idea) },
@@ -202,7 +204,7 @@ export function useIdeaActions({
     setHidden((current) => new Set(current).add(idea.id));
     try {
       await updateIdea({ id: idea.id, status: "dismissed" });
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
     } catch (e) {
       setHidden((current) => without(current, [idea.id]));
       toast.show(message(e), { variant: "error" });
@@ -213,7 +215,7 @@ export function useIdeaActions({
     setRestoring(idea.id);
     try {
       await updateIdea({ id: idea.id, status: "open" });
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
       // Only this return animates in; a list mounted later (another tab, the drawer reopened) shows it plainly.
       setTimeout(() => restored.delete(idea.id), 1000);
     } catch (e) {

@@ -8,7 +8,7 @@ import type { Artifact, ArtifactRole, Task } from "../shared/model";
 import { artifactGroups, artifactsOf, baseName } from "../shared/artifacts";
 import { Modal } from "./modal";
 import { IdeaRow, useExitList } from "./task-ideas";
-import { boardKey, useBoardQuery } from "./queries";
+import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
 import { SessionMarkdown } from "./session-content";
 import { PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
 import { AiMark, Actions, Button, Choices, Field, IconButton, Label, Notice, Theme, font, message, space, touch, useTheme, noFocusRing } from "./ui";
@@ -28,7 +28,7 @@ const firstPage: Record<ArtifactRole, number> = { input: pageSize, output: pageS
  * links open in the browser. Removing is optimistic and never touches the file.
  */
 export function TaskArtifacts({ task, active, disabled, section }: { task: Task; active: boolean; disabled: boolean; section: SectionState }) {
-  const board = useBoardQuery();
+  const { detail } = useTaskDetail();
   const toast = useToast();
   const queryClient = useQueryClient();
   const deleteArtifact = useRpc(rpc.deleteArtifact);
@@ -48,8 +48,8 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     if (active) setLimit(firstPage);
   }, [active]);
   const list = useMemo(
-    () => (board.data ? artifactsOf(board.data.artifacts, task.id).filter((a) => !removing.has(a.id)) : []),
-    [board.data, task.id, removing],
+    () => (detail ? artifactsOf(detail.artifacts, task.id).filter((a) => !removing.has(a.id)) : []),
+    [detail, task.id, removing],
   );
   const fileKey = list.filter((a) => a.kind === "file").map((a) => `${a.id}:${a.target}`).join("|");
   // One batched check when the drawer shows the card or its files change (CARD-ARTIFACTS-SPEC §9).
@@ -96,7 +96,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     setRemoving((current) => new Set(current).add(artifact.id));
     try {
       await deleteArtifact({ id: artifact.id });
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
       toast.show(t("Artifact removed. The file was not changed."), { variant: "success" });
     } catch (e) {
       toast.show(message(e), { variant: "error" });
@@ -272,7 +272,7 @@ function ArtifactForm({ task, artifact, onClose }: { task: Task; artifact: Artif
     try {
       if (artifact) await update({ id: artifact.id, updatedAt: artifact.updatedAt, role, title, note });
       else await create({ taskId: task.id, role, target, title, note });
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
       toast.show(artifact ? t("Artifact saved") : t("Artifact added"), { variant: "success" });
       onClose();
     } catch (e) {

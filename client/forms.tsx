@@ -4,6 +4,8 @@ import { useBoardView } from "./board-view";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { View } from "react-native";
+import { useSettled } from "./motion";
+import { perfLap } from "./perf";
 import { Modal } from "./modal";
 import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { useBoardQuery, useResourcesQuery } from "./queries";
@@ -443,8 +445,13 @@ export function TaskForm({
   const [task] = useState(initialTask);
   const create = useRpc(rpc.createTask),
     update = useRpc(rpc.updateTask);
-  const resources = useResourcesQuery();
-  const board = useBoardQuery();
+  const settled = useSettled("task-form");
+  const ready = settled;
+  useEffect(() => perfLap("task-form.open", "task-form.open.mount"), []);
+  useEffect(() => {
+    if (ready) perfLap("task-form.open", "task-form.open.settled", true);
+  }, [ready]);
+  const board = useBoardQuery({ enabled: ready });
   const [title, setTitle] = useState(task?.title || seed?.title || ""),
     [description, setDescription] = useState(task?.description || seed?.description || ""),
     [status, setStatus] = useState<Status>(task?.status || startStatus(project, defaultStatus)),
@@ -462,7 +469,8 @@ export function TaskForm({
     [pending, setPending] = useState(false),
     [error, setError] = useState("");
   // From… (EXTERNAL-TRACKER-SPEC §5, CONNECTORS-SPEC §8.2): items added as inputs with the new card.
-  const connections = useConnections();
+  const resources = useResourcesQuery({ enabled: ready && !task && mode === "existing" });
+  const connections = useConnections(ready && !task);
   const byFamily = useMemo(() => connectionsByFamily(connections.data?.connections || []), [connections.data]);
   const [externals, setExternals] = useState<{ item: ExternalSummary; provider: ConnectorProvider }[]>([]),
     [picking, setPicking] = useState<ConnectorFamily | null>(null);
@@ -497,7 +505,7 @@ export function TaskForm({
     setStartAgentState(next);
     if (view.values && view.values.startAgentOnCreate !== next) void view.update({ startAgentOnCreate: next });
   };
-  const choice = useAgentChoice({ enabled: startChosen, cwd: project.primaryPath, defaults: agentDefaults });
+  const choice = useAgentChoice({ enabled: ready && startChosen, cwd: project.primaryPath, defaults: agentDefaults });
   // The project's lanes. New tasks start in an active lane (finished ones only
   // when added from that lane); an edited card keeps showing its current lane.
   const lanes = enabledStatuses(project);
@@ -585,6 +593,7 @@ export function TaskForm({
     }
   }
   const canSave =
+    ready &&
     !pending &&
     !!title.trim() &&
     !(!task && mode === "existing" && !workspaceId) &&
@@ -605,6 +614,15 @@ export function TaskForm({
           {!!seed?.followUpTitle && (
             <Label muted size={font.sm} lines={1}>{t("Follow-up of {title}", { title: seed.followUpTitle })}</Label>
           )}
+          <Field title={t("Title")} value={title} onChange={setTitle} placeholder={t("What needs doing?")} onSubmit={submit} />
+          <Field
+            title={t("Description")}
+            value={description}
+            onChange={setDescription}
+            multiline
+            onSubmit={submit}
+          />
+          {ready ? <>
           {!task && byFamily.size > 0 && (
             <View style={{ gap: space[2] }}>
               {externals.map((x) => (
@@ -640,14 +658,6 @@ export function TaskForm({
               )}
             </View>
           )}
-          <Field title={t("Title")} value={title} onChange={setTitle} placeholder={t("What needs doing?")} onSubmit={submit} />
-          <Field
-            title={t("Description")}
-            value={description}
-            onChange={setDescription}
-            multiline
-            onSubmit={submit}
-          />
           <Choices
             title={t("Status")}
             value={status}
@@ -797,6 +807,7 @@ export function TaskForm({
               )}
             </View>
           )}
+          </> : <Label muted>{t("Loading…")}</Label>}
           {resources.error && <Notice>{message(resources.error)}</Notice>}
           {error && <Notice>{error}</Notice>}
           <Actions>

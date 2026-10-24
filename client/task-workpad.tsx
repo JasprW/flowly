@@ -1,3 +1,5 @@
+import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
+import { perfStart, perfEnd, usePerfRender } from "./perf";
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
@@ -6,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import type { AcceptanceItem, CheckState, ConfusionItem, PlanSnapshot, Task, ValidationItem, Workpad } from "../shared/model";
 import { plansOf, validationFreshness, workpadOf } from "../shared/workpad";
-import { boardKey, useBoardQuery, useLiveAgents } from "./queries";
+import { useLiveAgents } from "./queries";
 import { Collapse, PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
 import { AiMark, IconButton, Label, font, message, radius, relativeTime, space, touch, useTheme, noFocusRing } from "./ui";
 import { t } from "../shared/i18n";
@@ -26,14 +28,16 @@ const shortPath = (path: string) => path.replace(/^\/(Users|home)\/[^/]+/, "~");
  * optimistic and never change the task revision.
  */
 export const TaskWorkpad = memo(function TaskWorkpad({ task, disabled, active, section }: { task: Task; disabled: boolean; active: boolean; section: SectionState }) {
-  const board = useBoardQuery();
+  usePerfRender("switch.workpad.commit");
+  const switchStart = perfStart();
+  const { detail } = useTaskDetail();
   const toast = useToast();
   const queryClient = useQueryClient();
   const checkRpc = useRpc(rpc.checkWorkpad);
   const resolveRpc = useRpc(rpc.resolveConfusion);
   const refreshRpc = useRpc(rpc.refreshWorkpad);
-  const workpad = workpadOf(board.data?.workpads, task.id);
-  const plans = useMemo(() => plansOf(board.data?.plans || [], task.id), [board.data?.plans, task.id]);
+  const workpad = detail?.workpad ?? undefined;
+  const plans = useMemo(() => plansOf(detail?.plans || [], task.id), [detail?.plans, task.id]);
   // Optimistic edits by item id until the board shows them.
   const [pending, setPending] = useState<ReadonlyMap<string, Partial<Pick<AcceptanceItem, "done"> & Pick<ValidationItem, "state">> | "removed">>(
     () => new Map(),
@@ -63,14 +67,14 @@ export const TaskWorkpad = memo(function TaskWorkpad({ task, disabled, active, s
   useEffect(() => {
     if (!head.data) return;
     if ((head.data.head?.sha || "") !== storedSha || !!head.data.head?.dirty !== storedDirty)
-      void queryClient.invalidateQueries({ queryKey: boardKey });
+      void invalidateCardViews(queryClient);
   }, [head.data, storedSha, storedDirty, queryClient]);
   if (!workpad && !plans.length) return null;
   const edit = async (id: string, change: Partial<Pick<AcceptanceItem, "done"> & Pick<ValidationItem, "state">> | "removed", run: () => Promise<unknown>) => {
     setPending((current) => new Map(current).set(id, change));
     try {
       await run();
-      await queryClient.invalidateQueries({ queryKey: boardKey });
+      await invalidateCardViews(queryClient);
     } catch (e) {
       toast.show(message(e), { variant: "error" });
     } finally {
@@ -103,6 +107,7 @@ export const TaskWorkpad = memo(function TaskWorkpad({ task, disabled, active, s
   const stamp = workpad?.env
     ? `${workpad.env.host}:${shortPath(workpad.env.path)}${workpad.env.head?.sha ? `@${workpad.env.head.sha.slice(0, 7)}${workpad.env.head.dirty ? "*" : ""}` : ""}`
     : "";
+  perfEnd("switch.workpad.own", switchStart);
   return (
     <Section
       id={task.id}

@@ -1,4 +1,5 @@
-import { useRef } from "react";
+import { useContext, useRef } from "react";
+import { BoardOutputActive } from "./query-activity";
 import { useQuery } from "@tanstack/react-query";
 import { useRpc } from "@getpaseo/plugin/client";
 import { sessionTail } from "../shared/rpc";
@@ -153,6 +154,7 @@ const limit = createLimiter(OUTPUT_CONCURRENCY);
  * for 5 minutes so lane switches and Back do not refetch them.
  */
 export function useCardOutput(session: OutputSession | null | undefined, taskId: string) {
+  const active = useContext(BoardOutputActive);
   const tail = useRpc(sessionTail);
   const query = useQuery({
     queryKey: ["flowly", "cardOutput", session?.id, session ? outputCacheKey(session) : ""],
@@ -161,7 +163,7 @@ export function useCardOutput(session: OutputSession | null | undefined, taskId:
         const response = await tail({ taskId, agentId: session!.id, limit: OUTPUT_TAIL_LIMIT });
         return latestAgentOutput(response.entries);
       }, signal),
-    enabled: !!session,
+    enabled: active && !!session,
     staleTime: Infinity,
     gcTime: 5 * 60_000,
     retry: false,

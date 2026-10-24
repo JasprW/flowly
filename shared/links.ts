@@ -44,13 +44,13 @@ export const touches = (link: Pick<Link, "from" | "to">, taskId: string) => link
 export const samePair = (link: Pick<Link, "from" | "to">, a: string, b: string) =>
   (link.from === a && link.to === b) || (link.from === b && link.to === a);
 
-export interface LinkView {
+export interface LinkView<T = Task> {
   link: Link;
   relation: Relation;
-  other: Task | undefined;
+  other: T | undefined;
 }
 
-export function linksOf(board: { links: readonly Link[]; tasks: readonly Task[] }, taskId: string): LinkView[] {
+export function linksOf<T extends Pick<Task, "id">>(board: { links: readonly Link[]; tasks: readonly T[] }, taskId: string): LinkView<T>[] {
   return board.links
     .filter((l) => touches(l, taskId))
     .map((link) => ({
