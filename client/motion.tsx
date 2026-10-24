@@ -287,6 +287,7 @@ function syncMarquee() {
   // A reversal releases the old lease before acquiring its replacement.
   void Promise.resolve().then(() => {
     if (!marquee.users || heightMotionBusy() || marquee.loop) return;
+    marquee.value.setValue(0);
     marquee.loop = Animated.loop(timing(marquee.value, 1, marqueePeriod, undefined, linear));
     marquee.loop.start();
   });
