@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react";
 import { Animated, View } from "react-native";
 import { useMarquee } from "./motion";
 import { tint } from "./ui";
+import { useSweepEnabled } from "./sweep-setting";
 import { dotGroups, glowKeys, phaseOffset } from "./running-geometry";
 
 /**
@@ -29,7 +30,8 @@ const peak = 0.85;
  * plain views laid out once per size.
  */
 export const RunningDots = memo(function RunningDots({ color, seed, radius = 0 }: { color: string; seed: string; radius?: number }) {
-  const phase = useMarquee(true);
+  const enabled = useSweepEnabled();
+  const phase = useMarquee(enabled);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const layers = useMemo(() => {
     if (!phase || !size.w || !size.h) return [];

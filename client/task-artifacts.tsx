@@ -294,9 +294,7 @@ function ArtifactForm({ task, artifact, onClose }: { task: Task; artifact: Artif
               onChange={setTarget}
               editable={!artifact}
               autoFocus={!artifact && !touch}
-              placeholder={t("docs/spec.md or https://…")}
-              hint={artifact ? undefined : t("A file or folder in this card's directories (relative to its workspace), or an http(s) link. Only the reference is stored.")}
-              onSubmit={ready ? () => void submit() : undefined}
+              placeholder={t("docs/spec.md or https://…")}              onSubmit={ready ? () => void submit() : undefined}
             />
             <Field title={t("Title")} value={title} onChange={setTitle} placeholder={t("Defaults to the file name or link")} />
             <Field title={t("Note")} value={note} onChange={setNote} multiline placeholder={t("What it is for")} />

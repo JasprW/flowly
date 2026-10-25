@@ -240,7 +240,6 @@ export const IdeasPage = memo(function IdeasPage({
                 on
                 icon="X"
                 label={t("Card: {title}", { title: cardTitle(cardFilter) || t("removed card") })}
-                hint={t("Shows every card's ideas")}
                 onPress={() => onCardFilter("")}
               />
             )}
