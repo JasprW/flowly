@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { AccessibilityInfo, Animated, Dimensions, Easing, Platform, type ViewProps } from "react-native";
+import { AccessibilityInfo, Animated, AppState, Dimensions, Easing, Platform, type ViewProps } from "react-native";
 import { reduceMotionNow, subscribeReduceMotion } from "./reduce-motion";
 import { isCompactLayout } from "./geometry";
 
@@ -289,20 +289,47 @@ export function PulseDot({ color, size = 8, active = true }: { color: string; si
  */
 /** One lap of the running comet / one sweep of the row shimmer. */
 export const marqueePeriod = 2400;
-const marquee = { users: 0, value: new Animated.Value(0), loop: null as Animated.CompositeAnimation | null, unwatch: null as (() => void) | null };
+const marquee = {
+  users: 0,
+  value: new Animated.Value(0),
+  loop: null as Animated.CompositeAnimation | null,
+  unwatch: null as (() => void) | null,
+  unwatchApp: null as (() => void) | null,
+};
+/** Drop the loop first, so its own end callback does not read the stop as an interruption. */
+function haltMarquee() {
+  const loop = marquee.loop;
+  marquee.loop = null;
+  loop?.stop();
+}
 /** Keep the grid mounted; only the one shared clock yields to height motion. */
 function syncMarquee() {
   if (marquee.loop && !heightMotionBusy()) return;
-  marquee.loop?.stop();
-  marquee.loop = null;
+  haltMarquee();
   if (!marquee.users || heightMotionBusy()) return;
   // A reversal releases the old lease before acquiring its replacement.
   void Promise.resolve().then(() => {
     if (!marquee.users || heightMotionBusy() || marquee.loop) return;
     marquee.value.setValue(0);
-    marquee.loop = Animated.loop(timing(marquee.value, 1, marqueePeriod, undefined, linear));
-    marquee.loop.start();
+    const loop = Animated.loop(timing(marquee.value, 1, marqueePeriod, undefined, linear));
+    marquee.loop = loop;
+    // A loop that ends on its own (another write to the value, a dropped native animation) would leave every sweep
+    // dark until a reload, because `marquee.loop` still looked alive: start it again.
+    loop.start(() => {
+      if (marquee.loop !== loop) return;
+      marquee.loop = null;
+      setTimeout(syncMarquee, 250);
+    });
   });
+}
+/**
+ * After the app was in the background (hidden window, locked screen, sleep) the browser or the native driver may have
+ * frozen the loop without ending it, so no callback fires. Coming back, start a fresh lap.
+ */
+function restartMarquee() {
+  if (!marquee.users) return;
+  haltMarquee();
+  syncMarquee();
 }
 export function useMarquee(active: boolean) {
   const reduced = useContext(ReduceMotion);
@@ -311,14 +338,19 @@ export function useMarquee(active: boolean) {
     if (!on) return;
     if (marquee.users++ === 0) {
       marquee.unwatch = subscribeHeightMotion(syncMarquee);
+      const app = AppState.addEventListener("change", (state) => {
+        if (state === "active") restartMarquee();
+      });
+      marquee.unwatchApp = () => app.remove();
       syncMarquee();
     }
     return () => {
       if (--marquee.users === 0) {
         marquee.unwatch?.();
         marquee.unwatch = null;
-        marquee.loop?.stop();
-        marquee.loop = null;
+        marquee.unwatchApp?.();
+        marquee.unwatchApp = null;
+        haltMarquee();
         marquee.value.setValue(0);
       }
     };
