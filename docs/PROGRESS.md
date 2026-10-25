@@ -17,6 +17,21 @@
 - Switched the maintainer's data after the merge (user's go-ahead): 365 ms for 107 cards / 4552 events, the backup taken at the move equals the original board.json field for field, reads and writes work, Settings → Storage checked on desktop (compact only partly capturable with shot-lib). See `docs/verification/sqlite-min-2026-10-26/switch.md`.
 - Onboarding: tour More features gets Backups; What's new 1.7.0 gets one item with Open settings → Storage. No tip: nothing to point at during normal use.
 - Independent milestone verification (claude/claude-haiku-5-5) and the real-data copy rehearsal: see `docs/verification/sqlite-min-2026-10-26/`.
+## Insights third version: activity and Skills (card "Insights重设计") — 2026-10-25
+
+Spec: [INSIGHTS-REDESIGN-SPEC](INSIGHTS-REDESIGN-SPEC.md) (third version, accepted 2026-10-25; plan in §11). The user found the second version "一般": attention per card, the time table and Agent habits were not useful to ordinary users and the daily record never produced a summary. They asked for a GitHub-style activity heatmap and for Insights to turn repeated work into reusable skills.
+
+- [x] `shared/activity.ts`: 53-week heatmap data from the flow log (turns, active cards, cards done), quartile levels; `insights.project` returns `{ today, activity, workflow, habits? }` without git or running-session reads.
+- [x] Digest: one generation per project with the last picked day waiting; `DIGEST_DAYS` 400; a past day is summarized when selected (fixes the empty daily record).
+- [x] `shared/workflow-stats.ts` slimmed to the last 7 days' rounds, one-pass share, models and tokens per card; second-version attention, time, weeks, baseline and anomalies removed.
+- [x] Agent habits behind the host setting `developer.agentHabits` (no settings page).
+- [x] Skills in the workflow-insights run: on by default, first scheduled run one interval after collecting starts, new quiet rule, material from cards, the owner's words (memory clues), memory and project skills, skill prompt and validation (max 3, names, lengths, redaction, updates only of Flowly's skills), per-kind replacement.
+- [x] `workflow-insights.install-skill`: `.agents/skills/<name>/SKILL.md` plus a relative `.claude/skills/<name>` link; foreign entries and failed links reported, never copied; no git.
+- [x] Client: heatmap, day panel, Skills (new / update with diff / in the project), Other suggestions and Workflow folded; settings renamed Skills; tour page 4; tip `first-skill-draft` (replaces the unreleased `insights-redesign`); What's new 1.7.0; nine catalogs.
+- [x] `npm run typecheck`, `npm test` in the isolated worktree (`feat/insights-v3`).
+- [ ] Live checks need this branch installed: Run now on Flowly, Add to project on Tinylink, screenshots, Luna 6 full-access (not run).
+- [ ] README screenshots `05-insights*.png` still show the first version.
+
 ## Insights redesign (card "Insights重设计") — 2026-10-22
 
 Spec: [INSIGHTS-REDESIGN-SPEC](INSIGHTS-REDESIGN-SPEC.md) (second version). The user rejected an output-statistics page ("it should not make people anxious or push them to grind") in favour of evaluating the workflow itself.
