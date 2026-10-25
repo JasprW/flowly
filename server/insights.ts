@@ -18,7 +18,6 @@ import { SUMMARIZER_LABELS, isSummarizer, summaryModelsOf, type SummaryEntry, ty
 import {
   TREND_DAYS,
   addDays,
-  analyzePrepared,
   dayKey,
   dayStart,
   isDay,
@@ -32,7 +31,8 @@ import {
   type ProjectInsights,
 } from "../shared/insights";
 import { habits, modellessAgents, withMoveDetails } from "../shared/agent-habits";
-import { cardStats, cardTokens, workflowStats, type CardTokens, type DigestHeadline, type InsightsView } from "../shared/workflow-stats";
+import { cardStats, cardTokens, workflowStats, type CardTokens, type InsightsView } from "../shared/workflow-stats";
+import { activity } from "../shared/activity";
 import {
   DIGEST_DAYS,
   clipMaterial,
@@ -48,8 +48,8 @@ import {
 
 export const DIGEST_TIMEOUT_MS = 120_000;
 type DayInput = { projectId: string; tz: string; day?: string };
-/** INSIGHTS-REDESIGN-SPEC §8: `end` is the window's last day (today when absent or later). */
-type WindowInput = { projectId: string; tz: string; end?: string };
+/** INSIGHTS-REDESIGN-SPEC §7: the page has no window; everything is relative to today. */
+type WindowInput = { projectId: string; tz: string };
 
 /** `digests.json`: serialized writes, backup, atomic replacement; invalid data is preserved. */
 export class DigestStore {
@@ -138,7 +138,9 @@ export class DigestStore {
 
 /** Project Insights (PROJECT-INSIGHTS-SPEC): stats from the flow log, git and live sessions; the daily digest. */
 export class InsightsService {
-  private running = new Set<string>();
+  /** The day each project is generating a digest for, and the day waiting after it. */
+  private generating = new Map<string, string>();
+  private pending = new Map<string, { input: DayInput & { day: string }; force: boolean; paseo: PaseoApi }>();
   /** Reads provider logs for tokens by day (§11). */
   usage: UsageService | null = null;
   private reconciled: Promise<unknown> | null = null;
@@ -174,22 +176,6 @@ export class InsightsService {
     return { board, project, tasks, entries };
   }
 
-  private async runningSessions(workspaces: ReadonlySet<string>, paseo: PaseoApi) {
-    const agents = new Set<string>(),
-      inWorkspaces = new Set<string>();
-    let cursor: string | undefined;
-    do {
-      const page = await paseo.agents.list({ filter: { includeArchived: false }, page: { limit: 200, cursor } });
-      for (const { agent } of page.entries)
-        if (agent.workspaceId && workspaces.has(agent.workspaceId) && !agent.archivedAt && !isSummarizer(agent) && (agent.status === "running" || agent.status === "initializing")) {
-          agents.add(agent.id);
-          inWorkspaces.add(agent.workspaceId);
-        }
-      cursor = page.pageInfo.nextCursor ?? undefined;
-    } while (cursor);
-    return { agents, workspaces: inWorkspaces };
-  }
-
   private async commits(project: Project, day: string, tz: string | undefined) {
     const since = dayStart(addDays(day, -(TREND_DAYS + 1)), tz);
     return this.git.commits(project.primaryPath, since, this.now());
@@ -219,8 +205,8 @@ export class InsightsService {
     return habits(full, { day, tz, modelOf: (agentId) => models.get(agentId) });
   }
 
-  /** Accepted workflow-insight findings and the card that carried each out (INSIGHTS-REDESIGN-SPEC §3.6). */
-  landed: ((projectId: string) => Promise<{ taskId: string; title: string }[]>) | null = null;
+  /** The developer switch for Agent habits (INSIGHTS-REDESIGN-SPEC §6); off unless set. */
+  agentHabits: () => Promise<boolean> = async () => false;
 
   /** Current models of sessions whose turns carry none (WORKFLOW-INSIGHTS-SPEC §12.5); empty on failure. */
   private async agentModels(wanted: ReadonlySet<string>, workspaces: ReadonlySet<string>, paseo: PaseoApi) {
@@ -245,48 +231,26 @@ export class InsightsService {
   private window(input: WindowInput) {
     const tz = validZone(input.tz);
     const now = this.now();
-    const today = dayKey(now, tz);
-    const end = input.end && isDay(input.end) && input.end < today ? input.end : today;
-    return { tz, now, today, end };
+    return { tz, now, today: dayKey(now, tz) };
   }
 
+  /** Cards finished in the last 7 days with their model, from the replayed histories. */
+  private finished(tasks: Parameters<typeof prepare>[0]["tasks"], entries: readonly FlowEntry[], now: number, tz: string | undefined, today: string, modelOf: (id: string) => string | undefined) {
+    const prepared = prepare({ tasks, entries, now, tz, day: today, runningAgents: new Set(), runningWorkspaces: new Set(), commits: [], repos: 0, gitError: null });
+    return { prepared, cards: cardStats({ histories: prepared.histories, modelOf }) };
+  }
+
+  /** The Insights page (INSIGHTS-REDESIGN-SPEC §7): a year of activity, the last week's workflow, habits for developers. */
   async project(input: WindowInput, paseo: PaseoApi): Promise<InsightsView> {
-    const { tz, now, today, end } = this.window(input);
-    const { board, project, tasks, entries } = await this.context(input.projectId);
+    const { tz, now, today } = this.window(input);
+    const { board, tasks, entries } = await this.context(input.projectId);
     const workspaces = new Set(tasks.map((t) => t.workspaceId));
-    const [running, git] = await Promise.all([
-      this.runningSessions(workspaces, paseo).catch(() => ({ agents: new Set<string>(), workspaces: new Set<string>() })),
-      this.commits(project, today, tz),
-    ]);
-    const prepared = prepare({
-      tasks,
-      entries,
-      now,
-      tz,
-      day: today,
-      runningAgents: running.agents,
-      runningWorkspaces: running.workspaces,
-      commits: git.commits,
-      repos: git.repos,
-      gitError: git.error,
-    });
-    const insights = analyzePrepared(prepared);
-    const modelless = new Set(prepared.input.entries.filter((e) => e.action === "agent.turn_ended" && !e.model && e.agentId).map((e) => e.agentId!));
+    const modelless = new Set(entries.filter((e) => e.action === "agent.turn_ended" && !e.model && e.agentId).map((e) => e.agentId!));
     const models = await this.agentModels(modelless, workspaces, paseo);
-    const cards = cardStats({ histories: prepared.histories, sessions: prepared.sessions, modelOf: (id) => models.get(id) });
-    const landed = this.landed ? await this.landed(project.id).catch(() => []) : [];
-    const workflow = workflowStats({ cards, entries: prepared.input.entries, incomplete: insights.incomplete, end, today, tz, now, landed, insights: insights.insights });
-    return { ...insights, workflow, habits: await this.habits(entries, board, tasks, insights.day, tz, paseo) };
-  }
-
-  /** Stored digest headlines between two days, newest first; never generates one. */
-  async digestHeadlines(input: { projectId: string; from: string; to: string }): Promise<{ entries: DigestHeadline[] }> {
-    const state = await this.digests.read();
-    const entries = state.entries
-      .filter((e) => e.projectId === input.projectId && e.day >= input.from && e.day <= input.to)
-      .sort((a, b) => b.day.localeCompare(a.day))
-      .map((e) => ({ day: e.day, headline: e.headline, at: e.at }));
-    return { entries };
+    const { cards } = this.finished(tasks, entries, now, tz, today, (id) => models.get(id));
+    const view: InsightsView = { today, activity: activity({ entries, today, tz }), workflow: workflowStats({ cards, today, tz, now }) };
+    if (await this.agentHabits().catch(() => false)) view.habits = await this.habits(entries, board, tasks, today, tz, paseo);
+    return view;
   }
 
   /**
@@ -295,7 +259,7 @@ export class InsightsService {
    */
   async tokens(input: WindowInput, paseo: PaseoApi): Promise<CardTokens> {
     if (!this.usage) throw new Error("Token usage is not available.");
-    const { tz, now, today, end } = this.window(input);
+    const { tz, now, today } = this.window(input);
     const { tasks, entries } = await this.context(input.projectId);
     const owner = new Map(tasks.map((t) => [t.workspaceId, t.id]));
     const agents: (AgentLike & { taskId: string })[] = [];
@@ -312,10 +276,9 @@ export class InsightsService {
       }
       cursor = page.pageInfo.nextCursor ?? undefined;
     } while (cursor);
-    // The same cards and model attribution as insights.project, without the running-session lookup.
-    const prepared = prepare({ tasks, entries, now, tz, day: today, runningAgents: new Set(), runningWorkspaces: new Set(), commits: [], repos: 0, gitError: null });
-    const cards = cardStats({ histories: prepared.histories, sessions: prepared.sessions, modelOf: (id) => models.get(id) });
-    const stats = workflowStats({ cards, entries: prepared.input.entries, incomplete: 0, end, today, tz, now, landed: [], insights: [] });
+    // The same cards and model attribution as insights.project.
+    const { cards } = this.finished(tasks, entries, now, tz, today, (id) => models.get(id));
+    const stats = workflowStats({ cards, today, tz, now });
     const usage = this.usage;
     const wantedTasks = new Set(stats.cards.map((c) => c.taskId));
     const series = await Promise.all(
@@ -323,10 +286,6 @@ export class InsightsService {
     );
     const modelOfTask = new Map(cards.map((c) => [c.taskId, c.model]));
     return cardTokens({ series, cards: stats.cards, modelOf: (id) => modelOfTask.get(id) || "", models: stats.models.map((m) => m.model) });
-  }
-
-  private key(input: DayInput) {
-    return `${input.projectId}\n${input.day}`;
   }
 
   /** The day's digest; a past day without one is generated once when the setting is on. */
@@ -337,25 +296,47 @@ export class InsightsService {
     const entry = state.entries.find((e) => e.projectId === input.projectId && e.day === input.day) || null;
     const error = state.errors.find((e) => e.projectId === input.projectId && e.day === input.day) || null;
     const empty = !material.text;
-    if (!entry && !error && !empty && settings.digestEnabled && input.day < today && !this.running.has(this.key(input)))
-      void this.start(input, paseo);
-    return { entry, running: this.running.has(this.key(input)), error, enabled: settings.digestEnabled, empty };
+    if (!entry && !error && !empty && settings.digestEnabled && input.day < today) this.queue(input, false, paseo);
+    return { entry, running: this.busyWith(input), error, enabled: settings.digestEnabled, empty };
   }
 
   refresh(input: DayInput & { day: string }, paseo: PaseoApi) {
-    if (!this.running.has(this.key(input))) void this.start(input, paseo);
+    this.queue(input, true, paseo);
     return { queued: true as const };
   }
 
+  /** Generating or waiting to generate this day. */
+  private busyWith(input: DayInput & { day: string }) {
+    return this.generating.get(input.projectId) === input.day || this.pending.get(input.projectId)?.input.day === input.day;
+  }
+
+  /**
+   * One digest per project at a time (INSIGHTS-REDESIGN-SPEC §2.2): a day asked for while
+   * another runs replaces any earlier waiting one, so clicking through days generates only
+   * the running one and the last selected.
+   */
+  private queue(input: DayInput & { day: string }, force: boolean, paseo: PaseoApi) {
+    const running = this.generating.get(input.projectId);
+    if (running === input.day) return;
+    if (running !== undefined) this.pending.set(input.projectId, { input, force, paseo });
+    else void this.start(input, paseo);
+  }
+
   private async start(input: DayInput & { day: string }, paseo: PaseoApi) {
-    const key = this.key(input);
-    this.running.add(key);
+    this.generating.set(input.projectId, input.day);
     try {
       await this.run(input, paseo);
     } catch (e) {
       await this.digests.setError(input.projectId, input.day, e instanceof Error ? e.message : String(e)).catch(() => undefined);
     } finally {
-      this.running.delete(key);
+      this.generating.delete(input.projectId);
+      const next = this.pending.get(input.projectId);
+      this.pending.delete(input.projectId);
+      if (next) {
+        const state = await this.digests.read().catch(() => null);
+        const has = state?.entries.some((e) => e.projectId === next.input.projectId && e.day === next.input.day);
+        if (next.force || !has) void this.start(next.input, next.paseo);
+      }
     }
   }
 

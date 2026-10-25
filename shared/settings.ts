@@ -147,6 +147,22 @@ export function performanceLogOn(values: unknown) {
   return parsed.success ? parsed.data.log : false;
 }
 
+/**
+ * Developer switches (INSIGHTS-REDESIGN-SPEC §6). No settings page: set
+ * `{"version":1,"values":{"agentHabits":true}}` in `~/.paseo/plugin-settings/flowly/developer.json`
+ * on the host and reload the plugin. `agentHabits` shows Agent habits on the Insights page.
+ */
+export const developerSettings = defineSettings({
+  id: "developer",
+  scope: "host",
+  version: 1,
+  schema: z.object({ agentHabits: z.boolean().default(false) }),
+});
+export function agentHabitsOn(values: unknown) {
+  const parsed = developerSettings.schema.safeParse(values ?? {});
+  return parsed.success ? parsed.data.agentHabits : false;
+}
+
 /** Interface language: follow the device (default) or one fixed language. Host-scoped. */
 export const languageSettings = defineSettings({
   id: "language",

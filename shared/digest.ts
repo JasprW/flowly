@@ -4,7 +4,8 @@ import { outputLanguageRule } from "./ai-language";
 import type { LocaleCode } from "./i18n";
 
 /** A project's daily change digest, written by a cheap model (PROJECT-INSIGHTS-SPEC §7). */
-export const DIGEST_DAYS = 60;
+/** A year of heatmap days (INSIGHTS-REDESIGN-SPEC §2.2); each entry is about 1 KB. */
+export const DIGEST_DAYS = 400;
 export const DIGEST_INPUT_LIMIT = 12000;
 export const DIGEST_ITEMS = 5;
 const ITEM_LIMIT = 1000;

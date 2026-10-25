@@ -10,7 +10,7 @@ import { SummaryStore } from "./summaries";
 import { DigestStore, InsightsService } from "./insights";
 import type { SummarySettings } from "../shared/summary";
 import type { BoardEvent } from "../shared/model";
-import { insightsWithHabitsSchema } from "../shared/agent-habits";
+import { insightsViewSchema } from "../shared/workflow-stats";
 import { BackgroundWorkspaces } from "./background-workspace";
 
 const roots: string[] = [];
@@ -106,14 +106,15 @@ async function setup() {
   };
 }
 
-test("project insights backfill the flow log and count running sessions", async () => {
+test("project insights backfill the flow log and carry a year of activity", async () => {
   const x = await setup();
   const result = await x.service.project({ projectId: "p", tz: "UTC" }, x.paseo);
   expect((await x.flow.read("p")).map((e) => e.id)).toEqual(["e1", "e2"]);
-  expect(result.day).toBe("2026-10-16");
-  expect(result.review).toEqual([{ taskId: "t", since: "2026-10-15T09:00:00.000Z" }]);
-  // A session is running in the card's workspace: no "nothing is running" suggestion.
-  expect(result.insights.map((i) => i.rule)).not.toContain("R7");
+  expect(result.today).toBe("2026-10-16");
+  expect(result.activity.from).toBe("2025-10-13");
+  expect(result.activity.days.map((d) => d.day)).toEqual(["2026-10-15"]);
+  // Habits only with the developer switch on (INSIGHTS-REDESIGN-SPEC §6).
+  expect(result.habits).toBeUndefined();
   await expect(x.service.project({ projectId: "nope", tz: "UTC" }, x.paseo)).rejects.toThrow("Project not found.");
 });
 
@@ -131,9 +132,10 @@ test("project insights carry the agent habits; turns without a stamped model tak
       a("h7", "agent.turn_ended", "2026-10-16T10:02:00.000Z", { outcome: "completed", model: "claude/claude-sonnet-5", pick: 0 }),
     );
   });
+  x.service.agentHabits = async () => true;
   const result = await x.service.project({ projectId: "p", tz: "UTC" }, x.paseo);
   // The RPC validates its answer against this schema; a mismatch would fail every Insights read.
-  const { habits } = insightsWithHabitsSchema.parse(result);
+  const habits = insightsViewSchema.parse(result).habits!;
   expect(habits.days).toHaveLength(7);
   expect(habits.days.at(-1)).toMatchObject({ day: "2026-10-16", deliveries: 2, moves: 1, movesAny: 1, offered: 1, picked: 1 });
   expect(Object.fromEntries(habits.models.map((m) => [m.model, m.deliveries]))).toEqual({ "codex/gpt-6-astra": 1, "claude/claude-sonnet-5": 1 });
@@ -160,6 +162,24 @@ test("a past day's digest is generated once on read; today's only on refresh", a
 
   const today = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-16" }, x.paseo);
   expect(today).toMatchObject({ entry: null, running: false, empty: true });
+  expect(x.created.length).toBe(1);
+});
+
+test("one digest per project at a time: days picked meanwhile generate only the last one", async () => {
+  const x = await setup();
+  x.service.refresh({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
+  x.service.refresh({ projectId: "p", tz: "UTC", day: "2026-10-14" }, x.paseo);
+  const waiting = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo);
+  // 10-13 had no activity, so reading it alone queues nothing; refresh it to wait instead.
+  expect(waiting.running).toBe(false);
+  x.service.refresh({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo);
+  expect((await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo)).running).toBe(true);
+  await settle();
+  await settle();
+  const state = await x.digests.read();
+  expect(state.entries.map((e) => e.day)).toEqual(["2026-10-15"]);
+  // 10-14 was replaced while waiting and never ran; 10-13 ran after 10-15 (and found nothing to summarize).
+  expect(state.errors.map((e) => e.day)).toEqual(["2026-10-13"]);
   expect(x.created.length).toBe(1);
 });
 

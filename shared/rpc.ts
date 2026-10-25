@@ -57,9 +57,7 @@ import { memoryEntrySchema, memoryInputFields, memoryKeywordsSchema, memoryTagsS
 import { perfReportSchema } from "./perf";
 import { localeCodes } from "./i18n";
 import { workflowOverviewSchema, workflowViewSchema } from "./workflow-insights";
-import { tokenInsightsSchema } from "./insights";
-import { insightsWithHabitsSchema } from "./agent-habits";
-import { cardTokensSchema, digestHeadlineSchema, insightsViewSchema } from "./workflow-stats";
+import { cardTokensSchema, insightsViewSchema } from "./workflow-stats";
 
 /** `{ etag }` in; the value is omitted when it still matches (PERFORMANCE-SPEC §3). */
 const etagInput = z.strictObject({ etag: z.string().max(200).optional() });
@@ -684,7 +682,7 @@ const insightsDay = {
 };
 export const projectInsights = defineRpc({
   name: "insights.project",
-  input: z.strictObject({ ...insightsDay, end: z.string().max(10).optional(), etag: z.string().max(200).optional() }),
+  input: z.strictObject({ ...insightsDay, etag: z.string().max(200).optional() }),
   output: z.object({ etag: z.string(), value: insightsViewSchema.optional() }),
 });
 export const projectDigest = defineRpc({
@@ -697,15 +695,9 @@ export const refreshDigest = defineRpc({
   input: z.strictObject({ ...insightsDay, day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
   output: z.object({ queued: z.boolean() }),
 });
-/** Stored digest headlines for a period; never starts a generation (INSIGHTS-REDESIGN-SPEC §4). */
-export const projectDigests = defineRpc({
-  name: "insights.digests",
-  input: z.strictObject({ projectId: z.string().min(1), from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
-  output: z.object({ entries: z.array(digestHeadlineSchema) }),
-});
 export const projectTokens = defineRpc({
   name: "insights.tokens",
-  input: z.strictObject({ ...insightsDay, end: z.string().max(10).optional(), etag: z.string().max(200).optional() }),
+  input: z.strictObject({ ...insightsDay, etag: z.string().max(200).optional() }),
   output: z.object({ etag: z.string(), value: cardTokensSchema.optional() }),
 });
 

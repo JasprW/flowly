@@ -6,7 +6,7 @@ import { BoardService, dataDirectory, migrateLegacyPluginData, paseoHome } from 
 import { readPaseoVersion } from "./server/paseo-version";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
-import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
+import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { readAttentionCount } from "./server/attention-count";
@@ -69,6 +69,7 @@ export default function contribute(host: PluginServerContext) {
   const workflowPrefs = server.registerSettings(workflowInsightsSettings);
   const perfPrefs = server.registerSettings(performanceSettings);
   const telemetryPrefs = server.registerSettings(telemetrySettings);
+  const developerPrefs = server.registerSettings(developerSettings);
   // Project memory and Insights as a whole (ONBOARDING-SETUP-SPEC §6); unreadable settings keep the defaults (on).
   const featurePrefs = server.registerSettings(featureSettings);
   const featureValues = async () => {
@@ -132,13 +133,17 @@ export default function contribute(host: PluginServerContext) {
   void insights.reconcile().catch((e) => logFailure("Kanban flow log backfill failed:", e));
   server.handle(rpc.projectInsights, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.project(input, paseo), etag));
   server.handle(rpc.projectDigest, (input, { paseo }) => insights.digest(input, paseo));
-  server.handle(rpc.projectDigests, (input) => insights.digestHeadlines(input));
   server.handle(rpc.projectTokens, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.tokens(input, paseo), etag));
   server.handle(rpc.refreshDigest, (input, { paseo }) => insights.refresh(input, paseo));
   server.handle(rpc.readSummaries, () => summaries.overview());
   server.handle(rpc.readSummariesChanged, async (input) => ifChanged(await summaries.overview(), input.etag));
   const usage = new UsageService(store);
   insights.usage = usage;
+  // Agent habits only for Flowly developers (INSIGHTS-REDESIGN-SPEC §6).
+  insights.agentHabits = async () => {
+    const state = await developerPrefs.read().catch(() => null);
+    return state?.status === "ready" && agentHabitsOn(state.values);
+  };
   server.handle(rpc.taskUsage, (input, { paseo }) => usage.task(input.taskId, paseo));
   server.handle(rpc.summaryHistory, (input) => summaries.store.history(input.taskId));
   // Workflow insights (WORKFLOW-INSIGHTS-SPEC): command log, scheduled analysis, suggestions.
@@ -151,11 +156,6 @@ export default function contribute(host: PluginServerContext) {
   const commands = new CommandLog(store.directory);
   const workflow = new WorkflowInsightsService(store, commands, new WorkflowStore(store.directory), flow, workflowValues, summaries.settings, aiLanguage);
   workflow.start();
-  // Insights trend rows note the weeks an accepted suggestion's card was finished (INSIGHTS-REDESIGN-SPEC §3.6).
-  insights.landed = async (projectId) =>
-    (await workflow.state.read()).findings
-      .filter((f) => f.projectId === projectId && f.status === "accepted" && !!f.acceptedTaskId)
-      .map((f) => ({ taskId: f.acceptedTaskId!, title: f.title }));
   // Turning the switch on reads the last week of sessions once (§3.3).
   let workflowWasOn: boolean | null = null;
   const stopWorkflowPrefs = workflowPrefs.subscribe((state) => {
