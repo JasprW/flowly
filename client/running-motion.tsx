@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import { Animated, Platform, StyleSheet, View } from "react-native";
-import { useMarquee, useReduceMotion } from "./motion";
+import { useHeightMotionBusy, useMarquee, useReduceMotion } from "./motion";
 import { tint } from "./ui";
 import { useSweepEnabled } from "./sweep-setting";
 import { dotGroups, glowKeys, phaseOffset } from "./running-geometry";
@@ -34,8 +34,11 @@ const webOffsets = 16;
  * browser runs off the JS thread, so the sweep costs the JS thread nothing. The look is the same keyframes; `seed`
  * becomes a negative delay, rounded to one of `webOffsets` starts so the number of generated rules stays bounded.
  */
+const heldLayer = { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0 } as const;
 function WebDots({ color, seed, radius }: { color: string; seed: string; radius: number }) {
   const reduced = useReduceMotion();
+  // Same priority rule as the native clock and WebPulseDot: a compact height transition hides the dots meanwhile.
+  const held = useHeightMotionBusy();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const layers = useMemo(() => {
     if (!size.w || !size.h) return [];
@@ -70,7 +73,7 @@ function WebDots({ color, seed, radius }: { color: string; seed: string; radius:
       style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: radius, overflow: "hidden" }}
     >
       {layers.map((layer) => (
-        <View key={layer.index} style={layer.style}>
+        <View key={layer.index} style={held ? heldLayer : layer.style}>
           {layer.dots.map(([x, y], i) => (
             <View key={i} style={{ position: "absolute", left: x, top: y, width: dot, height: dot, borderRadius: dot / 2, backgroundColor: fill }} />
           ))}

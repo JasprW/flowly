@@ -1,8 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { View } from "react-native";
-import { MotionProvider } from "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/client/motion";
-import { RunningDots } from "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/client/running-motion";
+import { MotionProvider } from "../../../client/motion";
+import { RunningDots } from "../../../client/running-motion";
 const n = Number(new URLSearchParams(location.search).get("n") || 12);
 createRoot(document.getElementById("root")!).render(
   <MotionProvider>

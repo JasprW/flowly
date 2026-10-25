@@ -17,6 +17,10 @@ export const motionDuration = { feedback: 120, forward: 220, reverse: 160 } as c
 const enterEasing = Easing.out(Easing.cubic);
 const exitEasing = Easing.in(Easing.quad);
 const ReduceMotion = createContext(true);
+/** Compact windows only: a height transition holds the decorative loops (HEIGHT lease). */
+export function useHeightMotionBusy() {
+  return useSyncExternalStore(subscribeHeightMotion, heightMotionBusy, () => false);
+}
 /** Whether system Reduce Motion is on (true until known). */
 export function useReduceMotion() {
   return useContext(ReduceMotion);

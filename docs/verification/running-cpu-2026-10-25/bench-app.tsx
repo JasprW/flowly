@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Animated, View, Easing, StyleSheet } from "react-native";
-import { dotGroups, glowKeys, phaseOffset } from "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/client/running-geometry";
+import { dotGroups, glowKeys, phaseOffset } from "../../../client/running-geometry";
 
 const q = new URLSearchParams(location.search);
 const variant = q.get("v") || "A";
