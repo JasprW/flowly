@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { AccessibilityInfo, Animated, AppState, Dimensions, Easing, Platform, type ViewProps } from "react-native";
+import { AccessibilityInfo, Animated, AppState, Dimensions, Easing, Platform, StyleSheet, View, type ViewProps } from "react-native";
 import { reduceMotionNow, subscribeReduceMotion } from "./reduce-motion";
 import { isCompactLayout } from "./geometry";
 
@@ -17,6 +17,10 @@ export const motionDuration = { feedback: 120, forward: 220, reverse: 160 } as c
 const enterEasing = Easing.out(Easing.cubic);
 const exitEasing = Easing.in(Easing.quad);
 const ReduceMotion = createContext(true);
+/** Whether system Reduce Motion is on (true until known). */
+export function useReduceMotion() {
+  return useContext(ReduceMotion);
+}
 
 // A height tween needs JS and a layout commit for every frame. Decorative
 // loops otherwise keep recording/drawing even the retained, covered board.
@@ -258,7 +262,32 @@ const linear = (t: number) => t;
  * native driver (a looped `sequence` restarts through JS every cycle and
  * freezes whenever the JS thread is busy; PERFORMANCE-SPEC §3).
  */
-export function PulseDot({ color, size = 8, active = true }: { color: string; size?: number; active?: boolean }) {
+/**
+ * Web: react-native-web compiles `animationKeyframes` from `StyleSheet.create` into a CSS animation, so the browser
+ * runs the breathing off the JS thread (the `Animated` loop below ran on the JS driver, one 60 fps loop per dot).
+ * The keyframes are the same curve; one shared style serves every dot.
+ */
+const webPulse = Platform.OS === "web"
+  ? StyleSheet.create({
+    pulse: {
+      animationKeyframes: Object.fromEntries(pulseInput.map((t, i) => [`${t * 100}%`, { opacity: pulseOutput[i] }])),
+      animationDuration: "1600ms",
+      animationIterationCount: "infinite",
+      animationTimingFunction: "linear",
+    } as object,
+  }).pulse
+  : null;
+type PulseProps = { color: string; size?: number; active?: boolean };
+export function PulseDot(props: PulseProps) {
+  return webPulse ? <WebPulseDot {...props} /> : <NativePulseDot {...props} />;
+}
+function WebPulseDot({ color, size = 8, active = true }: PulseProps) {
+  const reduced = useContext(ReduceMotion);
+  const heightBusy = useSyncExternalStore(subscribeHeightMotion, () => active && !reduced && heightMotionBusy(), () => false);
+  const style = { width: size, height: size, borderRadius: size / 2, backgroundColor: color };
+  return <View style={!active || reduced || heightBusy ? style : [style, webPulse]} />;
+}
+function NativePulseDot({ color, size = 8, active = true }: PulseProps) {
   const reduced = useContext(ReduceMotion);
   const heightBusy = useSyncExternalStore(subscribeHeightMotion, () => active && !reduced && heightMotionBusy(), () => false);
   const [value] = useState(() => new Animated.Value(0));

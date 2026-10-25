@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
-import { Animated, View } from "react-native";
-import { useMarquee } from "./motion";
+import { Animated, Platform, StyleSheet, View } from "react-native";
+import { useMarquee, useReduceMotion } from "./motion";
 import { tint } from "./ui";
 import { useSweepEnabled } from "./sweep-setting";
 import { dotGroups, glowKeys, phaseOffset } from "./running-geometry";
@@ -22,6 +22,63 @@ const sweepWindow = 0.6;
 const afterglow = 8;
 /** A dot's alpha at full light. */
 const peak = 0.85;
+/** Web: the loop length (matches `marqueePeriod`), neighbouring lines per layer, and start offsets in the loop. */
+const webPeriod = 2400;
+const webBand = 1;
+const webOffsets = 16;
+
+/**
+ * Web only. There is no native driver there, so animating with `Animated` cost the JS thread every layer on every
+ * frame (measured: 12 running cards = 60 % of a core in the renderer and GPU, 40 % reported on the real board). The
+ * web build of react-native-web compiles `animationKeyframes` from `StyleSheet.create` into a CSS animation that the
+ * browser runs off the JS thread, so the sweep costs the JS thread nothing. The look is the same keyframes; `seed`
+ * becomes a negative delay, rounded to one of `webOffsets` starts so the number of generated rules stays bounded.
+ */
+function WebDots({ color, seed, radius }: { color: string; seed: string; radius: number }) {
+  const reduced = useReduceMotion();
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const layers = useMemo(() => {
+    if (!size.w || !size.h) return [];
+    const groups = dotGroups(size.w, size.h, pitch, dot, slant);
+    // A negative delay of (loop - start) makes the wave reach the dot `start` later in the loop, as the native clock does.
+    const delay = `-${Math.round(((webOffsets - Math.floor(phaseOffset(seed) * webOffsets)) % webOffsets) * (webPeriod / webOffsets))}ms`;
+    const out = [];
+    for (let i = 0; i < groups.length; i += webBand) {
+      const band = groups.slice(i, i + webBand);
+      const keys = glowKeys((sweepWindow * (i + (band.length - 1) / 2)) / groups.length, (sweepWindow * afterglow) / groups.length);
+      const frames: Record<string, { opacity: number }> = {};
+      keys.input.forEach((x, k) => { frames[`${Math.round(x * 100000) / 1000}%`] = { opacity: keys.output[k] }; });
+      const style = StyleSheet.create({
+        layer: {
+          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+          animationKeyframes: frames, animationDuration: `${webPeriod}ms`, animationIterationCount: "infinite", animationTimingFunction: "linear", animationDelay: delay,
+        } as object,
+      }).layer;
+      out.push({ index: i, dots: band.flatMap((group) => group.dots), style });
+    }
+    return out;
+  }, [size.w, size.h, seed]);
+  if (reduced) return null;
+  const fill = tint(color, peak);
+  return (
+    <View
+      pointerEvents="none"
+      onLayout={(e) => {
+        const next = { w: Math.round(e.nativeEvent.layout.width), h: Math.round(e.nativeEvent.layout.height) };
+        setSize((current) => (current.w === next.w && current.h === next.h ? current : next));
+      }}
+      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: radius, overflow: "hidden" }}
+    >
+      {layers.map((layer) => (
+        <View key={layer.index} style={layer.style}>
+          {layer.dots.map(([x, y], i) => (
+            <View key={i} style={{ position: "absolute", left: x, top: y, width: dot, height: dot, borderRadius: dot / 2, backgroundColor: fill }} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
 
 /**
  * The dot sweep over its parent. Mount it as the parent's first child, so it lies under the content; `radius` clips
@@ -31,7 +88,13 @@ const peak = 0.85;
  */
 export const RunningDots = memo(function RunningDots({ color, seed, radius = 0 }: { color: string; seed: string; radius?: number }) {
   const enabled = useSweepEnabled();
-  const phase = useMarquee(enabled);
+  if (!enabled) return null;
+  if (Platform.OS === "web") return <WebDots color={color} seed={seed} radius={radius} />;
+  return <NativeDots color={color} seed={seed} radius={radius} />;
+});
+
+function NativeDots({ color, seed, radius }: { color: string; seed: string; radius: number }) {
+  const phase = useMarquee(true);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const layers = useMemo(() => {
     if (!phase || !size.w || !size.h) return [];
@@ -62,4 +125,4 @@ export const RunningDots = memo(function RunningDots({ color, seed, radius = 0 }
       ))}
     </View>
   );
-});
+}
