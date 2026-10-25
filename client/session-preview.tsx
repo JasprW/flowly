@@ -44,7 +44,7 @@ import {
   noFocusRing } from "./ui";
 import { sessionTone } from "./status";
 import { resolveSend, sendBehaviorText, type SendBehavior } from "./send-queue";
-import { useComposer } from "./composer";
+import { queuedRowKey, useComposer } from "./composer";
 import { useLiveAgents } from "./queries";
 import { imageInputSupported, listenForImages, pickImageFiles, readImages, type Attachment } from "./web-images";
 import { AttachmentThumb } from "./image-attach";
@@ -457,9 +457,13 @@ function SessionPreviewView({
       draftBuffer.clear(instruction);
       onDraftChange(sessionId, "", instruction);
       setAttachments(attachmentsRef.current.filter((a) => !attached.includes(a)));
+      // The message shows in the transcript at once, not after the checks, the send and the next read (SESSION-UX-SPEC).
+      transcript.current?.echo(messageId, instruction);
+      if (mounted.current) transcript.current?.jumpToLatest();
       try {
         await sendCardInstruction(paseo, task, sessionId, contextRead, instruction, action.activeTurnBehavior, images, messageId);
       } catch (e) {
+        transcript.current?.unecho(messageId);
         flushReport();
         const typed = draftBuffer.read();
         onDraftChange(sessionId, restoredDraft(instruction, typed));
@@ -547,9 +551,12 @@ function SessionPreviewView({
           )}
           {queued.length > 0 && (
             <View style={{ gap: 4 }}>
-              {queued.map((m) => (
+              {queued.map((m) => {
+                // Shown before the daemon confirmed it: everything stays in place and looks the same, presses wait.
+                const pending = m.id.startsWith("pending-");
+                return (
                 <QueuedRow
-                  key={m.id}
+                  key={queuedRowKey(m.id)}
                   menu={menuHandlers(openMenu, t("Queued message"), () => [
                     ...(running && !m.id.startsWith("pending-")
                       ? [{ id: "steer", label: t("Send now (steer)"), icon: "CornerDownRight", onPress: () =>
@@ -586,12 +593,13 @@ function SessionPreviewView({
                     </View>
                   )}
                   <Label muted size={font.xs} selectable={false}>{t("Queued")}</Label>
-                  {running && !m.id.startsWith("pending-") && (
+                  {running && (
                     <Button
                       quiet
                       icon="CornerDownRight"
                       label={t("Send now and steer the running turn")}
                       onPress={() =>
+                        !pending &&
                         void composer
                           .sendNow(task.id, sessionId, m.id)
                           .then(() => toast.show(t("Sent to the running turn"), { variant: "success" }))
@@ -605,19 +613,18 @@ function SessionPreviewView({
                       icon="Undo2"
                       size={26}
                       label={t("Take back to the message box")}
-                      disabled={m.id.startsWith("pending-")}
-                      onPress={() => withdraw(m)}
+                      onPress={() => !pending && withdraw(m)}
                     />
                   )}
                   <IconButton
                     icon="X"
                     size={26}
                     label={t("Remove queued message")}
-                    disabled={m.id.startsWith("pending-")}
-                    onPress={() => void composer.remove(sessionId, m.id).catch((e) => setError(message(e)))}
+                    onPress={() => !pending && void composer.remove(sessionId, m.id).catch((e) => setError(message(e)))}
                   />
                 </QueuedRow>
-              ))}
+                );
+              })}
             </View>
           )}
           <View

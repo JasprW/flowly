@@ -4,7 +4,7 @@ import { ActivityIndicator, Animated, Platform, Pressable, View, type ListRender
 import { FlatList, Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { usePaseo } from "@getpaseo/plugin/client";
 import { Label, Notice, font, message, noFocusRing, radius, space, touch, useTheme, verticalContent, verticalScroll, type Tone } from "./ui";
-import { activitySummary, groupTranscript, recentSessionOutput, type TranscriptBlock } from "./session-state";
+import { activitySummary, groupTranscript, pendingEchoes, recentSessionOutput, type SentEcho, type TranscriptBlock } from "./session-state";
 import { coalescedRefresh, FOLLOW_SLACK, useSessionFollowTail } from "./session-follow";
 import { useSessionTimeline } from "./session-timeline";
 import { HISTORY_MAX } from "../shared/session-tail";
@@ -18,7 +18,16 @@ import { useStableCallback } from "./stable";
 import { t } from "../shared/i18n";
 
 export type TranscriptNotice = { key: string; text: string; tone?: Tone };
-export type TranscriptHandle = { refresh(): void; jumpToLatest(): void };
+export type TranscriptHandle = {
+  refresh(): void;
+  jumpToLatest(): void;
+  /** Shows a message just sent at once, until the timeline holds it (or `unecho` after a failed send). */
+  echo(messageId: string, text: string): void;
+  unecho(messageId: string): void;
+};
+
+/** A sent message whose record never shows up stops being shown after this long. */
+const echoTimeout = 60_000;
 
 /**
  * Phones: an inverted, virtualized FlatList, like Paseo's own session view.
@@ -119,17 +128,47 @@ function SessionTranscriptView({
     };
   }, [agent, subscribe]);
   const loaded = timeline.query.data;
-  const output = useMemo(() => recentSessionOutput(loaded?.entries || []), [loaded?.entries]);
+  // Messages sent from here appear at once; each is replaced (same row key) when the timeline brings its record.
+  const [echoes, setEchoes] = useState<readonly SentEcho[]>([]);
+  const echoTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const unecho = useStableCallback((messageId: string) => {
+    clearTimeout(echoTimers.current.get(messageId));
+    echoTimers.current.delete(messageId);
+    setEchoes((current) => (current.some((e) => e.messageId === messageId) ? current.filter((e) => e.messageId !== messageId) : current));
+  });
+  const echo = useStableCallback((messageId: string, text: string) => {
+    setEchoes((current) => [...current, { messageId, text }]);
+    echoTimers.current.set(messageId, setTimeout(() => unecho(messageId), echoTimeout));
+  });
+  useEffect(() => () => echoTimers.current.forEach(clearTimeout), []);
+  const waiting = useMemo(() => pendingEchoes(loaded?.entries || [], echoes), [loaded?.entries, echoes]);
+  useEffect(() => {
+    // Recorded now: drop them so a later window that no longer holds the message cannot bring the echo back.
+    for (const e of echoes) if (!waiting.includes(e)) unecho(e.messageId);
+  }, [waiting]);
+  const output = useMemo(
+    () =>
+      recentSessionOutput(
+        waiting.length
+          ? [...(loaded?.entries || []), ...waiting.map((e) => ({ item: { type: "user_message", text: e.text, messageId: e.messageId } }))]
+          : loaded?.entries || [],
+      ),
+    [loaded?.entries, waiting],
+  );
   const blocks = useMemo(() => groupTranscript(output), [output]);
   const data = useMemo(() => (virtualized ? [...blocks].reverse() : blocks), [blocks]);
   const tail = useSessionFollowTail(virtualized);
-  const jumpToLatest = useStableCallback(() => tail.jumpToLatest());
-  useImperativeHandle(handle, () => ({ refresh: () => void refetch(), jumpToLatest }), [refetch, jumpToLatest]);
-  const latest = useMotionPresence(!tail.following ? true : undefined, !tail.following ? "latest" : "");
-
   // Web: adding older output above keeps what the user is reading in place.
   const contentHeight = useRef(0);
   const keepPosition = useRef<{ height: number; offset: number } | null>(null);
+  // Going to the latest (a send, the Latest button) wins over an older-output load still landing.
+  const jumpToLatest = useStableCallback(() => {
+    keepPosition.current = null;
+    tail.jumpToLatest();
+  });
+  useImperativeHandle(handle, () => ({ refresh: () => void refetch(), jumpToLatest, echo, unecho }), [refetch, jumpToLatest, echo, unecho]);
+  const latest = useMotionPresence(!tail.following ? true : undefined, !tail.following ? "latest" : "");
+
   const loadEarlier = useStableCallback(() => {
     // Armed only when older output is about to land, so other size changes never use it.
     void timeline.loadEarlier(

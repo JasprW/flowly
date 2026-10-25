@@ -5,6 +5,7 @@ import {
   turnEventKey,
   openNativeSession,
   recentSessionOutput,
+  pendingEchoes,
   groupTranscript,
   activitySummary,
 } from "./session-state";
@@ -86,6 +87,27 @@ test("preview extracts readable text with reader-facing author labels, without a
       })),
     ),
   ).toHaveLength(30);
+});
+
+test("a sent message keeps its row key from the local echo to the session's own record", () => {
+  const echo = { messageId: "m-1", text: "Next" };
+  const recorded = [{ seqStart: 41, item: { type: "user_message", text: "Next", clientMessageId: "m-1" } }];
+  // Not recorded yet: the echo stays; recorded (as messageId or clientMessageId): it goes.
+  expect(pendingEchoes([], [echo])).toEqual([echo]);
+  expect(pendingEchoes(recorded, [echo])).toEqual([]);
+  expect(pendingEchoes([{ item: { type: "user_message", messageId: "m-1" } }], [echo])).toEqual([]);
+  // An agent message with the same ID does not count.
+  expect(pendingEchoes([{ item: { type: "assistant_message", messageId: "m-1" } }], [echo])).toEqual([echo]);
+  const before = recentSessionOutput([{ item: { type: "user_message", text: "Next", messageId: "m-1" } }]);
+  const after = recentSessionOutput(recorded);
+  expect(before[0].key).toBe(after[0].key);
+  // Other entries keep their sequence key, and a repeated message ID cannot produce a duplicate key.
+  const keys = recentSessionOutput([
+    { seqStart: 1, item: { type: "assistant_message", text: "Hi" } },
+    { seqStart: 2, item: { type: "user_message", text: "A", messageId: "x" } },
+    { seqStart: 3, item: { type: "user_message", text: "B", messageId: "x" } },
+  ]).map((e) => e.key);
+  expect(keys).toEqual(["1-assistant_message", "x-user", "3-user_message"]);
 });
 
 test("consecutive thinking and tool calls merge into one activity block", () => {
