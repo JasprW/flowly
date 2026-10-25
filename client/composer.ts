@@ -7,8 +7,13 @@ import { t } from "../shared/i18n";
 
 const key = ["flowly", "composer"] as const;
 
-/** Queued messages shown before the daemon confirmed them; polling pauses meanwhile, so no poll lands without them. */
+/**
+ * Queued messages shown before the daemon confirmed them. Until the last is confirmed no read may land, as it would
+ * predate them and drop their rows from view: polling and focus, reconnect or mount refetches wait, refreshes are
+ * skipped, and the last answer refreshes once.
+ */
 let unconfirmed = 0;
+const settled = () => unconfirmed === 0;
 /** Daemon id → the temporary id a queued message was first shown under, so its row keeps one key (no re-entry). */
 const rowKeys = new Map<string, string>();
 /** The React key for a queued message's row: stable from the moment it is queued until it is sent or removed. */
@@ -25,10 +30,20 @@ export function useComposer(enabled = true) {
     push = useRpc(rpc.queueMessage),
     unqueue = useRpc(rpc.unqueueMessage),
     sendNow = useRpc(rpc.sendQueuedNow);
-  const query = useQuery({ queryKey: key, queryFn: () => read({}), refetchInterval: () => (unconfirmed ? false : 3000), enabled });
+  const query = useQuery({
+    queryKey: key,
+    queryFn: () => read({}),
+    refetchInterval: () => (settled() ? 3000 : false),
+    refetchOnWindowFocus: settled,
+    refetchOnReconnect: settled,
+    refetchOnMount: settled,
+    enabled,
+  });
   const patch = (update: (state: ComposerState) => ComposerState) =>
     client.setQueryData<ComposerState>(key, (current) => update(current ?? { version: 1, sessions: {} }));
-  const refresh = () => void client.invalidateQueries({ queryKey: key });
+  const refresh = () => {
+    if (settled()) void client.invalidateQueries({ queryKey: key });
+  };
   const timers = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; flush(): void }>());
   useEffect(
     () => () => {

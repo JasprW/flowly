@@ -158,13 +158,17 @@ function SessionTranscriptView({
   const blocks = useMemo(() => groupTranscript(output), [output]);
   const data = useMemo(() => (virtualized ? [...blocks].reverse() : blocks), [blocks]);
   const tail = useSessionFollowTail(virtualized);
-  const jumpToLatest = useStableCallback(() => tail.jumpToLatest());
-  useImperativeHandle(handle, () => ({ refresh: () => void refetch(), jumpToLatest, echo, unecho }), [refetch, jumpToLatest, echo, unecho]);
-  const latest = useMotionPresence(!tail.following ? true : undefined, !tail.following ? "latest" : "");
-
   // Web: adding older output above keeps what the user is reading in place.
   const contentHeight = useRef(0);
   const keepPosition = useRef<{ height: number; offset: number } | null>(null);
+  // Going to the latest (a send, the Latest button) wins over an older-output load still landing.
+  const jumpToLatest = useStableCallback(() => {
+    keepPosition.current = null;
+    tail.jumpToLatest();
+  });
+  useImperativeHandle(handle, () => ({ refresh: () => void refetch(), jumpToLatest, echo, unecho }), [refetch, jumpToLatest, echo, unecho]);
+  const latest = useMotionPresence(!tail.following ? true : undefined, !tail.following ? "latest" : "");
+
   const loadEarlier = useStableCallback(() => {
     // Armed only when older output is about to land, so other size changes never use it.
     void timeline.loadEarlier(
