@@ -281,7 +281,8 @@ export function ProjectForm({
           )}
           {project && (
             <Toggle
-              title={t("Workflow insights")}              value={workflowInsights}
+              title={t("Skills")}
+              value={workflowInsights}
               onChange={setWorkflowInsights}
             />
           )}

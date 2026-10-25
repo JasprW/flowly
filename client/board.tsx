@@ -157,7 +157,7 @@ const tipText: Record<TipId, () => string> = {
   subagents: () => t("When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo."),
   "summary-models": () => t("Choose summary models and their fallback order in Settings → Models. The default is Haiku, then Luna."),
   "ai-language": () => t("AI-written text follows Settings → AI features → AI output language. It starts as your interface language."),
-  "insights-redesign": () => t("Insights now measures the workflow, not output: attention and review rounds per card, where time goes and cost, by week."),
+  "first-skill-draft": () => t("Insights drafted a skill from your cards. Open Insights to add it to the project."),
   "first-memory-candidate": () => t("An agent suggested something to remember. Confirm it in Memory and new sessions on this project will know it; you can edit or delete it any time."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
   "card-display": () => t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
@@ -1059,8 +1059,8 @@ function BoardContent(
   });
   const togglePage = (next: "insights" | "ideas" | "memory") => {
     ignoredLink.current = linkKey;
-    // Opening the redesigned Insights is acting on its tip (INSIGHTS-REDESIGN-SPEC §8).
-    if (next === "insights" && onboarding.values && !onboarding.values.tipsSeen.includes("insights-redesign")) void onboarding.markTipSeen("insights-redesign");
+    // Opening Insights is acting on the skill-draft tip (INSIGHTS-REDESIGN-SPEC §5).
+    if (next === "insights" && onboarding.values && !onboarding.values.tipsSeen.includes("first-skill-draft")) void onboarding.markTipSeen("first-skill-draft");
     setPage((current) => (current === next ? null : next));
   };
   const closePage = useStableCallback(() => setPage(null));
@@ -1109,10 +1109,10 @@ function BoardContent(
   const projectAttention = useMemo(() => attention.filter((i) => i.project.id === project?.id), [attention, project?.id]);
   // First-run guidance (ONBOARDING-SPEC): the welcome tour, empty-board hint and one-time tips.
   const onboarding = useOnboarding();
-  // Tip "first-workflow-insight": one read per project while the tip is unseen and the feature on; never polls.
+  // Tips "first-skill-draft" and "first-workflow-insight": one read per project while either is unseen and the feature on; never polls.
   const workflowPrefs = useSettings(workflowInsightsSettings);
   const workflowOn = workflowPrefs.status === "ready" && workflowSettingsValues(workflowPrefs.values).enabled;
-  const workflowTipDue = !!project && workflowOn && !!onboarding.values && !onboarding.values.tipsSeen.includes("first-workflow-insight");
+  const workflowTipDue = !!project && workflowOn && !!onboarding.values && !(onboarding.values.tipsSeen.includes("first-workflow-insight") && onboarding.values.tipsSeen.includes("first-skill-draft"));
   const workflowView = useWorkflowInsightsQuery(project?.id || "", boardActive && workflowTipDue, false);
   const inPanel = !!props.workspaceId;
   const dialogOpen = !!menu || !!projectForm || !!taskForm || !!removing || !!deleting || !!wrapPrompt || !!linking;
@@ -1208,8 +1208,8 @@ function BoardContent(
           cardWithSession: !!task && !!cardIndex.agentsByWorkspace.get(task.workspaceId)?.length,
           fullSidebar: !!task && (compact ? !!currentDetail && (!!currentDetail.artifacts.length || !!currentDetail.ideas.length) : !!fullBoard && (fullBoard.artifacts.some((a) => a.taskId === task.id) || fullBoard.ideas.some((i) => i.taskId === task.id))),
           hasSummary: !task && !!summaries.data?.latest.some((e) => projectTasks.some((x) => x.id === e.taskId)),
-          workflowSuggestion: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open"),
-          insightsHistory: features.insights && !task && projectTasks.filter((x) => x.status === "done").length >= 3,
+          workflowSuggestion: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open" && !(f.target === "skill" && f.skill)),
+          skillDraft: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open" && f.target === "skill" && !!f.skill),
           memoryCandidate: !task && !!memoryCandidates,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",

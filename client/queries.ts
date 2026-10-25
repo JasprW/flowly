@@ -295,19 +295,19 @@ export const localZone = () => {
 };
 
 /**
- * Project Insights for one day. Read only while the page is open; re-read when
- * the board changes (`revision`) and once a minute so waiting times stay current.
+ * Project Insights (INSIGHTS-REDESIGN-SPEC §7). Read only while the page is open; re-read
+ * when the board changes (`revision`) and every few minutes (activity changes slowly).
  */
-export function useInsightsQuery(projectId: string, end: string | null, revision: number, enabled: boolean) {
+export function useInsightsQuery(projectId: string, revision: number, enabled: boolean) {
   const read = useRpc(rpc.projectInsights);
   const client = useQueryClient();
   const tz = localZone();
-  const key = ["flowly", "insights", projectId, end || "today"] as const;
+  const key = ["flowly", "insights", projectId] as const;
   const query = useQuery({
     queryKey: key,
-    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(end ? { end } : {}), ...(etag ? { etag } : {}) })),
+    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(etag ? { etag } : {}) })),
     enabled,
-    refetchInterval: enabled ? 60_000 : false,
+    refetchInterval: enabled ? 300_000 : false,
     placeholderData: (previous) => previous,
   });
   const refetch = query.refetch;
@@ -329,28 +329,17 @@ export function useDigestQuery(projectId: string, day: string | null, enabled: b
   });
 }
 
-/** Stored digest headlines for a period (INSIGHTS-REDESIGN-SPEC §4); reading never starts a generation. */
-export function useDigestHeadlinesQuery(projectId: string, from: string | null, to: string | null, enabled: boolean) {
-  const read = useRpc(rpc.projectDigests);
-  return useQuery({
-    queryKey: ["flowly", "digest-headlines", projectId, from || "", to || ""],
-    queryFn: () => read({ projectId, from: from!, to: to! }),
-    enabled: enabled && !!from && !!to,
-    placeholderData: (previous) => previous,
-  });
-}
-
-/** Tokens per finished card from local provider logs (INSIGHTS-REDESIGN-SPEC §3.4); separate so the page never waits on log parsing. */
-export function useTokensQuery(projectId: string, end: string | null, enabled: boolean) {
+/** Tokens per finished card from local provider logs (INSIGHTS-REDESIGN-SPEC §2.5); read only once the Workflow section is open. */
+export function useTokensQuery(projectId: string, enabled: boolean) {
   const read = useRpc(rpc.projectTokens);
   const client = useQueryClient();
   const tz = localZone();
-  const key = ["flowly", "insights-tokens", projectId, end || "today"] as const;
+  const key = ["flowly", "insights-tokens", projectId] as const;
   return useQuery({
     queryKey: key,
-    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(end ? { end } : {}), ...(etag ? { etag } : {}) })),
+    queryFn: () => readChanged(client, key, (etag) => read({ projectId, tz, ...(etag ? { etag } : {}) })),
     enabled,
-    refetchInterval: enabled ? 60_000 : false,
+    refetchInterval: enabled ? 300_000 : false,
     placeholderData: (previous) => previous,
   });
 }

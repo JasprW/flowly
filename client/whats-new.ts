@@ -22,8 +22,15 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
+    // INSIGHTS-REDESIGN-SPEC §5: Skills turn on for everyone who never touched the switch.
     version: "1.7.0",
     items: [
+      { icon: "CalendarDays", text: msg("Insights shows a year of activity; tap a day for its summary.") },
+      {
+        icon: "Sparkles",
+        text: msg("Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings."),
+        action: { label: msg("Open settings"), to: "settings", section: "ai" },
+      },
       {
         icon: "Database",
         text: msg("Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON."),
