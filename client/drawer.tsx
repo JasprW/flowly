@@ -40,6 +40,7 @@ import { shallowEqual, useStableCallback } from "./stable";
 import { isLegacyScope } from "../shared/scope";
 import { SessionCard } from "./session-card";
 import { subagentSummary } from "./subagents";
+import { RunningDots } from "./running-motion";
 import { sessionTree, subagentBucket, type SessionNode } from "../shared/subagents";
 import { SessionCreate } from "./session-create";
 import { SessionPreview } from "./session-preview";
@@ -543,6 +544,8 @@ function TaskDrawerView({
           <SubagentToggle
             id={node.agent.id}
             summary={subagentSummary(kids)}
+            // Folded only: once open, the running subagent rows sweep themselves.
+            running={!open && kids.some((c) => !c.archivedAt && subagentBucket(c) === "running")}
             open={open}
             onPress={() => setSubagentsOpen((current) => ({ ...current, [node.agent.id]: !open }))}
           />
@@ -1144,7 +1147,7 @@ const CardRequests = memo(function CardRequests({
 });
 
 /** The row under a main session that shows or hides its subagents, lined up with the subagent rows. */
-function SubagentToggle({ id, summary, open, onPress }: { id: string; summary: string; open: boolean; onPress(): void }) {
+function SubagentToggle({ id, summary, running, open, onPress }: { id: string; summary: string; running: boolean; open: boolean; onPress(): void }) {
   const { colors } = useTheme();
   return (
     <Pressable
@@ -1165,6 +1168,8 @@ function SubagentToggle({ id, summary, open, onPress }: { id: string; summary: s
         backgroundColor: state.pressed || (state as typeof state & { hovered?: boolean; focused?: boolean }).hovered ? colors.surface1 : colors.surface0,
       })}
     >
+      {/* Folded with a subagent running: the row carries the running sessions' dot sweep, on its own beat (MOTION-SPEC, running state). */}
+      {running && <RunningDots color={colors.accent} seed={`${id}/subagents`} />}
       <Icon name="CornerDownRight" size={13} color={colors.foregroundMuted} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Label muted size={font.sm} lines={1} selectable={false}>{summary}</Label>
