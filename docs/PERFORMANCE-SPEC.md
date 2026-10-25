@@ -188,7 +188,7 @@ Results: [verification](verification/performance.md).
 
 ### Mobile covered-board queries and first TaskForm (2026-10-23)
 
-Native SidebarEntry uses daemon `attention.count {}` → `{count:number|null}` instead of board/agent payloads, with the same shared Attention rule and 15s refresh. Retained native compact boards disable their own query/stream observers and card-output reads while covered; direct links still start a fresh full board in the background. TaskForm keeps its Title/Description mounted and defers optional controls/queries until `useSettled`, preserving Create guards, native input ownership, fresh authorization and 450ms modal handoff. [Complete contract and checks](MOBILE-QUERY-MODAL-SPEC.md).
+Native SidebarEntry uses daemon `attention.count {}` → `{count:number|null}` instead of board/agent payloads, with the same shared Attention rule and a 3s refresh (was 15s: the badge lagged the board's live Attention button; the response is a few bytes, the decoding stays on the daemon). Retained native compact boards disable their own query/stream observers and card-output reads while covered; direct links still start a fresh full board in the background. TaskForm keeps its Title/Description mounted and defers optional controls/queries until `useSettled`, preserving Create guards, native input ownership, fresh authorization and 450ms modal handoff. [Complete contract and checks](MOBILE-QUERY-MODAL-SPEC.md).
 
 ## Android task/session switch frames (2026-10-23)
 

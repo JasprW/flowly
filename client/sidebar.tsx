@@ -9,9 +9,9 @@ import { CountPill, Theme, noFocusRing } from "./ui";
 import { tn } from "../shared/i18n";
 
 /**
- * Restrained background refresh. Every surface reads the same lightweight count.
+ * Background refresh of a tiny {count} response (the daemon decodes board and agents). Short, so the badge stays close to the board's live Attention button.
  */
-const SIDEBAR_POLL_MS = 15_000;
+const SIDEBAR_POLL_MS = 3_000;
 
 /** Same sources and rule as the board Attention button; null while unavailable or failed. */
 function useAttentionCount() {
