@@ -174,7 +174,7 @@ function MemoryPage() {
   return (
     <View style={{ gap: space[5] }}>
       <PageTitle title={t("Project memory")} detail={t("Later cards start knowing what earlier ones learned.")} />
-      <MemoryFeatureGroup bare brief />
+      <MemoryFeatureGroup bare />
       <MemoryDemo />
       <Columns>
         {[
@@ -221,7 +221,7 @@ function InsightsPage() {
   return (
     <View style={{ gap: space[5] }}>
       <PageTitle title={t("Insights")} detail={t("See where your attention and time go.")} />
-      <InsightsFeatureGroup bare workflow brief />
+      <InsightsFeatureGroup bare workflow />
       <View style={{ gap: space[2] }}>
         <DemoControls hint={t("Sample numbers from a project's Insights page.")} />
         <DemoFrame>

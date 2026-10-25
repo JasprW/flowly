@@ -736,7 +736,6 @@ function TaskDrawerView({
                 }}
               >
                 <Label muted size={font.md}>{t("No sessions yet")}</Label>
-                <Label muted size={font.sm}>{t("Start one to put an agent on this task.")}</Label>
                 <View style={{ paddingTop: space[2] }}>
                   <Button primary icon="Play" disabled={!active || unavailable} onPress={() => setShowNew(true)}>
                     {t("Start session")}</Button>

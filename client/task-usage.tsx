@@ -80,7 +80,7 @@ function Breakdown({ tokens }: { tokens: TokenUsage }) {
         value={`${compactNumber(tokens.output)}${tokens.reasoning ? ` (${t("{n} reasoning", { n: compactNumber(tokens.reasoning) })})` : ""}`}
       />
       <Line title={t("Total")} value={compactNumber(totalTokens(tokens))} strong />
-      <Line title={t("Cache hit rate")} value={hitText(tokens)} hint={t("cache read ÷ all input")} />
+      <Line title={t("Cache hit rate")} value={hitText(tokens)} />
     </View>
   );
 }

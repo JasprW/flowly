@@ -435,14 +435,6 @@ const providerLabels: Record<ConnectorProvider, string> = {
   "azure-devops": "Azure DevOps",
 };
 
-const groupDescriptions: Record<ConnectorFamily, string> = {
-  jira: msg("Self-hosted Jira uses a personal access token. Jira Cloud uses your account email and an API token."),
-  confluence: msg("Self-hosted Confluence uses a personal access token. Confluence Cloud uses your account email and an API token; its address ends in /wiki."),
-  github: msg("github.com or GitHub Enterprise Server, with a personal access token that can read issues and pull requests."),
-  gitlab: msg("gitlab.com or a self-managed GitLab, with a personal access token with the read_api scope."),
-  azure: msg("Azure DevOps Services or Server, with a personal access token that can read work items. Use the organization address, e.g. https://dev.azure.com/your-organization."),
-};
-
 const addTitles: Record<ConnectorFamily, string> = {
   jira: msg("Add a Jira connection"),
   confluence: msg("Add a Confluence connection"),
@@ -464,12 +456,10 @@ export function ConnectionsPage() {
   if (editing) return <ConnectionEditor family={editing.family} connection={editing.connection} onClose={() => setEditing(null)} />;
   return (
     <SettingsPage
-      title={t("Connections")}
-      description={t("Connect Jira, Confluence, GitHub, GitLab or Azure DevOps to add their tickets, pages, issues, work items and pull requests to cards as inputs. Flowly only reads them; it never changes anything there. Tokens stay on the computer running Paseo.")}
-    >
+      title={t("Connections")}    >
       {connections.error && <Notice>{message(connections.error)}</Notice>}
       {connectorFamilies.map((family) => (
-        <SettingsGroup key={family} title={familyNames[family]} description={t(groupDescriptions[family])}>
+        <SettingsGroup key={family} title={familyNames[family]}>
           {list
             .filter((c) => familyOf(c.provider) === family)
             .map((c) => (

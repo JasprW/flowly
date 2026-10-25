@@ -41,7 +41,7 @@ import { compactNumber } from "../shared/usage";
 import { dollars, roundTokens, runCost, runTokens, type AiRun } from "../shared/ai-cost";
 import * as rpc from "../shared/rpc";
 import { localZone } from "./queries";
-import { INTERVALS, WORKFLOW_AUTO_MODELS, usageIn, windowDays, workflowInsightsSettings, workflowSettingsValues } from "../shared/workflow-insights";
+import { INTERVALS, WORKFLOW_AUTO_MODELS, usageIn, workflowInsightsSettings, workflowSettingsValues } from "../shared/workflow-insights";
 
 /** A Flowly AI run's estimated size and price (shared/ai-cost.ts): with a price for Claude models, tokens only otherwise. */
 const costTexts: Record<AiRun, readonly [string, string]> = {
@@ -73,23 +73,20 @@ export function GeneralPage({ onTour, onWhatsNew }: { onTour(): void; /** Reopen
   const onboarding = useOnboarding();
   const [reset, setReset] = useState(false);
   return (
-    <SettingsPage title={t("General")} description={t("Language, sending messages and the welcome tour.")}>
+    <SettingsPage title={t("General")}>
       <Problem text={language.problem} />
       <SettingsGroup
         title={t("Language")}
-        description={t("The language of Flowly's buttons and messages. Agent instructions, error details from the daemon and AI-written summaries are not affected.")}
       >
         <InterfaceLanguageRow />
       </SettingsGroup>
       <SettingsGroup
         title={t("Sending messages")}
-        description={t("In a session's message box, Enter sends and Shift+Enter starts a new line.")}
       >
         <SendBehaviorRow />
       </SettingsGroup>
       <SettingsGroup
         title={t("Welcome tour")}
-        description={t("A short tour of projects, cards and sessions and how they map to Paseo. One-time tips appear as you use the board.")}
       >
         <SettingRow title={t("Show welcome tour")} onPress={onTour} trailing={<ChevronRight />} />
         {whatsNew.length > 0 && <SettingRow title={t("What's new")} onPress={onWhatsNew} trailing={<ChevronRight />} />}
@@ -115,7 +112,7 @@ function SendBehaviorRow() {
   return (
     <SettingSelect
       title={t("When a session is running")}
-      detail={`${t(sendBehaviorText[current].detail)} ${t("Same options as Paseo's “Default send” setting. Plugins cannot read that setting, so choose it here.")}`}
+      detail={t(sendBehaviorText[current].detail)}
       value={current}
       placeholder={t(sendBehaviorText[current].label)}
       disabled={!view.values}
@@ -143,14 +140,13 @@ export function InterfaceLanguageRow() {
 }
 
 /** AI output language (Settings → AI features and the welcome tour's Built in page). */
-export function AiLanguageRow({ detail }: { detail?: string }) {
+export function AiLanguageRow() {
   const aiLanguage = useStored(useSettings(aiLanguageSettings), aiLanguageSettingsValues);
   const interfaceName = locales.find((l) => l.code === getLocale())?.name ?? "English";
   const sameAsInterface = t("Same as interface language ({language})", { language: interfaceName });
   return (
     <SettingSelect
       title={t("AI output language")}
-      detail={detail}
       value={aiLanguage.values?.aiLanguage ?? "interface"}
       placeholder={sameAsInterface}
       disabled={aiLanguage.busy}
@@ -170,11 +166,10 @@ export function ModelsPage({ active }: { active: boolean }) {
   const models = useStored(useSettings(modelSettings), modelSettingsValues);
   const current = agentModelFromValues(models.values);
   return (
-    <SettingsPage title={t("Models")} description={t("Which model new sessions start with, and which one writes summaries.")}>
+    <SettingsPage title={t("Models")}>
       <Problem text={models.problem} />
       <ModelDefaultGroup
         title={t("Default model")}
-        description={t("New sessions, and “Start an agent now” on a new task, start with this model. A project can set its own in its settings; that one wins.")}
         value={current}
         disabled={models.busy}
         noneLabel={t("Automatic")}
@@ -220,13 +215,11 @@ export function SummaryModelGroup({ active, bare = false, extra }: { active: boo
       <Problem text={summary.problem} />
       <SettingsGroup
         title={bare ? t("Progress models") : t("Summary models")}
-        description={t("Models are tried from top to bottom. If one fails, the same conversation is sent to the next model's provider.")}
       >
         {selected.map((id, index) => (
           <SettingRow
             key={id}
             title={`${index + 1}. ${modelLabel(id)}`}
-            detail={id}
             trailing={
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
                 <IconButton icon="ArrowUp" label={t("Move {model} up", { model: modelLabel(id) })} disabled={summary.busy || index === 0} onPress={() => move(index, -1)} />
@@ -273,18 +266,17 @@ export function WorkflowPage() {
     .sort((a, b) => a - b)
     .map((days) => ({ value: String(days), label: dayLabel(days) }));
   return (
-    <SettingsPage title={t("Workflow")} description={t("How cards move through the board and what happens when they are done.")}>
+    <SettingsPage title={t("Workflow")}>
       <Problem text={status.problem || wrapup.problem || view.problem} />
-      <SettingsGroup title={t("Moving cards")} description={t("Agents always set their own work stage and deliver to review. These rules react to session activity on top of that.")}>
+      <SettingsGroup title={t("Moving cards")}>
         <SettingSwitch
           title={t("Auto-update status from sessions")}
-          detail={t("A Kanban session resuming after review moves the card to Development, after a blocker back to its previous stage; a turn that ends without a report puts a reviewed card back. A project can still turn this off in its settings.")}
           value={status.values?.autoStatus ?? true}
           disabled={status.busy}
           onChange={(autoStatus) => status.save({ autoStatus })}
         />
       </SettingsGroup>
-      <SettingsGroup title={t("Finishing cards")} description={t("When a card moves to Done or Cancelled, you are asked whether to wrap it up: archive its workspace and sessions. The card stays on the board.")}>
+      <SettingsGroup title={t("Finishing cards")}>
         <SettingSwitch
           title={t("Auto wrap up")}
           detail={t("Archive without asking when nothing blocks it: no running session, no uncommitted or unpushed work. Otherwise the card is left for manual Wrap up.")}
@@ -294,14 +286,12 @@ export function WorkflowPage() {
         />
         <SettingSwitch
           title={t("Auto archive on delete")}
-          detail={t("When you delete a card, also archive its sessions (and its own workspace) without asking, when nothing blocks it. Otherwise the delete dialog asks.")}
           value={wrapup.values?.archiveOnDelete ?? false}
           disabled={wrapup.busy}
           onChange={(archiveOnDelete) => wrapup.save({ archiveOnDelete })}
         />
         <SettingSelect
           title={t("Hide old finished cards")}
-          detail={t("Done and Cancelled cards that finished longer ago fold under “Show older” at the bottom of their lane. They are not archived.")}
           value={String(hideAfter)}
           placeholder={dayLabel(hideAfter)}
           disabled={view.busy}
@@ -324,21 +314,18 @@ export function AiPage() {
     { value: "copy", label: t("Copy") },
   ];
   return (
-    <SettingsPage title={t("AI features")} description={t("What the board writes and suggests for you. The model is chosen under Models.")}>
+    <SettingsPage title={t("AI features")}>
       <Problem text={summary.problem || ideas.problem || native.problem || features.problem} />
       <SettingsGroup
         title={t("Output language")}
-        description={t("The language of text the AI writes: card summaries, the daily digest, Workflow insights, session insights, and the next steps and ideas agents suggest. Your own titles and notes are never translated.")}
       >
-        <AiLanguageRow detail={t("Applies from the next run; text already written stays as it is.")} />
+        <AiLanguageRow />
       </SettingsGroup>
       <SettingsGroup
         title={t("Task progress summary")}
-        description={t("After each agent turn on a card, a cheap model updates the card's state, recap and next step. It runs as a short child session that is archived right after.")}
       >
         <SettingSwitch
           title={t("Auto summary")}
-          detail={t("Update after every completed turn. Refresh on a card always works.")}
           value={summary.values?.summaryEnabled ?? true}
           disabled={summary.busy}
           onChange={(summaryEnabled) => summary.save({ summaryEnabled })}
@@ -347,7 +334,7 @@ export function AiPage() {
       <MemoryFeatureGroup />
       <InsightsFeatureGroup />
       {(features.values?.insights ?? true) && <WorkflowInsightsGroup />}
-      <SettingsGroup title={t("Ideas")} description={t("Agents suggest worthwhile next steps as ideas on their cards; you turn them into new tasks or dismiss them.")}>
+      <SettingsGroup title={t("Ideas")}>
         <SettingSwitch
           title={t("Ideas")}
           detail={t("Off: the Ideas page, the card sections and the lightbulb counts are hidden, and agents can no longer propose ideas. Existing ideas are kept and come back when you turn this on.")}
@@ -358,11 +345,9 @@ export function AiPage() {
       </SettingsGroup>
       <SettingsGroup
         title={t("Paseo's session view")}
-        description={t("Flowly sessions opened in Paseo itself show the agent's suggested next steps as a card under its last reply.")}
       >
         <SettingSelect
           title={t("Tapping a suggested next step")}
-          detail={t("Fill puts it in that session's message box on web and desktop; nothing is sent. Where that is not possible, and with Copy, it is copied for you to paste.")}
           value={native.values?.nextMoveTap ?? "fill"}
           placeholder={tapOptions.find((o) => o.value === (native.values?.nextMoveTap ?? "fill"))?.label ?? ""}
           disabled={native.busy}
@@ -378,27 +363,24 @@ export function AiPage() {
         />
         <SettingSwitch
           title={t("Progress")}
-          detail={t("A progress row after each turn. Turn it off if another plugin already writes recaps.")}
           value={native.values?.outsideProgress ?? true}
           disabled={native.busy || !native.values?.outside}
           onChange={(outsideProgress) => native.save({ outsideProgress })}
         />
         <SettingSwitch
           title={t("Suggested next steps")}
-          detail={t("A card with the messages you are likely to send next.")}
           value={native.values?.outsideNextMoves ?? true}
           disabled={native.busy || !native.values?.outside}
           onChange={(outsideNextMoves) => native.save({ outsideNextMoves })}
         />
         <SettingSwitch
           title={t("Ideas")}
-          detail={t("Follow-ups worth doing, kept with the session: continue there, or start them in a new session or workspace.")}
           value={native.values?.outsideIdeas ?? true}
           disabled={native.busy || !native.values?.outside}
           onChange={(outsideIdeas) => native.save({ outsideIdeas })}
         />
       </SettingsGroup>
-      <SettingsGroup title={t("Artifacts")} description={t("Each card lists its inputs and outputs: files and links it worked from or delivered. You can always add them by hand.")}>
+      <SettingsGroup title={t("Artifacts")}>
         <SettingSwitch
           title={t("Agent artifacts")}
           detail={t("Off: agents can no longer add or remove artifacts and list deliverables in their replies instead. Existing artifacts are kept.")}
@@ -412,25 +394,23 @@ export function AiPage() {
 }
 
 /** Project memory as a whole and its finished-card review (Settings → AI features and the welcome tour). */
-export function MemoryFeatureGroup({ bare = false, brief = false }: { bare?: boolean; /** Without the detail lines (the welcome tour). */ brief?: boolean }) {
+export function MemoryFeatureGroup({ bare = false }: { bare?: boolean }) {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const features = useStored(useSettings(featureSettings), featureSettingsValues);
   const on = features.values?.memory ?? true;
   return (
     <SettingsGroup
       title={bare ? undefined : t("Project memory")}
-      description={bare ? undefined : t("Decisions and pitfalls you confirm are shared with new sessions on the same project.")}
     >
       <SettingSwitch
         title={t("Project memory")}
-        detail={brief ? undefined : t("Off in every project when off. Each project can still turn it off on its own. Entries are kept.")}
         value={on}
         disabled={features.busy}
         onChange={(memory) => features.save({ memory })}
       />
       <SettingSwitch
         title={t("Find memories in finished cards")}
-        detail={[brief ? "" : t("When a card moves to Done, the summary model suggests at most one thing worth remembering for the project's later cards, and usually none. You confirm it."), aiCostText("memoryReview", summaryModelOf(summary.values))].filter(Boolean).join(" ")}
+        detail={aiCostText("memoryReview", summaryModelOf(summary.values))}
         value={on && (summary.values?.retroEnabled ?? true)}
         disabled={summary.busy || !on}
         onChange={(retroEnabled) => summary.save({ retroEnabled })}
@@ -440,25 +420,23 @@ export function MemoryFeatureGroup({ bare = false, brief = false }: { bare?: boo
 }
 
 /** Insights as a whole, its daily digest and, in the welcome tour, the Workflow insights switch. */
-export function InsightsFeatureGroup({ bare = false, workflow = false, brief = false }: { bare?: boolean; workflow?: boolean; /** Without the detail lines (the welcome tour). */ brief?: boolean }) {
+export function InsightsFeatureGroup({ bare = false, workflow = false }: { bare?: boolean; workflow?: boolean }) {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const features = useStored(useSettings(featureSettings), featureSettingsValues);
   const on = features.values?.insights ?? true;
   return (
     <SettingsGroup
       title={bare ? undefined : t("Insights")}
-      description={bare ? undefined : t("Each project's Insights page: how much of your attention cards take, review rounds, where time and cost go, by week.")}
     >
       <SettingSwitch
         title={t("Insights")}
-        detail={brief ? undefined : t("Off: the Insights page and its chip are hidden, and no digest or Workflow insights run. Activity is still recorded.")}
         value={on}
         disabled={features.busy}
         onChange={(insights) => features.save({ insights })}
       />
       <SettingSwitch
         title={t("Daily digest")}
-        detail={[brief ? "" : t("Write a past day's project summary when Insights opens it. Refresh in Insights always works."), aiCostText("digest", summaryModelOf(summary.values))].filter(Boolean).join(" ")}
+        detail={aiCostText("digest", summaryModelOf(summary.values))}
         value={on && (summary.values?.digestEnabled ?? true)}
         disabled={summary.busy || !on}
         onChange={(digestEnabled) => summary.save({ digestEnabled })}
@@ -537,7 +515,6 @@ function WorkflowInsightsGroup() {
     <>
       <SettingsGroup
         title={t("Workflow insights")}
-        description={t("Every few days, a model reads the shell commands agents ran on this project's cards and suggests scripts, tools and rules worth keeping. Off by default: it spends tokens and keeps a log of commands.")}
       >
         <SettingSwitch
           title={t("Workflow insights")}
@@ -573,7 +550,6 @@ function WorkflowInsightsGroup() {
             )}
             <SettingSelect
               title={t("How often")}
-              detail={t("Daily needs plenty of tokens; longer periods cost less and still catch repeated work.")}
               value={String(interval)}
               placeholder={t(intervalLabels[interval as (typeof INTERVALS)[number]] ?? intervalLabels[7])}
               disabled={prefs.busy}
@@ -582,7 +558,6 @@ function WorkflowInsightsGroup() {
             />
             <SettingSelect
               title={t("Run after")}
-              detail={tn(windowDays(interval), "Looks at the last {n} day of commands. Quiet periods are skipped without calling the model.", "Looks at the last {n} days of commands. Quiet periods are skipped without calling the model.")}
               value={String(values?.runHour ?? 9)}
               placeholder={hourLabel(values?.runHour ?? 9)}
               disabled={prefs.busy}

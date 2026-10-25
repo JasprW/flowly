@@ -63,9 +63,9 @@ export function CardsPage() {
   const busy = !view.values;
   const isDefault = display.activity === "auto" && cardFields.every((field) => display[field]);
   return (
-    <SettingsPage title={t("Cards")} description={t("Choose what board cards show. Anything that needs you, such as questions, approvals, errors and blocked-by cards, always shows.")}>
+    <SettingsPage title={t("Cards")}>
       <CardPreview display={display} />
-      <SettingsGroup title={t("Activity line")} description={t("One line under the title about what the agent did.")}>
+      <SettingsGroup title={t("Activity line")}>
         <SettingSelect
           title={t("Show")}
           value={display.activity}
@@ -75,7 +75,10 @@ export function CardsPage() {
           onChange={(next) => void view.update({ cardActivity: next as CardActivity })}
         />
       </SettingsGroup>
-      <SettingsGroup title={t("Details")} description={t("Priority, type, ticket and tags sit in one quiet row above the title; the rest in the row below.")}>
+      <SettingsGroup>
+        <SettingSwitch title={t("Running sweep")} value={view.values?.runningSweep ?? true} disabled={busy} onChange={(runningSweep) => void view.update({ runningSweep })} />
+      </SettingsGroup>
+      <SettingsGroup title={t("Details")}>
         {cardFields.map((field) => (
           <SettingSwitch
             key={field}
@@ -133,10 +136,7 @@ function SidebarLayout({ busy, order: storedOrder, open: storedOpen, onChange }:
   );
   const row = { flexDirection: "row", alignItems: "center", gap: space[2], minHeight: touch ? 48 : 38, paddingHorizontal: space[1.5] } as const;
   return (
-    <SettingsGroup
-      title={t("Card sidebar")}
-      description={t("Arrange the sections of an open card and choose which start open. The description stays on top.")}
-    >
+    <SettingsGroup title={t("Card sidebar")}>
       <View style={{ padding: 4 }}>
         <View style={{ ...row, minHeight: 28 }}>
           <View style={{ flex: 1 }} />

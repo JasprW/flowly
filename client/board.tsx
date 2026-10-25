@@ -99,6 +99,7 @@ import { sessionAttentionSummary, sessionAttentionSummaryFromTurns } from "../sh
 import { MotionProvider, MotionReveal, useMotionPresence, lerp } from "./motion";
 import { SortableList } from "./sortable-list";
 import { useBoardView } from "./board-view";
+import { setSweepEnabled } from "./sweep-setting";
 import { BoardOutputActive, boardIsActive } from "./query-activity";
 import { OverviewBar } from "./overview-bar";
 import { InsightsPage } from "./insights";
@@ -279,6 +280,8 @@ function BoardContent(
   >(null);
   const view = useBoardView();
   // Moving a card into Done/Cancelled asks whether to wrap it up, unless the
+  const sweepOn = view.values?.runningSweep ?? true;
+  useEffect(() => setSweepEnabled(sweepOn), [sweepOn]);
   // daemon does it automatically (Auto wrap up setting).
   const wrapupPrefs = useSettings(wrapupSettings);
   // The Ideas switch (IDEAS-INBOX-SPEC §10); on until the setting has loaded.

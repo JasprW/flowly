@@ -246,9 +246,7 @@ export function ProjectForm({
           {project && <LaneEditor lanes={lanes} counts={laneCounts} disabled={pending} onChange={setLanes} />}
           {project && (
             <ModelDefaultGroup
-              title={t("Default model")}
-              description={t("New sessions in this project start with this model instead of the global default.")}
-              value={agentModel}
+              title={t("Default model")}              value={agentModel}
               disabled={pending}
               noneLabel={globalModel ? t("Global default ({model})", { model: `${globalModel.provider} · ${globalModel.model}` }) : t("Global default (Automatic)")}
               noneDetail={t("No override: the global default applies")}
@@ -269,9 +267,7 @@ export function ProjectForm({
           )}
           {project && (
             <Toggle
-              title={t("Auto-update status in this project")}
-              detail={t("A Kanban session resuming after review moves the card to Development, after a blocker back to its previous stage. Applies only while Auto-update status is on in Flowly settings.")}
-              value={autoStatus}
+              title={t("Auto-update status in this project")}              value={autoStatus}
               onChange={setAutoStatus}
             />
           )}
@@ -285,9 +281,7 @@ export function ProjectForm({
           )}
           {project && (
             <Toggle
-              title={t("Workflow insights")}
-              detail={t("Include this project when workflow insights run. Turn the feature itself on in Settings → AI features.")}
-              value={workflowInsights}
+              title={t("Workflow insights")}              value={workflowInsights}
               onChange={setWorkflowInsights}
             />
           )}
@@ -301,9 +295,7 @@ export function ProjectForm({
           )}
           {project && onShowArchived && (
             <Toggle
-              title={t("Show archived")}
-              detail={t("Archived projects and tasks")}
-              value={archivedShown}
+              title={t("Show archived")}              value={archivedShown}
               onChange={setArchivedShown}
             />
           )}
@@ -784,9 +776,7 @@ export function TaskForm({
           {!task && (
             <View style={{ gap: 12 }}>
               <Toggle
-                title={t("Start an agent now")}
-                detail={t("Create the task, then start its first session with Kanban tools. Turn off to add the task only and start later.")}
-                value={startChosen}
+                title={t("Start an agent now")}                value={startChosen}
                 onChange={setStartAgent}
               />
               {startChosen && (
@@ -799,9 +789,7 @@ export function TaskForm({
                       onChange={setPrompt}
                       multiline
                       placeholder={t("What should the agent do first?")}
-                      onSubmit={submit}
-                      hint={t("The title and description are included automatically.")}
-                    />
+                      onSubmit={submit}                    />
                   </ImageAttachments>
                 </>
               )}

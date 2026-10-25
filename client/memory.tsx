@@ -442,8 +442,8 @@ export function MemoryEditor({
       <Field title={t("Title")} value={draft.title} onChange={(value) => set({ title: value })} placeholder={t("The rule or fact itself")} autoFocus />
       <Field title={t("Details")} value={draft.body} onChange={(value) => set({ body: value })} multiline placeholder={t("What and why, or the symptom and how to avoid it. Never a secret.")} />
       <Field title={t("Tags")} value={draft.tags} onChange={(value) => set({ tags: value })} placeholder={t("Comma-separated, e.g. drawer, mobile")} />
-      <Field title={t("Search words")} value={draft.keywords} onChange={(value) => set({ keywords: value })} hint={t("Other names it goes by, in English and your language; they help new cards find it.")} placeholder={t("Comma-separated")} />
-      {allowPin && <Toggle title={t("Pin")} detail={t("Every new session on this project sees it.")} value={draft.pinned} onChange={(pinned) => set({ pinned })} />}
+      <Field title={t("Search words")} value={draft.keywords} onChange={(value) => set({ keywords: value })} placeholder={t("Comma-separated")} />
+      {allowPin && <Toggle title={t("Pin")} value={draft.pinned} onChange={(pinned) => set({ pinned })} />}
       <Actions>
         <Button quiet disabled={pending} onPress={onCancel}>{t("Cancel")}</Button>
         <Button primary icon="Check" disabled={!valid || pending} onPress={() => void go()}>{submit}</Button>

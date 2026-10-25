@@ -30,6 +30,8 @@ export const boardViewSettings = defineSettings({
     showArchived: z.boolean().default(false),
     /** Done/Cancelled cards that finished more than this many days ago fold under "Show older"; 0 shows all. */
     hideFinishedAfterDays: z.number().int().min(0).max(365).default(14),
+    /** The dot sweep on running cards, sessions and subagent rows (MOTION-SPEC, running state). */
+    runningSweep: z.boolean().default(true),
     /** Before CONNECTORS-SPEC: the Jira picker's connection; read as `lastConnections.jira`. */
     lastTicketConnection: z.string().max(200).default(""),
     /** Each family's picker connection, when there are several (CONNECTORS-SPEC §8.1). */
