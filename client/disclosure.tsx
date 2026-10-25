@@ -30,10 +30,11 @@ export function Disclosure({ title, summary, open, disabled, flush, onChange, ch
         })}
       >
         <Chevron open={open} title={title} color={colors.foregroundMuted} />
-        <View style={{ flex: 1, minWidth: 0 }}>
+        {/* With a summary the title keeps its own width and the summary gives way (as in SectionHeader). */}
+        <View style={summary ? { flexShrink: 0 } : { flex: 1, minWidth: 0 }}>
           <Label bold size={font.md} selectable={false}>{title}</Label>
         </View>
-        {!!summary && <View style={{ flexShrink: 1, maxWidth: "50%" }}><Label muted size={font.sm} lines={1} selectable={false}>{summary}</Label></View>}
+        {!!summary && <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, maxWidth: "50%", alignItems: "flex-end" }}><Label muted size={font.sm} lines={1} selectable={false}>{summary}</Label></View>}
       </Pressable>
       <Collapse open={open} id={title} style={{ paddingTop: 8, paddingBottom: 4, paddingLeft: flush ? 0 : 22, gap: 10 }}>
         {children}
