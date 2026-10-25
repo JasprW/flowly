@@ -82,6 +82,7 @@ export function recentSessionOutput(
     };
   }[],
 ) {
+  const keys = new Set<string>();
   return entries
     .flatMap((entry, index) => {
       const { item } = entry;
@@ -107,10 +108,13 @@ export function recentSessionOutput(
             : tool
               ? msg("Tool")
               : msg("Session");
-      const identity = entry.seqStart ?? item.messageId ?? item.callId ?? index;
+      // A message this client sent keeps its key from the local echo to the session's own record (SESSION-UX-SPEC).
+      const sent = item.type.includes("user") && messageId ? `${messageId}-user` : "";
+      const key = sent && !keys.has(sent) ? sent : `${entry.seqStart ?? item.messageId ?? item.callId ?? index}-${item.type}`;
+      keys.add(key);
       return [
         {
-          key: `${identity}-${item.type}`,
+          key,
           author,
           text,
           kind: tool ? "tool" : item.type,
@@ -118,6 +122,20 @@ export function recentSessionOutput(
         },
       ];
     });
+}
+
+/** A message this client just sent, shown at once until the session's timeline holds it. */
+export type SentEcho = { messageId: string; text: string };
+
+/** The echoes the timeline does not hold yet (matched by the message ID the send carried). */
+export function pendingEchoes(
+  entries: readonly { item: { type: string; messageId?: unknown; clientMessageId?: unknown } }[],
+  echoes: readonly SentEcho[],
+) {
+  if (!echoes.length) return echoes;
+  const seen = new Set<unknown>();
+  for (const { item } of entries) if (item.type.includes("user")) seen.add(item.messageId).add(item.clientMessageId);
+  return echoes.filter((e) => !seen.has(e.messageId));
 }
 
 type OutputEntry = ReturnType<typeof recentSessionOutput>[number];

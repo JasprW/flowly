@@ -2,10 +2,17 @@ import { useEffect, useRef } from "react";
 import { useRpc } from "@getpaseo/plugin/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
-import type { ComposerState, OutgoingImage } from "../shared/composer";
+import type { ComposerEntry, ComposerState, OutgoingImage } from "../shared/composer";
 import { t } from "../shared/i18n";
 
 const key = ["flowly", "composer"] as const;
+
+/** Queued messages shown before the daemon confirmed them; polling pauses meanwhile, so no poll lands without them. */
+let unconfirmed = 0;
+/** Daemon id → the temporary id a queued message was first shown under, so its row keeps one key (no re-entry). */
+const rowKeys = new Map<string, string>();
+/** The React key for a queued message's row: stable from the moment it is queued until it is sent or removed. */
+export const queuedRowKey = (id: string) => rowKeys.get(id) ?? id;
 
 /**
  * Daemon-persisted drafts and queued follow-ups (survive plugin reload / app
@@ -18,7 +25,7 @@ export function useComposer(enabled = true) {
     push = useRpc(rpc.queueMessage),
     unqueue = useRpc(rpc.unqueueMessage),
     sendNow = useRpc(rpc.sendQueuedNow);
-  const query = useQuery({ queryKey: key, queryFn: () => read({}), refetchInterval: 3000, enabled });
+  const query = useQuery({ queryKey: key, queryFn: () => read({}), refetchInterval: () => (unconfirmed ? false : 3000), enabled });
   const patch = (update: (state: ComposerState) => ComposerState) =>
     client.setQueryData<ComposerState>(key, (current) => update(current ?? { version: 1, sessions: {} }));
   const refresh = () => void client.invalidateQueries({ queryKey: key });
@@ -50,25 +57,37 @@ export function useComposer(enabled = true) {
       timers.current.set(agentId, { timer: setTimeout(flush, 500), flush });
     },
     async queue(taskId: string, agentId: string, text: string, images: OutgoingImage[] = []) {
-      const temp = {
+      const temp: ComposerEntry["queue"][number] = {
         id: `pending-${Date.now()}`,
         text,
         at: new Date().toISOString(),
         ...(images.length ? { images: images.map((image, i) => ({ file: `pending-${i}.png`, mimeType: image.mimeType })) } : {}),
       };
-      patch((s) => ({
-        ...s,
-        sessions: {
-          ...s.sessions,
-          [agentId]: {
-            ...(s.sessions[agentId] ?? { taskId, draft: "", draftAt: null, lastError: null }),
-            queue: [...(s.sessions[agentId]?.queue || []), temp],
-          },
-        },
-      }));
+      // Until the daemon answers, no poll may land: one already in flight is cancelled (its result predates this
+      // message and would wipe it from view), and polling pauses.
+      unconfirmed++;
       try {
-        return await push({ taskId, agentId, text, ...(images.length ? { images } : {}) });
+        await client.cancelQueries({ queryKey: key });
+        patch((s) => ({
+          ...s,
+          sessions: {
+            ...s.sessions,
+            [agentId]: {
+              ...(s.sessions[agentId] ?? { taskId, draft: "", draftAt: null, lastError: null }),
+              queue: [...(s.sessions[agentId]?.queue || []), temp],
+            },
+          },
+        }));
+        const item = await push({ taskId, agentId, text, ...(images.length ? { images } : {}) });
+        // The confirmed message takes the temporary one's place and its row key, so the row is not rebuilt.
+        rowKeys.set(item.id, temp.id);
+        patch((s) => {
+          const e = s.sessions[agentId];
+          return e ? { ...s, sessions: { ...s.sessions, [agentId]: { ...e, queue: e.queue.map((m) => (m.id === temp.id ? item : m)) } } } : s;
+        });
+        return item;
       } finally {
+        unconfirmed--;
         refresh();
       }
     },

@@ -135,3 +135,11 @@ All plugin text fields use `TextBox` (`client/ui.tsx`) through `Field`, the pick
 ## Composer simplified (2026-10-23, user request)
 
 The line under the message box (the "Enter to send · Shift+Enter for a new line" key hint and the "When running: Queue" chooser with its modal) is gone. The running-session send behaviour (Steer / Queue / Interrupt, `sendBehavior` in the board-view settings) is now chosen in Settings → General → Sending messages; the keys are unchanged (Enter sends, Shift+Enter a new line, ⌘/Ctrl+Enter the alternative). The send button's accessibility hint still describes what Enter does while running.
+
+## Queued row without flicker (2026-10-25, user report)
+
+Sending while the session runs showed the new queued row flash once. Cause: the row is shown at once under a temporary id (`pending-…`) and the daemon answers with its own id; the row was keyed by id, so React rebuilt it and replayed its entry, and the temporary row hid Steer and greyed Take back / Remove, so the row also jumped. A composer poll already in flight could also land without the new message and drop it for a moment. Now (`client/composer.ts`, `client/session-preview.tsx`): the confirmed message takes the temporary one's place and keeps its row key (`queuedRowKey`); an in-flight poll is cancelled before the row is shown and polling pauses until the daemon answers; while temporary, the row looks and lays out exactly like a confirmed one and its buttons ignore presses.
+
+## Sent message shows at once (2026-10-25, user report)
+
+A message sent from the session view reached the transcript only after the send's checks (session status and card context, read in parallel), the send itself and the next transcript read, often a second on a phone over the relay. Now the transcript shows it as soon as Send is pressed (`echo` on the transcript handle, with the same `messageId` the send carries) and jumps to it; when the timeline brings the session's own record of that message (matched by `messageId` / `clientMessageId`), the record takes the echo's place under the same row key (`<messageId>-user`), so the row is not rebuilt. A failed send removes the echo (the text goes back to the message box as before); an echo whose record never arrives is dropped after 60 s. Queued messages are unchanged: they show as queued rows until the turn ends.
