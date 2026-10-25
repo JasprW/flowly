@@ -722,6 +722,12 @@ export const setWorkflowFinding = defineRpc({
   }),
   output: z.object({ revision: z.number() }),
 });
+/** Writes an open skill draft into the project (INSIGHTS-REDESIGN-SPEC §4.1). */
+export const installSkill = defineRpc({
+  name: "workflow-insights.install-skill",
+  input: z.strictObject({ projectId: z.string().min(1).max(200), findingId: z.string().min(1).max(100), expectedRevision: z.number().int().min(0) }),
+  output: z.object({ revision: z.number(), path: z.string(), linked: z.boolean(), notice: z.string().optional() }),
+});
 export const workflowInsightsOverview = defineRpc({
   name: "workflow-insights.overview",
   input: z.strictObject({}),

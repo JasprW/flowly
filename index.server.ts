@@ -48,7 +48,7 @@ import { WorkflowInsightsService, WorkflowStore } from "./server/workflow-insigh
 import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workflow-insights";
 import { sessionModel } from "./server/agent-model";
 import { startedByUser, turnPick, userTexts } from "./shared/agent-habits";
-import { MemoryService, setMemoryEverywhere } from "./server/memory";
+import { MemoryService, setMemoryEverywhere, memoryOn } from "./server/memory";
 import { POSTHOG_KEY, TelemetryService } from "./server/telemetry";
 import { FLOWLY_VERSION } from "./shared/version";
 import { logFailure, reportError, reportRpcErrors, setErrorSink } from "./server/error-report";
@@ -172,6 +172,7 @@ export default function contribute(host: PluginServerContext) {
   });
   server.handle(rpc.runWorkflowInsights, (input, { paseo }) => workflow.run(input.projectId, paseo, true));
   server.handle(rpc.setWorkflowFinding, (input) => workflow.setStatus(input));
+  server.handle(rpc.installSkill, (input) => workflow.installSkill(input));
   server.handle(rpc.workflowInsightsOverview, () => workflow.overview());
   server.handle(rpc.purgeWorkflowCommands, async () => ({ deletedProjects: await workflow.purge() }));
   const service = new BoardService(store);
@@ -258,6 +259,12 @@ export default function contribute(host: PluginServerContext) {
   tools.agents.connectors = connectors;
   // Project memory (PROJECT-MEMORY-SPEC): confirmed knowledge shared across a project's cards.
   const memory = new MemoryService(store, summaries.store, summaries.settings, aiLanguage, (taskId) => summaries.settled(taskId));
+  // Skill material: card summaries and project memory (INSIGHTS-REDESIGN-SPEC §3.2).
+  workflow.skillSources = {
+    summaries: async () => (await summaries.store.read()).entries,
+    memory: async () => memory.store.read(),
+    memoryOn: (project) => memoryOn(project),
+  };
   tools.agents.memory = memory;
   server.handle(rpc.readMemory, async ({ projectId, etag }) => ifChanged(await memory.view(projectId), etag));
   server.handle(rpc.memoryCounts, async ({ etag }) => ifChanged(await memory.counts(), etag));
