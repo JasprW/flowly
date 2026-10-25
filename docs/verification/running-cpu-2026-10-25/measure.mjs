@@ -7,17 +7,25 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
 const [pagePath, ...configs] = process.argv.slice(2);
-const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}) });
-const root = browser.process().pid;
+// Playwright has no Browser.process(): tag our browser with a unique switch and find its root process by it.
+const tag = `--bench-tag=${process.pid}-${Date.now()}`;
+const browser = await chromium.launch({ headless: true, args: [tag], ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}) });
+
+/** ps TIME is [[DD-]HH:]MM:SS[.ss]; returns seconds. */
+function cpuSeconds(text) {
+  const [days, rest] = text.includes("-") ? text.split("-") : [0, text];
+  return rest.split(":").reduce((total, part) => total * 60 + Number(part), 0) + Number(days) * 86400;
+}
 
 /** CPU seconds per process kind, only for the browser we launched and its descendants. */
 function sample() {
   const rows = execSync("ps -axo pid,ppid,time,args", { encoding: "utf8" }).trim().split("\n").slice(1).map((l) => {
-    const m = l.trim().match(/^(\d+)\s+(\d+)\s+([\d:.]+)\s+(.*)$/);
-    const [mm, ss] = m[3].split(":");
-    return { pid: +m[1], ppid: +m[2], t: Number(mm) * 60 + Number(ss), kind: (m[4].match(/--type=([a-z-]+)/) || [, "browser"])[1] };
-  });
-  const ours = new Set([root]);
+    const m = l.trim().match(/^(\d+)\s+(\d+)\s+([\d:.-]+)\s+(.*)$/);
+    if (!m) return null;
+    return { pid: +m[1], ppid: +m[2], t: cpuSeconds(m[3]), args: m[4], kind: (m[4].match(/--type=([a-z-]+)/) || [, "browser"])[1] };
+  }).filter(Boolean);
+  const rootRow = rows.find((r) => r.args.includes(tag) && !r.args.includes("--type="));
+  const ours = new Set(rootRow ? [rootRow.pid] : []);
   for (let grew = true; grew;) { grew = false; for (const r of rows) if (!ours.has(r.pid) && ours.has(r.ppid)) { ours.add(r.pid); grew = true; } }
   return rows.filter((r) => ours.has(r.pid));
 }
