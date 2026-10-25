@@ -329,7 +329,7 @@ export function useDigestQuery(projectId: string, day: string | null, enabled: b
   });
 }
 
-/** Tokens per finished card from local provider logs (INSIGHTS-REDESIGN-SPEC §2.5); read only once the Workflow section is open. */
+/** Tokens per finished card from local provider logs (INSIGHTS-REDESIGN-SPEC §2.5); separate so the page never waits on log parsing. */
 export function useTokensQuery(projectId: string, enabled: boolean) {
   const read = useRpc(rpc.projectTokens);
   const client = useQueryClient();
