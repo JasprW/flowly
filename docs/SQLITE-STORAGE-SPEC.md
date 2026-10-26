@@ -58,6 +58,8 @@ CREATE INDEX items_project ON items (collection, project_id);
 
 连接设置并读回确认：`journal_mode=WAL`、`synchronous=FULL`、`busy_timeout`。目录 0700；数据库、迁移快照和备份文件 0600。
 
+2026-10-26 用户决定接受 macOS 突然断电的小风险，不开 `fullfsync` 和 `checkpoint_fullfsync`。macOS 的 fsync 不保证写进磁盘缓存之下；WAL 模式下只有检查点那一刻断电才可能损坏数据库，平时断电最多丢最后几秒的修改。兜底是每日备份。
+
 ## 5. 读写
 
 `BoardStore` 的业务逻辑一行不改，只把“读出整板 / 写回整板”换成持久层接口：
