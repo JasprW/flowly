@@ -213,7 +213,7 @@ function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { i
         </>
       }
     >
-      <Button small quiet disabled={busy || !client} label={t("Dismiss {title}", { title: idea.title })} onPress={() => client && act(() => dismissIdea(client, { ideaId: idea.id }), t("Idea dismissed"))}>
+      <Button small quiet disabled={busy || !client} label={t("Dismiss {title}", { title: idea.title })} onPress={() => client && act(() => dismissIdea(client, { ideaId: idea.id, projectId: idea.projectId }), t("Idea dismissed"))}>
         {t("Dismiss")}
       </Button>
       <Button
@@ -223,7 +223,7 @@ function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { i
         disabled={busy || !client}
         onPress={() => {
           if (!client) return;
-          newCardFromIdea(client, { ideaId: idea.id });
+          newCardFromIdea(client, { ideaId: idea.id, projectId: idea.projectId });
           close();
         }}
       >
@@ -231,7 +231,7 @@ function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { i
       </Button>
       {canContinue &&
         (confirm ? (
-          <Button small primary icon="CornerDownRight" disabled={busy || !client} onPress={() => client && act(() => continueIdea(client, { ideaId: idea.id, agentId }), t("Idea sent"))}>
+          <Button small primary icon="CornerDownRight" disabled={busy || !client} onPress={() => client && act(() => continueIdea(client, { ideaId: idea.id, projectId: idea.projectId, agentId }), t("Idea sent"))}>
             {t("Send")}
           </Button>
         ) : (

@@ -287,7 +287,8 @@ export const deleteLink = defineRpc({
 export const listConnections = defineRpc({
   name: "connectors.connections",
   input: z.object({}),
-  output: z.object({ connections: z.array(connectionSchema) }),
+  /** linkedCards: per connection id, the cards whose inputs read through it (the removal warning, CONNECTORS-SPEC). */
+  output: z.object({ connections: z.array(connectionSchema), linkedCards: z.record(z.string(), z.number().int().nonnegative()) }),
 });
 export const saveConnection = defineRpc({
   name: "connectors.connection-save",

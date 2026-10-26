@@ -2,8 +2,7 @@ import { createContext, useCallback, useContext, useMemo, type ReactNode } from 
 import { useRpc } from "@getpaseo/plugin/client";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
-import { CARD_UNAVAILABLE, cardDetail, projectCardIndex, type CardDetail, type ProjectCardIndex } from "../shared/card-detail";
-import type { Board } from "./board-read";
+import { CARD_UNAVAILABLE, type CardDetail, type ProjectCardIndex } from "../shared/card-detail";
 import { createChangedReader, boardKey } from "./queries";
 
 export const detailKey = (hostId: string, taskId: string, workspaceId: string) => ["flowly", "card-detail", hostId, 1, taskId, workspaceId] as const;
@@ -36,26 +35,21 @@ export function useProjectIdeasQuery(hostId: string, projectId: string, enabled:
 export async function invalidateCardViews(client: QueryClient) {
   await Promise.all([boardKey, ["flowly", "card-detail"], ["flowly", "overview"], ["flowly", "project-card-index"], ["flowly", "project-ideas"]].map(queryKey => client.invalidateQueries({ queryKey })));
 }
-export type CardDetailState = { hostId: string; native: boolean; detail?: CardDetail; index?: ProjectCardIndex; error: unknown; indexError: unknown; pending: boolean; retry(): void; retryIndex(): void };
+export type CardDetailState = { hostId: string; detail?: CardDetail; index?: ProjectCardIndex; error: unknown; indexError: unknown; pending: boolean; retry(): void; retryIndex(): void };
 export const CardDetailContext = createContext<CardDetailState | null>(null);
 export function useTaskDetail() {
   const value = useContext(CardDetailContext);
   if (!value) throw new Error("Card detail provider is missing.");
   return value;
 }
-/** Web adapts its complete Board here. Native never creates a complete-board observer. */
-export function CardDetailProvider({ hostId, task, native, active, fullBoard, initialRead = true, children }: { hostId: string; task: { id: string; workspaceId: string; projectId: string }; native: boolean; active: boolean; fullBoard?: Board; initialRead?: boolean; children: ReactNode }) {
-  const query = useCardDetailQuery(hostId, task.id, task.workspaceId, native && active && initialRead);
-  const index = useProjectIndexQuery(hostId, task.projectId, native && active);
-  const webDetail = useMemo(() => !native && fullBoard && fullBoard.tasks.some(t => t.id === task.id && t.workspaceId === task.workspaceId) && fullBoard.projects.some(p => p.id === task.projectId) ? cardDetail(fullBoard, { taskId: task.id, workspaceId: task.workspaceId }) : undefined, [native, fullBoard, task.id, task.workspaceId]);
-  const webIndex = useMemo(() => !native && fullBoard?.projects.some(p => p.id === task.projectId) ? projectCardIndex(fullBoard, task.projectId) : undefined, [native, fullBoard, task.projectId]);
+/** One card's detail and its project's card index, in every layout; never adapted from the whole board (LOADING-R2-SPEC §2A). */
+export function CardDetailProvider({ hostId, task, active, initialRead = true, children }: { hostId: string; task: { id: string; workspaceId: string; projectId: string }; active: boolean; initialRead?: boolean; children: ReactNode }) {
+  const query = useCardDetailQuery(hostId, task.id, task.workspaceId, active && initialRead);
+  const index = useProjectIndexQuery(hostId, task.projectId, active);
   const retry = useCallback(() => void query.refetch(), [query.refetch]);
   const retryIndex = useCallback(() => void index.refetch(), [index.refetch]);
-  const detail = native ? (detailUnavailable(query.error) ? undefined : query.data) : webDetail;
-  const cards = native ? index.data : webIndex;
-  const error = native ? query.error : null, indexError = native ? index.error : null;
-  const pending = native && query.isPending;
-  const value = useMemo<CardDetailState>(() => ({ hostId, native, detail, index: cards, error, indexError, pending, retry, retryIndex }),
-    [hostId, native, detail, cards, error, indexError, pending, retry, retryIndex]);
+  const detail = detailUnavailable(query.error) ? undefined : query.data;
+  const value = useMemo<CardDetailState>(() => ({ hostId, detail, index: index.data, error: query.error, indexError: index.error, pending: query.isPending, retry, retryIndex }),
+    [hostId, detail, index.data, query.error, index.error, query.isPending, retry, retryIndex]);
   return <CardDetailContext.Provider value={value}>{children}</CardDetailContext.Provider>;
 }

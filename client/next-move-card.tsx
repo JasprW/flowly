@@ -106,6 +106,7 @@ const NextMovesCard = memo(function NextMovesCard({
       void (async () => {
         await moveToDone(client, {
           taskId: state.task.id,
+          workspaceId: state.task.workspaceId,
           agentId: state.agentId,
           eventId,
         });

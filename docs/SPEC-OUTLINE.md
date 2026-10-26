@@ -2,6 +2,8 @@
 
 2026-10-26 匿名使用数据（已实现，待随 1.7.0 发布）：daemon 每天最多向 PostHog Cloud US 发一条 `flowly_heartbeat`（不用 SDK），字段按白名单：版本、平台、界面实际语言（`ui_locale`，替代 GeoIP）、功能开关、窗口内计数、模型计数表；数量分桶，不发任何内容、路径或 ID。默认开启，Settings → General 与导览最后一页可关闭；`DO_NOT_TRACK` / `FLOWLY_TELEMETRY=0` 强制关闭；告知前也发送，关闭后不再发送。[spec](TELEMETRY-SPEC.md)。
 
+2026-10-26 加载优化 R2（实现中）：所有布局都读总览加单卡详情，客户端不再读完整看板；表单、连接编辑器、Next moves 和 Ideas 的动作只读自己的卡或项目；不留切回开关。[LOADING-R2-SPEC](LOADING-R2-SPEC.md)。
+
 2026-10-26 看板数据迁入 SQLite（最小方案）：board.json 首次启动自动迁入 `flowly.sqlite`（源快照、逐值核对、单次 rename、退休标记），失败继续用 JSON；BoardStore 业务逻辑不变，按行增量单事务写入；每日备份 7 份、从备份恢复（revision 偏移）、导出回 v5 JSON 后可装回旧版；Settings → Storage。附属文件与读取行为不变，加载优化另做。取代 10-25 的完整设计与 D1–D4。[spec](SQLITE-STORAGE-SPEC.md)。
 
 2026-10-25 Insights 第三版（已实现，待验收）：页面改为 GitHub 式的一年活跃度热力图（每天的 agent 轮次，主题绿色深浅，不显示总数和连续天数），点某一天看当天的轮次、完成的卡和 AI 总结（过去的日子选中时生成，每个项目同时一份，保留 400 天）。Skills 成为主要能力：和 Workflow insights 合成一次运行（默认开启，首次定时运行等满一个周期），从卡片总结、workpad、项目记忆的线索、确认的记忆、命令记录和已有 skill 中提炼完整的 SKILL.md 草稿，点“加入项目”写入 `.agents/skills/<name>/` 并在 `.claude/skills/` 建软链接，不提交；Flowly 加入的 skill 可收到更新（diff）。其它建议与最近 7 天工作流数字默认收起；介入次数、时间去向、按周表格去掉；Agent habits 移到开发者设置。先于 SQLite R1 合入，R1 需补上 §7.1 的字段与写方法。[spec](INSIGHTS-REDESIGN-SPEC.md)。

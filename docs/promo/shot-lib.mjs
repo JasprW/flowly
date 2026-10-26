@@ -56,7 +56,12 @@ export async function hidePrivate(page, project) {
     let tab = leaf;
     while (tab.parentElement && [...tab.parentElement.children].filter((c) => label(c)).length < 2) tab = tab.parentElement;
     if (!tab.parentElement) return;
-    for (const sib of tab.parentElement.children) if (sib !== tab && label(sib)) sib.style.display = 'none';
+    // Only siblings on the tab's own row: in the compact header the walk can reach the column that also holds the board.
+    const row = tab.getBoundingClientRect();
+    for (const sib of tab.parentElement.children) {
+      const r = sib.getBoundingClientRect();
+      if (sib !== tab && label(sib) && Math.abs(r.y - row.y) < 12 && r.height < 80) sib.style.display = 'none';
+    }
   }, { project, sidebar: SIDEBAR_WIDTH - 20 });
 }
 

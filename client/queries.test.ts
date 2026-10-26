@@ -1,7 +1,8 @@
 import { expect, test, vi } from "vitest";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import type { PaseoAgent, PaseoAgentUpdate } from "@getpaseo/client";
-import { applyAgentUpdates, applyBoardPatch, createChangedReader, readBoardDelta } from "./queries";
+import { applyAgentUpdates, createChangedReader } from "./queries";
+import { applyBoardPatch, readBoardDelta } from "./board-read";
 import { BoardDeltas } from "../server/board-delta";
 import { SUMMARIZER_LABELS } from "../shared/summary";
 

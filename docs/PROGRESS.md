@@ -1,5 +1,16 @@
 # Implementation progress
 
+## Loading R2: no whole-board reads — 2026-10-26
+
+- User decision 2026-10-26: every layout reads the overview plus card detail; no switch back to the whole board and no user option. The maintainer uses it first and fixes what shows up. [Spec](LOADING-R2-SPEC.md)
+- Client no longer calls `board.read-changed`: the wide board polls the overview, the drawer reads card detail, Ideas read the project's ideas, the task form reads the project card index (new `externals`), the connection editor reads `linkedCards` from `connectors.connections`, the Next moves and Ideas actions read only their card or project, idea links carry `projectId`. Server handler kept for older clients.
+- Parity on a copy of the maintainer's data (107 cards, 4552 events, 118 sessions in 5 attention states each, finished-card cutoffs from 6 h to 30 days): overview facts equal the old whole-board derivations (`docs/verification/loading-r2-2026-10-26/parity.test.ts`). It catches 3 of 4 injected server bugs; the 4th (`hadTurnEnd`) is invisible on this data because every session has a turn end.
+- Timing, wide 1700×1000, Flowly project, 3 runs each: first card 577/605/605 ms before, 503/968/463 ms after; first 10 s received 5.3–5.5 MB before, 2.3–2.9 MB after (the rest is Paseo's and Flowly's other reads). `timing-before.json`, `timing-after.json`.
+- Live check after installing 5d8cb95 (merged with main after Insights v3): no `board.read`/`board.read-changed` sent while opening the board, a card, a session preview and the New task form; the overview polls every 3 s; a wide session preview keeps polling its card (4 detail reads in 12 s). Screenshots in `ui/` (desktop board, card, session preview, New task; compact board). Phone timing (§4.3) not run.
+- `docs/promo/shot-lib.mjs` `hidePrivate` hid the whole compact board (the walk up from the project label reached the column holding the board); it now hides only siblings on the tab's own row.
+- Independent verification (Haiku 5.5): first round on 16a117d found the wide preview polling stop, the lost idea-link retry and swallowed read errors (fixed in 24e417c) and parity gaps (closed in 24e417c and 96b4620); re-verification on 24e417c confirmed the fixes. Report: `docs/verification/loading-r2-2026-10-26/README.md`.
+- Onboarding: no tour, tip or What's new change; nothing new to point at, the board only loads less.
+
 ## Anonymous usage data (telemetry) — 2026-10-26
 
 - User decisions 2026-10-26: PostHog Cloud EU over its capture HTTP API (no SDK), one daily heartbeat, whitelisted fields, on by default and sent before the user has seen the notice, off stops everything, no preview or reset ID, `ui_locale` instead of GeoIP. [Spec](TELEMETRY-SPEC.md).

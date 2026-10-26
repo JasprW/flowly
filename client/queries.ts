@@ -1,11 +1,10 @@
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { useQuery, useQueryClient, type QueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import type { PaseoAgent, PaseoApi, PaseoAgentUpdate } from "@getpaseo/client";
 import * as rpc from "../shared/rpc";
 import { isSummarizer } from "../shared/summary";
 import { listAgents } from "./resources";
-import { readBoardDelta, type Board, type BoardRead } from "./board-read";
 import type { BoardOverview } from "../shared/overview";
 import { overviewKey, readOverviewDelta, type OverviewRead } from "./overview-query";
 
@@ -65,33 +64,6 @@ export const boardKey = ["flowly", "board"] as const;
 export const resourcesKey = ["flowly", "resources"] as const;
 export const summariesKey = ["flowly", "summaries"] as const;
 export const activityKey = ["flowly", "activity"] as const;
-
-export { applyBoardPatch, readBoardDelta, type BoardPatch } from "./board-read";
-
-/** One fresh reader for the board and chip navigation; fetchQuery joins an in-flight poll. */
-export function boardQueryOptions(client: QueryClient, read: BoardRead) {
-  return {
-    queryKey: boardKey,
-    queryFn: () => readChanged(client, boardKey, (etag, why) => readBoardDelta(read, client.getQueryData<Board>(boardKey), etag, why)),
-    staleTime: 0,
-  };
-}
-
-/** A cached board alone never authorizes a chip link. Always read, or join a current read. */
-export function useFreshBoard() {
-  const read = useRpc(rpc.readBoardChanged);
-  const client = useQueryClient();
-  return useCallback(() => client.fetchQuery({ ...boardQueryOptions(client, read), retry: false }), [client, read]);
-}
-
-export function useBoardQuery(options: { refetchInterval?: number; retry?: number; enabled?: boolean; notifyOnChangeProps?: UseQueryOptions<Board>["notifyOnChangeProps"] } = {}) {
-  const read = useRpc(rpc.readBoardChanged);
-  const client = useQueryClient();
-  return useQuery({
-    ...boardQueryOptions(client, read),
-    ...options,
-  });
-}
 
 export function overviewQueryOptions(client: QueryClient, hostId: string, read: OverviewRead) {
   const key = overviewKey(hostId);
