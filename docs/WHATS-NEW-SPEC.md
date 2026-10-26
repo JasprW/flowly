@@ -71,6 +71,12 @@ export const whatsNew: { version: string; items: WhatsNewItem[] }[] = [ /* 新�
 
 版本号写**带上这些变化发布的那个版本**。条目写这个版本里用户可见的新功能和变化，每条一句话；能在设置里开关或调整的给 **Open settings**（落在对应设置页），导览相关的给 **Take the tour**。
 
+### 1.7.0（待发布）
+
+| 图标 | 文案 | 按钮 |
+| --- | --- | --- |
+| `Database` | Paseo 支持时，看板改存本地 SQLite 数据库并每天备份；Settings → Storage 可恢复备份或导出为 JSON（[SQLITE-STORAGE-SPEC](SQLITE-STORAGE-SPEC.md)） | Open settings → Storage |
+
 ### 1.6.0（2026-10-24 用户确认发布 1.6.0；v1.5.0..main 已合入的部分）
 
 | 图标 | 文案 | 按钮 |

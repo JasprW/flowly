@@ -22,6 +22,16 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
+    version: "1.7.0",
+    items: [
+      {
+        icon: "Database",
+        text: msg("Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON."),
+        action: { label: msg("Open settings"), to: "settings", section: "storage" },
+      },
+    ],
+  },
+  {
     version: "1.6.0",
     items: [
       {

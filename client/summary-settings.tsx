@@ -7,6 +7,7 @@ import { useShortcutBlock } from "./shortcuts";
 import { AiPage, GeneralPage, ModelsPage, WorkflowPage } from "./settings-pages";
 import { CardsPage } from "./card-settings";
 import { ConnectionsPage } from "./connectors";
+import { StoragePage } from "./storage-settings";
 import { Button, IconButton, Label, Theme, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
 import { msg, t } from "../shared/i18n";
 
@@ -130,7 +131,7 @@ export function SettingsFab({
   );
 }
 
-export type SettingsSection = "general" | "cards" | "models" | "workflow" | "ai" | "connections";
+export type SettingsSection = "general" | "cards" | "models" | "workflow" | "ai" | "connections" | "storage";
 /** Settings grouped by what they are for; each group is one page of the two-column layout. */
 const settingsSections: { id: SettingsSection; icon: string; label: string }[] = [
   { id: "general", icon: "SlidersHorizontal", label: msg("General") },
@@ -139,6 +140,7 @@ const settingsSections: { id: SettingsSection; icon: string; label: string }[] =
   { id: "workflow", icon: "Workflow", label: msg("Workflow") },
   { id: "ai", icon: "Sparkles", label: msg("AI features") },
   { id: "connections", icon: "Plug", label: msg("Connections") },
+  { id: "storage", icon: "Database", label: msg("Storage") },
 ];
 
 /** One entry of the section list: a row in the left column, a compact chip when the modal is narrow. */
@@ -196,6 +198,8 @@ function SettingsPanes({ open, initial, onTour, onWhatsNew, fill = false }: { op
       <WorkflowPage />
     ) : section === "connections" ? (
       <ConnectionsPage />
+    ) : section === "storage" ? (
+      <StoragePage />
     ) : (
       <AiPage />
     );

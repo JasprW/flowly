@@ -10,11 +10,9 @@
 
 ## Required reading and delivery order
 
-- Read `docs/SPEC-OUTLINE.md`, the current phase spec, and `docs/PROGRESS.md` before changing code.
+- Before changing code, read the spec of the area you change (find it in `docs/SPEC-OUTLINE.md`) and the `docs/PROGRESS.md` entries for that area. Search these large files instead of reading them whole.
 - The user's later single-root decision supersedes multi-repo product behavior. Read `docs/SINGLE-ROOT-SPEC.md` before modifying project, task, workspace or tool behavior.
-- Phase 1 is the complete Kanban UI and Paseo resource integration. Stop after Phase 1 implementation and Luna verification for the user's acceptance. Do not start Phase 2 without the user's subsequent instruction.
-- The user has authorized Phase 2 implementation and complete testing. Follow `docs/PHASE-02-SPEC.md`, use an explicitly full-access Luna 6 test session, and stop for user review after delivery.
-- Write the complete phase spec before implementation. Keep observable behavior, errors, data contracts, and acceptance criteria in sync with changes. Routine implementation choices within the accepted scope do not require another approval.
+- Write or update the spec before implementing a feature: behavior, errors, data contracts and acceptance criteria. A spec holds the contract only; progress, review rounds and history go to `docs/PROGRESS.md` or `docs/verification/`. Keep it in sync with changes. Routine implementation choices within the accepted scope do not require another approval.
 - Record completed, failed, and unrun checks separately. A plugin reporting `running` alone does not prove UI or agent behavior.
 
 ## Product invariants
@@ -64,7 +62,8 @@
 
 ## Testing and local installation
 
-- The user explicitly requires a Paseo `codex/gpt-6-luna` session for each phase's testing. Discover actual provider/model availability; do not silently substitute a model.
+- Verification is objective because of who checks and against what, not because of the model: the acceptance criteria and checks are written before implementation (spec or the card's workpad); the implementer runs `npm run typecheck` and the relevant tests before every handoff and reports the commands, exit codes and counts; at each milestone (end of a phase, before the PR of a storage/schema/RPC change, before a release) an independent session that did not write the code runs the agreed checks on the exact commit (in a temporary `git worktree` of it) and owns that evidence. The implementer never edits the verifier's evidence and never weakens an assertion without saying so. The user's choice for the independent session is `claude/claude-haiku-5-5` (2026-10-26). Discover actual availability; do not silently substitute a model.
+- Keep the process lean. No independent run per increment, no file-hash freeze lists (the commit SHA is the freeze), no per-command evidence files. One short report per verification run: commit, commands, exit codes, pass/fail/unrun counts; raw output only for failures. After a fix, rerun the whole focused suite instead of stitching earlier passes together. A design advisor reviews at most once plus one re-review, and stops when no new High finding appears.
 - Launch all delegated/subagent sessions in full access, as explicitly requested by the user. For Codex pass `settings.modeId: "full-access"` at creation; do not rely on changing the mode after a turn has started. Discover the provider's equivalent mode when using another provider. Pass this requirement to test agents for any children they create, and stop leftover test children when the phase closes.
 - Testing sessions may read source, run focused checks, and use the installed plugin against dedicated fixture projects/directories. They own test evidence, not implementation files. Tell them they are sharing the codebase and must preserve others' work.
 - Do not spawn implementation agents without explicit authorization. The test-session request authorizes testing delegation.

@@ -79,7 +79,7 @@ export default function contribute(server: PluginServerContext) {
     return statusSettingsValues(state?.status === "ready" ? state.values : {}).autoStatus;
   };
   if (!process.env.FLOWLY_DATA_DIR && !process.env.ULTRA_KANBAN_DATA_DIR) migrateLegacyPluginData();
-  const store = new BoardStore(dataDirectory());
+  const store = new BoardStore(dataDirectory(), { backend: "sqlite" });
   // The Next moves card in Paseo's own timeline (NATIVE-SESSION-SPEC §6.1).
   const nextRows = new NextMoveRows(store);
   // The language of everything AI writes (AI-LANGUAGE-SPEC §3); unreadable settings fall back along the chain.
@@ -302,6 +302,14 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.readOverviewChanged, async (input, { paseo }) => {
     tools.attach(paseo);
     return overviewDeltas.read(boardOverview(await store.view()), input);
+  });
+  server.handle(rpc.readStorageStatus, () => store.storageStatus());
+  server.handle(rpc.backupStorage, async () => ({ name: await store.backupStorage() }));
+  server.handle(rpc.restoreStorage, (input) => store.restoreStorage(input.name));
+  server.handle(rpc.exportStorage, () => store.exportStorage());
+  server.handle(rpc.useSqliteStorage, async () => {
+    await store.useSqliteStorage();
+    return {};
   });
   server.handle(rpc.readCardDetailChanged, async (input, { paseo }) => { tools.attach(paseo); return readCardDetail(await store.view(), input); });
   server.handle(rpc.readProjectCardIndexChanged, async (input, { paseo }) => { tools.attach(paseo); return readProjectCardIndex(await store.view(), input); });
@@ -638,6 +646,7 @@ export default function contribute(server: PluginServerContext) {
     }
   });
   return () => {
+    void store.close().catch((e) => console.error("Flowly storage: close failed:", e instanceof Error ? e.message : String(e)));
     workflow.stop();
     stopWorkflowPrefs();
     stopFeaturePrefs();

@@ -1,0 +1,105 @@
+{
+  "host": {
+    "node": "v24.20.0",
+    "sqlite": "3.53.4"
+  },
+  "checks": {
+    "originalSha256": "edb5147ed69b82bda562bcdecc817101853353eca8362433361adefb2de45374",
+    "b_migratedEqualsJsonReader": true,
+    "b_boardJsonIsRetiredMarker": true,
+    "b_snapshotCount": 1,
+    "b_manifestSha256EqualsOriginal": true,
+    "b_snapshotBoardJsonBytesEqualOriginal": true,
+    "b_backend": "sqlite",
+    "b_backupsAfterMigration": 1,
+    "c_editSurvivesReopen": true,
+    "d_restoredFromBackupNamedLikeFlowly": true,
+    "d_contentEqualsOriginal": true,
+    "d_everyRevisionAboveEdited": true,
+    "d_staleEditRejected": true,
+    "d_previousDatabaseKept": true,
+    "d_keptDatabaseHasEdit": true,
+    "e_boardJsonVersion": 5,
+    "e_readableByPreviousReader": true,
+    "e_revisionsAbovePreExport": true,
+    "e_jsonModeReadEqualsPreExport": true,
+    "e_databaseRenamedRetired": true,
+    "e_modeFileWritten": true,
+    "f_contentEqualsPreExport": true,
+    "f_backend": "sqlite"
+  },
+  "timings": {
+    "migrationAndFirstReadMs": 330,
+    "readAfterMigrationMs": 8,
+    "editTaskMs": 25,
+    "restoreMs": 210,
+    "exportJsonMs": 56,
+    "useSqliteMs": 275
+  },
+  "sizes": {
+    "flowlySqliteBytes": 7000064
+  },
+  "counts": {
+    "projects": 6,
+    "tasks": 106,
+    "events": 4515,
+    "ideas": 77,
+    "workpads": 64,
+    "agentReceipts": 2730,
+    "backupFileBytes": 4933335
+  },
+  "probes": {
+    "P1_exportInterruptedBetweenWrites": {
+      "injectedThrown": true,
+      "reopenResult": "STORAGE_DIVERGED",
+      "boardJsonVersionAfter": 5
+    },
+    "P2_retireFailureAfterExport": {
+      "exportErrorCode": "EISDIR",
+      "nextReadCode": "STORAGE_BUSY",
+      "statusBackend": "error",
+      "statusReason": "busy",
+      "statusDetail": "Starting."
+    },
+    "P2_afterRestartWithRealClock": {
+      "backend": "json",
+      "contentEqualsExpected": true
+    },
+    "P3_sameSecondBackups": {
+      "listedNewestFirst": [
+        "flowly-20261026-120000.sqlite",
+        "flowly-20261026-120000-7.sqlite",
+        "flowly-20261026-120000-6.sqlite",
+        "flowly-20261026-120000-5.sqlite",
+        "flowly-20261026-120000-4.sqlite",
+        "flowly-20261026-120000-3.sqlite",
+        "flowly-20261026-120000-2.sqlite"
+      ],
+      "count": 7
+    },
+    "P4_secondProcess": {
+      "runtime": "system node",
+      "exitStatus": 0,
+      "result": "{\"code\":\"STORAGE_BUSY\"}",
+      "spawnError": null,
+      "stderrLines": 1
+    }
+  },
+  "errors": [],
+  "compiler": {
+    "bundleBytes": 96736,
+    "bundleSha256": "3d7be137eea69c4075ef84d8819b87ca6855f2df5a14d3aad7dc77e68bf12d81"
+  },
+  "source": {
+    "boardJsonBytes": 4933403,
+    "mtimeBefore": 1792988277271.91,
+    "hasBak": true,
+    "mtimeAfter": 1792988277271.91,
+    "boardJsonBytesAfter": 4933403,
+    "sourceReadOnlyNote": "drill opened the source only for copyFile and stat"
+  },
+  "cleanup": {
+    "tempDirsRemoved": true,
+    "tempDirCount": 7
+  }
+}

@@ -2,6 +2,7 @@ import { cardDetailSchema, projectCardIndexSchema, projectIdeasSchema } from "./
 import { attentionDismissInput, attentionDismissalSchema, attentionRestoreInput } from "./attention-dismiss";
 import { defineRpc } from "@getpaseo/plugin";
 import { overviewResponseSchema } from "./overview";
+import { storageStatusSchema } from "./storage";
 import { sessionInsightViewSchema } from "./session-insights";
 import { z } from "zod";
 /** Lightweight sidebar: no board/events/agents cross the phone connection. */
@@ -785,3 +786,13 @@ export const reviewForMemory = defineRpc({
   input: z.strictObject({ taskId: z.string().min(1).max(200) }),
   output: z.object({ queued: z.boolean() }),
 });
+/** Settings > Storage (SQLITE-STORAGE-SPEC §9): works while the board itself cannot be read. */
+export const readStorageStatus = defineRpc({ name: "storage.status", input: z.strictObject({}), output: storageStatusSchema });
+export const backupStorage = defineRpc({ name: "storage.backup", input: z.strictObject({}), output: z.strictObject({ name: z.string() }) });
+export const restoreStorage = defineRpc({
+  name: "storage.restore",
+  input: z.strictObject({ name: z.string().min(1).max(200) }),
+  output: z.strictObject({ aside: z.string().nullable() }),
+});
+export const exportStorage = defineRpc({ name: "storage.export-json", input: z.strictObject({}), output: z.strictObject({ retired: z.string().nullable() }) });
+export const useSqliteStorage = defineRpc({ name: "storage.use-sqlite", input: z.strictObject({}), output: z.strictObject({}) });
