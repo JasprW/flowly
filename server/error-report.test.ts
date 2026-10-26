@@ -136,6 +136,14 @@ test("sends one $exception with the §11 keys and the heartbeat's install id", a
   expect(body.distinct_id).toBe(state.installId);
 });
 
+test("a fresh install: concurrent first reports share one install id", async () => {
+  const { service, calls, directory } = await harness();
+  await Promise.all([1, 2, 3].map((i) => service.reportError(`burst ${i}`, failure())));
+  expect(calls).toHaveLength(3);
+  const state = JSON.parse(await readFile(join(directory, "telemetry.json"), "utf8"));
+  expect(new Set(calls.map((c) => c.body.distinct_id))).toEqual(new Set([state.installId]));
+});
+
 test("each kind once per UTC day, at most 20 a day; a new day starts over", async () => {
   let now = NOW;
   const { service, calls } = await harness({ now: () => now });

@@ -279,6 +279,20 @@ export class TelemetryService {
       });
     return this.running;
   }
+  private creating: Promise<TelemetryState> | null = null;
+  /** The stored state, or a new one; concurrent callers on a fresh install share one install id. */
+  private stateOrCreate(now: number): Promise<TelemetryState> {
+    this.creating ??= (async () => {
+      const stored = await this.file.read();
+      if (stored) return stored;
+      const state = { installId: randomUUID(), lastSentAt: "", windowStart: new Date(now - DAY).toISOString() };
+      await this.file.write(state);
+      return state;
+    })().finally(() => {
+      this.creating = null;
+    });
+    return this.creating;
+  }
   private errorDay = "";
   private errorsSent = new Set<string>();
   /**
@@ -299,11 +313,7 @@ export class TelemetryService {
       if (this.errorsSent.has(report.fingerprint) || this.errorsSent.size >= MAX_ERRORS_PER_DAY) return false;
       this.errorsSent.add(report.fingerprint);
       if (!(await this.deps.enabled().catch(() => true))) return false;
-      let state = await this.file.read();
-      if (!state) {
-        state = { installId: randomUUID(), lastSentAt: "", windowStart: new Date(now - DAY).toISOString() };
-        await this.file.write(state);
-      }
+      const state = await this.stateOrCreate(now);
       const properties = {
         $process_person_profile: false,
         $geoip_disable: true,
@@ -350,10 +360,11 @@ export class TelemetryService {
       if (stored?.windowStart) await this.file.write({ ...stored, windowStart: "" });
       return "off";
     }
+    const base = stored ?? (await this.stateOrCreate(now));
     // A copy, so the comparison below sees whether the window start changed.
-    const state: TelemetryState = stored ? { ...stored } : { installId: randomUUID(), lastSentAt: "", windowStart: new Date(now - DAY).toISOString() };
+    const state: TelemetryState = { ...base };
     if (!state.windowStart) state.windowStart = new Date(now).toISOString();
-    if (!stored || stored.windowStart !== state.windowStart) await this.file.write(state);
+    if (base.windowStart !== state.windowStart) await this.file.write(state);
     const last = Date.parse(state.lastSentAt);
     if (Number.isFinite(last) && now - last < SEND_EVERY) return "not-due";
 

@@ -242,7 +242,7 @@ Content-Type: application/json
 
 ### 11.3 事件内容（白名单）
 
-`event = "$exception"`，`distinct_id` 与心跳相同（`telemetry.json` 的 `installId`；文件还不存在时按第 3.3 节新建）。`properties` 的键集合固定为：
+`event = "$exception"`，`distinct_id` 与心跳相同（`telemetry.json` 的 `installId`；文件还不存在时按第 3.3 节新建；心跳和多个同时到来的错误共用同一次新建，所以一个安装只有一个 `installId`）。`properties` 的键集合固定为：
 
 | 键 | 内容 |
 |---|---|
@@ -271,4 +271,4 @@ Content-Type: application/json
 3. 同一错误同一天只发一次；30 种不同错误只发 20 条；第二天重新开始。
 4. 开关关闭、`DO_NOT_TRACK=1` 时不发；没有 Flowly 自身帧的未捕获异常不发。
 5. RPC 包装：同步和异步 handler 的程序错误被上报并原样抛出；`ToolError` 只抛出不上报；正常返回值不变。
-6. `properties` 的键集合与 11.3 节完全一致，`distinct_id` 与 `telemetry.json` 的 `installId` 相同。
+6. `properties` 的键集合与 11.3 节完全一致，`distinct_id` 与 `telemetry.json` 的 `installId` 相同；全新安装时同时上报的多个错误使用同一个 `installId`。
