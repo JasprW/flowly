@@ -183,7 +183,7 @@ function TaskDrawerView({
       {},
     );
   // The retained compact root is paused; visible card props still need remote edits/deletions.
-  const pollBoard = drawerNeedsBoard(active, selected);
+  const pollBoard = drawerNeedsBoard(compact, active, selected);
   // Only keep the shared poll alive. The root/data readers deliver changed props;
   // fetching flags must not re-render this entire retained detail tree.
   const detailState = useTaskDetail();

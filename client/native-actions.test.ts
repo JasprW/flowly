@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { CARD_UNAVAILABLE } from "../shared/card-detail";
 import { continueIdea, dismissIdea, moveToDone, newCardFromIdea, wrapupNeed, wrapupNow } from "./native-actions";
 
 const at = (s: number) => `2026-10-20T00:00:0${s}.000Z`;
@@ -8,6 +9,7 @@ function fake() {
     events: [{ id: "ev1", taskId: "t1", actor: "agent", action: "next_moves_suggested", agentId: "a1", at: at(1), moves: [{ label: "Verify", prompt: "Verify it" }] }] as unknown[],
     ideas: [{ id: "i1", taskId: "t1", projectId: "p", status: "open" }],
     autoWrapup: false,
+    offline: false,
     check: { blockers: [] as string[], warnings: [] as string[], revision: 8, workspace: { id: "w1" } as unknown, archiveWorkspace: true, sessions: 1 },
   };
   const calls: { name: string; input: unknown }[] = [];
@@ -15,10 +17,11 @@ function fake() {
   const client = {
     rpc: vi.fn(async (def: { name: string }, input: unknown) => {
       calls.push({ name: def.name, input });
+      if (state.offline) throw new Error("Network request failed");
       if (def.name === "board.read" || def.name === "board.read-changed") throw new Error("the whole board must not be read");
       if (def.name === "cards.detail-changed") {
         const { taskId, workspaceId } = input as { taskId: string; workspaceId: string };
-        if (taskId !== state.task.id || workspaceId !== state.task.workspaceId) throw new Error("This session's linked card is unavailable.");
+        if (taskId !== state.task.id || workspaceId !== state.task.workspaceId) throw new Error(CARD_UNAVAILABLE);
         return { etag: "e", value: { task: state.task, events: state.events } };
       }
       if (def.name === "projects.ideas-changed") return { etag: "e", value: { ideas: (input as { projectId: string }).projectId === "p" ? state.ideas : [] } };
@@ -110,4 +113,21 @@ test("outside session ideas go to the daemon with their target", async () => {
     { name: "sessions.idea-run", input: { agentId: "a9", ideaId: "i9", target: "workspace" } },
     { name: "sessions.idea-dismiss", input: { agentId: "a9", ideaId: "i8" } },
   ]);
+});
+
+test("each action reads only its own card or project", async () => {
+  const x = fake();
+  await moveToDone(x.client as never, { taskId: "t1", workspaceId: "w1", agentId: "a1", eventId: "ev1" });
+  await dismissIdea(x.client as never, { ideaId: "i1", projectId: "p" });
+  expect(x.calls.map((c) => c.name)).toEqual(["cards.detail-changed", "tasks.update", "projects.ideas-changed", "ideas.update"]);
+});
+
+test("a gone card or idea says so; a failed read reports the failure instead", async () => {
+  const x = fake();
+  await expect(moveToDone(x.client as never, { taskId: "gone", workspaceId: "w1", agentId: "a1", eventId: "ev1" })).rejects.toThrow(/This card is unavailable/);
+  await expect(dismissIdea(x.client as never, { ideaId: "missing", projectId: "p" })).rejects.toThrow(/no longer open/);
+  x.state.offline = true;
+  await expect(moveToDone(x.client as never, { taskId: "t1", workspaceId: "w1", agentId: "a1", eventId: "ev1" })).rejects.toThrow("Network request failed");
+  await expect(dismissIdea(x.client as never, { ideaId: "i1", projectId: "p" })).rejects.toThrow("Network request failed");
+  expect(x.calls.slice(-2).map((c) => c.name)).toEqual(["cards.detail-changed", "projects.ideas-changed"]);
 });

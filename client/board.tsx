@@ -130,6 +130,7 @@ import { nextTip, settingsHintDue, welcomeDecision, type TipId } from "./onboard
 import { latestRelease, whatsNew, whatsNewDecision, type WhatsNewItem } from "./whats-new";
 import { WhatsNewWindow } from "./whats-new-window";
 import { t, tn } from "../shared/i18n";
+import { PROJECT_UNAVAILABLE, gone } from "../shared/card-detail";
 import { workpadEnabled } from "../shared/workpad";
 import { cardDisplay } from "../shared/card-display";
 import { parentOf } from "../shared/subagents";
@@ -957,15 +958,22 @@ function BoardContent(
     const projectIds = link.projectId ? [link.projectId] : board.projects.map((p) => p.id);
     void (async () => {
       for (const projectId of projectIds) {
-        const ideas = await readProjectIdeas({ projectId }).then((r) => r.value?.ideas ?? [], () => []);
+        let ideas;
+        try {
+          ideas = await readProjectIdeas({ projectId }).then((r) => r.value?.ideas ?? []);
+        } catch (e) {
+          if (gone(e, PROJECT_UNAVAILABLE)) continue;
+          setError(e instanceof Error ? e.message : String(e));
+          return;
+        }
         const idea = ideas.find((i) => i.id === link.ideaId);
         if (!idea) continue;
-        // Never another idea: a gone or closed one is an error on the board.
-        const card = board.tasks.find((x) => x.id === idea.taskId);
-        if (idea.status !== "open" || !card) break;
+        // Never another idea: a gone or closed one is an error on the board. The idea names its project,
+        // so a card created moments ago need not be in this overview yet.
+        if (idea.status !== "open") break;
         setError("");
         setPage(null);
-        setProject(card.projectId);
+        setProject(idea.projectId);
         createFromIdea(idea);
         return;
       }

@@ -1,7 +1,6 @@
 import type { BoardOverview, OverviewPatch } from "../shared/overview";
 import { overviewCollections, overviewKeys } from "../shared/overview";
 import { patchItems } from "./board-read";
-import type { Board } from "./board-read";
 import { perfEnd, perfStart } from "./perf";
 
 export const overviewKey = (hostId: string) => ["flowly", "overview", hostId, 1] as const;
@@ -36,14 +35,9 @@ export async function readOverviewDelta(read: OverviewRead, cached: BoardOvervie
   return full;
 }
 
-/** Common metadata can display a newer full read; projection never replaces full data. */
-
-/** Metadata may still use a warm complete read after switching to compact layout. */
-export function projectOpenIdeaCount(board: BoardOverview | Board | undefined, projectId: string | undefined) {
+/** Open ideas on a project's cards, from the overview's per-card counts. */
+export function projectOpenIdeaCount(board: BoardOverview | undefined, projectId: string | undefined) {
   if (!board || !projectId) return 0;
-  if ("cards" in board) {
-    const tasks = new Set(board.tasks.filter(task => task.projectId === projectId).map(task => task.id));
-    return board.cards.reduce((count, card) => count + (tasks.has(card.taskId) ? card.openIdeas : 0), 0);
-  }
-  return board.ideas.filter(idea => idea.projectId === projectId && idea.status === "open").length;
+  const tasks = new Set(board.tasks.filter(task => task.projectId === projectId).map(task => task.id));
+  return board.cards.reduce((count, card) => count + (tasks.has(card.taskId) ? card.openIdeas : 0), 0);
 }

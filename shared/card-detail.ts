@@ -22,6 +22,9 @@ export const projectCardIndexSchema = z.strictObject({
 export type ProjectCardIndex = z.infer<typeof projectCardIndexSchema>;
 export const projectIdeasSchema = z.strictObject({ version: z.literal(1), projectId: z.string(), revision: z.number().int().nonnegative(), ideas: z.array(ideaSchema) });
 export type ProjectIdeas = z.infer<typeof projectIdeasSchema>;
+export const PROJECT_UNAVAILABLE = "Project is unavailable.";
+/** Whether a read failed because its card or project no longer exists (not a network or daemon failure). */
+export const gone = (error: unknown, reason: string) => error instanceof Error && error.message.includes(reason);
 export const CARD_UNAVAILABLE = "This session's linked card is unavailable. Refresh the session chip or open Flowly.";
 type Board = z.infer<typeof boardSchema>;
 export const cardReference = (task: Board["tasks"][number]): CardReference => cardReferenceSchema.parse(task);
@@ -40,12 +43,12 @@ export function cardDetail(board: Board, input: { taskId: string; workspaceId: s
     attentionDismissal: board.attentionDismissals.find(a => a.taskId === task.id) ?? null };
 }
 export function projectCardIndex(board: Board, projectId: string): ProjectCardIndex {
-  if (!board.projects.some(p => p.id === projectId)) throw new Error("Project is unavailable.");
+  if (!board.projects.some(p => p.id === projectId)) throw new Error(PROJECT_UNAVAILABLE);
   const cards = board.tasks.filter(t => t.projectId === projectId), ids = new Set(cards.map(t => t.id));
   const externals = board.artifacts.flatMap(a => a.external && ids.has(a.taskId) ? [{ taskId: a.taskId, provider: a.external.provider, key: a.external.key }] : []);
   return { version: 1, projectId, revision: board.revision, cards: cards.map(cardReference), tags: projectTagStats(board.tasks, projectId), externals };
 }
 export function projectIdeas(board: Board, projectId: string): ProjectIdeas {
-  if (!board.projects.some(p => p.id === projectId)) throw new Error("Project is unavailable.");
+  if (!board.projects.some(p => p.id === projectId)) throw new Error(PROJECT_UNAVAILABLE);
   return { version: 1, projectId, revision: board.revision, ideas: board.ideas.filter(i => i.projectId === projectId) };
 }

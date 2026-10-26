@@ -9,6 +9,11 @@ import { olderFinished, olderFinishedFromDates } from "../../../client/finished-
 import { latestTurnEnds } from "../../../shared/sort";
 import { sessionAttentionSummary, sessionAttentionSummaryFromTurns, type AttentionAgent } from "../../../shared/session-attention";
 import { allAttentionFromSources, attentionItemsWithFacts } from "../../../shared/attention";
+import { cardQuestions } from "../../../shared/progress";
+import { workpadSignal } from "../../../shared/workpad";
+import { currentWrapup } from "../../../shared/wrapup-state";
+import { hasOpenNextMoves } from "../../../shared/next-moves";
+import { faceKey, familyOf } from "../../../shared/connectors";
 
 const file = process.env.FLOWLY_PARITY_BOARD;
 
@@ -41,6 +46,35 @@ test.skipIf(!file)("overview facts match the whole-board derivations card by car
   const byTask = new Map<string, typeof board.events>();
   for (const e of board.events) byTask.set(e.taskId, [...(byTask.get(e.taskId) || []), e]);
   const turnFacts = (taskId: string) => new Map((facts.get(taskId)?.sessions || []).map(s => [s.agentId, s]));
+
+  // Card face facts, each as the old wide board derived it from the whole board (client/board.tsx before a5a4d9f).
+  const workpads = new Map(board.workpads.map(w => [w.taskId, w]));
+  const keys = new Map<string, { key: string; family: ReturnType<typeof familyOf> }[]>();
+  for (const a of board.artifacts) {
+    const key = a.external ? faceKey(a.external) : null;
+    if (key) keys.set(a.taskId, [...(keys.get(a.taskId) || []), { key, family: familyOf(a.external!.provider) }]);
+  }
+  const varied = { questions: 0, workpad: 0, wrapped: 0, external: 0, nextMoves: 0, ideas: 0 };
+  for (const task of board.tasks) {
+    const own = byTask.get(task.id) || [], card = facts.get(task.id)!, list = keys.get(task.id);
+    const old = {
+      questions: cardQuestions(task, own).length,
+      workpad: workpadSignal(task, workpads.get(task.id), own),
+      wrapped: !!currentWrapup(own, task.id),
+      external: list ? { text: list.length > 1 ? `${list[0].key} +${list.length - 1}` : list[0].key, family: list[0].family } : undefined,
+      hasArtifacts: board.artifacts.some(a => a.taskId === task.id),
+      hasExternal: board.artifacts.some(a => a.taskId === task.id && !!a.external),
+      hasWorkpad: workpads.has(task.id),
+      hasNextMoves: hasOpenNextMoves(own),
+      openIdeas: board.ideas.filter(i => i.taskId === task.id && i.status === "open").length,
+    };
+    const now = { questions: card.questions, workpad: card.workpad, wrapped: card.wrapped, external: card.external, hasArtifacts: card.hasArtifacts, hasExternal: card.hasExternal, hasWorkpad: card.hasWorkpad, hasNextMoves: card.hasNextMoves, openIdeas: card.openIdeas };
+    expect(now, task.id).toEqual(old);
+    varied.questions += +!!old.questions; varied.workpad += +!!old.workpad; varied.wrapped += +old.wrapped;
+    varied.external += +!!old.external; varied.nextMoves += +old.hasNextMoves; varied.ideas += +!!old.openIdeas;
+  }
+  // The data must exercise each fact, or the comparison proves nothing for it.
+  for (const [name, n] of Object.entries(varied)) expect(n, name).toBeGreaterThan(0);
 
   let compared = 0;
   const oldTurns = latestTurnEnds(board.events);
@@ -77,5 +111,5 @@ test.skipIf(!file)("overview facts match the whole-board derivations card by car
     }
   }
   expect(compared).toBe(board.tasks.length * kinds.length);
-  console.log(JSON.stringify({ cards: board.tasks.length, events: board.events.length, sessions: agents.length, attention: allAttentionFromSources({ board, agents, receipts, readUnavailable: false })!.length }));
+  console.log(JSON.stringify({ cards: board.tasks.length, events: board.events.length, sessions: agents.length, attention: allAttentionFromSources({ board, agents, receipts, readUnavailable: false })!.length, varied }));
 });

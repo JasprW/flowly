@@ -3,6 +3,7 @@ import * as rpc from "../shared/rpc";
 import { openNextMoves } from "../shared/next-moves";
 import { chipRequestId } from "./native-chips";
 import { t } from "../shared/i18n";
+import { CARD_UNAVAILABLE, PROJECT_UNAVAILABLE, gone } from "../shared/card-detail";
 
 /**
  * What the native Next moves card and Ideas popover do (NATIVE-SESSION-SPEC §6.4, §7.3).
@@ -12,7 +13,7 @@ import { t } from "../shared/i18n";
 type Client = Pick<PluginClientContext, "rpc" | "paseo" | "openScreen">;
 
 async function freshCard(client: Client, input: { taskId: string; workspaceId: string }) {
-  const detail = await client.rpc(rpc.readCardDetailChanged, { taskId: input.taskId, workspaceId: input.workspaceId }).then((r) => r.value, () => undefined);
+  const detail = await client.rpc(rpc.readCardDetailChanged, { taskId: input.taskId, workspaceId: input.workspaceId }).then((r) => r.value, (e) => gone(e, CARD_UNAVAILABLE) ? undefined : Promise.reject(e));
   if (!detail || detail.task.archivedAt) throw new Error(t("This card is unavailable. Open Flowly to check it."));
   return detail;
 }
@@ -47,7 +48,7 @@ export async function wrapupNow(client: Client, input: { taskId: string }): Prom
 }
 
 async function openIdea(client: Client, input: { ideaId: string; projectId: string }) {
-  const ideas = await client.rpc(rpc.readProjectIdeasChanged, { projectId: input.projectId }).then((r) => r.value?.ideas ?? [], () => []);
+  const ideas = await client.rpc(rpc.readProjectIdeasChanged, { projectId: input.projectId }).then((r) => r.value?.ideas ?? [], (e) => gone(e, PROJECT_UNAVAILABLE) ? [] : Promise.reject(e));
   const idea = ideas.find((i) => i.id === input.ideaId);
   if (!idea || idea.status !== "open") throw new Error(t("This idea is no longer open."));
   return idea;
