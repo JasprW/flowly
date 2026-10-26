@@ -19,6 +19,9 @@ const file = process.env.FLOWLY_PARITY_BOARD;
 
 test.skipIf(!file)("overview facts match the whole-board derivations card by card", () => {
   const board = storageSchema.parse(upgradeBoard(JSON.parse(readFileSync(file!, "utf8"))));
+  // Real data has no session that started a turn but never ended one; add one so `hadTurnEnd` is exercised.
+  const host = board.tasks.find(t => !t.archivedAt)!;
+  board.events.push({ ...board.events.find(e => e.taskId === host.id && e.action === "agent.turn_started")!, id: "parity-start-only", agentId: "parity-start-only" });
   const view = boardOverview(board);
   const facts = new Map(view.cards.map(c => [c.taskId, c]));
   // Every session that ever wrote an event, bound to its card's workspace, in every attention state.
@@ -83,6 +86,7 @@ test.skipIf(!file)("overview facts match the whole-board derivations card by car
     agents: new Set(view.cards.flatMap(c => c.sessions.filter(s => s.hadTurnEnd).map(s => s.agentId))),
   };
   expect([...newTurns.byTask].sort()).toEqual([...oldTurns.byTask].filter(([id]) => facts.has(id)).sort());
+  expect(newTurns.agents.has("parity-start-only")).toBe(false);
   expect([...newTurns.agents].sort()).toEqual([...oldTurns.agents].filter(id => board.events.some(e => e.agentId === id && facts.has(e.taskId))).sort());
 
   for (const project of board.projects) {
