@@ -1,5 +1,11 @@
 # Implementation progress
 
+## Anonymous usage data (telemetry) — 2026-10-26
+
+- User decisions 2026-10-26: PostHog Cloud EU over its capture HTTP API (no SDK), one daily heartbeat, whitelisted fields, on by default and sent before the user has seen the notice, off stops everything, no preview or reset ID, `ui_locale` instead of GeoIP. [Spec](TELEMETRY-SPEC.md).
+- Implemented: `server/telemetry.ts` (heartbeat, `telemetry.json`, forced-off env), `telemetry` host setting and `telemetry.status` RPC, Settings → General *Usage data* and the tour's last page, What's new 1.7.0 item, README sections, catalogs in all 9 languages. `server/telemetry.test.ts` covers spec §9 items 1–8.
+- Not done: `POSTHOG_KEY` is empty, so nothing is sent until the maintainer creates the PostHog EU project and fills the key in.
+
 ## Board data in SQLite (minimal) — 2026-10-26
 
 - User decision 2026-10-26: finish the SQLite move first, loading later; keep rollback and no data loss, otherwise as simple as possible. Replaces the 10-25 full design (D1–D4); the old fixture kernel, specs and evidence are on the local branch `archive/sqlite-r1-v1`. [Spec](SQLITE-STORAGE-SPEC.md).

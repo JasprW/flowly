@@ -5,7 +5,7 @@ import { BoardStore, columnOrder } from "./server/store";
 import { BoardService, dataDirectory, migrateLegacyPluginData } from "./server/service";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
-import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues } from "./shared/settings";
+import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { readAttentionCount } from "./server/attention-count";
@@ -48,6 +48,8 @@ import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workf
 import { sessionModel } from "./server/agent-model";
 import { turnPick, userTexts } from "./shared/agent-habits";
 import { MemoryService, setMemoryEverywhere } from "./server/memory";
+import { POSTHOG_KEY, TelemetryService } from "./server/telemetry";
+import { FLOWLY_VERSION } from "./shared/version";
 
 export default function contribute(server: PluginServerContext) {
   server.registerSettings(boardViewSettings);
@@ -63,6 +65,7 @@ export default function contribute(server: PluginServerContext) {
   const nativePrefs = server.registerSettings(nativeSessionSettings);
   const workflowPrefs = server.registerSettings(workflowInsightsSettings);
   const perfPrefs = server.registerSettings(performanceSettings);
+  const telemetryPrefs = server.registerSettings(telemetrySettings);
   // Project memory and Insights as a whole (ONBOARDING-SETUP-SPEC §6); unreadable settings keep the defaults (on).
   const featurePrefs = server.registerSettings(featureSettings);
   const featureValues = async () => {
@@ -618,6 +621,63 @@ export default function contribute(server: PluginServerContext) {
       recordLifecycle(store, board, identity, "agent.permission_requested"),
     );
   });
+  // Anonymous daily heartbeat (TELEMETRY-SPEC); off by the setting, DO_NOT_TRACK or FLOWLY_TELEMETRY=0.
+  const ready = <T,>(state: { status: string; values?: unknown } | null, parse: (values: unknown) => T) => parse(state?.status === "ready" ? state.values : {});
+  const telemetry = new TelemetryService({
+    directory: store.directory,
+    env: process.env,
+    apiKey: POSTHOG_KEY,
+    enabled: async () => ready(await telemetryPrefs.read().catch(() => null), telemetrySettingsValues).enabled,
+    snapshot: async () => {
+      const [language, device, ai, ideasState, nativeState, wrapState, features, workflowState, summary, autoStatus, board] = await Promise.all([
+        languagePrefs.read().catch(() => null),
+        devicePrefs.read().catch(() => null),
+        aiLanguagePrefs.read().catch(() => null),
+        ideasPrefs.read().catch(() => null),
+        nativePrefs.read().catch(() => null),
+        wrapupPrefs.read().catch(() => null),
+        featureValues(),
+        workflowValues(),
+        summaries.settings(),
+        autoStatusOn(),
+        store.view(),
+      ]);
+      const ideasValues = ready(ideasState, ideasSettingsValues);
+      const wrap = ready(wrapState, wrapupSettingsValues);
+      const projects = board.projects.filter((p) => !p.archivedAt);
+      const live = new Set(projects.map((p) => p.id));
+      return {
+        flowlyVersion: FLOWLY_VERSION,
+        language: ready(language, languageSettingsValues).language,
+        deviceLocale: ready(device, deviceLanguageValue),
+        aiLanguage: ready(ai, aiLanguageSettingsValues).aiLanguage,
+        features: {
+          memory: features.memory,
+          insights: features.insights,
+          ideas: ideasValues.ideas,
+          artifacts: ideasValues.artifacts,
+          outsideSessions: ready(nativeState, nativeSessionSettingsValues).outside,
+          autoStatus,
+          autoWrapup: wrap.autoWrapup,
+          archiveOnDelete: wrap.archiveOnDelete,
+          workflowInsights: workflowState.enabled,
+          summary: summary.summaryEnabled,
+        },
+        projects: projects.length,
+        cardsOpen: board.tasks.filter((t) => live.has(t.projectId) && !t.archivedAt && t.status !== "done" && t.status !== "cancelled").length,
+      };
+    },
+    activity: async () => {
+      const board = await store.view();
+      const [events, state] = await Promise.all([
+        Promise.all(board.projects.map((p) => flow.read(p.id).catch(() => []))).then((lists) => lists.flat()),
+        memory.store.read().catch(() => null),
+      ]);
+      return { events, memoryConfirmedAt: (state?.entries ?? []).flatMap((e) => (e.confirmedAt ? [e.confirmedAt] : [])) };
+    },
+  });
+  telemetry.start();
+  server.handle(rpc.telemetryStatus, () => ({ forcedOff: telemetry.forcedOff() }));
   console.log("Flowly store ready:", store.directory);
   server.before("agent.session_open", async ({ request }, { paseo }) => {
     tools.attach(paseo);
@@ -648,6 +708,7 @@ export default function contribute(server: PluginServerContext) {
   return () => {
     void store.close().catch((e) => console.error("Flowly storage: close failed:", e instanceof Error ? e.message : String(e)));
     workflow.stop();
+    telemetry.stop();
     stopWorkflowPrefs();
     stopFeaturePrefs();
     folders.stop();

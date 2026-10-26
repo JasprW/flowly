@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Usage data": "使用数据",
+  "Send anonymous usage data": "发送匿名使用数据",
+  "Turned off by DO_NOT_TRACK on this computer.": "已被本机的 DO_NOT_TRACK 关闭。",
+  "Once a day: versions, which features are on and usage counts. Never your content, paths or code.": "每天一次：版本、开启了哪些功能和使用次数。不会发送你的内容、路径或代码。",
+  "Flowly now sends anonymous usage data once a day: versions, which features are on and usage counts. Never your content, paths or code. You can turn it off in Settings.": "Flowly 现在每天发送一次匿名使用数据：版本、开启了哪些功能和使用次数。不会发送你的内容、路径或代码。可以在设置中关闭。",
   "Running sweep": "扫光动画",
   "Restore defaults": "恢复默认",
   "Progress models": "进度模型",

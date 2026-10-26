@@ -130,6 +130,10 @@ Summary models are an ordered fallback list in Settings → Models: add models a
 
 Board data is stored on the daemon machine in `~/.paseo/plugin-data/flowly/` (`PASEO_HOME` selects the daemon home). Writes are serialized and atomic, stale edits are rejected, and invalid files are preserved rather than reset. Removing or permanently deleting a project or card writes a backup to `removed/` first. Archiving plugin records never deletes Paseo resources or directories. The tool service listens on loopback with private per-session credentials.
 
+### Telemetry
+
+Once a day the daemon sends anonymous usage data to PostHog (EU): the Flowly version, OS and Node version, the interface language, which features are switched on, rough project and card counts, and how many cards, agent turns, deliveries, next moves, ideas and memories there were since the last one, with the models used. It never sends titles, descriptions, messages, paths, repository names or IDs of your projects, cards or sessions, and no IP-based location. Turn it off in Settings → General → *Send anonymous usage data*, or set `DO_NOT_TRACK=1` (or `FLOWLY_TELEMETRY=0`) for the Paseo daemon. Exactly what is sent: [`server/telemetry.ts`](server/telemetry.ts) and [docs/TELEMETRY-SPEC.md](docs/TELEMETRY-SPEC.md).
+
 ## Development
 
 To run from a checkout (for development):

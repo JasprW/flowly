@@ -128,6 +128,10 @@ agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型
 
 看板数据存放在 daemon 所在机器的 `~/.paseo/plugin-data/flowly/`（`PASEO_HOME` 可指定 daemon 主目录）。写入串行化并原子替换，过期编辑会被拒绝，无效文件会被保留而不是重置。移除或永久删除 project / 卡片前会先备份到 `removed/`。归档插件记录不会删除 Paseo 资源或磁盘目录。工具服务只监听本机回环地址，每个 session 使用独立的私有凭据。
 
+### 遥测
+
+daemon 每天向 PostHog（EU 区）发送一次匿名使用数据：Flowly 版本、操作系统和 Node 版本、界面语言、开启了哪些功能、大致的项目数和卡片数，以及自上次以来新建的卡片、agent 回合、交付、下一步建议、ideas 和 memory 的次数和用到的模型。不会发送标题、描述、消息、路径、仓库名，也不会发送项目、卡片或 session 的 ID，不做基于 IP 的定位。可以在 设置 → General → *Send anonymous usage data* 关闭，或给 Paseo daemon 设置 `DO_NOT_TRACK=1`（或 `FLOWLY_TELEMETRY=0`）。具体发送哪些字段见 [`server/telemetry.ts`](server/telemetry.ts) 和 [docs/TELEMETRY-SPEC.md](docs/TELEMETRY-SPEC.md)。
+
 ## 开发
 
 从本地仓库运行（开发用）：

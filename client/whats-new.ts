@@ -29,6 +29,11 @@ export const whatsNew: WhatsNewRelease[] = [
         text: msg("Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON."),
         action: { label: msg("Open settings"), to: "settings", section: "storage" },
       },
+      {
+        icon: "Activity",
+        text: msg("Flowly now sends anonymous usage data once a day: versions, which features are on and usage counts. Never your content, paths or code. You can turn it off in Settings."),
+        action: { label: msg("Open settings"), to: "settings", section: "general" },
+      },
     ],
   },
   {
