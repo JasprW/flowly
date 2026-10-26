@@ -174,8 +174,14 @@ test("one digest per project at a time: days picked meanwhile generate only the 
   expect(waiting.running).toBe(false);
   x.service.refresh({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo);
   expect((await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo)).running).toBe(true);
-  await settle();
-  await settle();
+  // Both runs are done once 10-15 stored its entry and 10-13 its error.
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    const done = await x.digests.read();
+    if (done.entries.length && done.errors.length) break;
+    if (Date.now() > deadline) throw new Error("background runs did not finish");
+    await new Promise((r) => setTimeout(r, 10));
+  }
   const state = await x.digests.read();
   expect(state.entries.map((e) => e.day)).toEqual(["2026-10-15"]);
   // 10-14 was replaced while waiting and never ran; 10-13 ran after 10-15 (and found nothing to summarize).
