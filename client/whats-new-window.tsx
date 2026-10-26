@@ -84,7 +84,7 @@ export function WhatsNewWindow({
       <Modal.Content contentContainerStyle={{ gap: space[4] }}>
         <Theme.Provider value={theme}>
           {releases.length > 1 ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], marginVertical: -space[1] }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], marginVertical: -space[1], marginLeft: -space[1.5] }}>
               <IconButton icon="ChevronLeft" label={t("Older release")} disabled={!older} onPress={() => turn(1)} />
               <Label muted size={font.sm} selectable={false}>
                 {t("Flowly {version}", { version: versionLabel(release.version) })}

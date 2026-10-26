@@ -15,7 +15,7 @@ export { useOnboarding } from "./onboarding-state";
 import { Button, IconButton, Label, Theme, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
 import { useShortcutBlock } from "./shortcuts";
 import { AttentionDemo, DemoControls, DemoFrame, LoopDemo, MemoryDemo, Sample, SideTitle } from "./tour-demos";
-import { t } from "../shared/i18n";
+import { formatLocale, t, tn } from "../shared/i18n";
 
 /** The three Kanban objects and the Paseo object each one is (page 1 and the empty-board strip). */
 const objects = [
@@ -187,40 +187,114 @@ function MemoryPage() {
   );
 }
 
-/** A few weeks of the Insights heatmap and one skill draft row (client/insights.tsx), with sample data. */
+/** Weekday names for the sample's labels, Monday first, in the interface locale (2026-10-19 is a Monday). */
+const sampleWeekday = (offset: number) => new Date(Date.UTC(2026, 9, 19 + offset, 12)).toLocaleDateString(formatLocale(), { weekday: "short", timeZone: "UTC" });
+
+/**
+ * The Insights page in miniature (client/insights.tsx), with sample data: a few weeks of the heatmap with
+ * weekday labels and a selected day, that day's summary card with per-card bars, and one skill draft row.
+ */
 function InsightsSample() {
   const { colors } = useTheme();
   // Accent opacity per level, as on the page; a fixed pattern of quiet and busy days.
   const opacity = [0, 0.28, 0.5, 0.75, 1];
   const pattern = "0012300124310023441001342200133410024432";
   const weeks = Array.from({ length: 10 }, (_, w) => Array.from({ length: 7 }, (_, d) => Number(pattern[(w * 7 + d) % pattern.length])));
+  // The busiest day of the last week is the one selected below.
+  const selected = { week: 9, day: 2 };
+  const cards = [
+    { title: t("Add rate limiting"), done: true, turns: 6, time: "48m", tokens: "1.2M", share: 1 },
+    { title: t("Fix flaky CI"), done: false, turns: 4, time: "21m", tokens: "640K", share: 0.55 },
+    { title: t("Migrate users table"), done: false, turns: 2, time: "9m", tokens: "310K", share: 0.25 },
+  ];
+  const chip = (label: string) => (
+    <View style={{ paddingHorizontal: space[2], height: 20, justifyContent: "center", borderRadius: radius.full, backgroundColor: colors.surface2 }}>
+      <Label size={font.xs} lines={1} selectable={false}>
+        {label}
+      </Label>
+    </View>
+  );
   return (
     <View style={{ gap: space[3] }}>
-      <View style={{ flexDirection: "row", gap: 3 }}>
-        {weeks.map((days, w) => (
-          <View key={w} style={{ gap: 3 }}>
-            {days.map((level, d) => (
-              <View key={d} style={{ width: 10, height: 10, borderRadius: 2, overflow: "hidden", backgroundColor: colors.surface2 }}>
-                {level > 0 && <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.accent, opacity: opacity[level] }} />}
+      <View style={{ flexDirection: "row", gap: space[2] }}>
+        <View style={{ gap: 3 }}>
+          {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+            <View key={d} style={{ height: 10, justifyContent: "center" }}>
+              {d % 2 === 0 && d < 6 && (
+                <Label muted size={font.xs} lines={1} selectable={false}>
+                  {sampleWeekday(d)}
+                </Label>
+              )}
+            </View>
+          ))}
+        </View>
+        <View style={{ flexDirection: "row", gap: 3 }}>
+          {weeks.map((days, w) => (
+            <View key={w} style={{ gap: 3 }}>
+              {days.map((level, d) => {
+                const picked = w === selected.week && d === selected.day;
+                return (
+                  <View key={d} style={{ width: 10, height: 10, borderRadius: 2, overflow: "hidden", backgroundColor: colors.surface2, borderWidth: picked ? 1.5 : 0, borderColor: colors.foreground }}>
+                    {level > 0 && <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.accent, opacity: opacity[level] }} />}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, overflow: "hidden" }}>
+        <View style={{ padding: space[3], gap: space[1.5] }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+            <Icon name="ChevronLeft" size={14} color={colors.foregroundMuted} />
+            <Label bold size={font.md} selectable={false}>
+              {t("Today")}
+            </Label>
+            <Icon name="ChevronRight" size={14} color={colors.foregroundMuted} />
+          </View>
+          <Label muted size={font.sm} lines={1} selectable={false}>
+            {[tn(12, "{n} turn", "{n} turns"), tn(3, "{n} card", "{n} cards"), tn(1, "{n} done", "{n} done"), t("agent {time}", { time: "1h 18m" }), t("{n} tokens", { n: "2.2M" })].join(" · ")}
+          </Label>
+        </View>
+        {cards.map((card, i) => (
+          <View key={card.title} style={{ flexDirection: "row", alignItems: "flex-start", gap: space[2], paddingHorizontal: space[3], paddingVertical: space[2], borderTopWidth: 1, borderColor: colors.border }}>
+            <View style={{ height: 18, justifyContent: "center" }}>
+              <Icon name={card.done ? "CircleCheck" : "Circle"} size={14} color={card.done ? colors.accent : colors.foregroundMuted} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Label size={font.md} lines={1} selectable={false}>
+                    {card.title}
+                  </Label>
+                </View>
+                <Label muted size={font.sm} lines={1} selectable={false}>
+                  {[tn(card.turns, "{n} turn", "{n} turns"), card.time, card.tokens].join(" · ")}
+                </Label>
               </View>
-            ))}
+              <View style={{ height: 3, borderRadius: 2, backgroundColor: colors.surface2, overflow: "hidden" }}>
+                <View style={{ width: `${Math.round(card.share * 100)}%`, height: 3, borderRadius: 2, backgroundColor: colors.accent, opacity: opacity[Math.max(1, 4 - i)] }} />
+              </View>
+            </View>
           </View>
         ))}
       </View>
-      <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], minHeight: 36 }}>
-        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", gap: space[1.5] }}>
+      <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, flexDirection: "row", alignItems: "flex-start", gap: space[2], paddingHorizontal: space[3], paddingVertical: space[2] }}>
+        <View style={{ height: 22, justifyContent: "center" }}>
+          <Icon name="ChevronRight" size={14} color={colors.foregroundMuted} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Label mono medium size={font.md} lines={1} selectable={false}>
             ship-pr
           </Label>
-          <View style={{ flexShrink: 1 }}>
-            <Label size={font.md} lines={1} selectable={false}>
-              {t("Ship a change through a pull request")}
-            </Label>
-          </View>
+          <Label muted size={font.sm} lines={1} selectable={false}>
+            {t("Ship a change through a pull request")}
+          </Label>
         </View>
-        <View style={{ paddingHorizontal: space[2], height: 20, justifyContent: "center", borderRadius: radius.full, backgroundColor: colors.surface2 }}>
-          <Label size={font.xs} lines={1} selectable={false}>
-            {t("New")}
+        <View style={{ alignItems: "flex-end", gap: 2 }}>
+          {chip(t("New"))}
+          <Label muted size={font.xs} selectable={false}>
+            {tn(4, "{n} card", "{n} cards")}
           </Label>
         </View>
       </View>
