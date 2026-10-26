@@ -24,6 +24,7 @@ import {
 import { ExternalError, storedConnection, type Fetch, type StoredConnection } from "./http";
 import { adapterFor } from "./index";
 import type { Fetched, ItemRef, SearchScope } from "./types";
+import { logFailure } from "../error-report";
 
 /**
  * External items as read-only card inputs (CONNECTORS-SPEC, EXTERNAL-TRACKER-SPEC).
@@ -168,7 +169,7 @@ export class ConnectorService {
         this.cachePath,
         JSON.stringify({ version: 2, entries: Object.fromEntries(entries.map(([k, v]) => [k, { provider: v.provider, summary: v.summary, fingerprint: v.fingerprint, fetchedAt: v.fetchedAt }])) }),
       );
-    }).catch((e) => console.error("Flowly connector cache not saved:", e instanceof Error ? e.message : String(e)));
+    }).catch((e) => logFailure("Flowly connector cache not saved:", e));
   }
 
   /** Waits for pending cache writes (shutdown, tests). */

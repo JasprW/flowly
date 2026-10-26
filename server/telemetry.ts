@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { localeCodes } from "../shared/i18n";
 import type { FlowEntry } from "../shared/insights";
+import { FLOWLY_VERSION } from "../shared/version";
+import { exceptionReport } from "./error-report";
 
 /**
  * Anonymous daily heartbeat to PostHog Cloud US (TELEMETRY-SPEC). Only the daemon sends, at
@@ -25,6 +27,8 @@ const MAX_WINDOW = 7 * DAY;
 const REQUEST_TIMEOUT = 10_000;
 const COUNT_CAP = 10_000;
 const MAX_MODELS = 10;
+/** Error reports (§11): each kind once per UTC day, at most this many a day. */
+export const MAX_ERRORS_PER_DAY = 20;
 const modelKey = /^[a-z0-9._-]+\/[a-zA-Z0-9._:-]+$/;
 
 /** DO_NOT_TRACK, FLOWLY_TELEMETRY=0 and tests switch it off whatever the setting says (§6). */
@@ -227,6 +231,8 @@ export type TelemetryDeps = {
   endpoint?: string;
   now?: () => number;
   fetch?: typeof fetch;
+  /** Tests only: the folder whose files count as Flowly's own frames (§11). */
+  pluginRoot?: string;
   /** The `telemetry` setting; unreadable settings count as on (the default). */
   enabled(): Promise<boolean>;
   snapshot(): Promise<TelemetrySnapshot>;
@@ -273,6 +279,68 @@ export class TelemetryService {
       });
     return this.running;
   }
+  private errorDay = "";
+  private errorsSent = new Set<string>();
+  /**
+   * Sends one `$exception` event (§11) under the same switches as the heartbeat. Never throws.
+   * Uncaught errors are reported only when they pass through Flowly's own code.
+   */
+  async reportError(source: string, error: unknown, handled = true): Promise<boolean> {
+    try {
+      if (this.forcedOff() || !this.deps.apiKey) return false;
+      const report = exceptionReport(error, source, handled, this.deps.pluginRoot);
+      if (!handled && report.frames.length === 0) return false;
+      const now = this.now();
+      const day = new Date(now).toISOString().slice(0, 10);
+      if (day !== this.errorDay) {
+        this.errorDay = day;
+        this.errorsSent = new Set();
+      }
+      if (this.errorsSent.has(report.fingerprint) || this.errorsSent.size >= MAX_ERRORS_PER_DAY) return false;
+      this.errorsSent.add(report.fingerprint);
+      if (!(await this.deps.enabled().catch(() => true))) return false;
+      let state = await this.file.read();
+      if (!state) {
+        state = { installId: randomUUID(), lastSentAt: "", windowStart: new Date(now - DAY).toISOString() };
+        await this.file.write(state);
+      }
+      const properties = {
+        $process_person_profile: false,
+        $geoip_disable: true,
+        $exception_list: [
+          { type: report.type, value: report.value, mechanism: { handled: report.handled, synthetic: false }, stacktrace: { type: "raw", frames: report.frames } },
+        ],
+        $exception_fingerprint: report.fingerprint,
+        source: report.source,
+        flowly_version: FLOWLY_VERSION,
+        node_major: Number(process.versions.node.split(".")[0]),
+        os: process.platform,
+        arch: process.arch,
+      };
+      return await this.post({ event: "$exception", distinct_id: state.installId, timestamp: new Date(now).toISOString(), properties });
+    } catch {
+      return false;
+    }
+  }
+  /** One capture request; true on a 2xx answer. */
+  private async post(event: { event: string; distinct_id: string; timestamp: string; properties: Record<string, unknown> }): Promise<boolean> {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT);
+    timer.unref?.();
+    try {
+      const response = await (this.deps.fetch ?? fetch)(this.deps.endpoint ?? POSTHOG_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: this.deps.apiKey, ...event }),
+        signal: abort.signal,
+      });
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   private async run(): Promise<CheckResult> {
     const on = !this.forcedOff() && Boolean(this.deps.apiKey) && (await this.deps.enabled().catch(() => true));
     const stored = await this.file.read();
@@ -295,23 +363,8 @@ export class TelemetryService {
     const [snapshot, activity] = await Promise.all([this.deps.snapshot(), this.deps.activity()]);
     const counts = countWindow(activity.events, activity.memoryConfirmedAt, from, now);
     const properties = heartbeatProperties(snapshot, counts, gap > MAX_WINDOW ? Math.ceil(gap / DAY) : undefined);
-    const body = JSON.stringify({ api_key: this.deps.apiKey, event: "flowly_heartbeat", distinct_id: state.installId, timestamp: new Date(now).toISOString(), properties });
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT);
-    timer.unref?.();
-    try {
-      const response = await (this.deps.fetch ?? fetch)(this.deps.endpoint ?? POSTHOG_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        signal: abort.signal,
-      });
-      if (!response.ok) return "failed";
-    } catch {
-      return "failed";
-    } finally {
-      clearTimeout(timer);
-    }
+    const sent = await this.post({ event: "flowly_heartbeat", distinct_id: state.installId, timestamp: new Date(now).toISOString(), properties });
+    if (!sent) return "failed";
     const sentAt = new Date(now).toISOString();
     await this.file.write({ ...state, lastSentAt: sentAt, windowStart: sentAt });
     return "sent";

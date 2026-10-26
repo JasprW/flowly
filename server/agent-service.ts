@@ -67,6 +67,7 @@ import { ToolError } from "./tool-error";
 import { ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Receipt, type Status } from "../shared/model";
 import { isLegacyScope } from "../shared/scope";
 import { MemoryError, type MemoryService } from "./memory";
+import { logFailure } from "./error-report";
 
 /** A project-memory refusal as the tool error agents read (PROJECT-MEMORY-SPEC §4.1). */
 function memoryToolError(e: unknown): unknown {
@@ -397,12 +398,12 @@ export class AgentService {
       });
     if (markArtifacts && value.artifacts.length)
       await this.artifactReads.mark(identity.agentId, readAt).catch((e) =>
-        console.error("Kanban artifact reads not saved:", e instanceof Error ? e.message : String(e)),
+        logFailure("Kanban artifact reads not saved:", e),
       );
     const seenExternals = Object.fromEntries([...externals].filter(([, v]) => v.fingerprint).map(([id, v]) => [id, v.fingerprint]));
     if (markArtifacts && Object.keys(seenExternals).length)
       await this.externalReads.mark(identity.agentId, seenExternals).catch((e) =>
-        console.error("Kanban external reads not saved:", e instanceof Error ? e.message : String(e)),
+        logFailure("Kanban external reads not saved:", e),
       );
     return value;
   }

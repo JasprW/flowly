@@ -29,6 +29,7 @@ import {
   ideaLimits,
   projectOrder,
 } from "../shared/model";
+import { logFailure } from "./error-report";
 
 export { StoreInvalidError };
 
@@ -114,7 +115,7 @@ export class BoardStore {
       this.onCommit?.();
       if (this.flow && events.length)
         void this.flow.append(events, board).catch((e) =>
-          console.error("Kanban flow log append failed:", e instanceof Error ? e.message : String(e)),
+          logFailure("Kanban flow log append failed:", e),
         );
       await this.storage?.afterCommit();
       return result.value;

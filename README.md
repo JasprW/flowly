@@ -132,7 +132,7 @@ Board data is stored on the daemon machine in `~/.paseo/plugin-data/flowly/` (`P
 
 ### Telemetry
 
-Once a day the daemon sends anonymous usage data to PostHog (US): the Flowly version, OS and Node version, the interface language, which features are switched on, rough project and card counts, and how many cards, agent turns, deliveries, next moves, ideas and memories there were since the last one, with the models used. It never sends titles, descriptions, messages, paths, repository names or IDs of your projects, cards or sessions, and no IP-based location. Turn it off in Settings → General → *Send anonymous usage data*, or set `DO_NOT_TRACK=1` (or `FLOWLY_TELEMETRY=0`) for the Paseo daemon. Exactly what is sent: [`server/telemetry.ts`](server/telemetry.ts) and [docs/TELEMETRY-SPEC.md](docs/TELEMETRY-SPEC.md).
+Once a day the daemon sends anonymous usage data to PostHog (US): the Flowly version, OS and Node version, the interface language, which features are switched on, rough project and card counts, and how many cards, agent turns, deliveries, next moves, ideas and memories there were since the last one, with the models used. When Flowly's daemon hits an error it also sends the error's type and code and where in Flowly's own code it happened (file and line), at most once a day per kind. It never sends error messages, titles, descriptions, chat messages, paths, repository names or IDs of your projects, cards or sessions, and no IP-based location. Turn it off in Settings → General → *Send anonymous usage data*, or set `DO_NOT_TRACK=1` (or `FLOWLY_TELEMETRY=0`) for the Paseo daemon. Exactly what is sent: [`server/telemetry.ts`](server/telemetry.ts) and [docs/TELEMETRY-SPEC.md](docs/TELEMETRY-SPEC.md).
 
 ## Development
 

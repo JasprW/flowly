@@ -118,7 +118,7 @@ export function UsageDataGroup({ bare = false }: { bare?: boolean }) {
     <SettingsGroup title={bare ? undefined : t("Usage data")}>
       <SettingSwitch
         title={t("Send anonymous usage data")}
-        detail={forced ? t("Turned off by DO_NOT_TRACK on this computer.") : t("Once a day: versions, which features are on and usage counts. Never your content, paths or code.")}
+        detail={forced ? t("Turned off by DO_NOT_TRACK on this computer.") : t("Once a day: versions, which features are on and usage counts. On errors: where in Flowly's code. Never your content, paths or code.")}
         value={!forced && (telemetry.values?.enabled ?? true)}
         disabled={forced || telemetry.busy}
         onChange={(enabled) => telemetry.save({ enabled })}
