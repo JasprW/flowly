@@ -613,9 +613,15 @@ export class BoardStorage {
       throw error;
     }
     if ((await this.boardFile()).kind === "none") await this.writeMarker();
+    this.step("restore:replaced");
     await this.openDatabase(sqlite);
     const opened = this.state as State;
-    if (opened.kind === "error") throw new StoreInvalidError(opened.detail, errorCodes[opened.reason], false);
+    if (opened.kind === "error")
+      throw new StoreInvalidError(
+        `The backup ${name} is now flowly.sqlite but cannot be opened: ${opened.detail} The previous database is ${aside ?? "(none)"}; restore another backup.`,
+        errorCodes[opened.reason],
+        false,
+      );
     console.log(`Flowly storage: restored ${name}; the previous database is ${aside ?? "(none)"}.`);
     return { aside };
   }

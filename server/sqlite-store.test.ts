@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -395,6 +396,30 @@ describe("backups, restore and the way back to JSON", () => {
     expect(aside).toMatch(/^flowly\.sqlite\.before-restore-/);
     expect(readDatabaseFile(sqlite, join(d, aside!)).tasks[0].title).toBe("After the backup");
     expect(text(onDisk(d))).toBe(text(restored));
+  });
+
+  test("a restored backup that cannot be opened is reported, and another backup still restores", async () => {
+    let now = Date.parse("2026-10-26T00:00:00Z");
+    let corrupt = false;
+    const d = await directory();
+    await writeBoard(d, fixture());
+    const s = open(d, {
+      now: () => new Date(now),
+      step: (name) => {
+        if (corrupt && name === "restore:replaced") writeFileSync(join(d, "flowly.sqlite"), "not a database");
+      },
+    });
+    const original = await s.read();
+    now += 1000;
+    await s.backupStorage();
+    const [newest, oldest] = (await s.storageStatus()).backups;
+    corrupt = true;
+    await expect(s.restoreStorage(newest.name)).rejects.toThrow(/is now flowly\.sqlite but cannot be opened/);
+    expect(await s.storageStatus()).toMatchObject({ backend: "error", reason: "invalid" });
+    corrupt = false;
+    now += 1000;
+    await s.restoreStorage(oldest.name);
+    expect(content(await s.read())).toBe(content(original));
   });
 
   test("backups run once a day after a write, and only the newest seven of Flowly's own are kept", async () => {
