@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { exceptionReport, expectedRpcError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
+import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
 import { MAX_ERRORS_PER_DAY, TelemetryService } from "./telemetry";
 import { ToolError } from "./tool-error";
 import { FLOWLY_VERSION } from "../shared/version";
@@ -36,6 +36,25 @@ test("plugin root: the folder above server/ from source, the bundle's folder whe
   expect(pluginRoot(`Error\n    at pluginRoot (${ROOT}/server/error-report.ts:40:20)`)).toBe(ROOT);
   expect(pluginRoot(`Error\n    at pluginRoot (file://${ROOT}/dist/server.js:40:20)`)).toBe(`${ROOT}/dist`);
   expect(pluginRoot("Error")).toBe("");
+  expect(pluginRoot(`Error\n    at pluginRoot (eval at evaluateBundle (file:///root/.nvm/lib/node_modules/@getpaseo/server/dist/plugins/bundle-evaluator.js:32:21), <anonymous>:99:20)`)).toBe(BUNDLE);
+});
+
+// As seen on Paseo 0.13.0 (Coder E2E 2026-10-26): the plugin bundle runs through eval.
+test("frames of Paseo's evaluated bundle: fixed file name, bundle positions, function names; no paths", () => {
+  const at = "eval at evaluateBundle (file:///root/.nvm/versions/node/v22.19.0/lib/node_modules/@getpaseo/server/dist/server/server/plugins/bundle-evaluator.js:32:21), <anonymous>";
+  const stack = [
+    "Error: ENOENT: no such file or directory, realpath '/tmp/alice-secret'",
+    `    at async directory (${at}:102566:21)`,
+    `    at async listDirectories (${at}:102580:19)`,
+    "    at async Object.realpath (node:internal/fs/promises:1000:10)",
+    "    at async handle (file:///root/.nvm/lib/node_modules/@getpaseo/server/dist/server/plugins/host.js:10:3)",
+  ].join("\n");
+  const frames = ownFrames(stack, BUNDLE);
+  expect(frames.map((f) => [f.filename, f.function, f.lineno, f.colno])).toEqual([
+    [BUNDLE_FILE, "async listDirectories", 102580, 19],
+    [BUNDLE_FILE, "async directory", 102566, 21],
+  ]);
+  expect(JSON.stringify(frames)).not.toMatch(/root|nvm|alice|internal|host\.js/);
 });
 
 test("frames: only Flowly's own files, relative, oldest call first; never a path outside the plugin", () => {

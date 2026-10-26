@@ -256,7 +256,7 @@ Content-Type: application/json
 - `type`：`error.name`，符合标识符格式（`^[A-Za-z_$][\w$]{0,60}$`）才用，否则为 `Error`；抛出的不是 `Error` 时为 `NonError`。
 - `value`：`error.code` 符合 `^[A-Z][A-Z0-9_]{1,40}$`（如 `ENOENT`、`SQLITE_BUSY`）时为它，否则为 `""`。**从不发送错误消息**：消息里常有路径、标题或命令。
 - `handled`：未捕获异常为 `false`，其余为 `true`。
-- `frames`：只保留 Flowly 自身文件的帧，最多 20 个，按最早的调用在前排列。"自身文件"指在插件目录下、且不在 `node_modules` 里的文件；插件目录在运行时从 `server/error-report.ts` 自己的堆栈帧推出（从源码加载时是 `server/` 的上一级，打包加载时是包文件所在目录），所以不依赖 Paseo 的加载方式。每帧只有 `filename`（相对插件目录的路径，如 `server/service.ts`）、`function`（符合 `^[\w$.<> ]{1,80}$` 才保留，否则为 `""`）、`lineno`、`colno`、`in_app: true`、`platform: "node:javascript"`。插件目录本身和插件以外的任何路径都不发送。
+- `frames`：只保留 Flowly 自身文件的帧，最多 20 个，按最早的调用在前排列。"自身文件"指在插件目录下、且不在 `node_modules` 里的文件；插件目录在运行时从 `server/error-report.ts` 自己的堆栈帧推出（从源码加载时是 `server/` 的上一级，打包加载时是包文件所在目录），所以不依赖 Paseo 的加载方式。Paseo 0.13 把插件服务端编成一个 esbuild bundle，再用 `eval` 执行（`bundle-evaluator.js`，没有文件名和 source map），这时帧的形式是 `eval at evaluateBundle (…), <anonymous>:行:列`：插件目录记为 bundle 模式，这类帧的 `filename` 固定为 `flowly-bundle.js`，`lineno`/`colno` 是 bundle 内的位置，函数名照常保留（2026-10-26 Coder 端到端测试发现）。其他插件的 eval 帧形式相同、无法区分，只可能出现在未捕获异常里，接受这一点。每帧只有 `filename`（相对插件目录的路径，如 `server/service.ts`）、`function`（符合 `^[\w$.<> ]{1,80}$` 才保留，否则为 `""`）、`lineno`、`colno`、`in_app: true`、`platform: "node:javascript"`。插件目录本身和插件以外的任何路径都不发送。
 
 ### 11.4 频率
 
@@ -265,6 +265,7 @@ Content-Type: application/json
 
 ### 11.5 验收
 
+1. 清洗（bundle 模式）：`eval at evaluateBundle (…), <anonymous>` 帧记为 `flowly-bundle.js`，保留函数名和位置，不含任何路径。
 1. 清洗：构造含插件内文件（源码路径和 `file://` URL）、插件内 `node_modules`、`node:internal` 和插件外用户路径的堆栈，只留下插件内两帧，路径相对，顺序反转；整个事件里没有用户路径和错误消息（`server/error-report.test.ts`）。
 2. `type`、`value`、`source` 的规则如 11.3 节；非 `Error` 为 `NonError`。
 3. 同一错误同一天只发一次；30 种不同错误只发 20 条；第二天重新开始。

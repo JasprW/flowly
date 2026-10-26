@@ -31,6 +31,15 @@ export type ExceptionReport = {
 };
 
 const frameLine = /^\s*at (?:(.+?) \()?(.+?):(\d+):(\d+)\)?$/;
+/**
+ * Paseo compiles the plugin into one bundle and runs it with `eval` (no file name, no source
+ * map), so its frames read `eval at evaluateBundle (…), <anonymous>:line:col`.
+ */
+const evalFrame = /^eval at .+, <anonymous>$/;
+/** `pluginRoot()` when the plugin runs as Paseo's evaluated bundle. */
+export const BUNDLE = "<bundle>";
+/** File name sent for frames of the evaluated bundle; line and column are bundle positions. */
+export const BUNDLE_FILE = "flowly-bundle.js";
 
 function filePath(location: string) {
   if (location.startsWith("file://")) {
@@ -43,27 +52,41 @@ function filePath(location: string) {
   return location;
 }
 
-/** The plugin folder, from where this file runs: from source it sits in `server/`, bundled it is the bundle's folder. */
+/**
+ * The plugin folder, from where this file runs: from source it sits in `server/`, bundled it is
+ * the bundle's folder; `BUNDLE` when Paseo evaluated the bundle.
+ */
 export function pluginRoot(stack = new Error().stack ?? ""): string {
   const own = stack.split("\n").map((line) => frameLine.exec(line)).find(Boolean);
   if (!own) return "";
+  if (evalFrame.test(own[2]!)) return BUNDLE;
   const dir = dirname(filePath(own[2]!));
   return basename(dir) === "server" ? dirname(dir) : dir;
 }
 
 const root = pluginRoot();
 
-/** Flowly's own frames, oldest call first (PostHog's order), relative to the plugin folder. */
+/**
+ * Flowly's own frames, oldest call first (PostHog's order): relative to the plugin folder, or
+ * `BUNDLE_FILE` with bundle positions when Paseo evaluated the bundle. Evaluated frames of other
+ * plugins look the same; only uncaught errors can contain them (§11.2).
+ */
 export function ownFrames(stack: string, base = root): ExceptionFrame[] {
   if (!base) return [];
   const frames: ExceptionFrame[] = [];
   for (const line of stack.split("\n")) {
     const match = frameLine.exec(line);
     if (!match) continue;
-    const file = filePath(match[2]!);
-    if (!file.startsWith(base + sep)) continue;
-    const relative = file.slice(base.length + 1).split(sep).join("/");
-    if (relative.startsWith("node_modules/") || relative.includes("/node_modules/")) continue;
+    let relative: string;
+    if (base === BUNDLE) {
+      if (!evalFrame.test(match[2]!)) continue;
+      relative = BUNDLE_FILE;
+    } else {
+      const file = filePath(match[2]!);
+      if (!file.startsWith(base + sep)) continue;
+      relative = file.slice(base.length + 1).split(sep).join("/");
+      if (relative.startsWith("node_modules/") || relative.includes("/node_modules/")) continue;
+    }
     const fn = match[1] ?? "";
     frames.push({
       filename: relative,
