@@ -88,3 +88,61 @@
 - 临时文件（`/tmp/fv-*`）：已删除。
 - 未向 `~/.paseo/plugin-data/flowly` 写入任何内容；未安装或 reload 插件；未创建 Paseo 会话、项目或卡片；未调用 Flowly 写入工具。
 - 未修改任何实现文件，未 commit。本目录下只新增了 `README.md`、`drill.mjs`、`drill-result.json`。
+
+## 复验（62ec9e9）
+
+- 复验对象：提交 `62ec9e9`（修复在 `a2ec3a9`）
+- 复验会话：PASEO_AGENT_ID `f6f13e35-b0c5-4492-b143-e081510d1d1b`，模型 claude-haiku-5-5（未写实现代码）
+- 日期：2026-10-26。检查在临时 detached worktree 中进行，结束后删除。
+
+### 1. 检查命令
+
+| 命令 | 退出码 | 结果 |
+|---|---|---|
+| `npm run typecheck` | 0 | `tsc --noEmit` 无错误 |
+| `npm test` | 0 | 129 files，1055 passed，1 skipped（1056）。跳过项为 crash 子进程用例，与上次一致（未逐条核对） |
+| `npx vitest run server/sqlite-store.test.ts server/sqlite-parity.test.ts server/sqlite-crash.test.ts` | 0 | 3 files，34 passed，1 skipped（35）。跳过项为 crash 子进程用例（设计如此） |
+
+### 2. F1–F7 是否关闭
+
+| 编号 | 结论 | 依据 |
+|---|---|---|
+| F1 导出中断 → DIVERGED | **关闭** | 复跑 P1（注入点在 board.json 写入之后，即“导出已完成”一侧）：重开 `ok`，board.json 为 v5。另一侧（mode 写入后、board.json 写入前中断）由 `sqlite-store.test.ts` 的 `an export stopped after export:mode` 覆盖：回到 SQLite，内容不变。 |
+| F2 retire 失败 → 状态卡在 starting | **关闭** | 复跑 P2：导出不抛错，状态 `json / exported`，读取 `ok`；真实时钟重启后内容一致。测试 `an export whose database cannot be renamed aside…` 覆盖同一场景。 |
+| F3 rename 在 try 之外 | **关闭（读代码）** | rename 现在在 try 内，失败回退 JSON；syncDirectory 失败只记日志。测试覆盖失败点 `migrate:snapshot`、`migrate:checked`、`migrate:before-rename`。rename 本身的注入未测试。 |
+| F4 同秒备份顺序 | **关闭** | 复跑 P3：列表为 `-7` … `-1`，最早的基础名文件被删除，正确。测试 `backups made within one second keep their order` 覆盖。 |
+| F5 restore 在打开失败时仍报成功 | **关闭（读代码，无测试）** | `restore` 在 openDatabase 后检查错误态并抛出。未复现，也没有测试。 |
+| F6 备份与快照 0644 | **关闭** | 权限探针（同一提交）：恢复后的 `flowly.sqlite`、恢复前副本、备份文件、导出的 board.json、storage-mode.json、retired 库全部为 0600。测试 `the snapshot and the backups are readable by the owner only` 覆盖快照、备份与数据库。 |
+| F7 旧版本测试与 `board.pre-v4.json` 副作用 | **未改行为，已说明** | 只补了注释。旧版本的副作用仍在（无数据影响，发生在旧版本代码中）。按 Low 接受为文档说明。 |
+
+### 3. §11 复判
+
+- **§11.2：PASS**。`server/sqlite-parity.test.ts` 逐步对照 JSON 与 SQLite，完整板比较，最后重开再比较。覆盖清单中的全部操作：建项目、建卡、编辑、标签、事件、回执、ideas、artifact、workpad、删卡、移除项目。
+  - 测试有效性：11 步全部真正改动了 JSON 板（逐步探针，全部 true）。`randomUUID` 按步骤固定、只对 `Date` 做假时钟，两边 id 与时间一致，比较不会因此被掩盖。
+  - 灵敏度：在临时 worktree 中注入两个 SQLite 写入缺陷（M1：已有行不更新；M2：不删除已移除行），`sqlite-parity` 两次都失败（exit 1）。临时 worktree 已删除，没有改动实现者的文件。
+  - 残留弱点：回执是通过 `mutate` 直接写入的，不是通过 agent 服务；重开只在最后检查一次。
+- **§11.4：PASS**（列出的失败点都有测试）。rename 注入未测，见 F3。
+- **§11.5：PASS**。新增“SQLite 版本 3.50.4 时停在 JSON，已迁移的看板被拒绝”的测试，启动路径覆盖到了。
+- 其余 §11.1、3、6、7、8、9 与上次结论相同。§11.9 仍只在 vitest 子进程中验证。
+
+### 4. 演练（drill.mjs，62ec9e9，Helper 运行时 node v24.20.0 / sqlite 3.53.4）
+
+- 检查 23 项，全部 true，无错误。
+- 计数：6 项目、106 卡、4515 事件、77 想法、64 workpad、2725 回执。注意：与第一次演练相比回执数从 2730 变为 2725，原 board.json 字节数也变了（4 933 403 → 4 930 822）。这是运行中的插件在两次演练之间写入了真实数据；复制时取的是当时的文件，drill 本身只做 copy 和 stat（mtime 与大小前后不变）。
+- 大小：flowly.sqlite 6 991 872 B。
+- 耗时：迁移+首次读 488 ms；之后读 7 ms；编辑 21 ms；恢复 237 ms；导出 58 ms；切回 SQLite 301 ms。
+- 探针：P1 `ok`（导出完成）；P2 导出 `null`（不抛错），之后读取 `ok`，状态 `json / exported`，重启后内容一致；P3 `-7`…`-1`；P4 第二进程 `STORAGE_BUSY`。
+- 结果保存在 `drill-result-2.json`，原 `drill-result.json` 未改动。
+
+### 5. 新发现
+
+没有 High 或 Medium 级别的新问题。
+
+- **Low（待确认）**：`restore` 修复后在 openDatabase 失败时会抛错，但此时已经把数据库换成了备份（`sqlite-storage.ts:614–617`）。界面会显示“失败”，而库已是恢复版本。可以再次恢复，所以不丢数据；只是报错语义需要说明。这是 UX 问题，未复现。
+
+### 6. 结论
+
+- 上次复现的问题（F1、F2、F4、F6）在复验中都已复现并确认修复；F3、F5 通过读代码确认。F7 只补了说明。
+- §11.2 从 FAIL 转为 PASS，且 parity 测试有效。
+- 仍为 UNRUN：Helper 运行时内的强杀演练；Settings > Storage 界面。
+- **我认为可以合并**（存储层面）。合并前建议：补一个 rename 注入测试；F5 补一个测试；F7 说明可以放到发布说明里。
