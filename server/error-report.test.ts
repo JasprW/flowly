@@ -90,7 +90,7 @@ test("expected RPC errors are not reported: tool errors and plain messages; bugs
   expect(expectedRpcError("x")).toBe(false);
 });
 
-async function harness(options: { env?: NodeJS.ProcessEnv; enabled?: boolean; now?: () => number } = {}) {
+async function harness(options: { env?: NodeJS.ProcessEnv; enabled?: boolean; now?: () => number; paseoVersion?: () => Promise<string> } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "flowly-errors-"));
   dirs.push(directory);
   const calls: { url: string; body: { api_key: string; event: string; distinct_id: string; properties: Record<string, unknown> } }[] = [];
@@ -99,6 +99,7 @@ async function harness(options: { env?: NodeJS.ProcessEnv; enabled?: boolean; no
     env: options.env ?? {},
     apiKey: "phc_test",
     pluginRoot: ROOT,
+    paseoVersion: options.paseoVersion,
     now: options.now ?? (() => NOW),
     enabled: async () => options.enabled ?? true,
     snapshot: async () => {
@@ -113,6 +114,18 @@ async function harness(options: { env?: NodeJS.ProcessEnv; enabled?: boolean; no
   return { service, calls, directory };
 }
 
+test("paseo_version: the host's version when known, retried after an empty answer, \"\" when unavailable", async () => {
+  let answers = ["", "0.13.0", "0.14.0"];
+  const { service, calls } = await harness({ paseoVersion: async () => answers.shift() ?? "" });
+  await service.reportError("a", failure());
+  await service.reportError("b", failure());
+  await service.reportError("c", failure());
+  expect(calls.map((c) => c.body.properties.paseo_version)).toEqual(["", "0.13.0", "0.13.0"]);
+  const { service: bare, calls: bareCalls } = await harness({ paseoVersion: async () => Promise.reject(new Error("no daemon")) });
+  await bare.reportError("a", failure());
+  expect(bareCalls[0]!.body.properties.paseo_version).toBe("");
+});
+
 test("sends one $exception with the §11 keys and the heartbeat's install id", async () => {
   const { service, calls, directory } = await harness();
   expect(await service.reportError("Kanban auto wrap-up failed:", failure())).toBe(true);
@@ -120,7 +133,7 @@ test("sends one $exception with the §11 keys and the heartbeat's install id", a
   const { body } = calls[0]!;
   expect(body.event).toBe("$exception");
   expect(Object.keys(body.properties).sort()).toEqual(
-    ["$process_person_profile", "$geoip_disable", "$exception_list", "$exception_fingerprint", "source", "flowly_version", "node_major", "os", "arch"].sort(),
+    ["$process_person_profile", "$geoip_disable", "$exception_list", "$exception_fingerprint", "source", "flowly_version", "paseo_version", "node_major", "os", "arch"].sort(),
   );
   expect(body.properties.flowly_version).toBe(FLOWLY_VERSION);
   expect(body.properties.$exception_list).toEqual([

@@ -233,6 +233,8 @@ export type TelemetryDeps = {
   fetch?: typeof fetch;
   /** Tests only: the folder whose files count as Flowly's own frames (§11). */
   pluginRoot?: string;
+  /** The Paseo version for error reports (§11.3); "" when unknown. Asked again after an empty answer. */
+  paseoVersion?(): Promise<string>;
   /** The `telemetry` setting; unreadable settings count as on (the default). */
   enabled(): Promise<boolean>;
   snapshot(): Promise<TelemetrySnapshot>;
@@ -293,6 +295,7 @@ export class TelemetryService {
     });
     return this.creating;
   }
+  private paseoVersion = "";
   private errorDay = "";
   private errorsSent = new Set<string>();
   /**
@@ -314,6 +317,7 @@ export class TelemetryService {
       this.errorsSent.add(report.fingerprint);
       if (!(await this.deps.enabled().catch(() => true))) return false;
       const state = await this.stateOrCreate(now);
+      this.paseoVersion ||= (await this.deps.paseoVersion?.().catch(() => "")) ?? "";
       const properties = {
         $process_person_profile: false,
         $geoip_disable: true,
@@ -323,6 +327,7 @@ export class TelemetryService {
         $exception_fingerprint: report.fingerprint,
         source: report.source,
         flowly_version: FLOWLY_VERSION,
+        paseo_version: this.paseoVersion,
         node_major: Number(process.versions.node.split(".")[0]),
         os: process.platform,
         arch: process.arch,

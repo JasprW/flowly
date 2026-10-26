@@ -2,7 +2,8 @@ import { readCardDetail, readProjectCardIndex, readProjectIdeas } from "./server
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import type { PaseoApi } from "@getpaseo/client";
 import { BoardStore, columnOrder } from "./server/store";
-import { BoardService, dataDirectory, migrateLegacyPluginData } from "./server/service";
+import { BoardService, dataDirectory, migrateLegacyPluginData, paseoHome } from "./server/service";
+import { readPaseoVersion } from "./server/paseo-version";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
 import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
@@ -626,6 +627,7 @@ export default function contribute(host: PluginServerContext) {
     directory: store.directory,
     env: process.env,
     apiKey: POSTHOG_KEY,
+    paseoVersion: () => readPaseoVersion(paseoHome()),
     enabled: async () => ready(await telemetryPrefs.read().catch(() => null), telemetrySettingsValues).enabled,
     snapshot: async () => {
       const [language, device, ai, ideasState, nativeState, wrapState, features, workflowState, summary, autoStatus, board] = await Promise.all([

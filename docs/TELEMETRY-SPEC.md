@@ -91,7 +91,7 @@ Content-Type: application/json
 | 字段 | 取值 | 说明 |
 |---|---|---|
 | `flowly_version` | `shared/version.ts` 的常量，测试保证它等于 `package.json` 的 version | |
-| `paseo_version` | 不发送：插件服务端 SDK 目前拿不到 Paseo 版本；SDK 提供后再加 | |
+| `paseo_version` | 心跳不发送；只随 `$exception` 发（11.3 节） | |
 | `node_major` | `process.versions.node` 的主版本号，如 `24` | |
 | `os` | `process.platform`：`darwin` / `linux` / `win32` / 其他原值 | |
 | `arch` | `process.arch` | |
@@ -201,7 +201,8 @@ Content-Type: application/json
   - 使用频率：各 `c_*` 的中位数和 P90，以及 DAU/WAU。
 - 看板：PostHog 项目 688543 的 **Flowly** 看板（2026-10-26 建）。
 - 排除测试安装：在项目设置的 test account filters 里加 HogQL 过滤 `distinct_id != '<installId>'`，并默认勾选；趋势类图打开 *Filter out internal and test users*，SQL 图在 WHERE 里写同样的条件。事件不建 person profile（`$process_person_profile: false`），所以 cohort 和 person 属性过滤无效；`type: event` 的 `distinct_id` 过滤匹配的是事件属性，也无效。已排除：Coder 测试机 `0d645af4-…`（它的 Usage data 开关也已关闭）。
-- 还原错误帧的 bundle 行号：`node scripts/map-bundle-lines.mjs --flowly <版本或 --ref 提交> --paseo <Paseo 版本> <行号>...`（行号可写 `104683`、`:104683:10` 或 `flowly-bundle.js:104683`）。脚本按 Paseo 0.13 `compiler.js` 的 `compileTarget` 选项（bundle、cjs、platform node、target node20、treeShaking，外部模块同 `SERVER_HOST_MODULES`）加 `wrapCommonJsBundle` 的 3 行头重建服务端 bundle，esbuild 用 Paseo 依赖的版本（`--esbuild` 可指定），再用同一次构建的 source map 查出 `server/*.ts` 的文件和行，并和 bundle 里的 `// server/xxx.ts` 模块注释核对；不带 source map 的构建与带 source map 的输出必须逐字相同，否则报错。源码取自 `v<版本>` 标签（或 `--ref`、`--dir`）并 `npm ci`。行号只在版本、依赖和 Paseo 的 esbuild 都一致时有效：事件里的 `flowly_version` 只是版本号，开发中的提交可能也叫同一个版本，对不上时用 `--ref` 试对应的提交，`--grep <文本>` 可列出 bundle 里含该文本的行来核对函数名。2026-10-26 的示例事件（`:104683 listDirectories`、`:102566 directory`）在 `13f9905` + Paseo 0.13.0 + esbuild 0.25.12 下对应 `server/directories.ts:16` 和 `server/service.ts:142`。
+- 还原错误帧的 bundle 行号：`node scripts/map-bundle-lines.mjs --flowly <版本或 --ref 提交> --paseo <Paseo 版本> <行号>...`（行号可写 `104683`、`:104683:10` 或 `flowly-bundle.js:104683`）。脚本按 Paseo 0.13 `compiler.js` 的 `compileTarget` 选项（bundle、cjs、platform node、target node20、treeShaking，外部模块同 `SERVER_HOST_MODULES`）加 `wrapCommonJsBundle` 的 3 行头重建服务端 bundle，esbuild 用 Paseo 依赖的版本（`--esbuild` 可指定），再用同一次构建的 source map 查出 `server/*.ts` 的文件和行，并和 bundle 里的 `// server/xxx.ts` 模块注释核对；不带 source map 的构建与带 source map 的输出必须逐字相同，否则报错。`--paseo` 用事件的 `paseo_version`。源码取自 `v<版本>` 标签（或 `--ref`、`--dir`）并 `npm ci`。行号只在版本、依赖和 Paseo 的 esbuild 都一致时有效：事件里的 `flowly_version` 只是版本号，开发中的提交可能也叫同一个版本，对不上时用 `--ref` 试对应的提交，`--grep <文本>` 可列出 bundle 里含该文本的行来核对函数名。2026-10-26 的示例事件（`:104683 listDirectories`、`:102566 directory`）在 `13f9905` + Paseo 0.13.0 + esbuild 0.25.12 下对应 `server/directories.ts:16` 和 `server/service.ts:142`。
+- 查某个 Paseo 版本的错误：HogQL `select properties.paseo_version, count() from events where event = '$exception' group by 1`（旧事件没有这个键，为空）。
 - 项目 key 只能写入，不能读取，放在源码里没有问题。可能有人伪造数据，这一点已接受：数据只用于参考。
 
 ## 9. 验收标准
@@ -255,7 +256,9 @@ Content-Type: application/json
 | `$exception_fingerprint` | 由 `type`、`value`、`source` 和各帧的文件、函数名、行号算出的 SHA-256 前 32 位十六进制 |
 | `source` | 11.2 节的来源；不符合 `^[\w .,;:'/-]{1,80}$` 时为 `other` |
 | `flowly_version`、`node_major`、`os`、`arch` | 同第 4 节 |
+| `paseo_version` | Paseo daemon 的版本号（如 `0.13.0`），取不到时为 `""` |
 
+- `paseo_version`：插件 SDK 不提供宿主版本（`COMPAT(sdk-paseo-version)`），所以用 `server/paseo-version.ts` 开一次短连接（同 `server/local-daemon.ts`，AGENTS.md 的本地连接例外），读 daemon 在连接时发来的 `server_info.version`，只保留符合 `^\d+\.\d+\.\d+(?:[-+.][\w.-]{1,20})?$` 的值。成功后在内存里缓存到 daemon 重启；取不到（连不上、没有凭据、格式不符）时发 `""`，下一条错误再试，不影响上报。bundle 行号取决于 Paseo 的版本（它自带的 esbuild 和包装头），所以还原行号时用这个值作 `--paseo`。
 - `type`：`error.name`，符合标识符格式（`^[A-Za-z_$][\w$]{0,60}$`）才用，否则为 `Error`；抛出的不是 `Error` 时为 `NonError`。
 - `value`：`error.code` 符合 `^[A-Z][A-Z0-9_]{1,40}$`（如 `ENOENT`、`SQLITE_BUSY`）时为它，否则为 `""`。**从不发送错误消息**：消息里常有路径、标题或命令。
 - `handled`：未捕获异常为 `false`，其余为 `true`。
@@ -273,5 +276,6 @@ Content-Type: application/json
 2. `type`、`value`、`source` 的规则如 11.3 节；非 `Error` 为 `NonError`。
 3. 同一错误同一天只发一次；30 种不同错误只发 20 条；第二天重新开始。
 4. 开关关闭、`DO_NOT_TRACK=1` 时不发；没有 Flowly 自身帧的未捕获异常不发。
+7. `paseo_version`：取到时随事件发出并缓存；第一次取不到时发 `""`，之后再取到就用新值；取值抛错不影响上报（`server/error-report.test.ts`）。
 5. RPC 包装：同步和异步 handler 的程序错误被上报并原样抛出；`ToolError` 只抛出不上报；正常返回值不变。
 6. `properties` 的键集合与 11.3 节完全一致，`distinct_id` 与 `telemetry.json` 的 `installId` 相同；全新安装时同时上报的多个错误使用同一个 `installId`。
