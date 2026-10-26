@@ -201,6 +201,7 @@ Content-Type: application/json
   - 使用频率：各 `c_*` 的中位数和 P90，以及 DAU/WAU。
 - 看板：PostHog 项目 688543 的 **Flowly** 看板（2026-10-26 建）。
 - 排除测试安装：在项目设置的 test account filters 里加 HogQL 过滤 `distinct_id != '<installId>'`，并默认勾选；趋势类图打开 *Filter out internal and test users*，SQL 图在 WHERE 里写同样的条件。事件不建 person profile（`$process_person_profile: false`），所以 cohort 和 person 属性过滤无效；`type: event` 的 `distinct_id` 过滤匹配的是事件属性，也无效。已排除：Coder 测试机 `0d645af4-…`（它的 Usage data 开关也已关闭）。
+- 还原错误帧的 bundle 行号：`node scripts/map-bundle-lines.mjs --flowly <版本或 --ref 提交> --paseo <Paseo 版本> <行号>...`（行号可写 `104683`、`:104683:10` 或 `flowly-bundle.js:104683`）。脚本按 Paseo 0.13 `compiler.js` 的 `compileTarget` 选项（bundle、cjs、platform node、target node20、treeShaking，外部模块同 `SERVER_HOST_MODULES`）加 `wrapCommonJsBundle` 的 3 行头重建服务端 bundle，esbuild 用 Paseo 依赖的版本（`--esbuild` 可指定），再用同一次构建的 source map 查出 `server/*.ts` 的文件和行，并和 bundle 里的 `// server/xxx.ts` 模块注释核对；不带 source map 的构建与带 source map 的输出必须逐字相同，否则报错。源码取自 `v<版本>` 标签（或 `--ref`、`--dir`）并 `npm ci`。行号只在版本、依赖和 Paseo 的 esbuild 都一致时有效：事件里的 `flowly_version` 只是版本号，开发中的提交可能也叫同一个版本，对不上时用 `--ref` 试对应的提交，`--grep <文本>` 可列出 bundle 里含该文本的行来核对函数名。2026-10-26 的示例事件（`:104683 listDirectories`、`:102566 directory`）在 `13f9905` + Paseo 0.13.0 + esbuild 0.25.12 下对应 `server/directories.ts:16` 和 `server/service.ts:142`。
 - 项目 key 只能写入，不能读取，放在源码里没有问题。可能有人伪造数据，这一点已接受：数据只用于参考。
 
 ## 9. 验收标准
