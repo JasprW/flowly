@@ -13,3 +13,19 @@ Commit under test: `74d95e2` (origin/main), deployed to `coder.Bofan.main` (Pase
 | Event visible in PostHog Activity | to be confirmed by the maintainer (`flowly_heartbeat`) |
 
 Screenshots: `docs/promo/shot-lib.mjs` (`launch`, `shot`, `pageText`), headless Chromium on app.paseo.sh connected to the Coder daemon through its pairing link.
+
+## Error reports end to end (TELEMETRY-SPEC §11) — 2026-10-26
+
+Commits deployed in turn to the same host: `412aaed`, `80ada7b`, `6d507cd` (PR #66, squash-merged as `9f3a04a`); previous source in `/root/flowly-test/backup-20261026-152800/`. Trigger: a one-off script using the plugin's `@getpaseo/client` (`DaemonClient.invokePluginRpc`, local credential) called `fs.list-directories` twice with a missing path (real `ENOENT` from `realpath`) and once with a regular file (`Expected an existing directory.`, a plain `Error`). Read back with the PostHog MCP (`execute-sql`) from a headless `claude -p` session. Script and archives removed afterwards.
+
+| Check | Result |
+|---|---|
+| RPC failure reaches PostHog as `$exception`, `source = rpc fs.list-directories`, `type Error`, `value ENOENT` | pass — 07:29:03Z, 07:32:52Z, 07:42:56Z |
+| Callers still get the original error | pass — the script saw the unchanged `ENOENT` / handler error |
+| Same error twice → one event | pass — one event per run |
+| Plain `Error` from a handler is not reported | pass — no event for the regular-file call |
+| No message, no path outside Flowly | pass — properties hold only the §11.3 keys |
+| `distinct_id` = heartbeat install id | pass — `0d645af4…` |
+| Frames on Paseo 0.13 | **fail on `412aaed`**: Paseo `eval`s the esbuild bundle (`bundle-evaluator.js`, no file name or source map), so frames came out as `bundle-evaluator.js:32:21), <anonymous>`. Fixed in `80ada7b`: such frames are `flowly-bundle.js` with bundle line/column and the function name (`async listDirectories` → `async directory`); pass on `80ada7b` and `6d507cd` |
+| IP not stored | **fail before the fix**: the PostHog project had *Discard client IP data* (`anonymize_ips`) off and all 4 earlier events had `$ip`. Turned on with the user's OK (project 688543); the 07:42 event has no `$ip` |
+| Uncaught exceptions, background `logFailure` path | not run end to end — same sink as the RPC path; covered by `server/error-report.test.ts` |
