@@ -38,7 +38,7 @@ Open **Flowly** from Paseo's sidebar. The daemon needs the `paseo` CLI on its pa
 
 Start a session from a card and the card follows the work: **Design → Development → Test → In review**. The agent sets its stage through scoped Kanban tools; the daemon also moves cards when a session starts or resumes a turn. A finished turn never marks a card Done. Done and Cancelled stay your decision. Cards show running, finished, unread and needs-attention session counts, and the latest agent output. Cards that finished more than 14 days ago (configurable in *Settings → Workflow*) fold under **Show older** at the bottom of Done and Cancelled, so the board stays about current work.
 
-Turn it off globally (*Settings → Moving cards*) or per project.
+Turn it off globally (*Settings → Workflow → Moving cards*) or per project.
 
 ### 2. Needs-you reminders
 
@@ -81,7 +81,7 @@ Once an agent understands the work it fills in the card's metadata itself. It se
 
 Insights shows a year of the project's activity, GitHub style: one square per day, darker for more agent turns, with no totals or streaks. Tap a day, or page through days with the arrows, to see its AI summary (written the first time you open a past day), its turns, agent time and tokens, and its cards, each with a bar for how much of the day it took. Below it, **Skills** turns what agents keep redoing into project skills (see below); other suggestions (scripts, repo tools, AGENTS.md rules) are folded underneath, followed by the last 7 days' review rounds, one-pass share and tokens per card by model.
 
-![Project insights: a year of activity, the selected day and skill drafts](docs/promo/screenshots/05-insights.png)
+![Project insights: a year of activity, the selected day's summary and Skills](docs/promo/screenshots/05-insights.png)
 
 <details>
 <summary>Dark theme</summary>
@@ -127,7 +127,7 @@ Summary models are an ordered fallback list in Settings → Models: add models a
 
 ### Data and safety
 
-Board data is stored on the daemon machine in `~/.paseo/plugin-data/flowly/` (`PASEO_HOME` selects the daemon home). Writes are serialized and atomic, stale edits are rejected, and invalid files are preserved rather than reset. Removing or permanently deleting a project or card writes a backup to `removed/` first. Archiving plugin records never deletes Paseo resources or directories. The tool service listens on loopback with private per-session credentials.
+Board data is stored on the daemon machine in `~/.paseo/plugin-data/flowly/` (`PASEO_HOME` selects the daemon home): in a local SQLite database, `flowly.sqlite`, where Paseo supports it, otherwise in `board.json`. *Settings → Storage* shows where it is, keeps a daily backup (the last 7), restores one, and exports the board to JSON. Writes are serialized and atomic, stale edits are rejected, and invalid files are preserved rather than reset. Removing or permanently deleting a project or card writes a backup to `removed/` first. Archiving plugin records never deletes Paseo resources or directories. The tool service listens on loopback with private per-session credentials.
 
 ### Telemetry
 

@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Insights is redesigned: a year of activity, a summary of each day you can page through, and how each finished card went (review rounds, waiting, tokens).": "Insights wurde neu gestaltet: ein Jahr Aktivität, eine Zusammenfassung pro Tag zum Durchblättern und wie jede fertige Karte lief (Review-Runden, Wartezeit, Tokens).",
+  "The board opens and refreshes faster, most of all on phones: it reads only the overview and the open card.": "Das Board öffnet und aktualisiert sich schneller, vor allem auf dem Handy: Es liest nur die Übersicht und die geöffnete Karte.",
+  "Settings fill the screen on phones, and Settings → Cards can turn off the running sweep on cards and sessions.": "Die Einstellungen füllen auf dem Handy den Bildschirm, und unter Einstellungen → Karten lässt sich die Lauf-Animation auf Karten und Sitzungen abschalten.",
+  "Older release": "Ältere Version",
+  "Newer release": "Neuere Version",
   "Usage data": "Nutzungsdaten",
   "Send anonymous usage data": "Anonyme Nutzungsdaten senden",
   "Turned off by DO_NOT_TRACK on this computer.": "Auf diesem Computer durch DO_NOT_TRACK ausgeschaltet.",
@@ -1367,7 +1372,6 @@ const catalog: Catalog = {
   "Review rounds and tokens per card, last 7 days.": "Review-Runden und Tokens pro Karte, letzte 7 Tage.",
   "A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.": "Jede Woche liest ein Modell deine Karten und Befehle und entwirft Skills. Verbraucht Tokens; Modell und Zeitplan stehen in den Einstellungen.",
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "Jede Woche liest ein Modell die Karten dieses Projekts, deine Nachrichten und die Befehle der Agenten und entwirft Skills und Skripte, die sich lohnen. Verbraucht Tokens und führt ein lokales Befehlsprotokoll.",
-  "Insights shows a year of activity; tap a day for its summary.": "Insights zeigt ein Jahr Aktivität; tippe auf einen Tag für seine Zusammenfassung.",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights entwirft Skills aus deinen Karten und fügt sie auf deinen Wunsch dem Projekt hinzu. Standardmäßig an; in den Einstellungen abschaltbar.",
   "Previous day": "Vorheriger Tag",
   "Next day": "Nächster Tag",

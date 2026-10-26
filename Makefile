@@ -49,11 +49,12 @@ verify-clean: ## Fail unless on main, with a clean tree, in sync with origin
 	@git fetch -q origin
 	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/$(BRANCH))" || { echo "HEAD differs from origin/$(BRANCH): push or pull first"; exit 1; }
 
-bump: ## Set the version in package.json and the lockfile (VERSION=x.y.z)
+bump: ## Set the version in package.json, the lockfile and shared/version.ts (VERSION=x.y.z)
 	@test -n "$(VERSION)" || { echo "usage: make bump VERSION=x.y.z"; exit 1; }
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$$' || { echo "VERSION must look like 1.2.3"; exit 1; }
 	@if git rev-parse -q --verify "refs/tags/v$(VERSION)" >/dev/null; then echo "tag v$(VERSION) already exists"; exit 1; fi
 	npm version "$(VERSION)" --no-git-tag-version --ignore-scripts
+	node -e 'const fs = require("fs"), f = "shared/version.ts"; fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(/FLOWLY_VERSION = "[^"]*"/, `FLOWLY_VERSION = "$${process.argv[1]}"`))' "$(VERSION)"
 
 tag: ## Annotate the already committed current version (merge the bump PR first)
 	git tag -a "v$(CUR)" -m "Flowly v$(CUR): the agent-native workflow for Paseo"

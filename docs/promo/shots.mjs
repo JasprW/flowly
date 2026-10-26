@@ -10,7 +10,8 @@ const want = (n) => !only || only.has(n);
 const browser = await launch();
 
 const open = (opts) => openPage(browser, opts);
-const shot = (s, name, clip) => shotTo(s, out + name + '.png', clip);
+// Park the mouse on the plugin's empty title bar first, so no hover tooltip (e.g. a host sidebar workspace) is in the shot.
+const shot = async (s, name, clip) => { await s.page.mouse.move(s.w / 2, 8); await s.page.waitForTimeout(400); await shotTo(s, out + name + '.png', clip); };
 const button = (p, re) => p.getByRole('button', { name: re }).first();
 
 if (want('board')) {
@@ -47,6 +48,8 @@ if (want('insights')) {
   for (const scheme of ['light', 'dark']) {
     const s = await open({ w: 1700, h: 1500, scheme });
     await button(s.page, /Project insights/).click(); await s.page.waitForTimeout(3500);
+    // Select the latest day with activity, so the day summary card has something to show.
+    await s.page.getByRole('button', { name: /, [1-9][\d,]* turns?$/ }).last().click().catch(() => {}); await s.page.waitForTimeout(3500);
     await shot(s, scheme === 'light' ? '05-insights' : '05-insights-dark');
     await s.context.close();
   }

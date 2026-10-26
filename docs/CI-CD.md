@@ -28,7 +28,7 @@ References: [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/)
 
 1. Merge reviewed changes and green CI into main. Work from a clean checkout
    synchronized with origin/main.
-2. On a release branch run `make bump VERSION=1.5.0` (or `1.5.0-rc.1`),
+2. On a release branch run `make bump VERSION=1.5.0` (or `1.5.0-rc.1`; it also sets `shared/version.ts`),
    commit package.json/package-lock.json and merge that PR after CI passes. Then
    on synchronized main run `make release VERSION=1.5.0`: it typechecks/tests,
    verifies the already merged version, creates an annotated v* tag, asks before

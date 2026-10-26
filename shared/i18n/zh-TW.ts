@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Insights is redesigned: a year of activity, a summary of each day you can page through, and how each finished card went (review rounds, waiting, tokens).": "Insights 全新設計：一整年的活躍度、可逐日翻閱的每日摘要，以及每張完成卡片的過程（審查輪次、等待、token）。",
+  "The board opens and refreshes faster, most of all on phones: it reads only the overview and the open card.": "看板開啟與重新整理更快，手機上尤其明顯：只讀取概覽和目前開啟的卡片。",
+  "Settings fill the screen on phones, and Settings → Cards can turn off the running sweep on cards and sessions.": "手機上的設定改為全螢幕，在設定 → 卡片中可以關閉卡片與工作階段上的掃光動畫。",
+  "Older release": "較舊的版本",
+  "Newer release": "較新的版本",
   "Usage data": "使用資料",
   "Send anonymous usage data": "傳送匿名使用資料",
   "Turned off by DO_NOT_TRACK on this computer.": "已被本機的 DO_NOT_TRACK 關閉。",
@@ -1367,7 +1372,6 @@ const catalog: Catalog = {
   "Review rounds and tokens per card, last 7 days.": "最近 7 天每卡的來回輪數和 token。",
   "A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.": "每週由模型讀你的卡片和指令，整理出 skill 草稿。會花 token；模型和頻率在設定裡。",
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "每週由模型閱讀這個專案的卡片、你的訊息和 agent 執行過的指令，整理出值得保留的 skill 和腳本。會花 token，並在本機記錄指令。",
-  "Insights shows a year of activity; tap a day for its summary.": "Insights 顯示一年的活躍度；點某一天看當天摘要。",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights 會從你的卡片整理出 skill，你同意後加入專案。預設開啟，可在設定裡關閉。",
   "Previous day": "前一天",
   "Next day": "後一天",

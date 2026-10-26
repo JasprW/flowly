@@ -1,6 +1,6 @@
 # 更新后的 What's new 窗口
 
-Status: **已实现，1.6.0 随发布**（2026-10-22 设计确认，2026-10-24 按 W4 加历史翻页；§13）（卡片“插件更新后弹出‘新功能’提示”，follow-up of “重设计onboarding流程”）。
+Status: **已实现，1.6.0 随发布**（2026-10-22 设计确认，2026-10-24 按 W4 加历史翻页，2026-10-26 按 W5 改为左右翻页，随 1.7.0 发布；§13）（卡片“插件更新后弹出‘新功能’提示”，follow-up of “重设计onboarding流程”）。
 
 ## 1. 目的
 
@@ -37,7 +37,7 @@ ONBOARDING-SETUP-SPEC D7 决定老用户不自动弹新导览，所以老用户�
 条目表是一个**版本列表，新的在前**，最早到 **1.5.0**，更早的不收（W4）。
 
 - 自动弹出只看**最新一个有条目的版本**（`latestRelease`）：它比 `whatsNewSeen` 新才弹；关闭时记下它的版本号。旧版本的页不会让窗口再弹。
-- 窗口总是打开在最新版本那一页。页脚左侧有翻页按钮，按钮上写目标版本：有更老版本时显示 “🕒 Flowly 1.5”（往回翻），不在最新页时显示 “‹ Flowly 1.6”（往前翻）。翻页不改变 `whatsNewSeen`。
+- 窗口总是打开在最新版本那一页。版本号两侧各一个箭头：‹ 翻到更老的版本，› 翻到更新的版本，到头时对应箭头变灰（W5）。翻页不改变 `whatsNewSeen`。
 - 跳版本升级（1.5 → 1.8）：自动打开在 1.8 那页，用户可往回翻看 1.7、1.6……。
 - 发布新版本时在列表最前面加一项；旧版本条目保留（不再“新的覆盖老的”）。每版最多 7 条（`WHATS_NEW_MAX_ITEMS`），保证一页不太长。
 
@@ -45,16 +45,16 @@ ONBOARDING-SETUP-SPEC D7 决定老用户不自动弹新导览，所以老用户�
 
 - 插件 `Modal`（与导览同一组件、同一入场动效），标题 “What's new”，标题图标 `FlowlyMark`，桌面与手机同一组件，最大宽度 ~440。
 - 每条一行：图标（`Icon`）+ 一句话（md），右侧可选一个按钮（`Chip` 风格的次要按钮），窄屏时按钮换到文字下方。
-- 标题下一行说明 “Flowly {version}”（条目表的版本号去掉末尾的 `.0`）。
+- 标题下一行是 “‹ Flowly {version} ›”（条目表的版本号去掉末尾的 `.0`；只有一个版本时没有箭头）。
 - 页脚只有一个主按钮 **Got it**。
 - 条目按钮：先关闭窗口（记为已看），等约 450 ms（`useAfterModalClose`，两个 Modal 不在同一帧切换）再执行动作：
   - `settings`：打开 Settings 的指定页（`openSettingsAt(section)`）；
   - `tour`：手动打开欢迎导览（非首次模式，不写外部 session 草稿）。
 - 打开期间不显示 tip 横幅；关闭后 tip 照常按优先级出现。
 
-### 5.0 翻页（§4）
+### 5.0 翻页（§4，W5）
 
-页脚：`[‹ Flowly 较新版本]`（不在第一页时）`[🕒 Flowly 较老版本]`（还有更老版本时），右侧 **Got it**。每次打开都回到最新一页。
+版本行：`[‹] Flowly 1.7 [›]`，与 Insights 日总结的日期翻页同一形式（`IconButton` ChevronLeft / ChevronRight，无障碍标签 “Older release” / “Newer release”）。左箭头翻到更老的版本，右箭头翻到更新的版本；在最老 / 最新一页时对应箭头禁用。翻页时条目从翻页方向滑入（`Enter`，水平 16 pt：往老翻从左侧进，往新翻从右侧进；Reduce Motion 下无位移）；打开窗口时的第一页不滑动。每次打开都回到最新一页。页脚只有 **Got it**。
 
 ### 5.1 再次打开（用户决定 2026-10-22）
 
@@ -71,11 +71,16 @@ export const whatsNew: { version: string; items: WhatsNewItem[] }[] = [ /* 新�
 
 版本号写**带上这些变化发布的那个版本**。条目写这个版本里用户可见的新功能和变化，每条一句话；能在设置里开关或调整的给 **Open settings**（落在对应设置页），导览相关的给 **Take the tour**。
 
-### 1.7.0（待发布）
+### 1.7.0（v1.6.0..v1.7.0，全部更新见 [release-notes/v1.7.0](release-notes/v1.7.0.md)）
 
 | 图标 | 文案 | 按钮 |
 | --- | --- | --- |
+| `CalendarDays` | Insights 改版：一年的活跃度、可逐日翻看的每日总结、每张完成卡片的过程（评审轮次、等待、token）（[INSIGHTS-REDESIGN-SPEC](INSIGHTS-REDESIGN-SPEC.md)） | — |
+| `Sparkles` | Insights 从卡片里起草 skill，你同意才加进项目；默认开，可在设置里关 | Open settings → AI features |
+| `Gauge` | 看板打开和刷新更快，手机上尤其明显：只读概览和打开的卡片（[LOADING-R2-SPEC](LOADING-R2-SPEC.md)） | — |
+| `MonitorSmartphone` | 手机上设置改为全屏；Settings → Cards 可关闭扫光动画 | Open settings → Cards |
 | `Database` | Paseo 支持时，看板改存本地 SQLite 数据库并每天备份；Settings → Storage 可恢复备份或导出为 JSON（[SQLITE-STORAGE-SPEC](SQLITE-STORAGE-SPEC.md)） | Open settings → Storage |
+| `Activity` | 匿名使用数据：每天一次版本、开启的功能和使用次数；出错时只报 Flowly 代码里的位置；可在设置里关（[TELEMETRY-SPEC](TELEMETRY-SPEC.md)） | Open settings → General |
 
 ### 1.6.0（2026-10-24 用户确认发布 1.6.0；v1.5.0..main 已合入的部分）
 
@@ -148,3 +153,4 @@ ONBOARDING-SPEC（新增一节，指向本 spec；数据契约加字段）、ONB
 | W2 | 跳版本升级只显示最新一个版本，新的覆盖老的（§4）。我提示过中间版本的设置变化会被错过，用户仍选此项。 |
 | W3 | 首个条目先按 1.5.0 做 demo 看效果（§6）；条目内容按 §6 的 3 条。2026-10-24 起作废：正式发布 1.6.0，条目见 §6。 |
 | W4 | 2026-10-24：What's new 可查看历史版本，默认展示最新版本，可翻页看老版本，从 v1.5.0 开始，更早的不管（§4，取代 W2）。 |
+| W5 | 2026-10-26（卡片“v1.7.0发布”）：导航改为直接左右翻页查看各版本 changelog：版本号两侧的 ‹ › 取代页脚的版本按钮（§5.0）。 |

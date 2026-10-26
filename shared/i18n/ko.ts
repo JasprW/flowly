@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Insights is redesigned: a year of activity, a summary of each day you can page through, and how each finished card went (review rounds, waiting, tokens).": "Insights가 새로워졌습니다: 1년간의 활동, 날짜별로 넘겨 볼 수 있는 일일 요약, 완료된 각 카드의 진행 과정(리뷰 횟수, 대기, 토큰).",
+  "The board opens and refreshes faster, most of all on phones: it reads only the overview and the open card.": "보드가 더 빠르게 열리고 새로 고쳐집니다. 특히 휴대폰에서: 개요와 열린 카드만 읽습니다.",
+  "Settings fill the screen on phones, and Settings → Cards can turn off the running sweep on cards and sessions.": "휴대폰에서 설정이 전체 화면으로 열리고, 설정 → 카드에서 카드와 세션의 실행 중 스윕을 끌 수 있습니다.",
+  "Older release": "이전 릴리스",
+  "Newer release": "다음 릴리스",
   "Usage data": "사용 데이터",
   "Send anonymous usage data": "익명 사용 데이터 보내기",
   "Turned off by DO_NOT_TRACK on this computer.": "이 컴퓨터의 DO_NOT_TRACK 설정으로 꺼져 있습니다.",
@@ -1367,7 +1372,6 @@ const catalog: Catalog = {
   "Review rounds and tokens per card, last 7 days.": "최근 7일 카드당 리뷰 왕복과 토큰.",
   "A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.": "매주 모델이 카드와 명령을 읽고 스킬 초안을 만듭니다. 토큰을 씁니다. 모델과 주기는 설정에 있습니다.",
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "매주 모델이 이 프로젝트의 카드, 내 메시지, 에이전트가 실행한 명령을 읽고 남길 만한 스킬과 스크립트를 초안으로 만듭니다. 토큰을 쓰고 명령을 로컬에 기록합니다.",
-  "Insights shows a year of activity; tap a day for its summary.": "Insights에 1년 동안의 활동이 표시됩니다. 날짜를 누르면 요약을 봅니다.",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights가 카드에서 스킬 초안을 만들고, 원하면 프로젝트에 추가합니다. 기본으로 켜져 있으며 설정에서 끌 수 있습니다.",
   "Previous day": "이전 날",
   "Next day": "다음 날",

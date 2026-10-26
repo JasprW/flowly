@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Insights is redesigned: a year of activity, a summary of each day you can page through, and how each finished card went (review rounds, waiting, tokens).": "Insights переработан: активность за год, сводка по каждому дню с перелистыванием и то, как прошла каждая завершённая карточка (раунды ревью, ожидание, токены).",
+  "The board opens and refreshes faster, most of all on phones: it reads only the overview and the open card.": "Доска открывается и обновляется быстрее, особенно на телефоне: она читает только обзор и открытую карточку.",
+  "Settings fill the screen on phones, and Settings → Cards can turn off the running sweep on cards and sessions.": "На телефоне настройки открываются на весь экран, а в Настройки → Карточки можно выключить анимацию выполнения на карточках и сессиях.",
+  "Older release": "Предыдущий выпуск",
+  "Newer release": "Следующий выпуск",
   "Usage data": "Данные об использовании",
   "Send anonymous usage data": "Отправлять анонимные данные об использовании",
   "Turned off by DO_NOT_TRACK on this computer.": "Отключено переменной DO_NOT_TRACK на этом компьютере.",
@@ -1367,7 +1372,6 @@ const catalog: Catalog = {
   "Review rounds and tokens per card, last 7 days.": "Раунды ревью и токены на карточку за 7 дней.",
   "A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.": "Каждую неделю модель читает ваши карточки и команды и составляет навыки. Тратит токены; модель и расписание — в настройках.",
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "Каждую неделю модель читает карточки этого проекта, ваши сообщения и команды агентов и составляет навыки и скрипты, которые стоит сохранить. Тратит токены и ведёт локальный журнал команд.",
-  "Insights shows a year of activity; tap a day for its summary.": "Insights показывает активность за год; нажмите на день, чтобы увидеть сводку.",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights составляет навыки по вашим карточкам и добавляет их в проект по вашему решению. Включено по умолчанию; можно выключить в настройках.",
   "Previous day": "Предыдущий день",
   "Next day": "Следующий день",

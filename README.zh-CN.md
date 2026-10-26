@@ -38,7 +38,7 @@ paseo plugin add jasprw/flowly
 
 从卡片启动 session 后，卡片会跟着工作走：**Design → Development → Test → In review**。agent 通过受限的 Kanban 工具设置自己所处的阶段；session 开始或恢复一轮时，daemon 也会移动卡片。回合结束**不会**把卡片设为 Done，Done 和 Cancelled 永远由你决定。卡片上显示运行中、已结束回合、未读、需关注的 session 数量，以及最近一条 agent 输出。
 
-可在 *Settings → Moving cards* 全局关闭，也可以按项目关闭。
+可在 *Settings → Workflow → Moving cards* 全局关闭，也可以按项目关闭。
 
 ### 2. 人工介入提醒
 
@@ -79,7 +79,7 @@ agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型
 
 Insights 用 GitHub 式的热力图显示项目一年的活跃度：每天一格，agent 轮次越多颜色越深，不显示总数和连续天数。点某一天或用箭头左右翻页，可以看那天的 AI 总结（过去的日子第一次打开时生成）、轮次、agent 用时和 token，以及那天的卡片，每张卡下面一条横条表示它占了当天多少。下面是 **Skills**，把 agent 反复在做的事沉淀成项目 skill（见下文）；其它建议（脚本、仓库工具、AGENTS.md 规则）默认收起，再下面是最近 7 天的来回轮数、一次通过率、每卡 token（按模型）。
 
-![Project insights：一年活跃度、选中的那一天和 skill 草稿](docs/promo/screenshots/05-insights.png)
+![Project insights：一年活跃度、选中那一天的总结和 Skills](docs/promo/screenshots/05-insights.png)
 
 <details>
 <summary>深色主题</summary>
@@ -125,7 +125,7 @@ Insights 用 GitHub 式的热力图显示项目一年的活跃度：每天一格
 
 ### 数据与安全
 
-看板数据存放在 daemon 所在机器的 `~/.paseo/plugin-data/flowly/`（`PASEO_HOME` 可指定 daemon 主目录）。写入串行化并原子替换，过期编辑会被拒绝，无效文件会被保留而不是重置。移除或永久删除 project / 卡片前会先备份到 `removed/`。归档插件记录不会删除 Paseo 资源或磁盘目录。工具服务只监听本机回环地址，每个 session 使用独立的私有凭据。
+看板数据存放在 daemon 所在机器的 `~/.paseo/plugin-data/flowly/`（`PASEO_HOME` 可指定 daemon 主目录）：Paseo 支持时存在本地 SQLite 数据库 `flowly.sqlite` 里，否则存在 `board.json`。*Settings → Storage* 显示存放位置，每天备份一次（保留最近 7 份），可恢复备份或把看板导出为 JSON。写入串行化并原子替换，过期编辑会被拒绝，无效文件会被保留而不是重置。移除或永久删除 project / 卡片前会先备份到 `removed/`。归档插件记录不会删除 Paseo 资源或磁盘目录。工具服务只监听本机回环地址，每个 session 使用独立的私有凭据。
 
 ### 遥测
 

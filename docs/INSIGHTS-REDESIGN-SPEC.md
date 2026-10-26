@@ -274,7 +274,7 @@ diff 由客户端计算：用一个简单的按行 LCS（几十行规模），�
   - 开关：Insights、Daily digest、**Skills**（默认开，可以在这里关掉）。Skills 开关的说明去掉 “Off by default”，改为：“A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.” 后面接费用估算。
 - **一次性提示**：新增 `first-skill-draft`。条件：Insights 和 Skills 都开着，当前项目有 open 的 skill 草稿，而且没有打开 Insights。文案：“Insights drafted a skill from your cards. Open Insights to add it to the project.” 优先级放在 `first-workflow-insight` 前面。第二版加的 `insights-redesign` 提示从没上线，直接删掉。`first-workflow-insight` 保留，只用于其它建议。
 - **What's new**：在 `client/whats-new.ts` 顶部加一个版本，内容：
-  - “Insights shows a year of activity; tap a day for its summary.”
+  - “Insights shows a year of activity; tap a day for its summary.”（发布 1.7.0 时改为一句总述整个改版，见 WHATS-NEW-SPEC §6）
   - “Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.”
 
   附 **Open settings** 按钮。理由：老用户会被默认打开，属于“现有用户自己碰不到的变化”（AGENTS.md）。

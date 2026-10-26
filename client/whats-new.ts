@@ -25,11 +25,20 @@ export const whatsNew: WhatsNewRelease[] = [
     // INSIGHTS-REDESIGN-SPEC §5: Skills turn on for everyone who never touched the switch.
     version: "1.7.0",
     items: [
-      { icon: "CalendarDays", text: msg("Insights shows a year of activity; tap a day for its summary.") },
+      {
+        icon: "CalendarDays",
+        text: msg("Insights is redesigned: a year of activity, a summary of each day you can page through, and how each finished card went (review rounds, waiting, tokens)."),
+      },
       {
         icon: "Sparkles",
         text: msg("Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings."),
         action: { label: msg("Open settings"), to: "settings", section: "ai" },
+      },
+      { icon: "Gauge", text: msg("The board opens and refreshes faster, most of all on phones: it reads only the overview and the open card.") },
+      {
+        icon: "MonitorSmartphone",
+        text: msg("Settings fill the screen on phones, and Settings → Cards can turn off the running sweep on cards and sessions."),
+        action: { label: msg("Open settings"), to: "settings", section: "cards" },
       },
       {
         icon: "Database",

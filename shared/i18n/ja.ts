@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Insights is redesigned: a year of activity, a summary of each day you can page through, and how each finished card went (review rounds, waiting, tokens).": "Insights を刷新しました：1 年分のアクティビティ、日ごとにめくれるサマリー、完了した各カードの経過（レビュー回数、待ち時間、トークン）。",
+  "The board opens and refreshes faster, most of all on phones: it reads only the overview and the open card.": "ボードの表示と更新が速くなりました（特にスマートフォン）：概要と開いているカードだけを読み込みます。",
+  "Settings fill the screen on phones, and Settings → Cards can turn off the running sweep on cards and sessions.": "スマートフォンでは設定が全画面で開き、設定 → カードでカードとセッションの実行中スイープをオフにできます。",
+  "Older release": "前のリリース",
+  "Newer release": "次のリリース",
   "Usage data": "使用状況データ",
   "Send anonymous usage data": "匿名の使用状況データを送信",
   "Turned off by DO_NOT_TRACK on this computer.": "このコンピューターの DO_NOT_TRACK によりオフになっています。",
@@ -1367,7 +1372,6 @@ const catalog: Catalog = {
   "Review rounds and tokens per card, last 7 days.": "直近 7 日のカードごとのレビュー往復とトークン。",
   "A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.": "毎週モデルがカードとコマンドを読み、スキルを下書きします。トークンを使います。モデルと頻度は設定にあります。",
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "毎週モデルがこのプロジェクトのカード、あなたのメッセージ、エージェントが実行したコマンドを読み、残す価値のあるスキルとスクリプトを下書きします。トークンを使い、コマンドをローカルに記録します。",
-  "Insights shows a year of activity; tap a day for its summary.": "Insights に 1 年分のアクティビティが表示されます。日をタップすると要約が見られます。",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights がカードからスキルを下書きし、あなたが決めたらプロジェクトに追加します。既定でオン。設定でオフにできます。",
   "Previous day": "前の日",
   "Next day": "次の日",

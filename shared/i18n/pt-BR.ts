@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Insights is redesigned: a year of activity, a summary of each day you can page through, and how each finished card went (review rounds, waiting, tokens).": "O Insights foi redesenhado: um ano de atividade, um resumo de cada dia para folhear e como foi cada cartão concluído (rodadas de revisão, espera, tokens).",
+  "The board opens and refreshes faster, most of all on phones: it reads only the overview and the open card.": "O quadro abre e atualiza mais rápido, principalmente no celular: ele lê só a visão geral e o cartão aberto.",
+  "Settings fill the screen on phones, and Settings → Cards can turn off the running sweep on cards and sessions.": "No celular, as configurações ocupam a tela inteira, e em Configurações → Cartões dá para desligar a varredura em execução em cartões e sessões.",
+  "Older release": "Versão anterior",
+  "Newer release": "Versão mais recente",
   "Usage data": "Dados de uso",
   "Send anonymous usage data": "Enviar dados de uso anônimos",
   "Turned off by DO_NOT_TRACK on this computer.": "Desativado por DO_NOT_TRACK neste computador.",
@@ -1367,7 +1372,6 @@ const catalog: Catalog = {
   "Review rounds and tokens per card, last 7 days.": "Rodadas de revisão e tokens por cartão, últimos 7 dias.",
   "A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.": "Toda semana um modelo lê seus cartões e comandos e rascunha skills. Gasta tokens; modelo e frequência ficam nas Configurações.",
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "Toda semana um modelo lê os cartões deste projeto, suas mensagens e os comandos que os agentes executaram, e rascunha skills e scripts que valem a pena. Gasta tokens e mantém um registro local de comandos.",
-  "Insights shows a year of activity; tap a day for its summary.": "O Insights mostra um ano de atividade; toque em um dia para ver o resumo.",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "O Insights rascunha skills a partir dos seus cartões e as adiciona ao projeto quando você quiser. Ligado por padrão; desligue nas Configurações.",
   "Previous day": "Dia anterior",
   "Next day": "Próximo dia",
