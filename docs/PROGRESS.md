@@ -4,7 +4,7 @@
 
 - User decisions 2026-10-26: PostHog Cloud EU over its capture HTTP API (no SDK), one daily heartbeat, whitelisted fields, on by default and sent before the user has seen the notice, off stops everything, no preview or reset ID, `ui_locale` instead of GeoIP. [Spec](TELEMETRY-SPEC.md).
 - Implemented: `server/telemetry.ts` (heartbeat, `telemetry.json`, forced-off env), `telemetry` host setting and `telemetry.status` RPC, Settings → General *Usage data* and the tour's last page, What's new 1.7.0 item, README sections, catalogs in all 9 languages. `server/telemetry.test.ts` covers spec §9 items 1–8.
-- Not done: `POSTHOG_KEY` is empty, so nothing is sent until the maintainer creates the PostHog EU project and fills the key in.
+- 2026-10-26: `POSTHOG_KEY` filled in. The maintainer's PostHog project is in the US region (the EU endpoint rejected the token, `us.i.posthog.com/flags` accepted it), so per the user's decision the endpoint moved to `https://us.i.posthog.com/i/v0/e/`.
 
 ## Board data in SQLite (minimal) — 2026-10-26
 

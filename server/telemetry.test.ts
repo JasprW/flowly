@@ -63,11 +63,11 @@ test("version constant matches package.json", () => {
   expect(FLOWLY_VERSION).toBe(pkg.version);
 });
 
-test("§9-1, §9-2: a due check sends exactly one heartbeat to PostHog EU with exactly the whitelisted keys", async () => {
+test("§9-1, §9-2: a due check sends exactly one heartbeat to PostHog US with exactly the whitelisted keys", async () => {
   const { service, calls } = harness(await dir());
   expect(await service.check()).toBe("sent");
   expect(calls).toHaveLength(1);
-  expect(calls[0].url).toBe("https://eu.i.posthog.com/i/v0/e/");
+  expect(calls[0].url).toBe("https://us.i.posthog.com/i/v0/e/");
   expect(calls[0].body.event).toBe("flowly_heartbeat");
   expect(calls[0].body.api_key).toBe("phc_test");
   expect(Object.keys(calls[0].body.properties).sort()).toEqual(expectedKeys);

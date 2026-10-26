@@ -6,12 +6,12 @@ import { localeCodes } from "../shared/i18n";
 import type { FlowEntry } from "../shared/insights";
 
 /**
- * Anonymous daily heartbeat to PostHog Cloud EU (TELEMETRY-SPEC). Only the daemon sends, at
+ * Anonymous daily heartbeat to PostHog Cloud US (TELEMETRY-SPEC). Only the daemon sends, at
  * most one `flowly_heartbeat` a day, with the whitelisted properties built below and nothing
  * else. Failures are silent: no retries queue, the next hourly check tries again.
  */
 
-export const POSTHOG_ENDPOINT = "https://eu.i.posthog.com/i/v0/e/";
+export const POSTHOG_ENDPOINT = "https://us.i.posthog.com/i/v0/e/";
 /** Write-only project key (`phc_…`), public by design and safe in source; rotation in TELEMETRY-SPEC §8. Empty: nothing is sent. */
 export const POSTHOG_KEY = "phc_CUgzT9nWDYNm2XSqdQLAHyVc27GSvJyFPiEDrkSM6ZYS";
 
