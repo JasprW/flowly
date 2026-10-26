@@ -1,0 +1,28 @@
+[
+ {
+  "label": "compact",
+  "newerDisabledOnLatest": true
+ },
+ {
+  "label": "compact",
+  "olderDisabledOnOldest": true
+ },
+ {
+  "label": "compact",
+  "closed": true,
+  "errors": []
+ },
+ {
+  "label": "desktop",
+  "newerDisabledOnLatest": true
+ },
+ {
+  "label": "desktop",
+  "olderDisabledOnOldest": true
+ },
+ {
+  "label": "desktop",
+  "closed": true,
+  "errors": []
+ }
+]

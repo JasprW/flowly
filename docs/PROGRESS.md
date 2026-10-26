@@ -1,5 +1,14 @@
 # Implementation progress
 
+## v1.7.0 release preparation (card "v1.7.0发布") — 2026-10-26
+
+- Version 1.7.0 (`make bump` now also sets `shared/version.ts`, which `server/telemetry.test.ts` keeps equal to package.json). Release notes: [release-notes/v1.7.0.md](release-notes/v1.7.0.md), covering v1.6.0..main (#57–#67 and the Insights redesign).
+- What's new 1.7.0: six items (Insights redesign, skill drafts, faster loading, phone settings and the running sweep switch, SQLite with backups, usage data); the old Insights one-liner is replaced in all catalogs. [WHATS-NEW-SPEC](WHATS-NEW-SPEC.md) §6.
+- What's new navigation (W5): ‹ Flowly x.y › beside the version pages left to older and right to newer releases, items slide in from that side; the footer keeps only Got it. §5.0.
+- Welcome tour: the Insights page sample now shows weekday labels, a selected day, the day summary card with per-card bars and a two-line skill row, matching the 1.7 Insights page.
+- README / README.zh-CN and the registry media (`assets/screenshots/`) reshot with `docs/promo/shots.mjs` (it now parks the mouse before each shot and selects the latest active day in Insights); Settings path for Moving cards and the storage paragraph corrected. `06-next-moves.png` not reshot (its fixture script still uses `board.read`); it still shows the composer hint row removed in 1.6.
+- Live check on the installed build: `docs/verification/release-v1.7.0-2026-10-26/`.
+
 ## Loading R2: no whole-board reads — 2026-10-26
 
 - User decision 2026-10-26: every layout reads the overview plus card detail; no switch back to the whole board and no user option. The maintainer uses it first and fixes what shows up. [Spec](LOADING-R2-SPEC.md)
