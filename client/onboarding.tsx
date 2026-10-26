@@ -7,7 +7,7 @@ import { nativeSessionSettings, nativeSessionSettingsValues } from "../shared/se
 import { FlowlyMark } from "./brand-icons";
 import { MotionReveal, motionDuration, useMotionValue } from "./motion";
 import { firstRunOutside, outsidePatch, outsideShown, stepPage, tourKey, welcomePageCount, type OutsideChoice } from "./onboarding-logic";
-import { AiLanguageRow, InsightsFeatureGroup, InterfaceLanguageRow, MemoryFeatureGroup, SummaryModelGroup, aiCostText, summaryModelOf } from "./settings-pages";
+import { AiLanguageRow, InsightsFeatureGroup, InterfaceLanguageRow, MemoryFeatureGroup, SummaryModelGroup, UsageDataGroup, aiCostText, summaryModelOf } from "./settings-pages";
 import { summarySettings, summarySettingsValues } from "../shared/summary";
 import { SettingSwitch, SettingsGroup } from "./settings-ui";
 import { useStored } from "./stored-settings";
@@ -313,6 +313,7 @@ function StartPage({ canCreate }: { canCreate: boolean }) {
         ))}
       </Panel>
       <MoreFeatures />
+      <UsageDataGroup bare />
       <Hint icon="Settings" text={t("Change any of this later in Settings, the gear at the bottom left. You can reopen this tour there or from the Command Center.")} />
     </View>
   );

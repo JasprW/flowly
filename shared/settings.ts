@@ -233,6 +233,21 @@ export function featureSettingsValues(values: unknown): FeatureSettings {
   return parsed.success ? parsed.data : featureSettings.schema.parse({});
 }
 
+/** Anonymous daily usage data (TELEMETRY-SPEC §5): on unless the user turns it off. Host-scoped. */
+export const telemetrySettings = defineSettings({
+  id: "telemetry",
+  scope: "host",
+  version: 1,
+  schema: z.object({
+    enabled: z.boolean().default(true),
+  }),
+});
+export type TelemetrySettings = z.infer<typeof telemetrySettings.schema>;
+export function telemetrySettingsValues(values: unknown): TelemetrySettings {
+  const parsed = telemetrySettings.schema.safeParse(values ?? {});
+  return parsed.success ? parsed.data : telemetrySettings.schema.parse({});
+}
+
 /** Global default model for new sessions (MODEL-DEFAULTS-SPEC). Empty strings mean "none": new sessions follow the latest session. */
 export const modelSettings = defineSettings({
   id: "models",

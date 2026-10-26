@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Usage data": "Données d'utilisation",
+  "Send anonymous usage data": "Envoyer des données d'utilisation anonymes",
+  "Turned off by DO_NOT_TRACK on this computer.": "Désactivé par DO_NOT_TRACK sur cet ordinateur.",
+  "Once a day: versions, which features are on and usage counts. Never your content, paths or code.": "Une fois par jour : versions, fonctionnalités activées et nombres d'utilisations. Jamais votre contenu, vos chemins ni votre code.",
+  "Flowly now sends anonymous usage data once a day: versions, which features are on and usage counts. Never your content, paths or code. You can turn it off in Settings.": "Flowly envoie désormais des données d'utilisation anonymes une fois par jour : versions, fonctionnalités activées et nombres d'utilisations. Jamais votre contenu, vos chemins ni votre code. Désactivable dans les Réglages.",
   "Running sweep": "Balayage d'exécution",
   "Restore defaults": "Rétablir les valeurs par défaut",
   "Progress models": "Modèles de progression",
