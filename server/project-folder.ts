@@ -7,6 +7,7 @@ import { upgradeBoard } from "./migrate";
 import type { Board, Project } from "../shared/model";
 import type { SummaryEntry } from "../shared/summary";
 import { summaryEntrySchema } from "../shared/summary";
+import { logFailure } from "./error-report";
 
 /** Per-project copy of the board in `<root>/.flowly/` (PROJECT-FOLDER-SPEC). */
 export const FOLDER = ".flowly";
@@ -221,7 +222,7 @@ export class ProjectFolders {
       this.states.set(project.id, { path, savedAt: this.states.get(project.id)?.savedAt ?? "", error: reason });
       if (!this.logged.has(`${project.id}:${reason}`)) {
         this.logged.add(`${project.id}:${reason}`);
-        console.error(`Kanban project folder not saved for ${project.id}:`, reason);
+        logFailure("Kanban project folder not saved:", error, project.id);
       }
     }
   }

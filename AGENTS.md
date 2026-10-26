@@ -60,6 +60,12 @@
 - A new tip id is not in anyone's stored `tipsSeen`, so it is shown once to every user, including existing ones: that is how new features get announced. Do not add it to a stored list. Existing users were only marked seen for the tip ids that existed at that time.
 - When a release changes something existing users will not run into themselves (a new setting, a switch whose default differs for them, a moved entry point), add that release on top of `client/whats-new.ts` (its user-visible new features, one sentence each, at most 7, optional Open settings / Take the tour button; older releases stay, back to 1.5.0). Existing users see the newest release once after updating and can page back to older ones; new users skip it because the tour covers it (`docs/WHATS-NEW-SPEC.md`).
 
+## Telemetry upkeep
+
+- When a feature adds a switch or a core action worth counting, decide whether the heartbeat gets an `f_*`/`c_*` field (`docs/TELEMETRY-SPEC.md` §4). If it does, change §4, `heartbeatProperties` and the key-set test in `server/telemetry.test.ts` together, and the notice text if what is sent changes. Otherwise say so in the delivery note.
+- Daemon-side failures are logged with `logFailure` (`server/error-report.ts`), never a bare `console.error`; `server/error-report.test.ts` fails otherwise. Keep the label a fixed string: ids, paths and messages go in the log-only `context` argument, never in the label.
+- Tests and fixture daemons run with telemetry off (`NODE_ENV=test`, `FLOWLY_TELEMETRY=0`). Check PostHog end to end only when telemetry code changes, or once before a release on one machine; switch that machine off afterwards and keep its install excluded (§8).
+
 ## Testing and local installation
 
 - Verification is objective because of who checks and against what, not because of the model: the acceptance criteria and checks are written before implementation (spec or the card's workpad); the implementer runs `npm run typecheck` and the relevant tests before every handoff and reports the commands, exit codes and counts; at each milestone (end of a phase, before the PR of a storage/schema/RPC change, before a release) an independent session that did not write the code runs the agreed checks on the exact commit (in a temporary `git worktree` of it) and owns that evidence. The implementer never edits the verifier's evidence and never weakens an assertion without saying so. The user's choice for the independent session is `claude/claude-haiku-5-5` (2026-10-26). Discover actual availability; do not silently substitute a model.

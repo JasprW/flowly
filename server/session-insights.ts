@@ -163,7 +163,7 @@ export class SessionInsightService {
         const merged = queue.splice(0, queue.length);
         const last = merged[merged.length - 1];
         await this.run({ text: merged.map((b) => b.text).join("\n\n---\n\n"), endedAt: last.endedAt, agent: last.agent }, paseo).catch((e) =>
-          this.recordError(last.agent, e instanceof Error ? e.message : String(e)),
+          this.recordError(last.agent, e),
         );
       }
     } finally {
@@ -171,8 +171,9 @@ export class SessionInsightService {
     }
   }
 
-  private recordError(agent: OutsideAgent, message: string) {
-    console.error("Flowly session insight failed:", message);
+  private recordError(agent: OutsideAgent, error: unknown) {
+    logFailure("Flowly session insight failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
     return this.store
       .update((state) => {
         const now = new Date().toISOString();

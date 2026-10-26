@@ -237,7 +237,7 @@ Content-Type: application/json
 | 来源 | `source` | 说明 |
 |---|---|---|
 | RPC handler 抛出的错误 | `rpc <rpc 名>`，如 `rpc task.update` | 包在 `server.handle` 外层，上报后原样抛出，调用方看到的结果不变。**不报**预期错误，也就是 handler 故意返回给调用方的答复：`ToolError`、`MemoryError`、`StoreInvalidError`、`ExternalError`、`ZodError`，以及没有系统错误码的普通 `Error`（如 "Task not found."、版本冲突）。`TypeError` 等程序错误、带系统错误码的错误（`ENOENT`、`SQLITE_BUSY`）照常上报 |
-| 后台任务失败 | 日志标签去掉末尾冒号，如 `Kanban auto wrap-up failed` | 原来的 `console.error(label, message)` 统一改用 `logFailure(label, error)`：日志输出不变，再上报一次 |
+| 后台任务失败 | 日志标签去掉末尾冒号，如 `Kanban auto wrap-up failed` | 原来的 `console.error(label, message)` 统一改用 `logFailure(label, error, context?)`：日志输出不变，再上报一次。标签是固定字符串；id、路径等只写进日志的内容放在 `context` 参数里，不上报。存储层的失败状态（`fail()`）没有错误对象，上报为 `StorageError`，`value` 为存储错误码。daemon 代码里不再有裸 `console.error`，由 `server/error-report.test.ts` 检查 |
 | 未捕获异常 | `uncaught` | `process.on("uncaughtExceptionMonitor")`，不改变崩溃行为；插件卸载时移除。整个 daemon 进程共用这个事件，所以只有堆栈里有 Flowly 自身帧时才上报。进程随后退出时请求可能来不及发出，属尽力而为 |
 
 插件启动完成（遥测服务建立）之前的错误不上报。

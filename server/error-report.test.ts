@@ -1,9 +1,9 @@
-import { afterEach, expect, test } from "vitest";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { afterEach, expect, test, vi } from "vitest";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
+import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, logFailure, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
 import { MAX_ERRORS_PER_DAY, TelemetryService } from "./telemetry";
 import { ToolError } from "./tool-error";
 import { FLOWLY_VERSION } from "../shared/version";
@@ -203,4 +203,30 @@ test("RPC handlers: unexpected failures are reported and rethrown; expected ones
   await expect(handlers.get("a.expected")!({}, {})).rejects.toThrow("bad");
   expect(handlers.get("a.ok")!({}, {})).toBe(42);
   expect(reported).toEqual(["rpc a.sync", "rpc a.async"]);
+});
+
+test("logFailure: context goes to the log only, the report gets the label", () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
+  logFailure("Kanban project folder not saved:", new Error("EACCES /Users/alice"), "project-123");
+  expect(log).toHaveBeenCalledWith("Kanban project folder not saved:", "project-123", "EACCES /Users/alice");
+  expect(reported).toEqual(["Kanban project folder not saved:"]);
+  log.mockRestore();
+});
+
+// TELEMETRY-SPEC §11.2: every daemon-side error log is reported, so new code cannot bypass logFailure.
+test("daemon code logs failures only through logFailure", async () => {
+  const root = join(__dirname, "..");
+  const files = ["index.server.ts", ...(await readdir(join(root, "server"), { recursive: true })).map((f) => join("server", String(f)))].filter(
+    (f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== join("server", "error-report.ts"),
+  );
+  const offenders: string[] = [];
+  for (const file of files) {
+    const text = await readFile(join(root, file), "utf8");
+    text.split("\n").forEach((line, i) => {
+      if (line.includes("console.error(")) offenders.push(`${file}:${i + 1}`);
+    });
+  }
+  expect(offenders, "use logFailure(label, error, context?) from server/error-report.ts").toEqual([]);
 });

@@ -141,9 +141,15 @@ export function reportError(source: string, error: unknown, handled = true) {
   }
 }
 
-/** Logs a background failure as before (label and message) and reports it. */
-export function logFailure(label: string, error: unknown) {
-  console.error(label, error instanceof Error ? error.message : String(error));
+/**
+ * Logs a background failure (label, optional log-only context, message) and reports it. Every
+ * daemon-side error log goes through here; `server/error-report.test.ts` fails on a bare
+ * `console.error` elsewhere. `context` (ids, paths) is printed but never reported.
+ */
+export function logFailure(label: string, error: unknown, context?: string) {
+  const text = error instanceof Error ? error.message : String(error);
+  if (context) console.error(label, context, text);
+  else console.error(label, text);
   reportError(label, error);
 }
 

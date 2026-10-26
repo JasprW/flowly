@@ -17,6 +17,7 @@ import {
   writeFileDurable,
   type BoardPersistence,
 } from "./board-file";
+import { logFailure } from "./error-report";
 
 /**
  * The board in `flowly.sqlite` (SQLITE-STORAGE-SPEC): start-up rules, the one-time move from
@@ -274,7 +275,8 @@ export class BoardStorage {
 
   private fail(reason: Extract<State, { kind: "error" }>["reason"], detail: string) {
     this.state = { kind: "error", reason, detail, at: Date.now() };
-    console.error(`Flowly storage: ${errorCodes[reason]}: ${detail}`);
+    // No error object here: report the storage error code (detail may hold paths, so it is log-only).
+    logFailure("Flowly storage failed:", Object.assign(new Error(detail), { name: "StorageError", code: errorCodes[reason] }));
   }
   private async readMode() {
     try {
@@ -323,7 +325,7 @@ export class BoardStorage {
       if ((await this.boardFile()).kind === "board") {
         // An export that stopped before renaming the database aside finishes here (§8).
         if (await exists(this.path(DB)))
-          await this.retireDatabase("retired").catch((error) => console.error("Flowly storage: renaming the exported database aside failed; it stays unused:", message(error)));
+          await this.retireDatabase("retired").catch((error) => logFailure("Flowly storage: renaming the exported database aside failed; it stays unused:", error));
         this.releaseOwner();
         this.state = { kind: "json", reason: "exported" };
         return;
@@ -405,7 +407,7 @@ export class BoardStorage {
     try {
       db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     } catch (error) {
-      console.error("Flowly storage: checkpoint before close failed:", message(error));
+      logFailure("Flowly storage: checkpoint before close failed:", error);
     }
     db.close();
     this.state = { kind: "starting" };
@@ -467,13 +469,13 @@ export class BoardStorage {
       await rm(tmp, { force: true });
       this.releaseOwner();
       this.state = { kind: "json", reason: "migration-failed", detail: message(error) };
-      console.error("Flowly storage: moving the board to SQLite failed; staying on board.json:", message(error));
+      logFailure("Flowly storage: moving the board to SQLite failed; staying on board.json:", error);
       return;
     }
-    await syncDirectory(this.directory).catch((error) => console.error("Flowly storage: syncing the data folder failed:", message(error)));
+    await syncDirectory(this.directory).catch((error) => logFailure("Flowly storage: syncing the data folder failed:", error));
     this.step("migrate:after-rename");
     // From here flowly.sqlite is the board; a failed marker is written again at the next start (§6 rule 5).
-    await this.writeMarker().catch((error) => console.error("Flowly storage: writing the board.json marker failed:", message(error)));
+    await this.writeMarker().catch((error) => logFailure("Flowly storage: writing the board.json marker failed:", error));
     console.log(`Flowly storage: moved the board to SQLite in ${Date.now() - started} ms (${source.tasks.length} cards, ${source.events.length} events).`);
     await this.openDatabase(sqlite);
   }
@@ -553,7 +555,7 @@ export class BoardStorage {
     try {
       await this.backup();
     } catch (error) {
-      console.error("Flowly storage: daily backup failed:", message(error));
+      logFailure("Flowly storage: daily backup failed:", error);
     }
   }
   /** After each committed write: one automatic backup a day. */
@@ -677,7 +679,7 @@ export class BoardStorage {
     this.closeDatabase();
     // board.json is the board now; a database that cannot be renamed aside is left unused.
     const retired = await this.retireDatabase("retired").catch((error) => {
-      console.error("Flowly storage: renaming the exported database aside failed; it stays unused:", message(error));
+      logFailure("Flowly storage: renaming the exported database aside failed; it stays unused:", error);
       return null;
     });
     this.releaseOwner();
