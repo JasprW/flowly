@@ -65,9 +65,11 @@ export async function timeline(agent) {
   return {entries:all.sort((a,b)=>a.seqStart-b.seqStart),complete:false};
 }
 async function head(dir){return {sha:await command('git',['rev-parse','HEAD'],dir),dirty:!!await command('git',['status','--porcelain'],dir)};}
+// The board is in flowly.sqlite once board.json is the retired marker (SQLITE-STORAGE-SPEC §3); read-only here too.
+async function boardOf(dir){const raw=await json(path.join(dir,'board.json'));if(raw?.storage!=='sqlite')return raw;const {DatabaseSync}=await import('node:sqlite');const db=new DatabaseSync(path.join(dir,'flowly.sqlite'),{readOnly:true});try{const b={};for(const c of JSON.parse(db.prepare("SELECT value FROM meta WHERE key='board.collections'").get().value))b[c]=[];for(const r of db.prepare('SELECT collection, body FROM items ORDER BY collection, ord').all())(b[r.collection]??=[]).push(JSON.parse(r.body));return b;}finally{db.close();}}
 export async function snapshot(x,o) {
   // Storage is read-only here: board.read intentionally excludes private persisted receipts.
-  const b=await json(path.join(x.data,'board.json'));const task=b.tasks.find(t=>t.id===o.cardId);
+  const b=await boardOf(x.data);const task=b.tasks.find(t=>t.id===o.cardId);
   let file=null,checkInput=null;try {const v=await readFile(path.join(o.directory,o.filename));file={hash:hash(v),nonempty:!!v.toString().trim()};if(o.checkFile){const script=await readFile(o.checkFile);const node=await command('node',['--version'],o.directory);checkInput={hash:hash(Buffer.concat([v,script,Buffer.from(node)])),fileHash:hash(v),scriptHash:hash(script),node};}}catch(e){if(e.code!=='ENOENT')throw e;}
   const scope=await captureScope(o.directory,{base:o.baseCommit,filename:o.filename,history:o.historyBase??null});
   return {scope,boardEvents:b.events.filter(e=>e.taskId===o.cardId).map(publicEvent),changePaths:[...new Set([...scope.dirtyPaths,...scope.committedPaths])],task:publicTask(task),workpad:publicPad(b.workpads.find(p=>p.taskId===o.cardId)),artifacts:b.artifacts.filter(a=>a.taskId===o.cardId).map(publicArtifact),receipts:b.agentReceipts.filter(r=>r.agentId===o.id&&r.taskId===o.cardId).map(publicReceipt),head:await head(o.directory),file,checkInput,tree:await command('git',['rev-parse','HEAD^{tree}'],o.directory)};

@@ -22,6 +22,16 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
+    version: "1.7.0",
+    items: [
+      {
+        icon: "Database",
+        text: msg("The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage."),
+        action: { label: msg("Open settings"), to: "settings", section: "storage" },
+      },
+    ],
+  },
+  {
     version: "1.6.0",
     items: [
       {

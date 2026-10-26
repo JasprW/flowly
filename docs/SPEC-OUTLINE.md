@@ -1,5 +1,7 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-10-26 看板数据迁入 SQLite（最小方案）：board.json 首次启动自动迁入 `flowly.sqlite`（源快照、逐值核对、单次 rename、退休标记），失败继续用 JSON；BoardStore 业务逻辑不变，按行增量单事务写入；每日备份 7 份、从备份恢复（revision 偏移）、导出回 v5 JSON 后可装回旧版；Settings → Storage。附属文件与读取行为不变，加载优化另做。取代 10-25 的完整设计与 D1–D4。[spec](SQLITE-STORAGE-SPEC.md)。
+
 2026-10-23 后台 workspace：memory review、Insights digest、workflow insights 改在每个项目专用的「Flowly background」workspace 里运行，用前恢复已归档的那个复用、没有才新建，用完归档；修复 single-root 下按目录匹配“项目根 workspace”会选中某张卡的 workspace、review tab 留在卡片里的问题。[spec](BACKGROUND-WORKSPACE-SPEC.md)。
 
 2026-10-23 Summary 模型列表：用户可添加多个模型、上移/下移设置回退优先级、移除或恢复默认 Haiku→Luna；兼容旧 Auto/单模型设置，同步所有使用 summary 设置的入口。[spec](SUMMARY-MODELS-SPEC.md)。

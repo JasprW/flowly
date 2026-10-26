@@ -11,7 +11,11 @@ import { AgentService } from "./agent-service";
  * `seed` chooses which card setup the card starts with (CARD-SETUP-SPEC §3): all of it by default, so a test only
  * meets setup reminders and SETUP_INCOMPLETE when it leaves something out on purpose.
  */
-export async function agentFixture(seed: { type?: boolean; tags?: boolean; workpad?: boolean } = {}) {
+export async function agentFixture(
+  seed: { type?: boolean; tags?: boolean; workpad?: boolean } = {},
+  /** The board in SQLite instead of board.json (SQLITE-STORAGE-SPEC). */
+  backend: "json" | "sqlite" = "json",
+) {
   const { type = true, tags = true, workpad = true } = seed;
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "flowly-agent-test-")),
@@ -20,7 +24,7 @@ export async function agentFixture(seed: { type?: boolean; tags?: boolean; workp
     b = join(root, "b");
   await mkdir(a);
   await mkdir(b);
-  const store = new BoardStore(join(root, "data")),
+  const store = new BoardStore(join(root, "data"), { backend, storage: { checkVersion: false } }),
     stamp = new Date().toISOString();
   await store.mutate((board) => {
     board.projects.push({

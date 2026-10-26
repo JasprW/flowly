@@ -1,5 +1,14 @@
 # Implementation progress
 
+## Board data in SQLite (minimal) — 2026-10-26
+
+- User decision 2026-10-26: finish the SQLite move first, loading later; keep rollback and no data loss, otherwise as simple as possible. Replaces the 10-25 full design (D1–D4); the old fixture kernel, specs and evidence are on the local branch `archive/sqlite-r1-v1`. [Spec](SQLITE-STORAGE-SPEC.md).
+- `BoardStore` keeps every business rule; only load/save moved behind a persistence seam (`server/board-file.ts` JSON, `server/sqlite-storage.ts` SQLite). One generic `items` table keyed by collection and element key, row-level diff written in one `BEGIN IMMEDIATE`; cached board, owner lock (`storage-owner.sqlite`).
+- First start: snapshot to `migrations/`, build `flowly.sqlite.tmp`, integrity check and value-for-value comparison with the existing reader, one rename, then `board.json` becomes a marker older versions refuse. Any failure before the rename stays on JSON and retries at the next start. Daily backups (7), restore with a revision offset, export back to v5 JSON (`storage-mode.json`), Settings → Storage with five RPCs. Attached JSON files, composer, flow logs and read paths unchanged.
+- Self-checks on the branch commit: typecheck PASS; `npm test` 128 files / 1045 tests PASS (1 skipped: the crash child); new `server/sqlite-store.test.ts` 21 and `server/sqlite-crash.test.ts` 3 (real SIGKILL before/after the rename and inside a write). Mutation check: four deliberate bugs in the row diff and restore were each caught. Parity: the agent suites with the fixture on SQLite pass 119/125; the six others build a second JSON store on the same folder or corrupt board.json directly.
+- Onboarding: tour More features gets Backups; What's new 1.7.0 gets one item with Open settings → Storage. No tip: nothing to point at during normal use.
+- Independent milestone verification (claude/claude-haiku-5-5) and the real-data copy rehearsal: see `docs/verification/sqlite-min-2026-10-26/`.
+
 ## Configurable summary models — 2026-10-23
 
 - User-requested ordered model list in Settings → Models and the welcome tour: add, move up/down, remove, reset to Haiku→Luna; preserve legacy Auto/single-model choices. Additive v1 `summaryModels`, no write-on-read migration.

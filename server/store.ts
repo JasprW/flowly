@@ -1,9 +1,10 @@
 import { laneName, laneProblem } from "../shared/lanes";
-import { mkdir, readFile, writeFile, rename, copyFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { upgradeBoard } from "./migrate";
+import { JsonBoardFile, StoreInvalidError, assertBoardInvariants, writeFileDurable, type BoardPersistence } from "./board-file";
+import { BoardStorage, type StorageOptions } from "./sqlite-storage";
+import type { StorageStatus } from "../shared/storage";
 import { ideaTitleKey } from "../shared/ideas";
 import { otherEnd, relationLabels, relationOf, touches } from "../shared/links";
 import { changeTags, mergeTagEdit, normalizeTags, tagChangeNote } from "../shared/tags";
@@ -29,7 +30,7 @@ import {
   projectOrder,
 } from "../shared/model";
 
-export class StoreInvalidError extends Error {}
+export { StoreInvalidError };
 
 export const columnOrder = (a: Task, b: Task) =>
   a.position - b.position || a.createdAt.localeCompare(b.createdAt);
@@ -61,39 +62,27 @@ export class BoardStore {
   flow: FlowLog | null = null;
   /** Runs after each committed write (project folder snapshots, PROJECT-FOLDER-SPEC). */
   onCommit: (() => void) | null = null;
-  constructor(readonly directory: string) {}
+  private readonly json: JsonBoardFile;
+  /** SQLite storage with its fallback to board.json (SQLITE-STORAGE-SPEC); null keeps board.json only. */
+  readonly storage: BoardStorage | null;
+  constructor(
+    readonly directory: string,
+    options: { backend?: "json" | "sqlite"; storage?: StorageOptions } = {},
+  ) {
+    this.json = new JsonBoardFile(directory);
+    this.storage = options.backend === "sqlite" ? new BoardStorage(directory, this.json, options.storage) : null;
+    if (this.storage) this.tail = this.storage.start();
+  }
   get path() {
-    return join(this.directory, "board.json");
+    return this.json.path;
   }
-  private async load(): Promise<Board> {
-    try {
-      const raw = JSON.parse(await readFile(this.path, "utf8"));
-      if (raw?.version !== 5) await this.keepPreUpgradeCopy(raw?.version);
-      const board = upgradeBoard(raw);
-      this.assertInvariants(board);
-      return board;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT")
-        return emptyBoard();
-      throw new StoreInvalidError(
-        `Board data is invalid; preserved at ${this.path}. Restore a valid backup before continuing. ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-  /**
-   * One-time copy of older data before an upgrade is first persisted: pre-v4 before the
-   * status split (WORKFLOW-STAGES-SPEC), v4 before the `external` rename (CONNECTORS-SPEC §3.1).
-   */
-  private async keepPreUpgradeCopy(version: unknown) {
-    try {
-      await copyFile(this.path, join(this.directory, version === 4 ? "board.pre-v5.json" : "board.pre-v4.json"), constants.COPYFILE_EXCL);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
+  private persistence(): Promise<BoardPersistence> {
+    return this.storage ? this.storage.persistence() : Promise.resolve(this.json);
   }
   async read() {
+    if (this.storage) return this.queue(async () => (await this.persistence()).load());
     await this.tail;
-    return this.load();
+    return this.json.load();
   }
   async view() {
     return boardSchema.parse(await this.read());
@@ -111,75 +100,68 @@ export class BoardStore {
       | Promise<{ value: T; changed: boolean }>
       | { value: T; changed: boolean },
   ): Promise<T> {
-    const job = this.tail.then(async () => {
+    return this.queue(async () => {
       this.pending = [];
-      const board = await this.load();
+      const persistence = await this.persistence();
+      const board = await persistence.load();
       const result = await operation(board);
       const events = this.pending;
       this.pending = [];
       if (!result.changed) return result.value;
       board.revision++;
-      this.assertInvariants(board);
-      await mkdir(this.directory, { recursive: true, mode: 0o700 });
-      const temporary = `${this.path}.${randomUUID()}.tmp`;
-      await writeFile(
-        temporary,
-        JSON.stringify(storageSchema.parse(board), null, 2),
-        { mode: 0o600 },
-      );
-      try {
-        await copyFile(this.path, `${this.path}.bak`);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      }
-      await rename(temporary, this.path);
+      assertBoardInvariants(board);
+      await persistence.save(storageSchema.parse(board));
       this.onCommit?.();
       if (this.flow && events.length)
         void this.flow.append(events, board).catch((e) =>
           console.error("Kanban flow log append failed:", e instanceof Error ? e.message : String(e)),
         );
+      await this.storage?.afterCommit();
       return result.value;
     });
-    this.tail = job.then(
+  }
+  /** Runs after every queued read and write, before the next one starts. */
+  private queue<T>(job: () => Promise<T>): Promise<T> {
+    const run = this.tail.then(job);
+    this.tail = run.then(
       () => undefined,
       () => undefined,
     );
-    return job;
+    return run;
   }
-  private assertInvariants(board: Board) {
-    if (
-      new Set(board.agentReceipts.map((r) => r.key)).size !==
-      board.agentReceipts.length
-    )
-      throw new Error("Duplicate agent receipt.");
-    const nativeIds = new Set<string>(),
-      workspaces = new Set<string>(),
-      operations = new Set<string>();
-    for (const p of board.projects) {
-      if (nativeIds.has(p.paseoProjectId))
-        throw new Error("Paseo project is already linked to a board project.");
-      if (!p.repos.includes(p.primaryPath))
-        throw new Error("The primary directory must remain in the project.");
-      nativeIds.add(p.paseoProjectId);
-    }
-    for (const t of board.tasks) {
-      const project = board.projects.find((p) => p.id === t.projectId);
-      if (
-        !project ||
-        !project.repos.includes(t.sourcePath) ||
-        t.repoPaths.some((p) => !project.repos.includes(p)) ||
-        new Set(t.repoPaths).size !== t.repoPaths.length
-      )
-        throw new Error("Task source directory must belong to its project.");
-      if (workspaces.has(t.workspaceId))
-        throw new Error("Workspace is already bound to another card.");
-      if (operations.has(t.operationId))
-        throw new Error("Duplicate task operation.");
-      workspaces.add(t.workspaceId);
-      operations.add(t.operationId);
-      if (t.tags && new Set(t.tags.map((x) => x.tag)).size !== t.tags.length)
-        throw new Error("Duplicate tag on a card.");
-    }
+  /** Settings > Storage (SQLITE-STORAGE-SPEC §9); the board may be unreadable meanwhile. */
+  async storageStatus(): Promise<StorageStatus> {
+    if (!this.storage) return { backend: "json", directory: this.directory, backups: [] };
+    await this.tail;
+    return this.storage.status();
+  }
+  backupStorage() {
+    return this.queue(() => this.requireStorage().backup());
+  }
+  restoreStorage(name: string) {
+    return this.queue(async () => {
+      const result = await this.requireStorage().restore(name);
+      this.onCommit?.();
+      return result;
+    });
+  }
+  exportStorage() {
+    return this.queue(async () => {
+      const result = await this.requireStorage().exportJson();
+      this.onCommit?.();
+      return result;
+    });
+  }
+  useSqliteStorage() {
+    return this.queue(() => this.requireStorage().useSqlite());
+  }
+  /** Plugin shutdown: finishes queued writes and closes the database. */
+  close() {
+    return this.queue(async () => this.storage?.close());
+  }
+  private requireStorage() {
+    if (!this.storage) throw new Error("This store keeps board.json only.");
+    return this.storage;
   }
   async editTask(input: TaskEdit): Promise<Task> {
     return this.mutate((board) => {
@@ -378,7 +360,7 @@ export class BoardStore {
       const folder = join(this.directory, "removed");
       await mkdir(folder, { recursive: true, mode: 0o700 });
       const backup = join(folder, `${project.id}-${removed.removedAt.replace(/[:.]/g, "-")}.json`);
-      await writeFile(backup, JSON.stringify(removed, null, 2), { mode: 0o600, flag: "wx" });
+      await writeFileDurable(backup, JSON.stringify(removed, null, 2), "wx");
       board.projects = board.projects.filter((p) => p.id !== project.id);
       board.tasks = board.tasks.filter((t) => !taskIds.has(t.id));
       board.events = board.events.filter((e) => !taskIds.has(e.taskId));
@@ -477,7 +459,7 @@ export class BoardStore {
       const folder = join(this.directory, "removed");
       await mkdir(folder, { recursive: true, mode: 0o700 });
       const backup = join(folder, `task-${task.id}-${removed.removedAt.replace(/[:.]/g, "-")}.json`);
-      await writeFile(backup, JSON.stringify(removed, null, 2), { mode: 0o600, flag: "wx" });
+      await writeFileDurable(backup, JSON.stringify(removed, null, 2), "wx");
       board.tasks = board.tasks.filter((t) => t !== task);
       board.events = board.events.filter((e) => e.taskId !== task.id);
       board.agentReceipts = board.agentReceipts.filter((r) => r.taskId !== task.id);

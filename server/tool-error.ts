@@ -17,7 +17,7 @@ export function toolFailure(error: unknown) {
       retryable: error.retryable,
     };
   if (error instanceof StoreInvalidError)
-    return { code: "STORE_INVALID", message: error.message, retryable: false };
+    return { code: error.code, message: error.message, retryable: error.retryable };
   if (error instanceof SyntaxError)
     return {
       code: "INVALID_INPUT",
