@@ -47,6 +47,7 @@ import { ToolSecrets, writePrivate } from "./tool-context";
 import { ToolError, toolFailure } from "./tool-error";
 import { cliSource } from "./cli-source";
 import { skillText, workingInstructions } from "./skill-source";
+import { logFailure } from "./error-report";
 
 const maxBody = 262144;
 
@@ -124,7 +125,7 @@ export class ToolServer {
     // Bindings of cards deleted earlier (or before this cleanup existed). An empty board is never trusted for this.
     if ((await this.store.read()).tasks.length)
       await this.pruneContexts().catch((e) =>
-        console.error("Kanban session bindings not cleaned:", e instanceof Error ? e.message : String(e)),
+        logFailure("Kanban session bindings not cleaned:", e),
       );
     await writePrivate(
       join(this.store.directory, "flowly.mjs"),

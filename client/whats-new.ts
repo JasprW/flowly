@@ -31,7 +31,7 @@ export const whatsNew: WhatsNewRelease[] = [
       },
       {
         icon: "Activity",
-        text: msg("Flowly now sends anonymous usage data once a day: versions, which features are on and usage counts. Never your content, paths or code. You can turn it off in Settings."),
+        text: msg("Flowly now sends anonymous usage data: once a day, versions, which features are on and usage counts; on errors, where in Flowly's code. Never your content, paths or code. You can turn it off in Settings."),
         action: { label: msg("Open settings"), to: "settings", section: "general" },
       },
     ],

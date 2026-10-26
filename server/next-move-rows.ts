@@ -4,6 +4,7 @@ import { openNextMoves, shownMoves } from "../shared/next-moves";
 import type { NextMove } from "../shared/model";
 import { nextRowId, nextRowKind, nextRowVersion, type NextRowData } from "../shared/native-session";
 import { within } from "./summaries";
+import { logFailure } from "./error-report";
 
 const ROW_TIMEOUT_MS = 10_000;
 
@@ -35,7 +36,7 @@ export class NextMoveRows {
       await this.write(paseo, identity.agentId, id, data);
       this.live.set(identity.agentId, { id, eventId: suggestion.id, moves: [...moves] });
     } catch (e) {
-      console.error("Flowly next steps card not added:", e instanceof Error ? e.message : String(e));
+      logFailure("Flowly next steps card not added:", e);
     }
   }
 
@@ -46,7 +47,7 @@ export class NextMoveRows {
       await this.write(paseo, agentId, id, { status: "ready", eventId: suggestionId, moves });
       this.live.set(agentId, { id, eventId: suggestionId, moves: [...moves] });
     } catch (e) {
-      console.error("Flowly next steps card not added:", e instanceof Error ? e.message : String(e));
+      logFailure("Flowly next steps card not added:", e);
     }
   }
 
@@ -57,7 +58,7 @@ export class NextMoveRows {
     try {
       await this.write(paseo, agentId, live.id, { status: "past", eventId: live.eventId, moves: live.moves });
     } catch (e) {
-      console.error("Flowly next steps card not retired:", e instanceof Error ? e.message : String(e));
+      logFailure("Flowly next steps card not retired:", e);
     }
   }
 

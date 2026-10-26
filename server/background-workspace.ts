@@ -5,6 +5,7 @@ import type { PaseoApi } from "@getpaseo/client";
 import { z } from "zod";
 import type { Project } from "../shared/model";
 import { daemonWorkspaceRecovery, type WorkspaceRecovery } from "./workspace-restore";
+import { logFailure } from "./error-report";
 
 export const BACKGROUND_TITLE = "Flowly background";
 
@@ -74,7 +75,7 @@ export class BackgroundWorkspaces {
         if (!slot || --slot.users > 0) return;
         this.slots.delete(project.id);
         await paseo.workspaces.archive(id).catch((e) =>
-          console.error("Flowly could not archive its background workspace:", e instanceof Error ? e.message : String(e)),
+          logFailure("Flowly could not archive its background workspace:", e),
         );
       });
     }
@@ -84,7 +85,7 @@ export class BackgroundWorkspaces {
     const known = (await this.read()).projects[project.id];
     if (known) {
       const state = await this.revive(known).catch((e) => {
-        console.error("Flowly could not restore its background workspace; making a new one:", e instanceof Error ? e.message : String(e));
+        logFailure("Flowly could not restore its background workspace; making a new one:", e);
         return "gone" as const;
       });
       if (state !== "gone") return known;

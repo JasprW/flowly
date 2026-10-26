@@ -23,6 +23,7 @@ import {
   type MarkSessionUnreadInput,
   type SessionReadReceipt,
 } from "../shared/session-attention";
+import { logFailure } from "./error-report";
 
 export class SessionReadStore {
   private tail: Promise<unknown> = Promise.resolve();
@@ -264,7 +265,7 @@ export class SessionReadService {
       await connection.clear(agentIds);
       return true;
     } catch (e) {
-      console.error("Flowly could not clear Paseo read state:", e instanceof Error ? e.message : String(e));
+      logFailure("Flowly could not clear Paseo read state:", e);
       return false;
     } finally {
       await connection?.close();

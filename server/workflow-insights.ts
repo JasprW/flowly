@@ -46,6 +46,7 @@ import {
   type WorkflowState,
   type WorkflowView,
 } from "../shared/workflow-insights";
+import { logFailure } from "./error-report";
 
 const DAY_MS = 86_400_000;
 const TICK_MS = 15 * 60_000;
@@ -315,7 +316,7 @@ export class WorkflowInsightsService {
         before = res.startCursor;
       }
     } catch (e) {
-      console.error("Workflow insights backfill skipped a session:", e instanceof Error ? e.message : String(e));
+      logFailure("Workflow insights backfill skipped a session:", e);
     }
     return records.length ? this.log.append(projectId, records) : 0;
   }
@@ -616,4 +617,4 @@ export class WorkflowInsightsService {
   }
 }
 
-const log = (what: string) => (e: unknown) => console.error(`Workflow insights ${what} failed:`, e instanceof Error ? e.message : String(e));
+const log = (what: string) => (e: unknown) => logFailure(`Workflow insights ${what} failed:`, e);

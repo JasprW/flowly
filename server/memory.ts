@@ -42,6 +42,7 @@ import type { SummaryStore } from "./summaries";
 import { runSummaryModels } from "./summary-models";
 import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
+import { logFailure } from "./error-report";
 
 const DAY_MS = 86_400_000;
 
@@ -777,4 +778,4 @@ function stripUndefined<T extends object>(value: T): Partial<T> {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.());
-const logError = (what: string) => (e: unknown) => console.error(`Flowly project memory ${what} failed:`, e instanceof Error ? e.message : String(e));
+const logError = (what: string) => (e: unknown) => logFailure(`Flowly project memory ${what} failed:`, e);

@@ -1,5 +1,6 @@
 import { openLocalDaemon } from "./local-daemon";
 import { paseoHome } from "./service";
+import { logFailure } from "./error-report";
 
 /** The child session a summarizer or insight run created, and is now done with. */
 export type RemovableAgent = { id: string; archive(): Promise<unknown> };
@@ -27,7 +28,7 @@ export function daemonRemoveAgent(
       client = await connect();
       await client.deleteAgent(agent.id);
     } catch (error) {
-      console.error("Flowly could not delete a summarizer session; archiving it:", error instanceof Error ? error.message : String(error));
+      logFailure("Flowly could not delete a summarizer session; archiving it:", error);
       await agent.archive().catch(() => undefined);
     } finally {
       await client?.close().catch(() => undefined);

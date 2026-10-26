@@ -25,6 +25,7 @@ import { repoMatcher } from "./repos";
 import { memoryContext } from "./memory";
 import type { z } from "zod";
 import type { removeProject as removeProjectRpc, restoreProjectCheck as restoreProjectCheckRpc } from "../shared/rpc";
+import { logFailure } from "./error-report";
 
 const execute = promisify(execFile);
 type RemoveResult = z.infer<typeof removeProjectRpc.output>;
@@ -464,7 +465,7 @@ export class BoardService {
     const task = await this.createCard(input, paseo);
     if (findingId)
       await this.insightFindings!.accept(input.projectId, findingId, task.id).catch((e) =>
-        console.error("Workflow insights suggestion not marked accepted:", e instanceof Error ? e.message : String(e)),
+        logFailure("Workflow insights suggestion not marked accepted:", e),
       );
     return task;
   }

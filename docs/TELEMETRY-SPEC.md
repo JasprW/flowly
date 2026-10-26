@@ -6,6 +6,7 @@ Status: **已实现，待随 1.7.0 发布**（2026-10-26，卡片“遥测建设
 - 设置里只放简要说明，不提供逐字段预览，具体内容以开源代码和本 spec 为准；
 - 不提供重置 ID；
 - 不做 IP 地理解析，i18n 需要的语言分布由 `ui_locale` 提供。
+- 2026-10-26 追加：上报 daemon 端遇到的错误，用单独的 `$exception` 事件，只带错误类型、安全的错误码、来源标签和 Flowly 自身代码的堆栈帧，不带错误消息和用户路径，每种错误每天最多一次（第 11 节）。客户端（界面）错误不上报。
 
 ## 1. 目的与反目标
 
@@ -20,7 +21,7 @@ Paseo 的插件注册表不提供安装或更新统计，npm 的下载量又混�
 反目标：
 
 - 逐个事件上报；
-- 崩溃报告和错误堆栈；
+- 错误消息，以及 Flowly 自身代码以外的堆栈帧和路径（第 11 节只发类型、错误码和 Flowly 自身的帧）；
 - 客户端（界面）埋点、session replay、feature flags；
 - 任何能还原用户在做什么的内容（标题、描述、路径、仓库、对话、命令）；
 - 按用户或团队识别身份；
@@ -29,7 +30,7 @@ Paseo 的插件注册表不提供安装或更新统计，npm 的下载量又混�
 ## 2. 总体形态
 
 - **只有 daemon 发送**。客户端不发起任何网络请求，也不加任何依赖，所以冷启动约束不受影响（AGENTS.md 的 Cold start 一条）。
-- **每天最多一个事件** `flowly_heartbeat`，内容是第 4 节的白名单字段。不发送其他事件。
+- **每天最多一个心跳事件** `flowly_heartbeat`，内容是第 4 节的白名单字段；另外只有第 11 节的 `$exception` 错误事件。不发送其他事件。
 - **接收方**：PostHog Cloud US 区的一个项目，由维护者持有。项目设置里打开 *Discard client IP data*。
 - **不用 SDK**：一次 `fetch` POST，超时 10 s，不重试队列，失败就等下一次检查（第 3 节）。
 - 遥测失败**不影响任何功能**：不抛错，不弹提示，不写入看板数据。
@@ -156,7 +157,7 @@ Content-Type: application/json
 ## 5. 设置
 
 - 新增 host 设置 `telemetry`（`shared/settings.ts`）：`{ enabled: boolean, default true }`。
-- 放在 **Settings → General**，单独一组 **Usage data**，只有一个开关 **Send anonymous usage data**。说明行（涉及隐私，所以按 UI 文案规则保留）只做简要说明，不逐项列字段：*Once a day: versions, which features are on and usage counts. Never your content, paths or code.* 不提供逐字段预览（用户决定 2026-10-26：项目开源，发送内容以 `server/telemetry.ts` 和本 spec 为准，README 的 Telemetry 一节链接到这两处）。
+- 放在 **Settings → General**，单独一组 **Usage data**，只有一个开关 **Send anonymous usage data**。说明行（涉及隐私，所以按 UI 文案规则保留）只做简要说明，不逐项列字段：*Once a day: versions, which features are on and usage counts. On errors: where in Flowly's code. Never your content, paths or code.* 不提供逐字段预览（用户决定 2026-10-26：项目开源，发送内容以 `server/telemetry.ts` 和本 spec 为准，README 的 Telemetry 一节链接到这两处）。
 - 被环境变量强制关闭时（第 6 节），开关显示为关、不可操作，说明行改为 *Turned off by DO_NOT_TRACK on this computer.* 客户端通过 RPC `telemetry.status`（返回 `{ forcedOff: boolean }`，有 schema 校验）得知这个状态。
 - 关闭后**立即生效**，从下一次检查开始不再发送任何东西，包括关闭这个动作本身。重新打开后照常发送。
 - daemon 读设置时使用 `*Values()` 解析函数（存储的值可能缺字段）。
@@ -177,7 +178,7 @@ Content-Type: application/json
 
 | 位置 | 内容 |
 |---|---|
-| What's new（引入遥测的那个版本，`client/whats-new.ts`） | 一条：*Flowly now sends anonymous usage data once a day: versions, which features are on and usage counts. Never your content, paths or code. You can turn it off in Settings.*，带 **Open settings** 按钮，打开 General |
+| What's new（引入遥测的那个版本，`client/whats-new.ts`） | 一条：*Flowly now sends anonymous usage data: once a day, versions, which features are on and usage counts; on errors, where in Flowly's code. Never your content, paths or code. You can turn it off in Settings.*，带 **Open settings** 按钮，打开 General |
 | 首次导览最后一页 Ready when you are（`client/onboarding.tsx`） | 在 More features 下面放同一个开关（`UsageDataGroup`），文案同第 5 节，默认开。Built in 页讲的是每张卡都在跑的功能，遥测放在那里不合适 |
 | README（英文、中文） | 新增 **Telemetry** 一节：几句话概括发送什么、不发送什么，关闭方法（设置或 `DO_NOT_TRACK=1`），数据存放地（PostHog US），并链接到本 spec 和 `server/telemetry.ts` |
 | ONBOARDING-SPEC | 记录最后一页新增的这一行。不加一次性 tip：What's new 已经覆盖老用户，导览覆盖新用户 |
@@ -215,8 +216,59 @@ Content-Type: application/json
 
 ## 10. 以后可能加（本版不做）
 
+- 客户端（界面）错误；
 - 客户端平台（web / 桌面 / iOS / Android）：需要客户端经现有 RPC 告诉 daemon，等证明需要再加；
 - 主动反馈入口；
-- 崩溃和错误计数。
 
 每一项加进来之前都要先修改第 4 节和告知文案。
+
+## 11. 错误上报
+
+2026-10-26 用户决定：单独事件 + 清洗过的堆栈，只在 daemon 端。实现：`server/error-report.ts`（清洗、采集点）和 `TelemetryService.reportError`（`server/telemetry.ts`）。
+
+### 11.1 前提
+
+和心跳相同：开关为开、没有被环境变量强制关闭（第 6 节）、`POSTHOG_KEY` 非空。不要求距上次心跳多久，也不要求用户看过告知（同第 3 节）。
+
+### 11.2 采集点
+
+| 来源 | `source` | 说明 |
+|---|---|---|
+| RPC handler 抛出的错误 | `rpc <rpc 名>`，如 `rpc task.update` | 包在 `server.handle` 外层，上报后原样抛出，调用方看到的结果不变。**不报**预期错误，也就是 handler 故意返回给调用方的答复：`ToolError`、`MemoryError`、`StoreInvalidError`、`ExternalError`、`ZodError`，以及没有系统错误码的普通 `Error`（如 "Task not found."、版本冲突）。`TypeError` 等程序错误、带系统错误码的错误（`ENOENT`、`SQLITE_BUSY`）照常上报 |
+| 后台任务失败 | 日志标签去掉末尾冒号，如 `Kanban auto wrap-up failed` | 原来的 `console.error(label, message)` 统一改用 `logFailure(label, error)`：日志输出不变，再上报一次 |
+| 未捕获异常 | `uncaught` | `process.on("uncaughtExceptionMonitor")`，不改变崩溃行为；插件卸载时移除。整个 daemon 进程共用这个事件，所以只有堆栈里有 Flowly 自身帧时才上报。进程随后退出时请求可能来不及发出，属尽力而为 |
+
+插件启动完成（遥测服务建立）之前的错误不上报。
+
+### 11.3 事件内容（白名单）
+
+`event = "$exception"`，`distinct_id` 与心跳相同（`telemetry.json` 的 `installId`；文件还不存在时按第 3.3 节新建；心跳和多个同时到来的错误共用同一次新建，所以一个安装只有一个 `installId`）。`properties` 的键集合固定为：
+
+| 键 | 内容 |
+|---|---|
+| `$process_person_profile` | `false` |
+| `$geoip_disable` | `true` |
+| `$exception_list` | 一项：`{ type, value, mechanism: { handled, synthetic: false }, stacktrace: { type: "raw", frames } }` |
+| `$exception_fingerprint` | 由 `type`、`value`、`source` 和各帧的文件、函数名、行号算出的 SHA-256 前 32 位十六进制 |
+| `source` | 11.2 节的来源；不符合 `^[\w .,;:'/-]{1,80}$` 时为 `other` |
+| `flowly_version`、`node_major`、`os`、`arch` | 同第 4 节 |
+
+- `type`：`error.name`，符合标识符格式（`^[A-Za-z_$][\w$]{0,60}$`）才用，否则为 `Error`；抛出的不是 `Error` 时为 `NonError`。
+- `value`：`error.code` 符合 `^[A-Z][A-Z0-9_]{1,40}$`（如 `ENOENT`、`SQLITE_BUSY`）时为它，否则为 `""`。**从不发送错误消息**：消息里常有路径、标题或命令。
+- `handled`：未捕获异常为 `false`，其余为 `true`。
+- `frames`：只保留 Flowly 自身文件的帧，最多 20 个，按最早的调用在前排列。"自身文件"指在插件目录下、且不在 `node_modules` 里的文件；插件目录在运行时从 `server/error-report.ts` 自己的堆栈帧推出（从源码加载时是 `server/` 的上一级，打包加载时是包文件所在目录），所以不依赖 Paseo 的加载方式。Paseo 0.13 把插件服务端编成一个 esbuild bundle，再用 `eval` 执行（`bundle-evaluator.js`，没有文件名和 source map），这时帧的形式是 `eval at evaluateBundle (…), <anonymous>:行:列`：插件目录记为 bundle 模式，这类帧的 `filename` 固定为 `flowly-bundle.js`，`lineno`/`colno` 是 bundle 内的位置，函数名照常保留（2026-10-26 Coder 端到端测试发现）。其他插件的 eval 帧形式相同、无法区分，只可能出现在未捕获异常里，接受这一点。每帧只有 `filename`（相对插件目录的路径，如 `server/service.ts`）、`function`（符合 `^[\w$.<> ]{1,80}$` 才保留，否则为 `""`）、`lineno`、`colno`、`in_app: true`、`platform: "node:javascript"`。插件目录本身和插件以外的任何路径都不发送。
+
+### 11.4 频率
+
+- 同一个指纹每个 UTC 日最多发一次，每个 UTC 日最多发 20 条（`MAX_ERRORS_PER_DAY`）。计数只在内存里，daemon 重启后重新计（用户偏好最简单的方案）。
+- 发送失败不重试。请求超时 10 s；失败不影响调用方，也不写看板数据。
+
+### 11.5 验收
+
+1. 清洗（bundle 模式）：`eval at evaluateBundle (…), <anonymous>` 帧记为 `flowly-bundle.js`，保留函数名和位置，不含任何路径。
+1. 清洗：构造含插件内文件（源码路径和 `file://` URL）、插件内 `node_modules`、`node:internal` 和插件外用户路径的堆栈，只留下插件内两帧，路径相对，顺序反转；整个事件里没有用户路径和错误消息（`server/error-report.test.ts`）。
+2. `type`、`value`、`source` 的规则如 11.3 节；非 `Error` 为 `NonError`。
+3. 同一错误同一天只发一次；30 种不同错误只发 20 条；第二天重新开始。
+4. 开关关闭、`DO_NOT_TRACK=1` 时不发；没有 Flowly 自身帧的未捕获异常不发。
+5. RPC 包装：同步和异步 handler 的程序错误被上报并原样抛出；`ToolError` 只抛出不上报；正常返回值不变。
+6. `properties` 的键集合与 11.3 节完全一致，`distinct_id` 与 `telemetry.json` 的 `installId` 相同；全新安装时同时上报的多个错误使用同一个 `installId`。

@@ -24,6 +24,7 @@ import {
 } from "../shared/summary";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { runSummaryModels } from "./summary-models";
+import { logFailure } from "./error-report";
 export { availableModels } from "./summary-models";
 import { summaryRow } from "../shared/native-session";
 
@@ -290,7 +291,7 @@ export class SummaryService {
       if (!snapshot?.agent || snapshot.agent.archivedAt) return;
       await within(session.timeline.append(summaryRow(entry, task.workspaceId)), this.rowTimeoutMs);
     } catch (e) {
-      console.error("Flowly summary row not added:", e instanceof Error ? e.message : String(e));
+      logFailure("Flowly summary row not added:", e);
     }
   }
 
