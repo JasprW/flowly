@@ -36,3 +36,6 @@ Other suggestions and Workflow summaries started at different left edges (each w
 
 ## Lists flush, skill rows restacked (same day, second style note)
 The bodies of Other suggestions, Workflow and Dismissed were indented 22 px, so their lists did not line up with the Skills list; they now start at the page's left edge (`Disclosure` `flush`). A skill row is two lines (name in monospace, its title under it in muted text), status chip and card count stacked on the right, chevron aligned with the name. Images: `live-desktop-light-lists-flush.png`, `live-desktop-light-skill-row.png`. `npm run typecheck` 0 errors; `npm test` 134 files passed.
+
+## Heatmap squeezed (same day, third style note)
+Two defects: the weekday labels (Mon / Wed / Fri) were cut off at the bottom (their text box was shrunk to the 11 px cell height, line height 16 px, overflow hidden), and the 53 columns were 769 px wide in a 760 px column, so the last week stuck out past the panel's right edge. Labels now have their own 16 px line box centered on the cell; on wide layouts the cell size is measured from the room beside the labels (8 to 14 px) so the last week ends at the panel edge; compact still scrolls, ending at the right edge. Images: `live-heatmap-fit-desktop.png`, `live-heatmap-fit-compact.png`. `npm run typecheck` 0 errors; `npm test` 134 files passed.

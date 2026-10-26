@@ -98,6 +98,8 @@ const longDate = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateStrin
 // ---- Activity (§2.1, §2.2) ----------------------------------------------------------
 
 const CELL_GAP = 3;
+/** Line height of an extra-small label. */
+const WEEKDAY_LINE = 16;
 /** Accent opacity per level; level 0 is the neutral surface. */
 const LEVEL_OPACITY = [0, 0.28, 0.5, 0.75, 1];
 
@@ -131,7 +133,9 @@ const Week = memo(function Week({ days, counts, levels, today, size, selected, o
 /** A year of turns per day, GitHub style (§2.1): no totals, no streaks, just how dense the days were. */
 const Heatmap = memo(function Heatmap({ activity, today, selected, compact, onSelect }: { activity: Activity; today: string; selected: string; compact: boolean; onSelect(day: string): void }) {
   const { colors } = useTheme();
-  const size = compact ? 10 : 11;
+  // Wide layouts stretch the 53 columns over the room beside the weekday labels, so the last week ends where the page does; compact ones scroll.
+  const [gridWidth, setGridWidth] = useState(0);
+  const size = compact ? 10 : gridWidth > 0 ? Math.max(8, Math.min(14, (gridWidth - (ACTIVITY_WEEKS - 1) * CELL_GAP) / ACTIVITY_WEEKS)) : 11;
   const step = size + CELL_GAP;
   const scroller = useRef<{ scrollToEnd?(o: { animated: boolean }): void } | null>(null);
   const { weeks, months } = useMemo(() => {
@@ -176,11 +180,14 @@ const Heatmap = memo(function Heatmap({ activity, today, selected, compact, onSe
       <View style={{ flexDirection: "row", gap: space[1] }}>
         <View style={{ paddingTop: 16, gap: CELL_GAP }}>
           {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-            <View key={d} style={{ height: size, justifyContent: "center" }}>
+            <View key={d} style={{ height: size }}>
+              {/* The label is taller than a cell: give it its own line box, centered on the cell, or its text is cut off. */}
               {d % 2 === 0 && d < 6 ? (
-                <Label muted size={font.xs} lines={1} selectable={false}>
-                  {weekday(d)}
-                </Label>
+                <View style={{ height: WEEKDAY_LINE, marginTop: (size - WEEKDAY_LINE) / 2, flexShrink: 0 }}>
+                  <Label muted size={font.xs} lines={1} selectable={false}>
+                    {weekday(d)}
+                  </Label>
+                </View>
               ) : null}
             </View>
           ))}
@@ -190,7 +197,9 @@ const Heatmap = memo(function Heatmap({ activity, today, selected, compact, onSe
             {grid}
           </ScrollView>
         ) : (
-          grid
+          <View style={{ flex: 1, minWidth: 0 }} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
+            {grid}
+          </View>
         )}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 3 }}>
