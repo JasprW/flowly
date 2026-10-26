@@ -1,6 +1,6 @@
 # 匿名使用数据（遥测）
 
-Status: **已实现，待随 1.7.0 发布**（2026-10-26，卡片“遥测建设”；实现：`server/telemetry.ts`）。发布前要先在 `POSTHOG_KEY` 填入 PostHog 项目 key，常量为空时不发送。用户决定：使用 PostHog Cloud 的 EU 区；由 daemon 直接调用 capture HTTP API，不引入 SDK；每天发送一次心跳；字段按白名单；默认开启、可以关闭；遵守 `DO_NOT_TRACK`。2026-10-26 补充决定：
+Status: **已实现，待随 1.7.0 发布**（2026-10-26，卡片“遥测建设”；实现：`server/telemetry.ts`）。`POSTHOG_KEY` 已于 2026-10-26 填入 PostHog EU 项目的 project token；常量为空时不发送。用户决定：使用 PostHog Cloud 的 EU 区；由 daemon 直接调用 capture HTTP API，不引入 SDK；每天发送一次心跳；字段按白名单；默认开启、可以关闭；遵守 `DO_NOT_TRACK`。2026-10-26 补充决定：
 
 - 用户被告知之前就可以发送，关闭之后不再发送；
 - 设置里只放简要说明，不提供逐字段预览，具体内容以开源代码和本 spec 为准；
@@ -187,6 +187,12 @@ Content-Type: application/json
 ## 8. 维护者侧（不在插件代码里）
 
 - PostHog 项目选 EU 区，打开 *Discard client IP data*，数据保留期用免费档的默认值。
+- Key 的维护：
+  - `server/telemetry.ts` 的 `POSTHOG_KEY` 是项目的 project token（`phc_…`），只能写入事件，不能读取数据，本来就设计成公开，随 npm 包发布，用户不用配置。
+  - 不要提交 personal API key（`phx_…`），插件也用不到它。
+  - 在 PostHog 里设置用量上限（billing limit），防止有人刷事件耗尽额度或产生费用。
+  - 只有在 key 被滥用时才更换：先在 PostHog 项目设置里重置 project token，再改 `POSTHOG_KEY` 并发布新版本。代价是旧版本的安装会停止上报，直到用户升级。
+  - capture 接口对任何 key 都返回 200，key 是否正确要在 PostHog 的 Activity 页面看事件有没有到。
 - 建议的看板，全部基于 `flowly_heartbeat`，统计每天的独立 `distinct_id`：
   - 版本分布：按 `flowly_version` 分组；
   - 升级曲线：新版本发布后各版本的占比；

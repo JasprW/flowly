@@ -12,8 +12,8 @@ import type { FlowEntry } from "../shared/insights";
  */
 
 export const POSTHOG_ENDPOINT = "https://eu.i.posthog.com/i/v0/e/";
-/** Write-only project key (`phc_…`), safe in source (TELEMETRY-SPEC §8). Empty: nothing is sent. */
-export const POSTHOG_KEY = "";
+/** Write-only project key (`phc_…`), public by design and safe in source; rotation in TELEMETRY-SPEC §8. Empty: nothing is sent. */
+export const POSTHOG_KEY = "phc_CUgzT9nWDYNm2XSqdQLAHyVc27GSvJyFPiEDrkSM6ZYS";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
