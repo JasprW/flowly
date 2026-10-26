@@ -1,0 +1,88 @@
+Flowly storage: moved the board to SQLite in 228 ms (107 cards, 4552 events).
+{
+ "host": {
+  "node": "v24.20.0",
+  "sqlite": "3.53.4",
+  "platform": "darwin-arm64"
+ },
+ "boardJsonBytes": 4955943,
+ "migrationMs": 370.8,
+ "counts": {
+  "tasks": 107,
+  "events": 4552,
+  "receipts": 2723
+ },
+ "sameBoard": true,
+ "read": {
+  "json": {
+   "median": 14.1,
+   "p90": 15.6,
+   "min": 13.5,
+   "n": 30
+  },
+  "sqlite": {
+   "median": 6.1,
+   "p90": 6.6,
+   "min": 5.9,
+   "n": 30
+  }
+ },
+ "view": {
+  "json": {
+   "median": 16.6,
+   "p90": 17.3,
+   "min": 16,
+   "n": 30
+  },
+  "sqlite": {
+   "median": 9.1,
+   "p90": 9.6,
+   "min": 8.9,
+   "n": 30
+  }
+ },
+ "overview": {
+  "json": {
+   "median": 19.4,
+   "p90": 21.7,
+   "min": 18.4,
+   "n": 30
+  },
+  "sqlite": {
+   "median": 11.5,
+   "p90": 12.2,
+   "min": 11.2,
+   "n": 30
+  }
+ },
+ "coldStart": {
+  "json": {
+   "median": 13.9,
+   "p90": 14.1,
+   "min": 13.7,
+   "n": 10
+  },
+  "sqlite": {
+   "median": 40,
+   "p90": 49.1,
+   "min": 37,
+   "n": 10
+  }
+ },
+ "edit": {
+  "json": {
+   "median": 63,
+   "p90": 93.6,
+   "min": 59,
+   "n": 20
+  },
+  "sqlite": {
+   "median": 23.2,
+   "p90": 25,
+   "min": 22.4,
+   "n": 20
+  }
+ },
+ "databaseBytes": 7061504,
+ "cleaned": 2
+}
