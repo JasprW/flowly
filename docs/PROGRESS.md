@@ -31,6 +31,8 @@ Spec: [INSIGHTS-REDESIGN-SPEC](INSIGHTS-REDESIGN-SPEC.md) (third version, accept
 - [x] `npm run typecheck`, `npm test` in the isolated worktree (`feat/insights-v3`).
 - [ ] Live checks need this branch installed: Run now on Flowly, Add to project on Tinylink, screenshots, Luna 6 full-access (not run).
 - [ ] README screenshots `05-insights*.png` still show the first version.
+- 2026-10-26 after the live check (user notes): Other suggestions, Dismissed and Workflow lists start at the page's left edge and skill rows are two lines; the heatmap's weekday labels are no longer cut off and its columns fit the page; the Back bar of Insights, Ideas and Memory is as high as the task card's icon row (`pageBarHeight`); the page felt empty, so Workflow opens by default and a "Last 7 days" list sits under the day panel (spec §2.2, §10.8). Candidates not built, from the data the page already has: areas the last 7 days' finished cards belong to (tags), memory entries confirmed this week, the busiest cards of the week.
+
 
 ## Insights redesign (card "Insights重设计") — 2026-10-22
 

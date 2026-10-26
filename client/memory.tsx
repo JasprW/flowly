@@ -27,7 +27,7 @@ import { Enter } from "./motion";
 import { keepPageRows, usePageRows } from "./page-rows";
 import { memoryCountsKey, memoryKey, useMemoryQuery } from "./queries";
 import { IdeaRow, useExitList, useHeld } from "./task-ideas";
-import { Actions, AiMark, Button, Choices, CueRing, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
+import { Actions, AiMark, Button, Choices, CueRing, Field, IconButton, Label, Notice, TextBox, Theme, Toggle, font, message, noFocusRing, pageBarHeight, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg, tn } from "../shared/i18n";
 
 /** Project memory UI (PROJECT-MEMORY-SPEC §8): the Memory page, the drawer section and their shared cards. */
@@ -516,7 +516,7 @@ export const MemoryPage = memo(function MemoryPage({
   const counts = (k: MemoryKind) => active.filter((e) => e.kind === k).length;
   return (
     <View style={{ flex: 1, minHeight: 0 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], height: touch ? 48 : 40, borderBottomWidth: 1, borderColor: colors.border }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], height: pageBarHeight, borderBottomWidth: 1, borderColor: colors.border }}>
         <Button quiet icon="ChevronLeft" label={t("Back to board (Esc)")} onPress={onBack}>
           {t("Board")}</Button>
         <View style={{ flex: 1 }} />

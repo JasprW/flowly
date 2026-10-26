@@ -11,7 +11,7 @@ import { Enter } from "./motion";
 import { usePageRows } from "./page-rows";
 import { StatusIcon } from "./status";
 import { ClosedIdea, IdeaCard, IdeaRow, sessionName, useExitList, useIdeaActions, type IdeaSession } from "./task-ideas";
-import { AiMark, Button, Choices, Label, TextBox, font, radius, space, tint, touch, useTheme, verticalContent, verticalScroll, noFocusRing } from "./ui";
+import { AiMark, Button, Choices, Label, TextBox, font, radius, space, tint, touch, useTheme, verticalContent, verticalScroll, noFocusRing, pageBarHeight } from "./ui";
 import { t, msg, tn } from "../shared/i18n";
 
 const sortLabels: Record<IdeaSort, string> = { newest: msg("Newest"), priority: msg("Priority"), card: msg("Card") };
@@ -153,7 +153,7 @@ export const IdeasPage = memo(function IdeasPage({
           alignItems: "center",
           gap: space[2],
           paddingHorizontal: space[3],
-          height: touch ? 48 : 40,
+          height: pageBarHeight,
           borderBottomWidth: 1,
           borderColor: colors.border,
         }}

@@ -15,7 +15,7 @@ import { Collapse, Disclosure } from "./disclosure";
 import { Enter } from "./motion";
 import { localZone, useDigestQuery, useInsightsQuery, useTokensQuery, useWorkflowInsightsQuery } from "./queries";
 import { lineDiff, skillFile, usageIn, type Finding, type FindingTarget, type WorkflowView } from "../shared/workflow-insights";
-import { AiMark, Button, IconButton, Label, Notice, TurnChevron, font, message, noFocusRing, radius, relativeTime, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
+import { AiMark, Button, IconButton, Label, Notice, TurnChevron, font, message, noFocusRing, pageBarHeight, radius, relativeTime, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { formatLocale, msg, t, tn } from "../shared/i18n";
 import { AgentHabits, habitsSummary } from "./agent-habits";
 import { useStableCallback } from "./stable";
@@ -55,7 +55,7 @@ export const InsightsPage = memo(function InsightsPage({
   const select = useStableCallback((d: string) => setPicked(d));
   return (
     <View style={{ flex: 1, minHeight: 0 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], height: touch ? 48 : 40, borderBottomWidth: 1, borderColor: colors.border }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], height: pageBarHeight, borderBottomWidth: 1, borderColor: colors.border }}>
         <Button quiet icon="ChevronLeft" label={t("Back to board (Esc)")} onPress={onBack}>
           {t("Board")}
         </Button>
@@ -75,6 +75,7 @@ export const InsightsPage = memo(function InsightsPage({
               <Section title={t("Activity")}>
                 <Heatmap activity={data.activity} today={data.today} selected={day} compact={compact} onSelect={select} />
                 <DayPanel projectId={project.id} day={day} today={data.today} activity={data.activity} active={active} titleOf={titleOf} onOpenTask={onOpenTask} />
+                <RecentDays activity={data.activity} today={data.today} selected={day} titleOf={titleOf} onSelect={select} />
               </Section>
               <Skills projectId={project.id} view={workflow.data} error={workflow.error} titleOf={titleOf} onOpenTask={onOpenTask} onOpenSettings={onOpenSettings} />
               <OtherSuggestions projectId={project.id} view={workflow.data} titleOf={titleOf} onOpenTask={onOpenTask} onCreate={onCreateFromFinding} />
@@ -218,6 +219,34 @@ const Heatmap = memo(function Heatmap({ activity, today, selected, compact, onSe
     </View>
   );
 });
+
+/** The last 7 days with any activity, newest first: the date, the cards that finished, the turns. A row picks the day above. */
+function RecentDays({ activity, today, selected, titleOf, onSelect }: { activity: Activity; today: string; selected: string; titleOf(id: string): string; onSelect(day: string): void }) {
+  const from = addDays(today, 1 - WINDOW_DAYS);
+  const days = activity.days.filter((d) => d.day >= from && d.day <= today).sort((a, b) => b.day.localeCompare(a.day));
+  if (!days.length) return null;
+  return (
+    <View style={{ gap: space[1] }}>
+      <Label muted size={font.sm} selectable={false}>
+        {t("Last 7 days")}
+      </Label>
+      <Panel>
+        {days.map((d, i) => (
+          <StatRow
+            key={d.day}
+            first={i === 0}
+            selected={d.day === selected}
+            label={d.day === today ? t("Today") : longDate(d.day)}
+            note={d.done.slice(0, 2).map(titleOf).join(" · ") + (d.done.length > 2 ? ` +${d.done.length - 2}` : "")}
+            value={tn(d.turns, "{n} turn", "{n} turns")}
+            onPress={() => onSelect(d.day)}
+            a11y={tn(d.turns, "{date}, {n} turn", "{date}, {n} turns", { date: shortDate(d.day) })}
+          />
+        ))}
+      </Panel>
+    </View>
+  );
+}
 
 /** The selected day (§2.2): its numbers and its AI summary; a past day's summary is written when first opened. */
 function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask }: { projectId: string; day: string; today: string; activity: Activity; active: boolean; titleOf(id: string): string; onOpenTask(id: string): void }) {
@@ -616,7 +645,7 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
 
 /** Review rounds, one-pass share and tokens per card of the last 7 days, folded (§2.5). */
 function WorkflowNumbers({ projectId, flow, active }: { projectId: string; flow: WorkflowStats; active: boolean }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const tokens = useTokensQuery(projectId, active);
   const perCard = tokens.data?.perCard;
   const summary =
@@ -691,7 +720,7 @@ function Panel({ children }: { children: ReactNode }) {
 }
 
 /** A Panel row: label, a muted note, the value on the right. */
-function StatRow({ first, label, value, note, onPress, a11y }: { first: boolean; label: string; value: string; note?: string; onPress?(): void; a11y?: string }) {
+function StatRow({ first, label, value, note, selected, onPress, a11y }: { first: boolean; label: string; value: string; note?: string; selected?: boolean; onPress?(): void; a11y?: string }) {
   const { colors } = useTheme();
   const body = (
     <>
@@ -726,7 +755,7 @@ function StatRow({ first, label, value, note, onPress, a11y }: { first: boolean;
       accessibilityRole="button"
       accessibilityLabel={a11y ?? `${label}: ${value}`}
       onPress={onPress}
-      style={(state) => ({ ...noFocusRing, ...style, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.surface2 : "transparent" })}
+      style={(state) => ({ ...noFocusRing, ...style, backgroundColor: selected || (state as { hovered?: boolean }).hovered || state.pressed ? colors.surface2 : "transparent" })}
     >
       {body}
     </Pressable>

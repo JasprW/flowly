@@ -24,6 +24,8 @@ export const radius = { sm: 4, md: 6, lg: 8, xl: 12, full: 999 } as const;
 export const font = { xs: 11, sm: 12, md: 13, base: 14, lg: 16, xl: 18 } as const;
 export const touch = Platform.OS !== "web";
 const control = touch ? 44 : 32;
+/** Height of the "← Board" bar of the Ideas, Memory and Insights pages: the task card header's icon row (top padding 8 + a control + the same below), so both bars line up. */
+export const pageBarHeight = 2 * space[2] + control;
 const smallControl = touch ? 32 : 28;
 
 /**

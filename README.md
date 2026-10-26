@@ -79,7 +79,7 @@ Once an agent understands the work it fills in the card's metadata itself. It se
 
 ### 6. Project insights
 
-Insights shows a year of the project's activity, GitHub style: one square per day, darker for more agent turns, with no totals or streaks. Tap a day to see its turns, the cards finished and an AI summary of the day (written the first time you open a past day). Below it, **Skills** turns what agents keep redoing into project skills (see below); other suggestions (scripts, repo tools, AGENTS.md rules) and the last 7 days' review rounds, one-pass share and tokens per card by model are folded underneath.
+Insights shows a year of the project's activity, GitHub style: one square per day, darker for more agent turns, with no totals or streaks. Tap a day to see its turns, the cards finished and an AI summary of the day (written the first time you open a past day). Below it, **Skills** turns what agents keep redoing into project skills (see below); other suggestions (scripts, repo tools, AGENTS.md rules) are folded underneath, followed by the last 7 days' review rounds, one-pass share and tokens per card by model. A list of the last 7 days sits under the day's summary.
 
 ![Project insights: a year of activity, the selected day and skill drafts](docs/promo/screenshots/05-insights.png)
 
