@@ -553,6 +553,9 @@ function SkillRow({
 
 // ---- Other suggestions (§2.4) and the workflow (§2.5) ---------------------------------
 
+/** The two folded rows share one title column, so their summaries start at the same left edge. */
+const FOLDED_TITLE_WIDTH = 150;
+
 /** Workflow insights other than skills, folded (§2.4): scripts, worktree setup, repo tools, AGENTS.md. */
 function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { projectId: string; view: WorkflowView | undefined; titleOf(id: string): string; onOpenTask(id: string): void; onCreate(finding: Finding): void }) {
   const setStatus = useRpc(rpc.setWorkflowFinding);
@@ -578,7 +581,7 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
   };
   const openCount = active.filter((f) => f.status === "open").length;
   return (
-    <Disclosure title={t("Other suggestions")} summary={tn(openCount, "Scripts, repo tools, AGENTS.md · {n} open", "Scripts, repo tools, AGENTS.md · {n} open")} open={open} onChange={setOpen}>
+    <Disclosure title={t("Other suggestions")} titleMinWidth={FOLDED_TITLE_WIDTH} summary={tn(openCount, "Scripts, repo tools, AGENTS.md · {n} open", "Scripts, repo tools, AGENTS.md · {n} open")} open={open} onChange={setOpen}>
       <View style={{ gap: space[2], paddingTop: space[1] }}>
         {!!failed && <Empty>{failed}</Empty>}
         {active.length > 0 && (
@@ -619,7 +622,7 @@ function WorkflowNumbers({ projectId, flow, active }: { projectId: string; flow:
           .filter(Boolean)
           .join(" · ");
   return (
-    <Disclosure title={t("Workflow")} summary={summary} open={open} onChange={setOpen}>
+    <Disclosure title={t("Workflow")} titleMinWidth={FOLDED_TITLE_WIDTH} summary={summary} open={open} onChange={setOpen}>
       {flow.models.length > 0 ? (
         <View style={{ paddingTop: space[1] }}>
           <Panel>

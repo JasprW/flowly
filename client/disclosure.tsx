@@ -5,9 +5,11 @@ import { useMotionPresence, lerp } from "./motion";
 import { Label, SectionHeader, font, space, touch, useTheme, noFocusRing } from "./ui";
 import { t, tn } from "../shared/i18n";
 
-export function Disclosure({ title, summary, open, disabled, flush, onChange, children }: {
+export function Disclosure({ title, summary, titleMinWidth, open, disabled, flush, onChange, children }: {
   title: string;
   summary?: string;
+  /** Rows stacked under each other pass the same value: their summaries then start at one left edge instead of ending at the right one. */
+  titleMinWidth?: number;
   open: boolean;
   disabled?: boolean;
   /** The body starts at the title's left edge instead of under the title text (lists of bordered items). */
@@ -31,10 +33,14 @@ export function Disclosure({ title, summary, open, disabled, flush, onChange, ch
       >
         <Chevron open={open} title={title} color={colors.foregroundMuted} />
         {/* With a summary the title keeps its own width and the summary gives way (as in SectionHeader). */}
-        <View style={summary ? { flexShrink: 0 } : { flex: 1, minWidth: 0 }}>
+        <View style={summary ? { flexShrink: 0, minWidth: titleMinWidth } : { flex: 1, minWidth: 0 }}>
           <Label bold size={font.md} selectable={false}>{title}</Label>
         </View>
-        {!!summary && <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, maxWidth: "50%", alignItems: "flex-end" }}><Label muted size={font.sm} lines={1} selectable={false}>{summary}</Label></View>}
+        {!!summary && (
+          <View style={titleMinWidth ? { flex: 1, minWidth: 0 } : { flexGrow: 1, flexShrink: 1, minWidth: 0, maxWidth: "50%", alignItems: "flex-end" }}>
+            <Label muted size={font.sm} lines={1} selectable={false}>{summary}</Label>
+          </View>
+        )}
       </Pressable>
       <Collapse open={open} id={title} style={{ paddingTop: 8, paddingBottom: 4, paddingLeft: flush ? 0 : 22, gap: 10 }}>
         {children}

@@ -112,6 +112,8 @@ Insights 回答两个问题：
 
 用 Disclosure，标题“其它建议”，摘要写“脚本、仓库工具、AGENTS.md · N 条”。内容就是 Workflow insights 现有的建议列表，只是去掉了 `skill` 这一类：目标 chip、标题、依据、proposal，以及 Create card / Dismiss / Restore 操作，行为不变。没有建议时整块不显示。
 
+其它建议和工作流两个收起行共用一个标题列宽（`Disclosure` 的 `titleMinWidth`），摘要从同一个左边缘开始，不再按文字长度靠右排；窄屏摘要单行截断。
+
 ### 2.5 工作流（默认收起）
 
 用 Disclosure，标题“工作流”。摘要行固定统计最近 7 天：

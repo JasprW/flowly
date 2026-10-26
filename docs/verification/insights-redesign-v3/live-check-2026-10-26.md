@@ -30,3 +30,6 @@ Branch `feat/insights-v3` rebased onto `origin/main` a0cbe68 (after the SQLite m
 
 ## Screenshots
 `live-desktop-light-skill-open.png`, `live-desktop-light-day-summary.png`, `live-desktop-dark.png` (Other suggestions open), `live-compact-light.png`. Other projects' tabs are hidden in every image.
+
+## Folded rows aligned (same day, after the user's style note)
+Other suggestions and Workflow summaries started at different left edges (each was right-aligned in a half-width box). Both rows now share a title column (`Disclosure` `titleMinWidth`, 150), so the summaries start at one left edge; the Workflow summary no longer truncates on desktop and truncates to one line on compact. Images: `live-desktop-light-folded-aligned.png`, `live-compact-light-folded-aligned.png`. `npm run typecheck` 0 errors; `npm test` 134 files, 1123 passed, 1 skipped (on the commit below, dirty before commit).
