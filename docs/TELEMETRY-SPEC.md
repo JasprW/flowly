@@ -199,6 +199,8 @@ Content-Type: application/json
   - 升级曲线：新版本发布后各版本的占比；
   - 功能开启率：各 `f_*` 的占比；
   - 使用频率：各 `c_*` 的中位数和 P90，以及 DAU/WAU。
+- 看板：PostHog 项目 688543 的 **Flowly** 看板（2026-10-26 建）。
+- 排除测试安装：在项目设置的 test account filters 里加 HogQL 过滤 `distinct_id != '<installId>'`，并默认勾选；趋势类图打开 *Filter out internal and test users*，SQL 图在 WHERE 里写同样的条件。事件不建 person profile（`$process_person_profile: false`），所以 cohort 和 person 属性过滤无效；`type: event` 的 `distinct_id` 过滤匹配的是事件属性，也无效。已排除：Coder 测试机 `0d645af4-…`（它的 Usage data 开关也已关闭）。
 - 项目 key 只能写入，不能读取，放在源码里没有问题。可能有人伪造数据，这一点已接受：数据只用于参考。
 
 ## 9. 验收标准
