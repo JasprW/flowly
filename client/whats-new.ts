@@ -26,7 +26,7 @@ export const whatsNew: WhatsNewRelease[] = [
     items: [
       {
         icon: "Database",
-        text: msg("The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage."),
+        text: msg("Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON."),
         action: { label: msg("Open settings"), to: "settings", section: "storage" },
       },
     ],

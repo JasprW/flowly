@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "Сделать копию сейчас",
   "Backed up": "Копия сделана",
   "Restore…": "Восстановить…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "Доска вернётся к копии от {time}. Изменения после неё исчезнут с доски; текущие данные останутся в папке данных.",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "Доска вернётся к {name} ({time}). Изменения после этого исчезнут с доски; текущие данные останутся в папке данных.",
   "Backup restored": "Копия восстановлена",
   "Export to JSON…": "Экспорт в JSON…",
   "Move the board back to SQLite": "Вернуть доску в SQLite",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "Flowly запишет доску в board.json и перестанет использовать SQLite. После этого можно установить более раннюю версию Flowly или вернуть доску здесь.",
   "Board exported to board.json": "Доска экспортирована в board.json",
   "Export to JSON": "Экспорт в JSON",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "Доска хранится в локальной базе данных, резервная копия делается каждый день. Восстановить копию или экспортировать доску в JSON можно в Настройки → Хранилище.",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "Теперь доска хранится в локальной базе SQLite с ежедневной резервной копией; восстановить копию или экспортировать в JSON можно в Настройки → Хранилище.",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "В Настройки → Хранилище видно, где хранится доска и её ежедневные резервные копии; там же можно восстановить копию или экспортировать доску в JSON.",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Где Paseo это поддерживает, доска переходит в локальную базу SQLite с ежедневными резервными копиями; в Настройки → Хранилище можно восстановить копию или экспортировать доску в JSON.",
 };
 export default catalog;

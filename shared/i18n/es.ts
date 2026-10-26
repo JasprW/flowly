@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "Hacer copia ahora",
   "Backed up": "Copia hecha",
   "Restore…": "Restaurar…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "El tablero vuelve a la copia de {time}. Los cambios posteriores salen del tablero; los datos actuales se quedan en la carpeta de datos.",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "El tablero vuelve a {name} ({time}). Los cambios posteriores salen del tablero; los datos actuales se quedan en la carpeta de datos.",
   "Backup restored": "Copia restaurada",
   "Export to JSON…": "Exportar a JSON…",
   "Move the board back to SQLite": "Devolver el tablero a SQLite",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "Flowly escribe el tablero en board.json y deja de usar SQLite. Después puedes instalar una versión anterior de Flowly o devolver el tablero aquí.",
   "Board exported to board.json": "Tablero exportado a board.json",
   "Export to JSON": "Exportar a JSON",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "El tablero se guarda en una base de datos local con una copia de seguridad diaria. Restaura una copia o exporta el tablero a JSON en Ajustes → Almacenamiento.",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "El tablero ahora vive en una base de datos SQLite local con copias diarias; restaura una copia o expórtalo a JSON en Ajustes → Almacenamiento.",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "Ajustes → Almacenamiento muestra dónde se guarda el tablero y sus copias diarias, y puede restaurar una o exportar el tablero a JSON.",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Donde Paseo lo permite, el tablero pasa a una base de datos SQLite local con copias diarias; Ajustes → Almacenamiento restaura una o exporta el tablero a JSON.",
 };
 export default catalog;

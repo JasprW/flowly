@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "Jetzt sichern",
   "Backed up": "Gesichert",
   "Restore…": "Wiederherstellen…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "Das Board kehrt zur Sicherung von {time} zurück. Spätere Änderungen verschwinden vom Board; die aktuellen Daten bleiben im Datenordner.",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "Das Board kehrt zu {name} ({time}) zurück. Spätere Änderungen verschwinden vom Board; die aktuellen Daten bleiben im Datenordner.",
   "Backup restored": "Sicherung wiederhergestellt",
   "Export to JSON…": "Als JSON exportieren…",
   "Move the board back to SQLite": "Board zurück nach SQLite verschieben",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "Flowly schreibt das Board in board.json und nutzt SQLite nicht mehr. Danach kannst du eine frühere Flowly-Version installieren oder das Board hier zurückholen.",
   "Board exported to board.json": "Board nach board.json exportiert",
   "Export to JSON": "Als JSON exportieren",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "Das Board liegt in einer lokalen Datenbank und wird täglich gesichert. Stelle eine Sicherung wieder her oder exportiere das Board als JSON unter Einstellungen → Speicher.",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "Das Board liegt jetzt in einer lokalen SQLite-Datenbank mit täglicher Sicherung; Wiederherstellen oder als JSON exportieren unter Einstellungen → Speicher.",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "Einstellungen → Speicher zeigt, wo das Board liegt, und seine täglichen Sicherungen; dort lässt sich eine wiederherstellen oder das Board als JSON exportieren.",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Wo Paseo es unterstützt, zieht das Board in eine lokale SQLite-Datenbank mit täglicher Sicherung; Einstellungen → Speicher stellt eine wieder her oder exportiert das Board als JSON.",
 };
 export default catalog;

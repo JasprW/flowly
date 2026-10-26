@@ -75,7 +75,7 @@ export const whatsNew: { version: string; items: WhatsNewItem[] }[] = [ /* 新�
 
 | 图标 | 文案 | 按钮 |
 | --- | --- | --- |
-| `Database` | 看板改存本地 SQLite 数据库并每天备份；在 Settings → Storage 恢复备份或导出为 JSON（[SQLITE-STORAGE-SPEC](SQLITE-STORAGE-SPEC.md)） | Open settings → Storage |
+| `Database` | Paseo 支持时，看板改存本地 SQLite 数据库并每天备份；Settings → Storage 可恢复备份或导出为 JSON（[SQLITE-STORAGE-SPEC](SQLITE-STORAGE-SPEC.md)） | Open settings → Storage |
 
 ### 1.6.0（2026-10-24 用户确认发布 1.6.0；v1.5.0..main 已合入的部分）
 

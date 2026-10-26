@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmodSync, writeFileSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as sqlite from "node:sqlite";
@@ -159,8 +159,11 @@ describe("moving board.json to SQLite", () => {
     await s.read();
     const [run] = await readdir(join(d, "migrations"));
     const [backup] = (await s.storageStatus()).backups;
-    for (const file of [join(d, "migrations", run, "board.json"), join(d, "backups", backup.name), join(d, "flowly.sqlite")])
-      expect((await stat(file)).mode & 0o777).toBe(0o600);
+    for (const file of [join(d, "migrations", run, "board.json"), join(d, "backups", backup.name), join(d, "flowly.sqlite")]) {
+      const info = await stat(file);
+      // Windows reports every writable file as 0o666.
+      if (process.platform !== "win32") expect(info.mode & 0o777).toBe(0o600);
+    }
   });
 
   test("an unreadable board.json is not moved and fails as before", async () => {
@@ -445,6 +448,19 @@ describe("backups, restore and the way back to JSON", () => {
     expect(await readFile(join(d, "backups", "mine.sqlite"), "utf8")).toBe("not Flowly's");
   });
 
+  test("databases kept aside in the same second get their own names", async () => {
+    const d = await directory();
+    await writeBoard(d, fixture());
+    const s = open(d, { now: () => new Date("2026-10-26T00:00:00Z") });
+    await s.read();
+    const [backup] = (await s.storageStatus()).backups;
+    const first = await s.restoreStorage(backup.name);
+    const second = await s.restoreStorage(backup.name);
+    expect(first.aside).toBe("flowly.sqlite.before-restore-20261026-000000");
+    expect(second.aside).toBe("flowly.sqlite.before-restore-20261026-000000-1");
+    expect(await missing(join(d, first.aside!))).toBe(false);
+  });
+
   test("backups made within one second keep their order, so the newest seven stay", async () => {
     const d = await directory();
     await writeBoard(d, fixture());
@@ -483,15 +499,19 @@ describe("backups, restore and the way back to JSON", () => {
     }
   });
 
-  test("an export whose database cannot be renamed aside still switches to JSON, and SQLite can come back", async () => {
+  test.skipIf(process.platform === "win32")("an export whose database cannot be renamed aside still switches to JSON, and SQLite can come back", async () => {
     let now = Date.parse("2026-10-26T00:00:00Z");
     const d = await directory();
     await writeBoard(d, fixture());
-    const s = open(d, { now: () => new Date(now) });
+    // Once board.json holds the board, the data folder stops accepting renames.
+    const s = open(d, { now: () => new Date(now), step: (name) => name === "export:json" && chmodSync(d, 0o500) });
     const before = await s.read();
-    // A folder already holds the retired name.
-    await mkdir(join(d, "flowly.sqlite.retired-20261026-000000", "taken"), { recursive: true });
-    expect(await s.exportStorage()).toEqual({ retired: null });
+    try {
+      expect(await s.exportStorage()).toEqual({ retired: null });
+    } finally {
+      chmodSync(d, 0o700);
+    }
+    expect(await missing(join(d, "flowly.sqlite"))).toBe(false);
     expect(await s.storageStatus()).toMatchObject({ backend: "json", reason: "exported" });
     expect(content(await s.read())).toBe(content(before));
     now += 1000;

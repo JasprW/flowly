@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "지금 백업",
   "Backed up": "백업했습니다",
   "Restore…": "복원…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "보드를 {time} 백업으로 되돌립니다. 그 이후의 변경은 보드에서 사라지며, 현재 데이터는 데이터 폴더에 남습니다.",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "보드를 {name}({time})으로 되돌립니다. 그 이후의 변경은 보드에서 사라지며, 현재 데이터는 데이터 폴더에 남습니다.",
   "Backup restored": "백업을 복원했습니다",
   "Export to JSON…": "JSON으로 내보내기…",
   "Move the board back to SQLite": "보드를 SQLite로 되돌리기",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "Flowly가 보드를 board.json에 쓰고 SQLite 사용을 멈춥니다. 그다음 이전 Flowly 버전을 설치하거나 여기서 보드를 되돌릴 수 있습니다.",
   "Board exported to board.json": "보드를 board.json으로 내보냈습니다",
   "Export to JSON": "JSON으로 내보내기",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "보드는 로컬 데이터베이스에 저장되고 매일 백업됩니다. 설정 → 저장소에서 백업을 복원하거나 보드를 JSON으로 내보낼 수 있습니다.",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "이제 보드가 로컬 SQLite 데이터베이스에 저장되고 매일 백업됩니다. 설정 → 저장소에서 백업을 복원하거나 JSON으로 내보낼 수 있습니다.",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "설정 → 저장소에서 보드가 저장된 위치와 매일의 백업을 확인하고, 백업을 복원하거나 보드를 JSON으로 내보낼 수 있습니다.",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Paseo가 지원하면 보드가 로컬 SQLite 데이터베이스로 옮겨지고 매일 백업됩니다. 설정 → 저장소에서 복원하거나 JSON으로 내보낼 수 있습니다.",
 };
 export default catalog;

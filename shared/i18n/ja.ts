@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "今すぐバックアップ",
   "Backed up": "バックアップしました",
   "Restore…": "復元…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "ボードを {time}のバックアップに戻します。それ以降の変更はボードから消えます。現在のデータはデータフォルダに残ります。",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "ボードを {name}（{time}）に戻します。それ以降の変更はボードから消えます。現在のデータはデータフォルダに残ります。",
   "Backup restored": "バックアップを復元しました",
   "Export to JSON…": "JSON にエクスポート…",
   "Move the board back to SQLite": "ボードを SQLite に戻す",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "Flowly はボードを board.json に書き出し、SQLite の使用をやめます。その後、以前の Flowly をインストールするか、ここでボードを戻せます。",
   "Board exported to board.json": "ボードを board.json にエクスポートしました",
   "Export to JSON": "JSON にエクスポート",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "ボードはローカルのデータベースに保存され、毎日バックアップされます。設定 → ストレージでバックアップの復元や JSON へのエクスポートができます。",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "ボードはローカルの SQLite データベースに保存され、毎日バックアップされるようになりました。設定 → ストレージで復元や JSON へのエクスポートができます。",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "設定 → ストレージで、ボードの保存場所と毎日のバックアップを確認でき、バックアップの復元や JSON へのエクスポートもできます。",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Paseo が対応していれば、ボードはローカルの SQLite データベースに移り、毎日バックアップされます。設定 → ストレージで復元や JSON へのエクスポートができます。",
 };
 export default catalog;

@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "立即備份",
   "Backed up": "已備份",
   "Restore…": "恢復…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "看板將回到 {time}的備份。之後的變更會從看板上消失；目前的資料保留在資料資料夾中。",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "看板將回到 {name}（{time}）。之後的變更會從看板上消失；目前的資料保留在資料資料夾中。",
   "Backup restored": "備份已恢復",
   "Export to JSON…": "匯出為 JSON…",
   "Move the board back to SQLite": "把看板移回 SQLite",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "Flowly 會把看板寫入 board.json 並停止使用 SQLite。之後你可以安裝舊版 Flowly，或在這裡把看板移回去。",
   "Board exported to board.json": "看板已匯出到 board.json",
   "Export to JSON": "匯出為 JSON",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "看板儲存在本機資料庫中，每天自動備份。可在設定 → 儲存中恢復備份或把看板匯出為 JSON。",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "看板現在儲存在本機 SQLite 資料庫中並每天備份；可在設定 → 儲存中恢復備份或匯出為 JSON。",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "設定 → 儲存裡可以看到看板儲存在哪裡和每天的備份，也能恢復備份或把看板匯出為 JSON。",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Paseo 支援時，看板會改存到本機 SQLite 資料庫並每天備份；設定 → 儲存可以恢復備份或把看板匯出為 JSON。",
 };
 export default catalog;

@@ -76,7 +76,7 @@ export function StoragePage() {
             <SettingRow
               key={b.name}
               title={relativeTime(b.at)}
-              detail={megabytes(b.bytes)}
+              detail={`${b.name} · ${megabytes(b.bytes)}`}
               trailing={
                 canRestore ? (
                   <Button small quiet disabled={pending} onPress={() => setConfirming({ kind: "restore", name: b.name, at: b.at })}>
@@ -90,7 +90,7 @@ export function StoragePage() {
       )}
       {confirming?.kind === "restore" && (
         <View style={{ gap: space[2] }}>
-          <Notice tone="warning">{t("The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.", { time: relativeTime(confirming.at) })}</Notice>
+          <Notice tone="warning">{t("The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.", { name: confirming.name, time: relativeTime(confirming.at) })}</Notice>
           <Actions>
             <Button quiet disabled={pending} onPress={() => setConfirming(null)}>
               {t("Cancel")}

@@ -32,7 +32,7 @@
 | `board.json` | 迁移后换成**退休标记**：`{"version":0,"storage":"sqlite",...}`。旧版本读到它会报“数据无效”并拒绝写入，而不会当成空看板。 |
 | `migrations/<时间>/` | 迁移前的源快照：原 `board.json`、`board.json.bak` 和 `manifest.json`（sha256、大小）。永久保留，不轮换。 |
 | `backups/flowly-<时间>.sqlite` | 自动和手动备份，只保留本插件生成的最新 7 份。 |
-| `flowly.sqlite.before-restore-<时间>` | 从备份恢复前的当前库，保留不删。 |
+| `flowly.sqlite.before-restore-<时间>` | 从备份恢复前的当前库，保留不删。同一秒内重名时加序号，不覆盖已有文件（下同）。 |
 | `flowly.sqlite.retired-<时间>` | 导出回 JSON 后退役的库，保留不删。 |
 | `storage-mode.json` | 只在导出回 JSON 后存在：`{"backend":"json"}`，表示不要自动再迁移。 |
 

@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "Fazer backup agora",
   "Backed up": "Backup feito",
   "Restore…": "Restaurar…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "O quadro volta ao backup de {time}. As mudanças feitas depois saem do quadro; os dados atuais ficam na pasta de dados.",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "O quadro volta para {name} ({time}). As mudanças feitas depois saem do quadro; os dados atuais ficam na pasta de dados.",
   "Backup restored": "Backup restaurado",
   "Export to JSON…": "Exportar para JSON…",
   "Move the board back to SQLite": "Devolver o quadro ao SQLite",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "O Flowly grava o quadro em board.json e deixa de usar SQLite. Depois você pode instalar uma versão anterior do Flowly ou devolver o quadro aqui.",
   "Board exported to board.json": "Quadro exportado para board.json",
   "Export to JSON": "Exportar para JSON",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "O quadro fica em um banco de dados local, com backup diário. Restaure um backup ou exporte o quadro para JSON em Configurações → Armazenamento.",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "O quadro agora fica em um banco de dados SQLite local com backup diário; restaure um backup ou exporte para JSON em Configurações → Armazenamento.",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "Configurações → Armazenamento mostra onde o quadro fica e seus backups diários, e pode restaurar um ou exportar o quadro para JSON.",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Onde o Paseo permite, o quadro passa para um banco de dados SQLite local com backups diários; Configurações → Armazenamento restaura um ou exporta o quadro para JSON.",
 };
 export default catalog;

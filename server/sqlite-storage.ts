@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { emptyBoard, storageSchema, type Board } from "../shared/model";
@@ -628,17 +629,24 @@ export class BoardStorage {
   /** Copies the closed flowly.sqlite to flowly.sqlite.before-restore-<time>; its emptied side files move with it. */
   private async keepAside() {
     if (!(await exists(this.path(DB)))) return null;
-    const name = `${DB}.before-restore-${stamp(this.now())}`;
-    await copyFile(this.path(DB), this.path(name));
+    const name = await this.freeName("before-restore");
+    await copyFile(this.path(DB), this.path(name), constants.COPYFILE_EXCL);
     await syncFile(this.path(name));
     for (const suffix of SIDE) if (await exists(this.path(DB + suffix))) await rename(this.path(DB + suffix), this.path(name + suffix));
     await syncDirectory(this.directory);
     return name;
   }
+  /** flowly.sqlite.<label>-<time>, with a suffix when that second is taken: a kept database is never overwritten. */
+  private async freeName(label: "before-restore" | "retired") {
+    const base = `${DB}.${label}-${stamp(this.now())}`;
+    let name = base;
+    for (let n = 1; (await exists(this.path(name))) || (await exists(this.path(`${name}-wal`))); n++) name = `${base}-${n}`;
+    return name;
+  }
   /** Renames flowly.sqlite (and its side files) to flowly.sqlite.<label>-<time>; null when there is none. */
   private async retireDatabase(label: "retired") {
     if (!(await exists(this.path(DB)))) return null;
-    const name = `${DB}.${label}-${stamp(this.now())}`;
+    const name = await this.freeName(label);
     for (const suffix of SIDE) if (await exists(this.path(DB + suffix))) await rename(this.path(DB + suffix), this.path(name + suffix));
     await rename(this.path(DB), this.path(name));
     await syncDirectory(this.directory);

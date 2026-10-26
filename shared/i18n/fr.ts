@@ -1384,7 +1384,7 @@ const catalog: Catalog = {
   "Back up now": "Sauvegarder maintenant",
   "Backed up": "Sauvegardé",
   "Restore…": "Restaurer…",
-  "The board goes back to the backup from {time}. Changes since then leave the board; the current data stays in the data folder.": "Le tableau revient à la sauvegarde de {time}. Les changements faits depuis quittent le tableau ; les données actuelles restent dans le dossier de données.",
+  "The board goes back to {name} ({time}). Changes since then leave the board; the current data stays in the data folder.": "Le tableau revient à {name} ({time}). Les changements faits depuis quittent le tableau ; les données actuelles restent dans le dossier de données.",
   "Backup restored": "Sauvegarde restaurée",
   "Export to JSON…": "Exporter en JSON…",
   "Move the board back to SQLite": "Remettre le tableau dans SQLite",
@@ -1392,7 +1392,7 @@ const catalog: Catalog = {
   "Flowly writes the board to board.json and stops using SQLite. Then you can install an earlier Flowly version, or move the board back here.": "Flowly écrit le tableau dans board.json et cesse d'utiliser SQLite. Vous pourrez ensuite installer une version antérieure de Flowly ou remettre le tableau ici.",
   "Board exported to board.json": "Tableau exporté vers board.json",
   "Export to JSON": "Exporter en JSON",
-  "The board is kept in a local database and backed up every day. Restore a backup or export the board to JSON in Settings → Storage.": "Le tableau est conservé dans une base de données locale, sauvegardée chaque jour. Restaurez une sauvegarde ou exportez le tableau en JSON dans Réglages → Stockage.",
-  "The board now lives in a local SQLite database with daily backups; restore a backup or export it to JSON in Settings → Storage.": "Le tableau est désormais dans une base SQLite locale sauvegardée chaque jour ; restaurez une sauvegarde ou exportez-le en JSON dans Réglages → Stockage.",
+  "Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.": "Réglages → Stockage indique où le tableau est conservé et ses sauvegardes quotidiennes, et permet d'en restaurer une ou d'exporter le tableau en JSON.",
+  "Where Paseo supports it, the board moves to a local SQLite database with daily backups; Settings → Storage restores one or exports the board to JSON.": "Quand Paseo le permet, le tableau passe dans une base SQLite locale sauvegardée chaque jour ; Réglages → Stockage en restaure une ou exporte le tableau en JSON.",
 };
 export default catalog;
