@@ -964,9 +964,11 @@ function BoardContent(
           ideas = await readProjectIdeas({ projectId }).then((r) => r.value?.ideas ?? []);
         } catch (e) {
           if (gone(e, PROJECT_UNAVAILABLE)) continue;
-          setError(e instanceof Error ? e.message : String(e));
+          if (appliedIdea.current === link.requestId) setError(e instanceof Error ? e.message : String(e));
           return;
         }
+        // A newer link arrived while this one was reading: it owns the board now.
+        if (appliedIdea.current !== link.requestId) return;
         const idea = ideas.find((i) => i.id === link.ideaId);
         if (!idea) continue;
         // Never another idea: a gone or closed one is an error on the board. The idea names its project,
@@ -978,7 +980,7 @@ function BoardContent(
         createFromIdea(idea);
         return;
       }
-      setError(t("This idea is no longer open."));
+      if (appliedIdea.current === link.requestId) setError(t("This idea is no longer open."));
     })();
   }, [ideaInput, board]);
   // WORKFLOW-INSIGHTS-SPEC §5.2: the new-task form, prefilled from a suggestion.
@@ -1814,7 +1816,7 @@ function BoardContent(
                     : { width: resizingFrom, flexGrow: 0, flexShrink: 0, minHeight: 0, overflow: "hidden" }
                 }
               >
-                {page === "ideas" && compact && (!projectIdeasData.data || projectIdeasData.error) ? (
+                {page === "ideas" && (!projectIdeasData.data || projectIdeasData.error) ? (
                   <View style={{ padding: space[4] }}>{projectIdeasData.error ? <><Notice>{message(projectIdeasData.error)}</Notice><Button quiet onPress={() => void projectIdeasData.refetch()}>{t("Retry")}</Button></> : <Label muted>{t("Loading cards…")}</Label>}</View>
                 ) : page === "insights" && board ? (
                   <InsightsPage
