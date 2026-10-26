@@ -56,7 +56,7 @@ CREATE INDEX items_project ON items (collection, project_id);
 
 集合按 Board 自身的数组字段自动处理，以后 Board 新增数组字段不需要改表。顺序原样保留：只追加/删除时已有行的 `ord` 不动，否则整组重新编号。
 
-连接设置并读回确认：`journal_mode=WAL`、`synchronous=FULL`、`busy_timeout`。目录 0700，文件 0600。
+连接设置并读回确认：`journal_mode=WAL`、`synchronous=FULL`、`busy_timeout`。目录 0700；数据库、迁移快照和备份文件 0600。
 
 ## 5. 读写
 
@@ -70,7 +70,7 @@ CREATE INDEX items_project ON items (collection, project_id);
 
 插件启动时，所有看板读写先等存储就绪（`BoardStore` 内部队列），无需额外 gate。规则按顺序判断：
 
-1. `storage-mode.json` 为 json → 用 JSON（导出回滚之后）。
+1. `storage-mode.json` 为 json：若 `board.json` 已是真实看板 → 用 JSON（导出之后；库若还在就补做改名，改名失败只记日志，库留着不用）；若 `board.json` 还是退休标记 → 导出没完成，删除 `storage-mode.json`，按下面的规则继续用 SQLite。
 2. 当前 Paseo 没有 `node:sqlite`，或 SQLite 版本低于 3.51.3（3.50.x 需 ≥3.50.7，3.44.x 需 ≥3.44.6；更早的版本有 WAL 损坏缺陷）→ 用 JSON。如果数据其实已经在 SQLite 里（board.json 是退休标记），则报错并说明要升级 Paseo，绝不当成空看板。
 3. 取 owner 锁。被占用（多半是 reload 时旧进程还没退出）就短暂重试；仍失败则报 `STORAGE_BUSY`，下次读写时再试。不会退回 JSON。
 4. 删除残留的 `flowly.sqlite.tmp`（未提交的迁移半成品）。
@@ -104,11 +104,12 @@ CREATE INDEX items_project ON items (collection, project_id);
 
 存储页“导出为 JSON”：
 
-1. 在写队列里读出当前看板，所有 revision 加偏移（同上），写成 v5 格式的 `board.json`（tmp + rename，替换退休标记）。
-2. 把 `flowly.sqlite` 改名为 `flowly.sqlite.retired-<时间>`，写 `storage-mode.json`。
-3. 本进程立刻改用 JSON 继续工作。用户此后可以装回上一个公开版本（它能直接读这个 board.json），也可以留在新版本里用 JSON。
+1. 在写队列里读出当前看板，所有 revision 加偏移（同上）。
+2. 先写 `storage-mode.json`，再把看板写成 v5 格式的 `board.json`（tmp + rename，替换退休标记）。两步之间中断时，下次启动看到退休标记，就当导出没发生（§6 规则 1）；写完 board.json 后中断，下次启动完成导出。
+3. 把 `flowly.sqlite` 改名为 `flowly.sqlite.retired-<时间>`。改名失败不影响导出：board.json 已是看板，库留着不用。
+4. 本进程立刻改用 JSON 继续工作。用户此后可以装回上一个公开版本（它能直接读这个 board.json），也可以留在新版本里用 JSON。
 
-存储页“切换回 SQLite”：删除 `storage-mode.json` 并立即按 §6 迁移（等同首次迁移，源是当前的 board.json）。
+存储页“切换回 SQLite”：先把残留的库改名，再删除 `storage-mode.json` 并立即按 §6 迁移（等同首次迁移，源是当前的 board.json）。
 
 导出后若有极少数靠 operationId 去重、不带 revision 的建卡请求在 15 分钟有效期内被旧 context 重放，最多会多出一张卡，不会覆盖数据。
 
@@ -144,7 +145,7 @@ RPC：`storage.status`、`storage.backup`、`storage.restore`、`storage.export-
 5. 启动规则：残留 tmp 被删；改名后写标记前中断能补完；DIVERGED、MISSING 不建空库；新安装建空库并写标记；没有 `node:sqlite` 或版本过低时用 JSON。
 6. 第二个进程拿不到 owner 锁时报 BUSY，不退回 JSON。
 7. 备份 → 修改 → 恢复：看板回到备份内容、revision 全部变大、旧 revision 的编辑被拒、恢复前的库被保留；超过 7 份时只删最旧的自有备份。
-8. 导出为 JSON：用旧 reader（`BoardStore` 的 JSON 持久层）读出的看板与导出前相同（revision 除外），旧 revision 的编辑被拒；库被改名保留；切换回 SQLite 后数据一致。
+8. 导出为 JSON：用旧 reader（`BoardStore` 的 JSON 持久层）读出的看板与导出前相同（revision 除外），旧 revision 的编辑被拒；库被改名保留；切换回 SQLite 后数据一致。导出在两次写文件之间中断、或库无法改名时，重启后状态一致。
 9. 在迁移的“改名前”和“改名后、写标记前”两处强杀子进程，重启后都能收敛到完整的旧状态或完整的新状态。
 
 **里程碑独立验收**（合并前，由未写代码的 `claude/claude-haiku-5-5` 会话执行，按 AGENTS.md）：在实现提交上复跑以上检查；用用户本机 Flowly 数据目录的**本地副本**（隔离临时目录，跑完删除，不上传）演练一次迁移、备份、恢复、导出回 JSON，确认与原 board.json 逐值一致；在实际 Paseo Helper 运行时里打开 `node:sqlite` 并完成一次迁移。报告写入 `docs/verification/sqlite-min-2026-10-26/`。

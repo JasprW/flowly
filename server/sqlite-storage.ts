@@ -39,7 +39,7 @@ const DB = "flowly.sqlite",
   MODE = "storage-mode.json",
   KEEP_BACKUPS = 7,
   DAY = 24 * 60 * 60 * 1000;
-const backupName = /^flowly-(\d{8})-(\d{6})(?:-\d+)?\.sqlite$/;
+const backupName = /^flowly-(\d{8})-(\d{6})(?:-(\d+))?\.sqlite$/;
 const SIDE = ["-wal", "-shm", "-journal"];
 
 /** SQLite 3.51.3, or the fixed 3.50.7 / 3.44.6 branches: earlier versions can corrupt a WAL database. */
@@ -319,11 +319,16 @@ export class BoardStorage {
   private async open() {
     this.closeDatabase();
     if (await this.readMode()) {
-      // An export that stopped before retiring the database finishes here (§8).
-      if (await exists(this.path(DB))) await this.retireDatabase("retired");
-      this.releaseOwner();
-      this.state = { kind: "json", reason: "exported" };
-      return;
+      if ((await this.boardFile()).kind === "board") {
+        // An export that stopped before renaming the database aside finishes here (§8).
+        if (await exists(this.path(DB)))
+          await this.retireDatabase("retired").catch((error) => console.error("Flowly storage: renaming the exported database aside failed; it stays unused:", message(error)));
+        this.releaseOwner();
+        this.state = { kind: "json", reason: "exported" };
+        return;
+      }
+      // The export stopped before board.json held the board: it did not happen.
+      await rm(this.path(MODE), { force: true });
     }
     this.sqlite ??= await (this.options.sqlite ?? loadSqlite)();
     const sqlite = this.sqlite;
@@ -437,6 +442,7 @@ export class BoardStorage {
       this.step("migrate:snapshot");
       const db = new sqlite.DatabaseSync(tmp);
       try {
+        await chmod(tmp, 0o600);
         configure(db, "DELETE");
         db.exec(SCHEMA);
         transaction(db, () => {
@@ -448,11 +454,14 @@ export class BoardStorage {
         check(db, "integrity_check");
         // The database must give back exactly the board the existing reader produced.
         if (JSON.stringify(readBoard(db).board) !== JSON.stringify(storageSchema.parse(source))) throw new Error("The new database does not read back the same board.");
+        this.step("migrate:checked");
       } finally {
         db.close();
       }
       await syncFile(tmp);
       this.step("migrate:before-rename");
+      // The commit point: before it board.json is the board, after it flowly.sqlite is.
+      await rename(tmp, this.path(DB));
     } catch (error) {
       await rm(tmp, { force: true });
       this.releaseOwner();
@@ -460,8 +469,7 @@ export class BoardStorage {
       console.error("Flowly storage: moving the board to SQLite failed; staying on board.json:", message(error));
       return;
     }
-    await rename(tmp, this.path(DB));
-    await syncDirectory(this.directory);
+    await syncDirectory(this.directory).catch((error) => console.error("Flowly storage: syncing the data folder failed:", message(error)));
     this.step("migrate:after-rename");
     // From here flowly.sqlite is the board; a failed marker is written again at the next start (§6 rule 5).
     await this.writeMarker().catch((error) => console.error("Flowly storage: writing the board.json marker failed:", message(error)));
@@ -484,6 +492,7 @@ export class BoardStorage {
         throw error;
       }
       await copyFile(this.path(name), join(folder, name));
+      await chmod(join(folder, name), 0o600);
       await syncFile(join(folder, name));
       if (sha256(await readFile(join(folder, name))) !== sha256(bytes)) throw new Error(`The snapshot of ${name} does not match the original.`);
       files[name] = { sha256: sha256(bytes), bytes: bytes.length };
@@ -496,14 +505,16 @@ export class BoardStorage {
 
   async backups() {
     const folder = this.path("backups");
-    const names = (await readdir(folder).catch(() => [] as string[])).filter((n) => backupName.test(n)).sort().reverse();
-    return Promise.all(
+    const names = (await readdir(folder).catch(() => [] as string[])).filter((n) => backupName.test(n));
+    const list = await Promise.all(
       names.map(async (name) => {
-        const [, day, time] = backupName.exec(name)!;
+        const [, day, time, n] = backupName.exec(name)!;
         const when = new Date(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4)}Z`);
-        return { name, at: when.toISOString(), time: when.getTime(), bytes: (await stat(join(folder, name))).size };
+        return { name, at: when.toISOString(), time: when.getTime(), n: Number(n ?? 0), bytes: (await stat(join(folder, name))).size };
       }),
     );
+    // Newest first; within one second the later file has the higher suffix.
+    return list.sort((a, b) => b.time - a.time || b.n - a.n);
   }
   /** Backs up the open database now; returns the file name. */
   async backup() {
@@ -518,6 +529,7 @@ export class BoardStorage {
     await rm(tmp, { force: true });
     try {
       state.board.db.prepare("VACUUM INTO ?").run(tmp);
+      await chmod(tmp, 0o600);
       const copy = new this.sqlite!.DatabaseSync(tmp);
       try {
         check(copy, "quick_check");
@@ -602,6 +614,8 @@ export class BoardStorage {
     }
     if ((await this.boardFile()).kind === "none") await this.writeMarker();
     await this.openDatabase(sqlite);
+    const opened = this.state as State;
+    if (opened.kind === "error") throw new StoreInvalidError(opened.detail, errorCodes[opened.reason], false);
     console.log(`Flowly storage: restored ${name}; the previous database is ${aside ?? "(none)"}.`);
     return { aside };
   }
@@ -635,12 +649,23 @@ export class BoardStorage {
     bumpRevisions(board, 1 + maxRevision(board));
     const parsed = storageSchema.parse(board);
     assertBoardInvariants(parsed);
-    await writeFileAtomic(this.json.path, JSON.stringify(parsed, null, 2));
-    this.step("export:json");
+    // The mode file first: a stop before board.json is written finds the marker and stays on SQLite;
+    // once board.json holds the board, the next start finishes the export (§6 rule 1).
     await writeFileAtomic(this.path(MODE), `${JSON.stringify({ backend: "json", at: this.now().toISOString() })}\n`);
     this.step("export:mode");
+    try {
+      await writeFileAtomic(this.json.path, JSON.stringify(parsed, null, 2));
+    } catch (error) {
+      await rm(this.path(MODE), { force: true });
+      throw error;
+    }
+    this.step("export:json");
     this.closeDatabase();
-    const retired = await this.retireDatabase("retired");
+    // board.json is the board now; a database that cannot be renamed aside is left unused.
+    const retired = await this.retireDatabase("retired").catch((error) => {
+      console.error("Flowly storage: renaming the exported database aside failed; it stays unused:", message(error));
+      return null;
+    });
     this.releaseOwner();
     this.state = { kind: "json", reason: "exported" };
     console.log(`Flowly storage: exported the board to board.json; the database is now ${retired}.`);
@@ -649,6 +674,8 @@ export class BoardStorage {
   /** Leaves JSON after an export: the board moves to SQLite again like the first time. */
   async useSqlite() {
     if (this.state.kind !== "json") throw new Error("The board already uses SQLite.");
+    // A database left behind by an export that could not rename it would block the move as diverged.
+    if (await exists(this.path(DB))) await this.retireDatabase("retired");
     await rm(this.path(MODE), { force: true });
     await this.start();
     // start() replaced the state; the narrowing from the check above no longer holds.

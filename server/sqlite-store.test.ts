@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as sqlite from "node:sqlite";
@@ -95,7 +95,8 @@ describe("moving board.json to SQLite", () => {
     expect(board.events.map((e) => e.id)).toEqual(["e0", "e1", "e2", "e3", "e4", "e1"]);
     const marker = JSON.parse(await readFile(join(d, "board.json"), "utf8"));
     expect(marker).toMatchObject({ version: 0, storage: "sqlite" });
-    // An older Flowly refuses the marker instead of starting with an empty board.
+    // An older Flowly refuses the marker instead of starting with an empty board: its load() runs this same
+    // upgradeBoard (server/migrate.ts is unchanged since 1.6.0) after copying the file to board.pre-v4.json.
     expect(() => upgradeBoard(marker)).toThrow();
     const [run] = await readdir(join(d, "migrations"));
     const manifest = JSON.parse(await readFile(join(d, "migrations", run, "manifest.json"), "utf8"));
@@ -133,6 +134,32 @@ describe("moving board.json to SQLite", () => {
     const next = open(d);
     expect((await next.read()).tasks[0].title).toBe("On JSON");
     expect((await next.storageStatus()).backend).toBe("sqlite");
+  });
+
+  test.each(["migrate:snapshot", "migrate:checked", "migrate:before-rename"])("a move that fails at %s leaves board.json as it was and stays on JSON", async (point) => {
+    const d = await directory();
+    const bytes = await writeBoard(d, fixture());
+    const s = open(d, {
+      step: (name) => {
+        if (name === point) throw new Error(`failed at ${point}`);
+      },
+    });
+    expect(text(await s.read())).toBe(text(await jsonReading(fixture())));
+    expect(await readFile(join(d, "board.json"), "utf8")).toBe(bytes);
+    expect(await missing(join(d, "flowly.sqlite"))).toBe(true);
+    expect(await missing(join(d, "flowly.sqlite.tmp"))).toBe(true);
+    expect(await s.storageStatus()).toMatchObject({ backend: "json", reason: "migration-failed" });
+  });
+
+  test("the snapshot and the backups are readable by the owner only", async () => {
+    const d = await directory();
+    await writeBoard(d, fixture());
+    const s = open(d);
+    await s.read();
+    const [run] = await readdir(join(d, "migrations"));
+    const [backup] = (await s.storageStatus()).backups;
+    for (const file of [join(d, "migrations", run, "board.json"), join(d, "backups", backup.name), join(d, "flowly.sqlite")])
+      expect((await stat(file)).mode & 0o777).toBe(0o600);
   });
 
   test("an unreadable board.json is not moved and fails as before", async () => {
@@ -217,6 +244,24 @@ describe("start-up rules", () => {
     await open(d).read();
     const old = open(d, { sqlite: async () => null });
     await expect(old.read()).rejects.toMatchObject({ code: "STORAGE_UNSUPPORTED" });
+  });
+
+  test("on a SQLite version with the WAL bug the board stays on JSON, and a moved board is refused", async () => {
+    class OldSqlite extends sqlite.DatabaseSync {
+      prepare(sql: string) {
+        return sql.includes("sqlite_version") ? ({ get: () => ({ v: "3.50.4" }) } as unknown as ReturnType<sqlite.DatabaseSync["prepare"]>) : super.prepare(sql);
+      }
+    }
+    const old = async () => ({ ...sqlite, DatabaseSync: OldSqlite }) as unknown as typeof sqlite;
+    const d = await directory();
+    await writeBoard(d, fixture());
+    const plain = open(d, { sqlite: old, checkVersion: true });
+    expect((await plain.read()).tasks).toHaveLength(2);
+    expect(await plain.storageStatus()).toMatchObject({ backend: "json", reason: "unsupported", detail: expect.stringContaining("3.50.4") });
+    expect(await missing(join(d, "flowly.sqlite"))).toBe(true);
+    await plain.close();
+    await open(d).read();
+    await expect(open(d, { sqlite: old, checkVersion: true }).read()).rejects.toMatchObject({ code: "STORAGE_UNSUPPORTED" });
   });
 
   test("SQLite versions with the WAL reset bug are refused", () => {
@@ -373,6 +418,61 @@ describe("backups, restore and the way back to JSON", () => {
     expect(names).toHaveLength(7);
     expect(names[0]).toBe("flowly-20261027-000107.sqlite");
     expect(await readFile(join(d, "backups", "mine.sqlite"), "utf8")).toBe("not Flowly's");
+  });
+
+  test("backups made within one second keep their order, so the newest seven stay", async () => {
+    const d = await directory();
+    await writeBoard(d, fixture());
+    const s = open(d, { now: () => new Date("2026-10-26T00:00:00Z") });
+    await s.read();
+    const made = [];
+    for (let i = 0; i < 7; i++) made.push(await s.backupStorage());
+    const names = (await s.storageStatus()).backups.map((b) => b.name);
+    expect(names).toEqual([...made].reverse());
+    expect(names).not.toContain("flowly-20261026-000000.sqlite");
+  });
+
+  test.each(["export:mode", "export:json"])("an export stopped after %s restarts in a consistent state", async (point) => {
+    const d = await directory();
+    await writeBoard(d, fixture());
+    const s = open(d, {
+      step: (name) => {
+        if (name === point) throw new Error("killed");
+      },
+    });
+    const before = await s.read();
+    await expect(s.exportStorage()).rejects.toThrow("killed");
+    await s.close();
+    const next = open(d);
+    const after = await next.read();
+    if (point === "export:mode") {
+      // board.json was never written: the export did not happen.
+      expect(text(after)).toBe(text(before));
+      expect((await next.storageStatus()).backend).toBe("sqlite");
+      expect(await missing(join(d, "storage-mode.json"))).toBe(true);
+    } else {
+      // board.json already held the board: the export is finished.
+      expect(content(after)).toBe(content(before));
+      expect(await next.storageStatus()).toMatchObject({ backend: "json", reason: "exported" });
+      expect(await missing(join(d, "flowly.sqlite"))).toBe(true);
+    }
+  });
+
+  test("an export whose database cannot be renamed aside still switches to JSON, and SQLite can come back", async () => {
+    let now = Date.parse("2026-10-26T00:00:00Z");
+    const d = await directory();
+    await writeBoard(d, fixture());
+    const s = open(d, { now: () => new Date(now) });
+    const before = await s.read();
+    // A folder already holds the retired name.
+    await mkdir(join(d, "flowly.sqlite.retired-20261026-000000", "taken"), { recursive: true });
+    expect(await s.exportStorage()).toEqual({ retired: null });
+    expect(await s.storageStatus()).toMatchObject({ backend: "json", reason: "exported" });
+    expect(content(await s.read())).toBe(content(before));
+    now += 1000;
+    await s.useSqliteStorage();
+    expect((await s.storageStatus()).backend).toBe("sqlite");
+    expect(content(await s.read())).toBe(content(before));
   });
 
   test("export writes a board.json older versions read, retires the database, and SQLite can come back", async () => {
