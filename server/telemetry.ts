@@ -282,7 +282,8 @@ export class TelemetryService {
       if (stored?.windowStart) await this.file.write({ ...stored, windowStart: "" });
       return "off";
     }
-    const state: TelemetryState = stored ?? { installId: randomUUID(), lastSentAt: "", windowStart: new Date(now - DAY).toISOString() };
+    // A copy, so the comparison below sees whether the window start changed.
+    const state: TelemetryState = stored ? { ...stored } : { installId: randomUUID(), lastSentAt: "", windowStart: new Date(now - DAY).toISOString() };
     if (!state.windowStart) state.windowStart = new Date(now).toISOString();
     if (!stored || stored.windowStart !== state.windowStart) await this.file.write(state);
     const last = Date.parse(state.lastSentAt);

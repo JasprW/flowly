@@ -113,6 +113,23 @@ test("§9-3: off sends nothing; turning it back on keeps the install id", async 
   expect(calls[1].body.distinct_id).toBe(id);
 });
 
+test("turning it back on starts the window then, and keeps that start across checks that do not send", async () => {
+  let now = NOW;
+  const root = await dir();
+  const { service, setEnabled } = harness(root, { now: () => now });
+  await service.check();
+  setEnabled(false);
+  now += HOUR;
+  await service.check();
+  setEnabled(true);
+  now += HOUR;
+  const reEnabledAt = new Date(now).toISOString();
+  expect(await service.check()).toBe("not-due");
+  now += HOUR;
+  expect(await service.check()).toBe("not-due");
+  expect(JSON.parse(await readFile(join(root, "telemetry.json"), "utf8")).windowStart).toBe(reEnabledAt);
+});
+
 test("§9-4: DO_NOT_TRACK, FLOWLY_TELEMETRY=0 and NODE_ENV=test send nothing", async () => {
   for (const env of [{ DO_NOT_TRACK: "1" }, { FLOWLY_TELEMETRY: "0" }, { FLOWLY_TELEMETRY: "off" }, { NODE_ENV: "test" }]) {
     const { service, calls } = harness(await dir(), { env });
