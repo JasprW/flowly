@@ -459,7 +459,7 @@ function SkillRow({
         style={(state) => ({
           ...noFocusRing,
           flexDirection: "row",
-          alignItems: "center",
+          alignItems: "flex-start",
           gap: space[2],
           paddingVertical: space[2],
           paddingHorizontal: space[3],
@@ -467,26 +467,26 @@ function SkillRow({
           backgroundColor: (state as { hovered?: boolean }).hovered ? colors.surface2 : "transparent",
         })}
       >
-        <TurnChevron open={open} size={14} color={colors.foregroundMuted} />
-        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "baseline", gap: space[1.5] }}>
+        <View style={{ height: 22, justifyContent: "center" }}>
+          <TurnChevron open={open} size={14} color={colors.foregroundMuted} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Label mono medium size={font.md} lines={1} selectable={false}>
             {name}
           </Label>
           {!!draft && (
-            <View style={{ flexShrink: 1 }}>
-              <Label size={font.md} lines={open ? undefined : 1} selectable={false}>
-                {draft.title}
-              </Label>
-            </View>
+            <Label muted size={font.sm} lines={open ? undefined : 1} selectable={false}>
+              {draft.title}
+            </Label>
           )}
         </View>
         {draft ? (
-          <>
+          <View style={{ alignItems: "flex-end", gap: 2 }}>
             {chip(update ? t("Update") : t("New"))}
             <Label muted size={font.xs} selectable={false}>
               {update ? t("In the project") : tn(draft.cards.length, "{n} card", "{n} cards")}
             </Label>
-          </>
+          </View>
         ) : (
           <Label muted size={font.xs} selectable={false}>
             {t("In the project")}
@@ -581,7 +581,7 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
   };
   const openCount = active.filter((f) => f.status === "open").length;
   return (
-    <Disclosure title={t("Other suggestions")} titleMinWidth={FOLDED_TITLE_WIDTH} summary={tn(openCount, "Scripts, repo tools, AGENTS.md · {n} open", "Scripts, repo tools, AGENTS.md · {n} open")} open={open} onChange={setOpen}>
+    <Disclosure title={t("Other suggestions")} flush titleMinWidth={FOLDED_TITLE_WIDTH} summary={tn(openCount, "Scripts, repo tools, AGENTS.md · {n} open", "Scripts, repo tools, AGENTS.md · {n} open")} open={open} onChange={setOpen}>
       <View style={{ gap: space[2], paddingTop: space[1] }}>
         {!!failed && <Empty>{failed}</Empty>}
         {active.length > 0 && (
@@ -592,7 +592,7 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
           </Panel>
         )}
         {dismissed.length > 0 && (
-          <Disclosure title={t("Dismissed ({n})", { n: dismissed.length })} open={showDismissed} onChange={setShowDismissed}>
+          <Disclosure title={t("Dismissed ({n})", { n: dismissed.length })} flush open={showDismissed} onChange={setShowDismissed}>
             <Panel>
               {dismissed.map((f, i) => (
                 <FindingRow key={f.id} first={i === 0} finding={f} titleOf={titleOf} onOpenTask={onOpenTask} onRestore={() => void change(f, "open")} />
@@ -622,7 +622,7 @@ function WorkflowNumbers({ projectId, flow, active }: { projectId: string; flow:
           .filter(Boolean)
           .join(" · ");
   return (
-    <Disclosure title={t("Workflow")} titleMinWidth={FOLDED_TITLE_WIDTH} summary={summary} open={open} onChange={setOpen}>
+    <Disclosure title={t("Workflow")} flush titleMinWidth={FOLDED_TITLE_WIDTH} summary={summary} open={open} onChange={setOpen}>
       {flow.models.length > 0 ? (
         <View style={{ paddingTop: space[1] }}>
           <Panel>

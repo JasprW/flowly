@@ -33,3 +33,6 @@ Branch `feat/insights-v3` rebased onto `origin/main` a0cbe68 (after the SQLite m
 
 ## Folded rows aligned (same day, after the user's style note)
 Other suggestions and Workflow summaries started at different left edges (each was right-aligned in a half-width box). Both rows now share a title column (`Disclosure` `titleMinWidth`, 150), so the summaries start at one left edge; the Workflow summary no longer truncates on desktop and truncates to one line on compact. Images: `live-desktop-light-folded-aligned.png`, `live-compact-light-folded-aligned.png`. `npm run typecheck` 0 errors; `npm test` 134 files, 1123 passed, 1 skipped (on the commit below, dirty before commit).
+
+## Lists flush, skill rows restacked (same day, second style note)
+The bodies of Other suggestions, Workflow and Dismissed were indented 22 px, so their lists did not line up with the Skills list; they now start at the page's left edge (`Disclosure` `flush`). A skill row is two lines (name in monospace, its title under it in muted text), status chip and card count stacked on the right, chevron aligned with the name. Images: `live-desktop-light-lists-flush.png`, `live-desktop-light-skill-row.png`. `npm run typecheck` 0 errors; `npm test` 134 files passed.
