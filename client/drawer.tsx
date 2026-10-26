@@ -183,11 +183,11 @@ function TaskDrawerView({
       {},
     );
   // The retained compact root is paused; visible card props still need remote edits/deletions.
-  const pollBoard = drawerNeedsBoard(compact, active, selected);
+  const pollBoard = drawerNeedsBoard(active, selected);
   // Only keep the shared poll alive. The root/data readers deliver changed props;
   // fetching flags must not re-render this entire retained detail tree.
   const detailState = useTaskDetail();
-  useCardDetailQuery(hostId, task.id, task.workspaceId, detailState.native && pollBoard, pollBoard ? 3000 : undefined, true);
+  useCardDetailQuery(hostId, task.id, task.workspaceId, pollBoard, pollBoard ? 3000 : undefined, true);
   const lock = useRef(false);
   const order = useMemo(() => drawerSectionOrder(sectionOrder ? sectionOrder.split(",") : []), [sectionOrder]);
   // Which sections are open: the user's defaults each time the sidebar opens, then their own toggles.

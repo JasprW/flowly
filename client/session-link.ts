@@ -63,7 +63,8 @@ export function parseSessionLink(
     );
   return result.data;
 }
-const ideaLinkSchema = z.object({ ideaId: id, requestId: id });
+/** projectId: the idea's project, so the board reads only its ideas; links from before it name none. */
+const ideaLinkSchema = z.object({ ideaId: id, projectId: id.optional(), requestId: id });
 export type IdeaLink = z.infer<typeof ideaLinkSchema>;
 /** "Start a new task" from the native Ideas chip: open Flowly's new-card form for this idea (NATIVE-SESSION-SPEC §7.3). */
 export function parseIdeaLink(params?: PluginScreenParams): IdeaLink | null {
@@ -89,37 +90,6 @@ async function step<T>(label: string, run: () => Promise<T> | T): Promise<T> {
     const text = error instanceof Error ? error.message : String(error);
     throw new Error(`${label}: ${text}`);
   }
-}
-
-export async function resolveSessionLink(
-  paseo: PaseoApi,
-  read: () => Promise<LinkBoard>,
-  link: CardSessionLink,
-) {
-  const [board, snapshot] = await Promise.all([
-    step(t("Kanban board read failed"), read),
-    step(t("Session lookup failed"), () => paseo.agents.ref(link.sessionId).refresh()),
-  ]);
-  const task = board?.tasks?.find(
-    (t) => t.id === link.taskId && t.workspaceId === link.workspaceId,
-  );
-  const project = task
-    ? board.projects?.find((p) => p.id === task.projectId)
-    : undefined;
-  const actor = snapshot?.agent;
-  if (!task || !project)
-    throw new Error(
-      t("This session's linked card is unavailable. Refresh the session chip or open Flowly."),
-    );
-  if (
-    !actor ||
-    actor.id !== link.sessionId ||
-    actor.workspaceId !== task.workspaceId
-  )
-    throw new Error(
-      t("This session is unavailable or its workspace changed. Refresh the session chip."),
-    );
-  return { board, detail: undefined, task, project, actor, link };
 }
 
 /** Native navigation authorizes a fresh detail scope and the exact native session. */

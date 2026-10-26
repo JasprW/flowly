@@ -1,5 +1,13 @@
 # Implementation progress
 
+## Loading R2: no whole-board reads — 2026-10-26
+
+- User decision 2026-10-26: every layout reads the overview plus card detail; no switch back to the whole board and no user option. The maintainer uses it first and fixes what shows up. [Spec](LOADING-R2-SPEC.md)
+- Client no longer calls `board.read-changed`: the wide board polls the overview, the drawer reads card detail, Ideas read the project's ideas, the task form reads the project card index (new `externals`), the connection editor reads `linkedCards` from `connectors.connections`, the Next moves and Ideas actions read only their card or project, idea links carry `projectId`. Server handler kept for older clients.
+- Parity on a copy of the maintainer's data (107 cards, 4552 events, 118 sessions in 5 attention states each, finished-card cutoffs from 6 h to 30 days): overview facts equal the old whole-board derivations (`docs/verification/loading-r2-2026-10-26/parity.test.ts`). It catches 3 of 4 injected server bugs; the 4th (`hadTurnEnd`) is invisible on this data because every session has a turn end.
+- Before (installed build, wide 1700×1000, Flowly project): first card about 600 ms, about 5.3 MB received in the first 10 s (`timing-before.json`). After: not measured yet; another session's install was active.
+- Onboarding: no tour, tip or What's new change; nothing new to point at, the board only loads less.
+
 ## Anonymous usage data (telemetry) — 2026-10-26
 
 - User decisions 2026-10-26: PostHog Cloud EU over its capture HTTP API (no SDK), one daily heartbeat, whitelisted fields, on by default and sent before the user has seen the notice, off stops everything, no preview or reset ID, `ui_locale` instead of GeoIP. [Spec](TELEMETRY-SPEC.md).

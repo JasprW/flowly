@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Linking, View } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
@@ -12,7 +12,6 @@ import {
   familyProviders,
   itemTypeOf,
   providerInfo,
-  recognizeUrl,
   type Connection,
   type ConnectorFamily,
   type ConnectorProvider,
@@ -22,7 +21,7 @@ import {
 import { boardViewSettings, boardViewValues } from "../shared/settings";
 import { Modal } from "./modal";
 import { SessionMarkdown } from "./session-content";
-import { boardKey, useBoardQuery } from "./queries";
+import { boardKey } from "./queries";
 import { useStableCallback } from "./stable";
 import { SettingRow, SettingsGroup, SettingsPage } from "./settings-ui";
 import { Actions, Badge, Button, Choices, Field, IconButton, Label, Notice, Row, Theme, font, message, radius, relativeTime, space, useTheme } from "./ui";
@@ -516,18 +515,10 @@ function ConnectionEditor({ family, connection, onClose }: { family: ConnectorFa
   const save = useRpc(rpc.saveConnection);
   const remove = useRpc(rpc.deleteConnection);
   const check = useRpc(rpc.testConnection);
-  const board = useBoardQuery();
-  // Cards whose inputs read through this connection (or its service), for the removal warning.
-  const linkedCards = useMemo(() => {
-    if (!connection) return 0;
-    const cards = new Set<string>();
-    for (const a of board.data?.artifacts || []) {
-      if (!a.external) continue;
-      const found = a.external.connectionId === connection.id || (familyOf(a.external.provider) === family && recognizeUrl(a.target, connection));
-      if (found) cards.add(a.taskId);
-    }
-    return cards.size;
-  }, [board.data?.artifacts, connection, family]);
+  // Cards whose inputs read through this connection (or its service), for the removal warning; counted by the daemon.
+  const listed = useConnections();
+  useEffect(() => void listed.refetch(), []);
+  const linkedCards = (connection && listed.data?.linkedCards[connection.id]) || 0;
   const providers = familyProviders(family);
   const [provider, setProvider] = useState<ConnectorProvider>(connection?.provider ?? providers[0]!);
   const info = providerInfo[provider];

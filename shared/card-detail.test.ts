@@ -32,3 +32,14 @@ test("deleted/rebound task or absent project rejects; archived scopes remain dis
   for (const board of [{ ...b, tasks: [] }, { ...b, projects: [] }, { ...b, tasks: b.tasks.map(t => ({ ...t, workspaceId: "moved" })) }]) expect(() => cardDetail(board, input)).toThrow("unavailable");
   b.tasks[0].archivedAt = at; expect(cardDetail(b, input).task.archivedAt).toBe(at);
 });
+test("the card index lists the external items on this project's cards only", () => {
+  const board = fixture(), art = { role: "input", kind: "url", title: "PR", note: "", createdBy: "human", createdAt: at, updatedAt: at } as const;
+  const external = { connectionId: "c1", provider: "github", key: "o/r#5", remoteId: "5", itemType: "pull" } as const;
+  board.projects.push({ ...p, id: "q" }); board.tasks.push({ ...board.tasks[0], id: "elsewhere", projectId: "q", workspaceId: "w9" });
+  board.artifacts.push(
+    { ...art, id: "a1", taskId: "linked", projectId: "p", target: "https://github.com/o/r/pull/5", external },
+    { ...art, id: "a2", taskId: "t", projectId: "p", target: "https://example.com/plain" },
+    { ...art, id: "a3", taskId: "elsewhere", projectId: "q", target: "https://github.com/o/r/pull/6", external: { ...external, key: "o/r#6" } },
+  );
+  expect(projectCardIndex(board, "p").externals).toEqual([{ taskId: "linked", provider: "github", key: "o/r#5" }]);
+});

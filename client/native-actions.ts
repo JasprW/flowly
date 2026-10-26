@@ -6,22 +6,21 @@ import { t } from "../shared/i18n";
 
 /**
  * What the native Next moves card and Ideas popover do (NATIVE-SESSION-SPEC §6.4, §7.3).
- * Every action re-reads the board first and refuses when what the user saw is
- * no longer current; it never acts on a different suggestion, idea or card.
+ * Every action re-reads its card or project first (never the whole board, LOADING-R2-SPEC §2B) and
+ * refuses when what the user saw is no longer current; it never acts on a different suggestion, idea or card.
  */
 type Client = Pick<PluginClientContext, "rpc" | "paseo" | "openScreen">;
 
-async function freshCard(client: Client, taskId: string) {
-  const board = await client.rpc(rpc.readBoard, {});
-  const task = board.tasks.find((x) => x.id === taskId);
-  if (!task || task.archivedAt) throw new Error(t("This card is unavailable. Open Flowly to check it."));
-  return { board, task };
+async function freshCard(client: Client, input: { taskId: string; workspaceId: string }) {
+  const detail = await client.rpc(rpc.readCardDetailChanged, { taskId: input.taskId, workspaceId: input.workspaceId }).then((r) => r.value, () => undefined);
+  if (!detail || detail.task.archivedAt) throw new Error(t("This card is unavailable. Open Flowly to check it."));
+  return detail;
 }
 
 /** The "Move to Done" suggestion, while it is still current: the card's fresh revision, like a drag to Done. */
-export async function moveToDone(client: Client, input: { taskId: string; agentId: string; eventId: string }) {
-  const { board, task } = await freshCard(client, input.taskId);
-  if (openNextMoves(board.events, input.agentId)?.id !== input.eventId)
+export async function moveToDone(client: Client, input: { taskId: string; workspaceId: string; agentId: string; eventId: string }) {
+  const { events, task } = await freshCard(client, input);
+  if (openNextMoves(events, input.agentId)?.id !== input.eventId)
     throw new Error(t("This suggestion is no longer current."));
   if (task.status === "done" || task.status === "cancelled") throw new Error(t("This card is already finished."));
   return client.rpc(rpc.updateTask, { id: task.id, revision: task.revision, status: "done" });
@@ -47,27 +46,27 @@ export async function wrapupNow(client: Client, input: { taskId: string }): Prom
   return "done";
 }
 
-async function openIdea(client: Client, ideaId: string) {
-  const board = await client.rpc(rpc.readBoard, {});
-  const idea = board.ideas.find((i) => i.id === ideaId);
+async function openIdea(client: Client, input: { ideaId: string; projectId: string }) {
+  const ideas = await client.rpc(rpc.readProjectIdeasChanged, { projectId: input.projectId }).then((r) => r.value?.ideas ?? [], () => []);
+  const idea = ideas.find((i) => i.id === input.ideaId);
   if (!idea || idea.status !== "open") throw new Error(t("This idea is no longer open."));
   return idea;
 }
 
 /** "Continue here": IDEAS-SPEC §6.2 unchanged (the daemon writes and sends the instruction). */
-export async function continueIdea(client: Client, input: { ideaId: string; agentId: string }) {
-  await openIdea(client, input.ideaId);
+export async function continueIdea(client: Client, input: { ideaId: string; projectId: string; agentId: string }) {
+  await openIdea(client, input);
   return client.rpc(rpc.adoptIdea, { id: input.ideaId, agentId: input.agentId });
 }
 
-export async function dismissIdea(client: Client, input: { ideaId: string }) {
-  await openIdea(client, input.ideaId);
+export async function dismissIdea(client: Client, input: { ideaId: string; projectId: string }) {
+  await openIdea(client, input);
   return client.rpc(rpc.updateIdea, { id: input.ideaId, status: "dismissed" });
 }
 
 /** "New card": Flowly's new-card form prefilled from the idea (the board validates the link). */
-export function newCardFromIdea(client: Client, input: { ideaId: string }) {
-  client.openScreen({ screenId: "board", params: { ideaId: input.ideaId, requestId: chipRequestId() } });
+export function newCardFromIdea(client: Client, input: { ideaId: string; projectId: string }) {
+  client.openScreen({ screenId: "board", params: { ideaId: input.ideaId, projectId: input.projectId, requestId: chipRequestId() } });
 }
 
 /** "Open in Flowly" from the popover: the card's overview, as the Task chip opens it. */

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { attentionDismissalSchema } from "./attention-dismiss";
 import { artifactSchema, boardSchema, eventSchema, ideaSchema, linkSchema, planSnapshotSchema, projectSchema, taskSchema, workpadSchema } from "./model";
 import { projectTagStats } from "./tags";
+import { connectorProviderSchema } from "./connectors";
 
 export const cardReferenceSchema = taskSchema.pick({ id: true, projectId: true, title: true, status: true, archivedAt: true, position: true, type: true, priority: true, workspaceId: true });
 export type CardReference = z.infer<typeof cardReferenceSchema>;
@@ -15,6 +16,8 @@ export type CardDetail = z.infer<typeof cardDetailSchema>;
 export const projectCardIndexSchema = z.strictObject({
   version: z.literal(1), projectId: z.string(), revision: z.number().int().nonnegative(), cards: z.array(cardReferenceSchema),
   tags: z.array(z.strictObject({ tag: z.string(), count: z.number().int().nonnegative(), lastUsedAt: z.string() })),
+  /** Tickets, pages and PRs already on this project's cards, so a form can say which card uses one (LOADING-R2-SPEC §2B). */
+  externals: z.array(z.strictObject({ taskId: z.string(), provider: connectorProviderSchema, key: z.string() })),
 });
 export type ProjectCardIndex = z.infer<typeof projectCardIndexSchema>;
 export const projectIdeasSchema = z.strictObject({ version: z.literal(1), projectId: z.string(), revision: z.number().int().nonnegative(), ideas: z.array(ideaSchema) });
@@ -38,7 +41,9 @@ export function cardDetail(board: Board, input: { taskId: string; workspaceId: s
 }
 export function projectCardIndex(board: Board, projectId: string): ProjectCardIndex {
   if (!board.projects.some(p => p.id === projectId)) throw new Error("Project is unavailable.");
-  return { version: 1, projectId, revision: board.revision, cards: board.tasks.filter(t => t.projectId === projectId).map(cardReference), tags: projectTagStats(board.tasks, projectId) };
+  const cards = board.tasks.filter(t => t.projectId === projectId), ids = new Set(cards.map(t => t.id));
+  const externals = board.artifacts.flatMap(a => a.external && ids.has(a.taskId) ? [{ taskId: a.taskId, provider: a.external.provider, key: a.external.key }] : []);
+  return { version: 1, projectId, revision: board.revision, cards: cards.map(cardReference), tags: projectTagStats(board.tasks, projectId), externals };
 }
 export function projectIdeas(board: Board, projectId: string): ProjectIdeas {
   if (!board.projects.some(p => p.id === projectId)) throw new Error("Project is unavailable.");

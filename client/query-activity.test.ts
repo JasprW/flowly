@@ -12,15 +12,12 @@ test("compact retained board pauses for drawer, page and task form; wide remains
   expect(boardIsActive(false, "t", "memory", true)).toBe(true);
 });
 
-test("visible compact detail replaces its paused root; wide layouts never acquire a second poller", () => {
-  for (const compact of [false, true]) {
-    const root = boardIsActive(compact, "t", null, false);
-    const drawer = drawerNeedsBoard(compact, true, "");
-    expect(Number(root) + Number(drawer)).toBe(1);
-  }
-  expect(drawerNeedsBoard(true, false, "")).toBe(false);
-  expect(drawerNeedsBoard(true, true, "session")).toBe(false);
-  expect(drawerNeedsBoard(false, true, "")).toBe(false);
+test("an open card polls its own detail in every layout; a compact root pauses under it, a wide root keeps its overview", () => {
+  expect(drawerNeedsBoard(true, "")).toBe(true);
+  expect(boardIsActive(true, "t", null, false)).toBe(false);
+  expect(boardIsActive(false, "t", null, false)).toBe(true);
+  expect(drawerNeedsBoard(false, "")).toBe(false);
+  expect(drawerNeedsBoard(true, "session")).toBe(false);
 });
 
 test("disabled observers neither start nor refetch on invalidation, but explicit fresh reads and re-enable work", async () => {

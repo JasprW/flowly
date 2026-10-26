@@ -8,7 +8,8 @@ import { useSettled } from "./motion";
 import { perfLap } from "./perf";
 import { Modal } from "./modal";
 import { usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
-import { useBoardQuery, useResourcesQuery } from "./queries";
+import { useResourcesQuery } from "./queries";
+import { useProjectIndexQuery } from "./card-detail-query";
 import * as rpc from "../shared/rpc";
 import {
   priorities,
@@ -32,7 +33,7 @@ import { ImageAttachments, useImageAttachments } from "./image-attach";
 import { newMessageId, rememberSentImages } from "./sent-images";
 import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
-import { projectTagStats, tagValues } from "../shared/tags";
+import { tagValues } from "../shared/tags";
 import { TagEditor } from "./tag-input";
 import { useStableCallback } from "./stable";
 import { ExternalChip, ExternalPicker, connectionsByFamily, familyNames, pickKey, useConnections } from "./connectors";
@@ -416,6 +417,8 @@ export type TaskSeed = {
 };
 
 export function TaskForm({
+  hostId,
+  boardTasks,
   project,
   task: initialTask,
   seed,
@@ -424,6 +427,9 @@ export function TaskForm({
   onSaved,
   agentDefaults,
 }: {
+  hostId: string;
+  /** Every card the board knows (its overview), for workspaces already bound in other projects. */
+  boardTasks: readonly Task[];
   project: Project;
   task?: Task;
   seed?: TaskSeed;
@@ -443,7 +449,8 @@ export function TaskForm({
   useEffect(() => {
     if (ready) perfLap("task-form.open", "task-form.open.settled", true);
   }, [ready]);
-  const board = useBoardQuery({ enabled: ready });
+  // This project's cards, tags and external items; never the whole board (LOADING-R2-SPEC §2B).
+  const index = useProjectIndexQuery(hostId, project.id, ready);
   const [title, setTitle] = useState(task?.title || seed?.title || ""),
     [description, setDescription] = useState(task?.description || seed?.description || ""),
     [status, setStatus] = useState<Status>(task?.status || startStatus(project, defaultStatus)),
@@ -481,11 +488,11 @@ export function TaskForm({
   // Items other cards of this project already reference (shown, still choosable).
   const externalUse = useMemo(() => {
     const used = new Map<string, string>();
-    const titles = new Map((board.data?.tasks || []).filter((x) => x.projectId === project.id && !x.archivedAt).map((x) => [x.id, x.title]));
-    for (const a of board.data?.artifacts || [])
-      if (a.external && titles.has(a.taskId)) used.set(pickKey(familyOf(a.external.provider), a.external.key), titles.get(a.taskId)!);
+    const titles = new Map((index.data?.cards || []).filter((x) => !x.archivedAt).map((x) => [x.id, x.title]));
+    for (const x of index.data?.externals || [])
+      if (titles.has(x.taskId)) used.set(pickKey(familyOf(x.provider), x.key), titles.get(x.taskId)!);
     return used;
-  }, [board.data?.tasks, board.data?.artifacts, project.id]);
+  }, [index.data]);
   const [operationId] = useState(
     () => `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
@@ -515,10 +522,7 @@ export function TaskForm({
   const eligible = (resources.data?.workspaces || []).filter((w) =>
     w.repoPaths.includes(project.primaryPath),
   );
-  const suggestions = useMemo(
-    () => projectTagStats(board.data?.tasks || [], project.id).map((s) => s.tag),
-    [board.data?.tasks, project.id],
-  );
+  const suggestions = useMemo(() => (index.data?.tags || []).map((s) => s.tag), [index.data]);
   const agentTags = useMemo(
     () => new Set((task?.tags || []).filter((x) => x.by === "agent").map((x) => x.tag)),
     [task],
@@ -725,9 +729,7 @@ export function TaskForm({
                         }}
                       >
                         {eligible.map((w) => {
-                          const bound = !!board.data?.tasks.some(
-                            (t) => t.workspaceId === w.id,
-                          );
+                          const bound = boardTasks.some((t) => t.workspaceId === w.id) || !!index.data?.cards.some((t) => t.workspaceId === w.id);
                           return (
                             <Row
                               key={w.id}

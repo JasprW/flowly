@@ -37,9 +37,6 @@ export async function readOverviewDelta(read: OverviewRead, cached: BoardOvervie
 }
 
 /** Common metadata can display a newer full read; projection never replaces full data. */
-export function preferOverviewMetadata<T extends { revision: number }>(overview: BoardOverview | undefined, complete: T | undefined) {
-  return overview && (!complete || overview.revision > complete.revision) ? overview : complete;
-}
 
 /** Metadata may still use a warm complete read after switching to compact layout. */
 export function projectOpenIdeaCount(board: BoardOverview | Board | undefined, projectId: string | undefined) {

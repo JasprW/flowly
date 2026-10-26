@@ -355,6 +355,21 @@ export function recognizeUrl(
   return gitlabFromUrl(value, connection.baseUrl);
 }
 
+/** Per connection: the cards with an input that reads through it, by connection id or by a URL it recognizes. */
+export function linkedCardCounts(
+  connections: readonly Connection[],
+  artifacts: readonly { taskId: string; target: string; external?: Pick<ExternalRef, "connectionId" | "provider"> }[],
+): Record<string, number> {
+  return Object.fromEntries(
+    connections.map((c) => {
+      const cards = new Set<string>();
+      for (const a of artifacts)
+        if (a.external && (a.external.connectionId === c.id || (familyOf(a.external.provider) === familyOf(c.provider) && recognizeUrl(a.target, c)))) cards.add(a.taskId);
+      return [c.id, cards.size];
+    }),
+  );
+}
+
 /** A bare key in the syntax of `provider`: SHOPSR-1, a page id, owner/repo#12, group/proj!34. */
 export function parseKey(value: string, provider: ConnectorProvider): { itemType: ItemType; key: string } | null {
   const family = familyOf(provider);

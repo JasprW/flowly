@@ -9,6 +9,7 @@ import {
   itemLabel,
   itemUrl,
   jqlKeys,
+  linkedCardCounts,
   keyFromUrl,
   normalizeBaseUrl,
   numberCandidates,
@@ -210,4 +211,16 @@ describe("Azure DevOps keys and links", () => {
     expect(itemLabel("azure-devops", "issue")).toBe("Azure DevOps work item");
     expect(externalTarget("AB#12", [az])).toMatchObject({ connectionId: "az", key: "AB#12" });
   });
+});
+
+test("linkedCardCounts counts each card once per connection, by connection id or a URL the connection recognizes", () => {
+  const conn = (id: string, provider: "github" | "jira-dc", baseUrl: string) => ({ id, provider, name: id, baseUrl, account: "", verifiedAt: "", authFailed: false });
+  const gh = conn("gh", "github", "https://github.com"), jira = conn("jira", "jira-dc", "https://jira.example.com");
+  const ext = { connectionId: "gh", provider: "github" } as const;
+  expect(linkedCardCounts([gh, jira], [
+    { taskId: "a", target: "https://github.com/o/r/pull/1", external: ext },
+    { taskId: "a", target: "https://github.com/o/r/pull/2", external: ext },
+    { taskId: "b", target: "https://github.com/o/r/issues/3", external: { connectionId: "removed", provider: "github" } },
+    { taskId: "c", target: "https://github.com/o/r/pull/4" },
+  ])).toEqual({ gh: 2, jira: 0 });
 });

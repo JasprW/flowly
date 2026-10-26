@@ -7,7 +7,7 @@ export function boardIsActive(compact: boolean, taskId: string, page: string | n
   return !compact || (!taskId && !page && !formOpen);
 }
 
-/** Wide roots already poll. A compact detail replaces its paused root. */
-export function drawerNeedsBoard(compact: boolean, active: boolean, selected: string) {
-  return compact && active && !selected;
+/** The open card polls its own detail in every layout: the board root reads only the overview (LOADING-R2-SPEC §2A). */
+export function drawerNeedsBoard(active: boolean, selected: string) {
+  return active && !selected;
 }

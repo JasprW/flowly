@@ -1,0 +1,1 @@
+{"label":"before","build":"installed plugin from feat/insights-v3 (contains main 7f82d0b; same wide read path as main: board.read-changed)","project":"Flowly (93 cards)","viewport":"1700x1000","browser":"Google Chrome via PLAYWRIGHT_CHROMIUM_PATH","runs":[{"firstCardMs":577,"receivedKB10s":5356},{"firstCardMs":605,"receivedKB10s":5355},{"firstCardMs":605,"receivedKB10s":5478}]}

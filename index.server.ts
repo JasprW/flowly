@@ -31,6 +31,7 @@ import { ArtifactService } from "./server/artifacts";
 import { WorkpadService } from "./server/workpad";
 import { ConnectorService, migrateTicketDirectory, refKey } from "./server/connectors/service";
 import { projectRepos } from "./server/connectors/repos";
+import { linkedCardCounts } from "./shared/connectors";
 import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
 import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./server/progress-rules";
@@ -446,7 +447,10 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.deleteLink, (input) => deleteLink(store, input));
   const artifacts = new ArtifactService(store, connectors);
   const workpads = new WorkpadService(store);
-  server.handle(rpc.listConnections, async () => ({ connections: await connectors.list() }));
+  server.handle(rpc.listConnections, async () => {
+    const [connections, board] = await Promise.all([connectors.list(), store.read()]);
+    return { connections, linkedCards: linkedCardCounts(connections, board.artifacts) };
+  });
   server.handle(rpc.saveConnection, (input) => connectors.save(input));
   server.handle(rpc.testConnection, (input) => connectors.test(input));
   server.handle(rpc.deleteConnection, (input) => connectors.remove(input.id));
