@@ -499,7 +499,8 @@ describe("backups, restore and the way back to JSON", () => {
     }
   });
 
-  test.skipIf(process.platform === "win32")("an export whose database cannot be renamed aside still switches to JSON, and SQLite can come back", async () => {
+  // A read-only folder blocks the rename except on Windows and for root, which ignores directory permissions.
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)("an export whose database cannot be renamed aside still switches to JSON, and SQLite can come back", async () => {
     let now = Date.parse("2026-10-26T00:00:00Z");
     const d = await directory();
     await writeBoard(d, fixture());
