@@ -219,11 +219,14 @@ function InsightsSample() {
       <View style={{ flexDirection: "row", gap: space[2] }}>
         <View style={{ gap: 3 }}>
           {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-            <View key={d} style={{ height: 10, justifyContent: "center" }}>
+            <View key={d} style={{ height: 10 }}>
+              {/* Taller than a cell: its own line box centered on the cell, as on the page, or the text is cut off. */}
               {d % 2 === 0 && d < 6 && (
-                <Label muted size={font.xs} lines={1} selectable={false}>
-                  {sampleWeekday(d)}
-                </Label>
+                <View style={{ height: 16, marginTop: -3, flexShrink: 0 }}>
+                  <Label muted size={font.xs} lines={1} selectable={false}>
+                    {sampleWeekday(d)}
+                  </Label>
+                </View>
               )}
             </View>
           ))}

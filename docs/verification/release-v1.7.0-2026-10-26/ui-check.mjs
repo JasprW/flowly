@@ -5,12 +5,17 @@ const out = new URL('./', import.meta.url).pathname;
 const browser = await launch();
 const settings = async (s) => {
   await s.page.locator('[aria-label="Flowly settings"]').last().click(); await s.page.waitForTimeout(1200);
-  await s.page.getByRole('button', { name: 'General', exact: true }).first().click().catch(() => {}); await s.page.waitForTimeout(800);
+  await s.page.getByText('General', { exact: true }).last().click().catch(() => {}); await s.page.waitForTimeout(800);
 };
 const row = (s, name) => s.page.getByText(name, { exact: true }).last();
 const results = [];
-for (const [label, w, h] of [['desktop', 1700, 1000], ['compact', 750, 900]]) {
-  const s = await open(browser, { w, h });
+for (const [label, w, h] of [['compact', 750, 900], ['desktop', 1700, 1000]]) {
+  // Enter the project at desktop width (the compact header has no project tab to click), then narrow the window.
+  const s = await open(browser, { w: 1700, h: 1000 });
+  if (w !== 1700) {
+    await s.page.setViewportSize({ width: w, height: h }); await s.page.waitForTimeout(1500);
+    Object.assign(s, { w, h, clip: { ...s.clip, width: w - s.clip.x, height: h } });
+  }
   await settings(s);
   await row(s, "What's new").click(); await s.page.waitForTimeout(1500);
   await shot(s, `${out}whats-new-${label}-latest.png`);
