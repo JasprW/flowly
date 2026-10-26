@@ -1333,7 +1333,6 @@ const catalog: Catalog = {
   "{date}, {n} turns": "{date}，{n} 轮",
   "Less": "少",
   "More": "多",
-  "{n} cards active": "{n} 张卡有动作",
   "No activity": "没有活动",
   "Generate summary": "生成总结",
   "Added to the project. Commit .agents/skills/{name} and .claude/skills/{name} so worktrees and teammates get it.": "已加入项目。提交 .agents/skills/{name} 和 .claude/skills/{name}，worktree 和队友才能用上。",
@@ -1370,5 +1369,8 @@ const catalog: Catalog = {
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "每周由模型阅读这个项目的卡片、你的消息和 agent 跑过的命令，总结出值得保留的 skill 和脚本。会花 token，并在本机记录命令。",
   "Insights shows a year of activity; tap a day for its summary.": "Insights 显示一年的活跃度；点某一天看当天总结。",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights 会从你的卡片总结出 skill，你同意后加入项目。默认开启，可在设置里关闭。",
+  "Previous day": "前一天",
+  "Next day": "后一天",
+  "agent {time}": "agent {time}",
 };
 export default catalog;

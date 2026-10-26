@@ -1333,7 +1333,6 @@ const catalog: Catalog = {
   "{date}, {n} turns": {"one": "{date}, {n} Durchgang", "other": "{date}, {n} Durchgänge"},
   "Less": "Weniger",
   "More": "Mehr",
-  "{n} cards active": {"one": "{n} Karte aktiv", "other": "{n} Karten aktiv"},
   "No activity": "Keine Aktivität",
   "Generate summary": "Zusammenfassung erstellen",
   "Added to the project. Commit .agents/skills/{name} and .claude/skills/{name} so worktrees and teammates get it.": "Zum Projekt hinzugefügt. Committe .agents/skills/{name} und .claude/skills/{name}, damit Worktrees und dein Team ihn bekommen.",
@@ -1370,5 +1369,8 @@ const catalog: Catalog = {
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "Jede Woche liest ein Modell die Karten dieses Projekts, deine Nachrichten und die Befehle der Agenten und entwirft Skills und Skripte, die sich lohnen. Verbraucht Tokens und führt ein lokales Befehlsprotokoll.",
   "Insights shows a year of activity; tap a day for its summary.": "Insights zeigt ein Jahr Aktivität; tippe auf einen Tag für seine Zusammenfassung.",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights entwirft Skills aus deinen Karten und fügt sie auf deinen Wunsch dem Projekt hinzu. Standardmäßig an; in den Einstellungen abschaltbar.",
+  "Previous day": "Vorheriger Tag",
+  "Next day": "Nächster Tag",
+  "agent {time}": "Agent {time}",
 };
 export default catalog;

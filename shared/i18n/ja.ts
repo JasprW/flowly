@@ -1333,7 +1333,6 @@ const catalog: Catalog = {
   "{date}, {n} turns": "{date}、{n} ターン",
   "Less": "少",
   "More": "多",
-  "{n} cards active": "動きのあったカード {n} 枚",
   "No activity": "アクティビティなし",
   "Generate summary": "要約を作成",
   "Added to the project. Commit .agents/skills/{name} and .claude/skills/{name} so worktrees and teammates get it.": "プロジェクトに追加しました。worktree やチームメイトにも届くよう .agents/skills/{name} と .claude/skills/{name} をコミットしてください。",
@@ -1370,5 +1369,8 @@ const catalog: Catalog = {
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "毎週モデルがこのプロジェクトのカード、あなたのメッセージ、エージェントが実行したコマンドを読み、残す価値のあるスキルとスクリプトを下書きします。トークンを使い、コマンドをローカルに記録します。",
   "Insights shows a year of activity; tap a day for its summary.": "Insights に 1 年分のアクティビティが表示されます。日をタップすると要約が見られます。",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights がカードからスキルを下書きし、あなたが決めたらプロジェクトに追加します。既定でオン。設定でオフにできます。",
+  "Previous day": "前の日",
+  "Next day": "次の日",
+  "agent {time}": "エージェント {time}",
 };
 export default catalog;

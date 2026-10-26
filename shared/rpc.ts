@@ -58,6 +58,7 @@ import { perfReportSchema } from "./perf";
 import { localeCodes } from "./i18n";
 import { workflowOverviewSchema, workflowViewSchema } from "./workflow-insights";
 import { cardTokensSchema, insightsViewSchema } from "./workflow-stats";
+import { dayDetailSchema } from "./day-detail";
 
 /** `{ etag }` in; the value is omitted when it still matches (PERFORMANCE-SPEC §3). */
 const etagInput = z.strictObject({ etag: z.string().max(200).optional() });
@@ -689,6 +690,12 @@ export const projectDigest = defineRpc({
   name: "insights.digest",
   input: z.strictObject({ ...insightsDay, day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
   output: digestViewSchema,
+});
+/** One day for the day summary card (INSIGHTS-REDESIGN-SPEC §2.2, §7); `tokens` also reads local provider logs. */
+export const projectDay = defineRpc({
+  name: "insights.day",
+  input: z.strictObject({ ...insightsDay, day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), tokens: z.boolean().optional() }),
+  output: dayDetailSchema,
 });
 export const refreshDigest = defineRpc({
   name: "insights.digest-refresh",

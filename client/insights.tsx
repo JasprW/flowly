@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
-import { ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import { useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
@@ -9,11 +9,12 @@ import { addDays } from "../shared/insights";
 import { ACTIVITY_WEEKS, activityLevel, type Activity } from "../shared/activity";
 import { MIN_CARDS, WINDOW_DAYS, type CardTokens, type WorkflowStats } from "../shared/workflow-stats";
 import type { DigestItem } from "../shared/digest";
-import { compactNumber, percent } from "../shared/usage";
+import { compactDuration, compactNumber, percent } from "../shared/usage";
+import { complexityLevel, complexityShare, type DayCard } from "../shared/day-detail";
 import { modelLabel } from "../shared/summary";
-import { Collapse, Disclosure } from "./disclosure";
+import { Collapse, Disclosure, ShowMore } from "./disclosure";
 import { Enter } from "./motion";
-import { localZone, useDigestQuery, useInsightsQuery, useTokensQuery, useWorkflowInsightsQuery } from "./queries";
+import { localZone, useDayQuery, useDigestQuery, useInsightsQuery, useTokensQuery, useWorkflowInsightsQuery } from "./queries";
 import { lineDiff, skillFile, usageIn, type Finding, type FindingTarget, type WorkflowView } from "../shared/workflow-insights";
 import { AiMark, Button, IconButton, Label, Notice, TurnChevron, font, message, noFocusRing, pageBarHeight, radius, relativeTime, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { formatLocale, msg, t, tn } from "../shared/i18n";
@@ -74,8 +75,7 @@ export const InsightsPage = memo(function InsightsPage({
             <>
               <Section title={t("Activity")}>
                 <Heatmap activity={data.activity} today={data.today} selected={day} compact={compact} onSelect={select} />
-                <DayPanel projectId={project.id} day={day} today={data.today} activity={data.activity} active={active} titleOf={titleOf} onOpenTask={onOpenTask} />
-                <RecentDays activity={data.activity} today={data.today} selected={day} titleOf={titleOf} onSelect={select} />
+                <DayPanel projectId={project.id} day={day} today={data.today} activity={data.activity} active={active} titleOf={titleOf} onOpenTask={onOpenTask} onSelect={select} />
               </Section>
               <Skills projectId={project.id} view={workflow.data} error={workflow.error} titleOf={titleOf} onOpenTask={onOpenTask} onOpenSettings={onOpenSettings} />
               <OtherSuggestions projectId={project.id} view={workflow.data} titleOf={titleOf} onOpenTask={onOpenTask} onCreate={onCreateFromFinding} />
@@ -220,44 +220,33 @@ const Heatmap = memo(function Heatmap({ activity, today, selected, compact, onSe
   );
 });
 
-/** The last 7 days with any activity, newest first: the date, the cards that finished, the turns. A row picks the day above. */
-function RecentDays({ activity, today, selected, titleOf, onSelect }: { activity: Activity; today: string; selected: string; titleOf(id: string): string; onSelect(day: string): void }) {
-  const from = addDays(today, 1 - WINDOW_DAYS);
-  const days = activity.days.filter((d) => d.day >= from && d.day <= today).sort((a, b) => b.day.localeCompare(a.day));
-  if (!days.length) return null;
-  return (
-    <View style={{ gap: space[1] }}>
-      <Label muted size={font.sm} selectable={false}>
-        {t("Last 7 days")}
-      </Label>
-      <Panel>
-        {days.map((d, i) => (
-          <StatRow
-            key={d.day}
-            first={i === 0}
-            selected={d.day === selected}
-            label={d.day === today ? t("Today") : longDate(d.day)}
-            note={d.done.slice(0, 2).map(titleOf).join(" · ") + (d.done.length > 2 ? ` +${d.done.length - 2}` : "")}
-            value={tn(d.turns, "{n} turn", "{n} turns")}
-            onPress={() => onSelect(d.day)}
-            a11y={tn(d.turns, "{date}, {n} turn", "{date}, {n} turns", { date: shortDate(d.day) })}
-          />
-        ))}
-      </Panel>
-    </View>
-  );
-}
-
-/** The selected day (§2.2): its numbers and its AI summary; a past day's summary is written when first opened. */
-function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask }: { projectId: string; day: string; today: string; activity: Activity; active: boolean; titleOf(id: string): string; onOpenTask(id: string): void }) {
+/**
+ * The day summary card (§2.2): arrows step to the previous or next day with activity; the day's
+ * numbers, its AI summary and its cards, the busiest first, each with a bar for its share of the
+ * busiest card's agent time.
+ */
+function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask, onSelect }: { projectId: string; day: string; today: string; activity: Activity; active: boolean; titleOf(id: string): string; onOpenTask(id: string): void; onSelect(day: string): void }) {
+  const { colors } = useTheme();
   const stats = activity.days.find((d) => d.day === day);
+  const version = stats ? `${stats.turns}:${stats.cards}:${stats.done.length}` : "0";
+  const fast = useDayQuery(projectId, day, version, false, active && !!stats);
+  const full = useDayQuery(projectId, day, version, true, active && !!stats);
+  const detail = full.data ?? fast.data;
   const digest = useDigestQuery(projectId, day, active && !!stats);
   const refresh = useRpc(rpc.refreshDigest);
   const client = useQueryClient();
   const [failed, setFailed] = useState("");
+  const [limit, setLimit] = useState(DAY_CARDS);
   const view = digest.data;
   const running = !!view?.running;
   const entry = view?.entry;
+  const prev = [...activity.days].reverse().find((d) => d.day < day)?.day;
+  const next = activity.days.find((d) => d.day > day && d.day <= today)?.day;
+  const go = (to: string | undefined) => {
+    if (!to) return;
+    setLimit(DAY_CARDS);
+    onSelect(to);
+  };
   const generate = async () => {
     setFailed("");
     try {
@@ -267,19 +256,28 @@ function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask
       setFailed(message(e));
     }
   };
-  const done = entry?.done.length ? entry.done : (stats?.done || []).map((taskId) => ({ text: titleOf(taskId), taskId }) as DigestItem);
+  const list = detail?.list ?? [];
+  const done = list.filter((c) => c.done).length;
+  const numbers = stats
+    ? [
+        tn(stats.turns, "{n} turn", "{n} turns"),
+        tn(stats.cards, "{n} card", "{n} cards"),
+        (detail ? done : stats.done.length) ? tn(detail ? done : stats.done.length, "{n} done", "{n} done") : "",
+        detail?.agentMs ? t("agent {time}", { time: compactDuration(detail.agentMs) }) : "",
+        detail?.tokens ? t("{n} tokens", { n: compactNumber(detail.tokens) }) : full.isFetching && !full.data ? "…" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : t("No activity");
   return (
     <Panel>
       <View style={{ padding: space[3], gap: space[2] }}>
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: space[2], flexWrap: "wrap" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
+          <IconButton icon="ChevronLeft" label={t("Previous day")} disabled={!prev} onPress={() => go(prev)} />
           <Label bold size={font.md} selectable={false}>
             {day === today ? t("Today") : longDate(day)}
           </Label>
-          <Label muted size={font.sm} selectable={false}>
-            {stats
-              ? [tn(stats.turns, "{n} turn", "{n} turns"), tn(stats.cards, "{n} card active", "{n} cards active"), stats.done.length ? tn(stats.done.length, "{n} done", "{n} done") : ""].filter(Boolean).join(" · ")
-              : t("No activity")}
-          </Label>
+          <IconButton icon="ChevronRight" label={t("Next day")} disabled={!next} onPress={() => go(next)} />
           <View style={{ flex: 1 }} />
           {!!entry && (
             <Button quiet small icon="RefreshCw" disabled={running} label={t("Regenerate the summary")} onPress={() => void generate()}>
@@ -287,6 +285,9 @@ function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask
             </Button>
           )}
         </View>
+        <Label muted size={font.sm} selectable={false}>
+          {numbers}
+        </Label>
         {!!stats &&
           (entry ? (
             <View style={{ flexDirection: "row", gap: space[1.5], alignItems: "flex-start" }}>
@@ -307,11 +308,6 @@ function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask
               </Button>
             </View>
           ))}
-        {!!stats && done.length > 0 && (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
-            {done.map((item, i) => (item.taskId ? <TaskChip key={`${item.taskId}-${i}`} title={titleOf(item.taskId)} onPress={() => onOpenTask(item.taskId!)} /> : null))}
-          </View>
-        )}
         {!!entry?.issues.length && (
           <View style={{ gap: space[1] }}>
             <Label muted size={font.xs} selectable={false}>
@@ -328,10 +324,69 @@ function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask
           </Label>
         )}
         {!!(failed || (view?.error && !running && !entry)) && <Empty>{failed || t("Last attempt failed: {message}", { message: view?.error?.message ?? "" })}</Empty>}
+        {!!stats && list.length > 0 && (
+          <View style={{ marginHorizontal: -space[3], borderTopWidth: 1, borderColor: colors.border }}>
+            {list.slice(0, limit).map((c, i) => (
+              <DayCardRow key={c.taskId} first={i === 0} card={c} share={complexityShare(c, list)} title={titleOf(c.taskId)} onOpenTask={onOpenTask} />
+            ))}
+            {list.length > limit && (
+              <View style={{ paddingHorizontal: space[3] }}>
+                <ShowMore count={list.length - limit} onPress={() => setLimit((n) => n + DAY_CARDS)} />
+              </View>
+            )}
+          </View>
+        )}
+        {!!stats && !detail && (fast.error ? <Empty>{message(fast.error)}</Empty> : null)}
       </View>
     </Panel>
   );
 }
+
+/** Cards shown at first in the day summary card, and added by each Show more. */
+const DAY_CARDS = 8;
+
+/** A card in the day summary: done or not, its title, that day's turns, time and tokens, and a bar for its share of the day's busiest card. */
+const DayCardRow = memo(function DayCardRow({ first, card, share, title, onOpenTask }: { first: boolean; card: DayCard; share: number; title: string; onOpenTask(id: string): void }) {
+  const { colors } = useTheme();
+  const note = [tn(card.turns, "{n} turn", "{n} turns"), card.agentMs ? compactDuration(card.agentMs) : "", card.tokens ? compactNumber(card.tokens) : ""].filter(Boolean).join(" · ");
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title}: ${note}`}
+      onPress={() => onOpenTask(card.taskId)}
+      style={(state) => ({
+        ...noFocusRing,
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: space[2],
+        paddingHorizontal: space[3],
+        paddingVertical: space[2],
+        borderTopWidth: first ? 0 : 1,
+        borderColor: colors.border,
+        backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.surface2 : "transparent",
+      })}
+    >
+      <View style={{ height: 18, justifyContent: "center" }}>
+        <Icon name={card.done ? "CircleCheck" : "Circle"} size={14} color={card.done ? colors.accent : colors.foregroundMuted} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Label size={font.md} lines={1} selectable={false}>
+              {title}
+            </Label>
+          </View>
+          <Label muted size={font.sm} lines={1} selectable={false}>
+            {note}
+          </Label>
+        </View>
+        <View style={{ height: 3, borderRadius: 2, backgroundColor: colors.surface2, overflow: "hidden" }}>
+          <View style={{ width: `${Math.max(2, Math.round(share * 100))}%`, height: 3, borderRadius: 2, backgroundColor: colors.accent, opacity: LEVEL_OPACITY[complexityLevel(share)] }} />
+        </View>
+      </View>
+    </Pressable>
+  );
+});
 
 // ---- Skills (§2.3) --------------------------------------------------------------------
 

@@ -1333,7 +1333,6 @@ const catalog: Catalog = {
   "{date}, {n} turns": "{date}, {n}턴",
   "Less": "적음",
   "More": "많음",
-  "{n} cards active": "활동한 카드 {n}개",
   "No activity": "활동 없음",
   "Generate summary": "요약 생성",
   "Added to the project. Commit .agents/skills/{name} and .claude/skills/{name} so worktrees and teammates get it.": "프로젝트에 추가했습니다. worktree와 팀원도 쓰도록 .agents/skills/{name}와 .claude/skills/{name}를 커밋하세요.",
@@ -1370,5 +1369,8 @@ const catalog: Catalog = {
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "매주 모델이 이 프로젝트의 카드, 내 메시지, 에이전트가 실행한 명령을 읽고 남길 만한 스킬과 스크립트를 초안으로 만듭니다. 토큰을 쓰고 명령을 로컬에 기록합니다.",
   "Insights shows a year of activity; tap a day for its summary.": "Insights에 1년 동안의 활동이 표시됩니다. 날짜를 누르면 요약을 봅니다.",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights가 카드에서 스킬 초안을 만들고, 원하면 프로젝트에 추가합니다. 기본으로 켜져 있으며 설정에서 끌 수 있습니다.",
+  "Previous day": "이전 날",
+  "Next day": "다음 날",
+  "agent {time}": "에이전트 {time}",
 };
 export default catalog;

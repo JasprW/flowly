@@ -42,3 +42,6 @@ Two defects: the weekday labels (Mon / Wed / Fri) were cut off at the bottom (th
 
 ## Page felt empty; Back bar height (same day, fourth and fifth style notes)
 Workflow now opens by default and a "Last 7 days" list (date, finished cards, turns; a row picks the day) sits under the day panel (`live-desktop-light-full-page.png`). The "Board" bar of Insights, Ideas and Memory is `pageBarHeight` (48 px on desktop, 60 on touch) so its icon row sits where the task card's header icons do: with a card opened from Insights, the Back button and the card's Edit button both have their center at y = 143 (`live-bar-aligned-with-card.png`). `npm run typecheck` 0 errors; `npm test` 134 files passed. The Ideas and Memory pages were opened after the change: their Back button center is also y = 143.
+
+## Day summary card (same day, user's redesign of the day panel)
+Paging back from Today lands on Sun, Oct 25 and moves the heatmap selection: 97 turns (equals the heatmap and the hand count), 11 cards, 8 done, agent 11h 28m (session run time, parallel sessions add up), 578M tokens; the cards are ordered by agent time with bars (46 turns, 7h 20m, 313M for the busiest), 8 shown and "Show 3 more". Images: `live-day-card-desktop.png`, `live-day-card-compact.png`. `npm run typecheck` 0 errors; `npm test` 135 files, 1127 passed, 1 skipped.

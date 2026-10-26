@@ -13,7 +13,7 @@ import { runSummaryModels } from "./summary-models";
 import type { AgentLike, UsageService } from "./usage";
 import { modelId } from "./agent-model";
 import { laneName } from "../shared/lanes";
-import { historyStatusLabel, type Board, type HistoryStatus, type Project } from "../shared/model";
+import { historyStatusLabel, type Board, type HistoryStatus, type Project, type Task } from "../shared/model";
 import { SUMMARIZER_LABELS, isSummarizer, summaryModelsOf, type SummaryEntry, type SummarySettings } from "../shared/summary";
 import {
   TREND_DAYS,
@@ -33,6 +33,7 @@ import {
 import { habits, modellessAgents, withMoveDetails } from "../shared/agent-habits";
 import { cardStats, cardTokens, workflowStats, type CardTokens, type InsightsView } from "../shared/workflow-stats";
 import { activity } from "../shared/activity";
+import { dayDetail, withDayTokens, type DayDetail } from "../shared/day-detail";
 import {
   DIGEST_DAYS,
   clipMaterial,
@@ -261,21 +262,7 @@ export class InsightsService {
     if (!this.usage) throw new Error("Token usage is not available.");
     const { tz, now, today } = this.window(input);
     const { tasks, entries } = await this.context(input.projectId);
-    const owner = new Map(tasks.map((t) => [t.workspaceId, t.id]));
-    const agents: (AgentLike & { taskId: string })[] = [];
-    const models = new Map<string, string>();
-    let cursor: string | undefined;
-    do {
-      const page = await paseo.agents.list({ filter: { includeArchived: true }, page: { limit: 200, cursor } });
-      for (const { agent } of page.entries) {
-        const taskId = agent.workspaceId ? owner.get(agent.workspaceId) : undefined;
-        if (!taskId) continue;
-        agents.push({ ...(agent as AgentLike), taskId });
-        const model = modelId(agent as Parameters<typeof modelId>[0]);
-        if (model) models.set(agent.id, model);
-      }
-      cursor = page.pageInfo.nextCursor ?? undefined;
-    } while (cursor);
+    const { agents, models } = await this.cardAgents(tasks, paseo);
     // The same cards and model attribution as insights.project.
     const { cards } = this.finished(tasks, entries, now, tz, today, (id) => models.get(id));
     const stats = workflowStats({ cards, today, tz, now });
@@ -286,6 +273,45 @@ export class InsightsService {
     );
     const modelOfTask = new Map(cards.map((c) => [c.taskId, c.model]));
     return cardTokens({ series, cards: stats.cards, modelOf: (id) => modelOfTask.get(id) || "", models: stats.models.map((m) => m.model) });
+  }
+
+  /** Every session (archived included) in the project's card workspaces, with its card, model and whether it runs now. */
+  private async cardAgents(tasks: readonly Task[], paseo: PaseoApi) {
+    const owner = new Map(tasks.map((t) => [t.workspaceId, t.id]));
+    const agents: (AgentLike & { taskId: string })[] = [];
+    const models = new Map<string, string>();
+    const running = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const page = await paseo.agents.list({ filter: { includeArchived: true }, page: { limit: 200, cursor } });
+      for (const { agent } of page.entries) {
+        const taskId = agent.workspaceId ? owner.get(agent.workspaceId) : undefined;
+        if (!taskId) continue;
+        agents.push({ ...(agent as AgentLike), taskId });
+        const model = modelId(agent as Parameters<typeof modelId>[0]);
+        if (model) models.set(agent.id, model);
+        if (agent.status === "running" || agent.status === "initializing") running.add(agent.id);
+      }
+      cursor = page.pageInfo.nextCursor ?? undefined;
+    } while (cursor);
+    return { agents, models, running };
+  }
+
+  /**
+   * One day for the day summary card (INSIGHTS-REDESIGN-SPEC §2.2). Without `tokens` it reads
+   * only the flow log; with it, it also lists the sessions (a running turn counts until now)
+   * and adds the day's tokens from local provider logs.
+   */
+  async day(input: DayInput & { day: string; tokens?: boolean }, paseo: PaseoApi): Promise<DayDetail> {
+    const tz = validZone(input.tz);
+    const { tasks, entries } = await this.context(input.projectId);
+    if (!input.tokens || !this.usage) return dayDetail({ entries, day: input.day, tz, now: this.now() });
+    const usage = this.usage;
+    const { agents, running } = await this.cardAgents(tasks, paseo);
+    const detail = dayDetail({ entries, day: input.day, tz, now: this.now(), running });
+    const wanted = new Set(detail.list.map((c) => c.taskId));
+    const series = await Promise.all(agents.filter((a) => wanted.has(a.taskId)).map(async (a) => ({ taskId: a.taskId, buckets: await usage.buckets(a).catch(() => null) })));
+    return withDayTokens(detail, series, tz);
   }
 
   /** The day's digest; a past day without one is generated once when the setting is on. */

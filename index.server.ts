@@ -133,6 +133,7 @@ export default function contribute(host: PluginServerContext) {
   void insights.reconcile().catch((e) => logFailure("Kanban flow log backfill failed:", e));
   server.handle(rpc.projectInsights, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.project(input, paseo), etag));
   server.handle(rpc.projectDigest, (input, { paseo }) => insights.digest(input, paseo));
+  server.handle(rpc.projectDay, (input, { paseo }) => insights.day(input, paseo));
   server.handle(rpc.projectTokens, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.tokens(input, paseo), etag));
   server.handle(rpc.refreshDigest, (input, { paseo }) => insights.refresh(input, paseo));
   server.handle(rpc.readSummaries, () => summaries.overview());

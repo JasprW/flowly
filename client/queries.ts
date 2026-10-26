@@ -329,6 +329,22 @@ export function useDigestQuery(projectId: string, day: string | null, enabled: b
   });
 }
 
+/**
+ * One day for the day summary card (INSIGHTS-REDESIGN-SPEC §2.2). `version` is the day's turn and
+ * move count from the heatmap, so the day refreshes when the page's activity does and never polls
+ * on its own; `tokens` also reads local provider logs, as a second query the card does not wait on.
+ */
+export function useDayQuery(projectId: string, day: string, version: string, tokens: boolean, enabled: boolean) {
+  const read = useRpc(rpc.projectDay);
+  const tz = localZone();
+  return useQuery({
+    queryKey: ["flowly", "insights-day", projectId, day, version, tokens],
+    queryFn: () => read({ projectId, tz, day, ...(tokens ? { tokens } : {}) }),
+    enabled,
+    staleTime: Infinity,
+  });
+}
+
 /** Tokens per finished card from local provider logs (INSIGHTS-REDESIGN-SPEC §2.5); separate so the page never waits on log parsing. */
 export function useTokensQuery(projectId: string, enabled: boolean) {
   const read = useRpc(rpc.projectTokens);

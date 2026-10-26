@@ -1333,7 +1333,6 @@ const catalog: Catalog = {
   "{date}, {n} turns": {"one": "{date}, {n} ход", "few": "{date}, {n} хода", "many": "{date}, {n} ходов", "other": "{date}, {n} хода"},
   "Less": "Меньше",
   "More": "Больше",
-  "{n} cards active": {"one": "{n} активная карточка", "few": "{n} активные карточки", "many": "{n} активных карточек", "other": "{n} активной карточки"},
   "No activity": "Нет активности",
   "Generate summary": "Создать сводку",
   "Added to the project. Commit .agents/skills/{name} and .claude/skills/{name} so worktrees and teammates get it.": "Добавлено в проект. Закоммитьте .agents/skills/{name} и .claude/skills/{name}, чтобы навык появился в worktree и у команды.",
@@ -1370,5 +1369,8 @@ const catalog: Catalog = {
   "Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.": "Каждую неделю модель читает карточки этого проекта, ваши сообщения и команды агентов и составляет навыки и скрипты, которые стоит сохранить. Тратит токены и ведёт локальный журнал команд.",
   "Insights shows a year of activity; tap a day for its summary.": "Insights показывает активность за год; нажмите на день, чтобы увидеть сводку.",
   "Insights drafts skills from your cards and adds them to the project when you say so. On by default; turn it off in Settings.": "Insights составляет навыки по вашим карточкам и добавляет их в проект по вашему решению. Включено по умолчанию; можно выключить в настройках.",
+  "Previous day": "Предыдущий день",
+  "Next day": "Следующий день",
+  "agent {time}": "агент {time}",
 };
 export default catalog;
