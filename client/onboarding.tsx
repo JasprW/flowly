@@ -187,31 +187,43 @@ function MemoryPage() {
   );
 }
 
-/** Insights' own metric rows (client/insights.tsx StatRow), with sample numbers. */
+/** A few weeks of the Insights heatmap and one skill draft row (client/insights.tsx), with sample data. */
 function InsightsSample() {
   const { colors } = useTheme();
-  const rows = [
-    { label: t("Interventions"), value: "2", note: t("{messages} messages · {permissions} permissions · {moves} moves", { messages: 1, permissions: 1, moves: 0 }) },
-    { label: t("Review rounds"), value: "1", note: t("{n} in one pass", { n: 4 }) },
-    { label: t("Questions from the agent"), value: "0.5" },
-  ];
+  // Accent opacity per level, as on the page; a fixed pattern of quiet and busy days.
+  const opacity = [0, 0.28, 0.5, 0.75, 1];
+  const pattern = "0012300124310023441001342200133410024432";
+  const weeks = Array.from({ length: 10 }, (_, w) => Array.from({ length: 7 }, (_, d) => Number(pattern[(w * 7 + d) % pattern.length])));
   return (
-    <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, overflow: "hidden" }}>
-      {rows.map((row, index) => (
-        <View key={row.label} style={{ flexDirection: "row", alignItems: "center", gap: space[3], paddingHorizontal: space[3], minHeight: 36, borderTopWidth: index ? 1 : 0, borderColor: colors.border }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Label size={font.md} lines={1} selectable={false}>{row.label}</Label>
+    <View style={{ gap: space[3] }}>
+      <View style={{ flexDirection: "row", gap: 3 }}>
+        {weeks.map((days, w) => (
+          <View key={w} style={{ gap: 3 }}>
+            {days.map((level, d) => (
+              <View key={d} style={{ width: 10, height: 10, borderRadius: 2, overflow: "hidden", backgroundColor: colors.surface2 }}>
+                {level > 0 && <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.accent, opacity: opacity[level] }} />}
+              </View>
+            ))}
           </View>
-          {!!row.note && (
-            <View style={{ flexShrink: 1 }}>
-              <Label muted size={font.sm} lines={1} selectable={false}>{row.note}</Label>
-            </View>
-          )}
-          <View style={{ minWidth: 48, alignItems: "flex-end" }}>
-            <Label medium size={font.md} selectable={false}>{row.value}</Label>
+        ))}
+      </View>
+      <View style={{ borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface0, flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], minHeight: 36 }}>
+        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", gap: space[1.5] }}>
+          <Label mono medium size={font.md} lines={1} selectable={false}>
+            ship-pr
+          </Label>
+          <View style={{ flexShrink: 1 }}>
+            <Label size={font.md} lines={1} selectable={false}>
+              {t("Ship a change through a pull request")}
+            </Label>
           </View>
         </View>
-      ))}
+        <View style={{ paddingHorizontal: space[2], height: 20, justifyContent: "center", borderRadius: radius.full, backgroundColor: colors.surface2 }}>
+          <Label size={font.xs} lines={1} selectable={false}>
+            {t("New")}
+          </Label>
+        </View>
+      </View>
     </View>
   );
 }
@@ -220,13 +232,13 @@ function InsightsSample() {
 function InsightsPage() {
   return (
     <View style={{ gap: space[5] }}>
-      <PageTitle title={t("Insights")} detail={t("See where your attention and time go.")} />
+      <PageTitle title={t("Insights")} detail={t("See which days were busy, and turn what agents keep redoing into skills.")} />
       <InsightsFeatureGroup bare workflow />
       <View style={{ gap: space[2] }}>
-        <DemoControls hint={t("Sample numbers from a project's Insights page.")} />
+        <DemoControls hint={t("Sample data from a project's Insights page.")} />
         <DemoFrame>
           <View style={{ flex: 1, minWidth: 0, padding: space[3], gap: space[3] }}>
-            <SideTitle>{t("Attention per card")}</SideTitle>
+            <SideTitle>{t("Activity")}</SideTitle>
             <Sample>
               <InsightsSample />
             </Sample>
@@ -235,9 +247,9 @@ function InsightsPage() {
       </View>
       <Columns>
         {[
-          <Legend key="i" title={t("Interventions")} text={t("Messages, permissions and next steps you had to send.")} />,
-          <Legend key="r" title={t("Review rounds")} text={t("How often a card came back from In review.")} />,
-          <Legend key="q" title={t("Questions from the agent")} text={t("What agents had to ask you, per card.")} />,
+          <Legend key="a" title={t("Activity")} text={t("A year of agent turns per day; tap a day for its summary.")} />,
+          <Legend key="s" title={t("Skills")} text={t("Drafted from your cards; added to the project only when you say so.")} />,
+          <Legend key="w" title={t("Workflow")} text={t("Review rounds and tokens per card, last 7 days.")} />,
         ]}
       </Columns>
     </View>

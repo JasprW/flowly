@@ -57,8 +57,8 @@ import { memoryEntrySchema, memoryInputFields, memoryKeywordsSchema, memoryTagsS
 import { perfReportSchema } from "./perf";
 import { localeCodes } from "./i18n";
 import { workflowOverviewSchema, workflowViewSchema } from "./workflow-insights";
-import { tokenInsightsSchema } from "./insights";
-import { insightsWithHabitsSchema } from "./agent-habits";
+import { cardTokensSchema, insightsViewSchema } from "./workflow-stats";
+import { dayDetailSchema } from "./day-detail";
 
 /** `{ etag }` in; the value is omitted when it still matches (PERFORMANCE-SPEC §3). */
 const etagInput = z.strictObject({ etag: z.string().max(200).optional() });
@@ -684,13 +684,19 @@ const insightsDay = {
 };
 export const projectInsights = defineRpc({
   name: "insights.project",
-  input: z.strictObject({ ...insightsDay, day: z.string().max(10).optional(), etag: z.string().max(200).optional() }),
-  output: z.object({ etag: z.string(), value: insightsWithHabitsSchema.optional() }),
+  input: z.strictObject({ ...insightsDay, etag: z.string().max(200).optional() }),
+  output: z.object({ etag: z.string(), value: insightsViewSchema.optional() }),
 });
 export const projectDigest = defineRpc({
   name: "insights.digest",
   input: z.strictObject({ ...insightsDay, day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
   output: digestViewSchema,
+});
+/** One day for the day summary card (INSIGHTS-REDESIGN-SPEC §2.2, §7); `tokens` also reads local provider logs. */
+export const projectDay = defineRpc({
+  name: "insights.day",
+  input: z.strictObject({ ...insightsDay, day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), tokens: z.boolean().optional() }),
+  output: dayDetailSchema,
 });
 export const refreshDigest = defineRpc({
   name: "insights.digest-refresh",
@@ -699,8 +705,8 @@ export const refreshDigest = defineRpc({
 });
 export const projectTokens = defineRpc({
   name: "insights.tokens",
-  input: z.strictObject({ ...insightsDay, day: z.string().max(10).optional(), etag: z.string().max(200).optional() }),
-  output: z.object({ etag: z.string(), value: tokenInsightsSchema.optional() }),
+  input: z.strictObject({ ...insightsDay, etag: z.string().max(200).optional() }),
+  output: z.object({ etag: z.string(), value: cardTokensSchema.optional() }),
 });
 
 // ---- Workflow insights (WORKFLOW-INSIGHTS-SPEC §6) ----
@@ -723,6 +729,12 @@ export const setWorkflowFinding = defineRpc({
     expectedRevision: z.number().int().min(0),
   }),
   output: z.object({ revision: z.number() }),
+});
+/** Writes an open skill draft into the project (INSIGHTS-REDESIGN-SPEC §4.1). */
+export const installSkill = defineRpc({
+  name: "workflow-insights.install-skill",
+  input: z.strictObject({ projectId: z.string().min(1).max(200), findingId: z.string().min(1).max(100), expectedRevision: z.number().int().min(0) }),
+  output: z.object({ revision: z.number(), path: z.string(), linked: z.boolean(), notice: z.string().optional() }),
 });
 export const workflowInsightsOverview = defineRpc({
   name: "workflow-insights.overview",

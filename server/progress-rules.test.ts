@@ -127,6 +127,19 @@ test("turn_ended can carry the session's model and the pick; nothing is written 
   }
 });
 
+test("turn_ended records byUser (false included); permission requests record only the tool name", () => {
+  const b = board("development");
+  recordLifecycle(store, b, id, "agent.turn_ended", { kind: "completed" }, { byUser: true });
+  recordLifecycle(store, b, id, "agent.turn_ended", { kind: "completed" }, { byUser: false });
+  recordLifecycle(store, b, id, "agent.turn_ended", { kind: "completed" }, {});
+  recordLifecycle(store, b, id, "agent.permission_requested", undefined, { tool: "Bash".padEnd(120, "x") });
+  expect(b.events[0].byUser).toBe(true);
+  expect(b.events[1].byUser).toBe(false);
+  expect(b.events[2]).not.toHaveProperty("byUser");
+  expect(b.events[3].tool).toHaveLength(80);
+  expect(b.events[3].tool!.startsWith("Bash")).toBe(true);
+});
+
 const ev = (action: string, at: number, extra: Partial<BoardEvent> = {}): BoardEvent => ({
   id: `${action}-${at}`, taskId: "t", actor: action.startsWith("agent.") ? "system" : "agent",
   action, agentId: "a", at: new Date(Date.parse(now) + at * 1000).toISOString(), ...extra,

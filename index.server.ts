@@ -6,7 +6,7 @@ import { BoardService, dataDirectory, migrateLegacyPluginData, paseoHome } from 
 import { readPaseoVersion } from "./server/paseo-version";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
-import { performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
+import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { readAttentionCount } from "./server/attention-count";
@@ -48,8 +48,8 @@ import { CommandLog } from "./server/command-log";
 import { WorkflowInsightsService, WorkflowStore } from "./server/workflow-insights";
 import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workflow-insights";
 import { sessionModel } from "./server/agent-model";
-import { turnPick, userTexts } from "./shared/agent-habits";
-import { MemoryService, setMemoryEverywhere } from "./server/memory";
+import { startedByUser, turnPick, userTexts } from "./shared/agent-habits";
+import { MemoryService, setMemoryEverywhere, memoryOn } from "./server/memory";
 import { POSTHOG_KEY, TelemetryService } from "./server/telemetry";
 import { FLOWLY_VERSION } from "./shared/version";
 import { logFailure, reportError, reportRpcErrors, setErrorSink } from "./server/error-report";
@@ -70,6 +70,7 @@ export default function contribute(host: PluginServerContext) {
   const workflowPrefs = server.registerSettings(workflowInsightsSettings);
   const perfPrefs = server.registerSettings(performanceSettings);
   const telemetryPrefs = server.registerSettings(telemetrySettings);
+  const developerPrefs = server.registerSettings(developerSettings);
   // Project memory and Insights as a whole (ONBOARDING-SETUP-SPEC §6); unreadable settings keep the defaults (on).
   const featurePrefs = server.registerSettings(featureSettings);
   const featureValues = async () => {
@@ -133,12 +134,18 @@ export default function contribute(host: PluginServerContext) {
   void insights.reconcile().catch((e) => logFailure("Kanban flow log backfill failed:", e));
   server.handle(rpc.projectInsights, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.project(input, paseo), etag));
   server.handle(rpc.projectDigest, (input, { paseo }) => insights.digest(input, paseo));
+  server.handle(rpc.projectDay, (input, { paseo }) => insights.day(input, paseo));
   server.handle(rpc.projectTokens, async ({ etag, ...input }, { paseo }) => ifChanged(await insights.tokens(input, paseo), etag));
   server.handle(rpc.refreshDigest, (input, { paseo }) => insights.refresh(input, paseo));
   server.handle(rpc.readSummaries, () => summaries.overview());
   server.handle(rpc.readSummariesChanged, async (input) => ifChanged(await summaries.overview(), input.etag));
   const usage = new UsageService(store);
   insights.usage = usage;
+  // Agent habits only for Flowly developers (INSIGHTS-REDESIGN-SPEC §6).
+  insights.agentHabits = async () => {
+    const state = await developerPrefs.read().catch(() => null);
+    return state?.status === "ready" && agentHabitsOn(state.values);
+  };
   server.handle(rpc.taskUsage, (input, { paseo }) => usage.task(input.taskId, paseo));
   server.handle(rpc.summaryHistory, (input) => summaries.store.history(input.taskId));
   // Workflow insights (WORKFLOW-INSIGHTS-SPEC): command log, scheduled analysis, suggestions.
@@ -167,6 +174,7 @@ export default function contribute(host: PluginServerContext) {
   });
   server.handle(rpc.runWorkflowInsights, (input, { paseo }) => workflow.run(input.projectId, paseo, true));
   server.handle(rpc.setWorkflowFinding, (input) => workflow.setStatus(input));
+  server.handle(rpc.installSkill, (input) => workflow.installSkill(input));
   server.handle(rpc.workflowInsightsOverview, () => workflow.overview());
   server.handle(rpc.purgeWorkflowCommands, async () => ({ deletedProjects: await workflow.purge() }));
   const service = new BoardService(store);
@@ -253,6 +261,12 @@ export default function contribute(host: PluginServerContext) {
   tools.agents.connectors = connectors;
   // Project memory (PROJECT-MEMORY-SPEC): confirmed knowledge shared across a project's cards.
   const memory = new MemoryService(store, summaries.store, summaries.settings, aiLanguage, (taskId) => summaries.settled(taskId));
+  // Skill material: card summaries and project memory (INSIGHTS-REDESIGN-SPEC §3.2).
+  workflow.skillSources = {
+    summaries: async () => (await summaries.store.read()).entries,
+    memory: async () => memory.store.read(),
+    memoryOn: (project) => memoryOn(project),
+  };
   tools.agents.memory = memory;
   server.handle(rpc.readMemory, async ({ projectId, etag }) => ifChanged(await memory.view(projectId), etag));
   server.handle(rpc.memoryCounts, async ({ etag }) => ifChanged(await memory.counts(), etag));
@@ -591,7 +605,7 @@ export default function contribute(host: PluginServerContext) {
     const model = await sessionModel(paseo, event.agent);
     const texts = userTexts(event.timeline);
     await store.mutate((board) => {
-      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts) });
+      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(event.timeline) });
       if (auto) applyTurnEnded(store, board, identity, event.outcome);
     });
     // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
@@ -622,7 +636,8 @@ export default function contribute(host: PluginServerContext) {
     const identity = await managedTask(event.agent);
     if (!identity) return;
     await store.mutate((board) =>
-      recordLifecycle(store, board, identity, "agent.permission_requested"),
+      // INSIGHTS-REDESIGN-SPEC §7.2: only the tool's name, never its input.
+      recordLifecycle(store, board, identity, "agent.permission_requested", undefined, { tool: event.request.name || event.request.kind }),
     );
   });
   // Anonymous daily heartbeat (TELEMETRY-SPEC); off by the setting, DO_NOT_TRACK or FLOWLY_TELEMETRY=0.

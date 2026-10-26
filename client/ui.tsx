@@ -24,6 +24,8 @@ export const radius = { sm: 4, md: 6, lg: 8, xl: 12, full: 999 } as const;
 export const font = { xs: 11, sm: 12, md: 13, base: 14, lg: 16, xl: 18 } as const;
 export const touch = Platform.OS !== "web";
 const control = touch ? 44 : 32;
+/** Height of the "← Board" bar of the Ideas, Memory and Insights pages: the same as the session preview header beside it (8 padding + a two-line title of 37 px or a control, whichever is taller, + 8 padding + 1 border), so both bottom borders line up. */
+export const pageBarHeight = 2 * space[2] + Math.max(control, 37) + 1;
 const smallControl = touch ? 32 : 28;
 
 /**

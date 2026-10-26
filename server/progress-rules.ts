@@ -22,7 +22,7 @@ export function recordLifecycle(
   action: "agent.turn_started" | "agent.turn_ended" | "agent.permission_requested",
   outcome?: PluginTurnOutcome,
   /** WORKFLOW-INSIGHTS-SPEC §12.4: the session's model and the next move the user's message took, on turn_ended. */
-  habits: { model?: string; pick?: number } = {},
+  habits: { model?: string; pick?: number; byUser?: boolean; tool?: string } = {},
 ) {
   const target = bound(board, identity);
   if (!target) return;
@@ -35,6 +35,8 @@ export function recordLifecycle(
     ...(outcome?.kind === "failed" ? { note: outcome.error.message.slice(0, 500) } : {}),
     ...(habits.model ? { model: habits.model.slice(0, 200) } : {}),
     ...(habits.pick !== undefined ? { pick: habits.pick } : {}),
+    ...(habits.byUser !== undefined ? { byUser: habits.byUser } : {}),
+    ...(habits.tool ? { tool: habits.tool.slice(0, 80) } : {}),
   });
 }
 

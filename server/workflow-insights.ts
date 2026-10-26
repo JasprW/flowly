@@ -13,8 +13,11 @@ import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { validZone } from "../shared/insights";
 import { SUMMARIZER_LABELS, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import type { Board, Project } from "../shared/model";
+import { readSkillBody, scanSkills, skillPath, writeSkill, type InstallResult } from "./project-skills";
 import {
   BACKFILL_DAYS,
+  CARD_DAYS,
+  DISMISS_COOLDOWN_DAYS,
   RETRY_PROMPT,
   RUN_TIMEOUT_MS,
   WORKFLOW_AUTO_MODELS,
@@ -41,6 +44,7 @@ import {
   type ExistingConfig,
   type RawFinding,
   type RunUsage,
+  type SkillMaterial,
   type WorkflowRun,
   type WorkflowSettings,
   type WorkflowState,
@@ -169,6 +173,13 @@ export class WorkflowInsightsService {
     private removeAgent: RemoveAgent = daemonRemoveAgent(),
   ) {}
 
+  /** Card summaries and project memory for the skill material (INSIGHTS-REDESIGN-SPEC §3.2); set by the daemon. */
+  skillSources: {
+    summaries(): Promise<readonly { taskId: string; target?: string; recap?: string; at: string }[]>;
+    memory(): Promise<{ clues: readonly { taskId: string; kind: string; text: string; at: string }[]; entries: readonly { projectId: string; kind: string; title: string; body: string; status: string }[] }>;
+    memoryOn(project: Project): boolean;
+  } | null = null;
+
   private pendingBackfill = false;
   attach(paseo: PaseoApi) {
     this.paseo = paseo;
@@ -278,6 +289,7 @@ export class WorkflowInsightsService {
         }
       };
       await Promise.all([worker(), worker()]);
+      await this.markCollecting(projectId);
       return written;
     } finally {
       this.backfilling.delete(projectId);
@@ -342,10 +354,14 @@ export class WorkflowInsightsService {
     if (!settings.enabled) return;
     const tz = validZone(settings.timeZone);
     const [board, state] = await Promise.all([this.board.read(), this.state.read()]);
+    // A project that never ran nor collected (a new install, or on by default after an update):
+    // start collecting now and read the last week once; its first run waits one interval (INSIGHTS-REDESIGN-SPEC §3.1).
+    for (const p of board.projects.filter(projectIncluded))
+      if (!this.lastRun(state, p.id) && !state.collectingSince[p.id] && !this.backfilling.has(p.id)) void this.backfill(p.id, paseo).catch(log("backfill"));
     const due = board.projects
       .filter(projectIncluded)
-      .map((p) => ({ p, last: this.lastRun(state, p.id) }))
-      .filter(({ p, last }) => !this.running.has(p.id) && !this.backfilling.has(p.id) && isDue({ now: this.now(), tz, runHour: settings.runHour, intervalDays: settings.intervalDays, lastRunAt: last?.at ?? null }))
+      .map((p) => ({ p, last: this.lastRun(state, p.id), since: state.collectingSince[p.id] ?? null }))
+      .filter(({ p, last, since }) => !this.running.has(p.id) && !this.backfilling.has(p.id) && (!!last || !!since) && isDue({ now: this.now(), tz, runHour: settings.runHour, intervalDays: settings.intervalDays, lastRunAt: last?.at ?? since }))
       .sort((a, b) => (a.last?.at ?? "").localeCompare(b.last?.at ?? ""));
     for (const { p } of due) this.run(p.id, paseo, false);
   }
@@ -406,10 +422,15 @@ export class WorkflowInsightsService {
    * (§5.3), checked against the suggestions as they are at write time (the user
    * may have dismissed one while the run went). Accepted and dismissed ones stay.
    */
-  private async record(run: Omit<WorkflowRun, "id" | "findings" | "replaced">, result?: { findings: RawFinding[]; cardIds: readonly string[] }) {
+  private async record(
+    run: Omit<WorkflowRun, "id" | "findings" | "replaced">,
+    result?: { findings: RawFinding[]; cardIds: readonly string[]; skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> }; redact?: { repo: string; home: string } },
+  ) {
     const id = randomUUID();
     return this.state.update((state) => {
-      const drafts = result ? validateFindings(result.findings, { cardIds: result.cardIds, existing: state.findings.filter((f) => f.projectId === run.projectId), now: Date.parse(run.at) }) : [];
+      const drafts = result
+        ? validateFindings(result.findings, { cardIds: result.cardIds, existing: state.findings.filter((f) => f.projectId === run.projectId), now: Date.parse(run.at), skills: result.skills, redact: result.redact })
+        : [];
       // A run without valid suggestions keeps the previous ones rather than emptying the list.
       const replaced = drafts.length
         ? replaceOpen(state.findings, run.projectId, drafts.map((f) => ({ ...f, id: randomUUID(), projectId: run.projectId, runId: id, status: "open" as const, createdAt: run.at, updatedAt: run.at })))
@@ -442,16 +463,22 @@ export class WorkflowInsightsService {
     const agg = aggregate(records);
     const stats = { calls: agg.calls, actions: agg.actions, cards: agg.cards, sessions: agg.sessions };
     const base = { projectId, at: to, from, to, manual, stats, model: "" };
-    // A scheduled check with nothing collected waits instead of using up the interval.
-    if (!records.length) return manual ? this.record({ ...base, status: "skipped", reason: "No commands collected yet." }) : undefined;
-    if (!manual && quiet(sinceLast, agg.cards)) return this.record({ ...base, status: "skipped", reason: "Not enough new activity." });
+    const entries = await this.flow.read(projectId).catch(() => []);
+    const recent = recentCards(entries, now - CARD_DAYS * DAY_MS);
+    const since = last ? Date.parse(last.at) : now - days * DAY_MS;
+    const activeCards = new Set(entries.filter((e) => e.action === "agent.turn_ended" && Date.parse(e.at) > since).map((e) => e.taskId)).size;
+    // Nothing collected and no recent card: a scheduled check waits instead of using up the interval.
+    if (!records.length && !recent.length) return manual ? this.record({ ...base, status: "skipped", reason: "No recent activity." }) : undefined;
+    if (!manual && quiet(sinceLast, agg.cards, activeCards)) return this.record({ ...base, status: "skipped", reason: "Not enough new activity." });
     let model = "";
     try {
       model = await this.model(paseo, settings);
       const state = await this.state.read();
       const existing = state.findings.filter((f) => f.projectId === projectId);
-      const cardIds = [...new Set(records.map((r) => r.taskId))];
-      const cards: CardInfo[] = cardIds
+      const skills = await this.skillContext(project, board, state, recent, now);
+      // Card ids the model may cite: the command window's and the last 30 days' (INSIGHTS-REDESIGN-SPEC §3.1).
+      const cardIds = [...new Set([...records.map((r) => r.taskId), ...recent])];
+      const cards: CardInfo[] = [...new Set(records.map((r) => r.taskId))]
         .map((id) => board.tasks.find((t) => t.id === id))
         .filter((t): t is Board["tasks"][number] => !!t)
         .map((t) => ({ id: t.id, title: t.title, type: t.type, tags: (t.tags || []).map((x) => x.tag), lane: t.status }));
@@ -463,6 +490,7 @@ export class WorkflowInsightsService {
         previous: existing
           .filter((f) => f.status === "accepted" || (f.status === "dismissed" && now - Date.parse(f.updatedAt) < 30 * DAY_MS))
           .map((f) => ({ target: f.target, title: f.title, status: f.status, proposal: f.proposal })),
+        skills: skills.material,
       });
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
         const agent = await paseo.workspaces.ref(workspaceId).agents.create({
@@ -498,7 +526,7 @@ export class WorkflowInsightsService {
         return { usage, parsed };
       });
       if (!parsed) throw new Error("The workflow insights model returned no JSON.");
-      await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, cardIds });
+      await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, cardIds, skills: skills.check, redact: { repo: project.primaryPath, home: this.home } });
     } catch (e) {
       await this.record({ ...base, model, status: "error", reason: (e instanceof Error ? e.message : String(e)).slice(0, 500) });
     }
@@ -510,6 +538,7 @@ export class WorkflowInsightsService {
     if (!project) throw new Error("Project not found.");
     const last = this.lastRun(state, projectId);
     const included = projectIncluded(project);
+    const findings = state.findings.filter((f) => f.projectId === projectId);
     const tz = validZone(settings.timeZone);
     return {
       enabled: settings.enabled,
@@ -518,13 +547,113 @@ export class WorkflowInsightsService {
       running: this.running.has(projectId),
       nextRunAt:
         settings.enabled && included
-          ? new Date(nextRunAt({ now: this.now(), tz, runHour: settings.runHour, intervalDays: settings.intervalDays, lastRunAt: last?.at ?? null })).toISOString()
+          ? new Date(nextRunAt({ now: this.now(), tz, runHour: settings.runHour, intervalDays: settings.intervalDays, lastRunAt: last?.at ?? state.collectingSince[projectId] ?? null })).toISOString()
           : null,
       windowDays: windowDays(settings.intervalDays),
       lastRun: last,
-      findings: state.findings.filter((f) => f.projectId === projectId),
+      findings,
+      ...(await this.installedView(project, state, findings)),
       revision: state.revision,
     };
+  }
+
+  /** Flowly's skills in the project with their current text, and the bodies open updates would change (§4.6). */
+  private async installedView(project: Project, state: WorkflowState, findings: WorkflowState["findings"]) {
+    const installed: WorkflowView["installed"] = [];
+    for (const i of state.installed.filter((x) => x.projectId === project.id)) {
+      const content = await readFile(skillPath(project.primaryPath, i.name), "utf8").catch(() => null);
+      if (content !== null) installed.push({ name: i.name, path: `.agents/skills/${i.name}/SKILL.md`, content });
+    }
+    const current: Record<string, string> = {};
+    for (const f of findings)
+      if (f.status === "open" && f.skill?.updates) {
+        const body = await readSkillBody(project.primaryPath, f.skill.name);
+        if (body !== null) current[f.skill.name] = body;
+      }
+    return { installed, current };
+  }
+
+  /** Starts the collecting clock once per project (§3.1). */
+  private markCollecting(projectId: string) {
+    const at = new Date(this.now()).toISOString();
+    return this.state.update((state) => {
+      if (state.collectingSince[projectId]) return { value: undefined, changed: false };
+      state.collectingSince[projectId] = at;
+      return { value: undefined, changed: true };
+    });
+  }
+
+  /** The skill material and the names the validation needs (INSIGHTS-REDESIGN-SPEC §3.2, §3.4). */
+  private async skillContext(project: Project, board: Board, state: WorkflowState, recent: readonly string[], now: number) {
+    const sources = this.skillSources;
+    const [summaries, memory, found] = await Promise.all([
+      sources?.summaries().catch(() => []) ?? Promise.resolve([]),
+      sources?.memory().catch(() => null) ?? Promise.resolve(null),
+      scanSkills(project.primaryPath),
+    ]);
+    const memoryOn = !!sources?.memoryOn(project) && !!memory;
+    const mine = new Set(state.installed.filter((i) => i.projectId === project.id).map((i) => i.name));
+    const installed = new Map<string, string>();
+    for (const name of mine) {
+      const body = await readSkillBody(project.primaryPath, name);
+      if (body !== null) installed.set(name, body);
+    }
+    const latest = new Map<string, { target?: string; recap?: string }>();
+    for (const s of summaries) latest.set(s.taskId, s);
+    const cards: SkillMaterial["cards"] = recent
+      .map((id) => board.tasks.find((t) => t.id === id))
+      .filter((t): t is Board["tasks"][number] => !!t)
+      .map((t) => {
+        const sum = latest.get(t.id);
+        const summary = [sum?.target, sum?.recap].filter(Boolean).join("\n");
+        return {
+          id: t.id,
+          title: t.title,
+          type: t.type,
+          tags: (t.tags || []).map((x) => x.tag),
+          lane: t.status,
+          summary,
+          acceptance: (board.workpads.find((w) => w.taskId === t.id)?.acceptance || []).map((a) => a.text),
+          clues: memoryOn ? memory!.clues.filter((c) => c.taskId === t.id).map((c) => ({ kind: c.kind, text: c.text })) : [],
+        };
+      });
+    const cooldown = now - DISMISS_COOLDOWN_DAYS * DAY_MS;
+    const material: SkillMaterial = {
+      cards,
+      memoryOn,
+      memory: memoryOn ? memory!.entries.filter((e) => e.projectId === project.id && e.status === "active").map((e) => ({ kind: e.kind, title: e.title, body: e.body })) : [],
+      skills: found.map((f) => ({ name: f.name, description: f.description, ...(installed.has(f.name) ? { body: installed.get(f.name) } : {}) })),
+      closedSkills: state.findings
+        .filter((f) => f.projectId === project.id && f.skill && (f.status === "accepted" || (f.status === "dismissed" && Date.parse(f.updatedAt) >= cooldown)))
+        .map((f) => ({ status: f.status, name: f.skill!.name, title: f.title })),
+    };
+    return { material, check: { names: found.map((f) => f.name), installed } };
+  }
+
+  /**
+   * Writes an open skill draft into the project (INSIGHTS-REDESIGN-SPEC §4): the file, the
+   * Claude Code link, then the draft accepted and the skill recorded as Flowly's. No git.
+   */
+  async installSkill(input: { projectId: string; findingId: string; expectedRevision: number }): Promise<InstallResult & { revision: number }> {
+    const board = await this.board.read();
+    const project = board.projects.find((p) => p.id === input.projectId);
+    if (!project) throw new Error("Project not found.");
+    let draft: WorkflowState["findings"][number] | undefined;
+    // Checked inside the serialized write, so two clicks cannot write twice.
+    return this.state.update(async (state) => {
+      if (state.revision !== input.expectedRevision) throw new Error("REVISION_CONFLICT: the suggestions changed; reload and try again.");
+      draft = state.findings.find((f) => f.id === input.findingId && f.projectId === input.projectId);
+      if (!draft || draft.status !== "open" || draft.target !== "skill" || !draft.skill) throw new Error("FINDING_NOT_OPEN: this skill draft is no longer open.");
+      const skill = draft.skill;
+      if (skill.updates && !state.installed.some((i) => i.projectId === project.id && i.name === skill.name)) throw new Error("SKILL_MISSING: Flowly did not add this skill, so it will not change it.");
+      const result = await writeSkill(project.primaryPath, skill, skill.updates ? "update" : "new");
+      const at = new Date(this.now()).toISOString();
+      draft.status = "accepted";
+      draft.acceptedSkill = skill.name;
+      draft.updatedAt = at;
+      state.installed = [...state.installed.filter((i) => !(i.projectId === project.id && i.name === skill.name)), { projectId: project.id, name: skill.name, findingId: draft.id, at }];
+      return { value: { ...result, revision: state.revision + 1 }, changed: true };
+    });
   }
 
   /** For the settings page: the latest run anywhere, and how many projects have a log. */
@@ -605,16 +734,31 @@ export class WorkflowInsightsService {
     await this.state.update(async (state) => {
       const runs = state.runs.filter((r) => r.projectId === projectId);
       const findings = state.findings.filter((f) => f.projectId === projectId);
-      if (!runs.length && !findings.length) return { value: null, changed: false };
+      const installed = state.installed.filter((i) => i.projectId === projectId);
+      if (!runs.length && !findings.length && !installed.length && !state.collectingSince[projectId]) return { value: null, changed: false };
       const folder = join(this.state.directory, "removed");
       await mkdir(folder, { recursive: true, mode: 0o700 });
       const backup = join(folder, `${projectId}-workflow-insights-${now.toISOString().replace(/[:.]/g, "-")}.json`);
-      await writeFile(backup, JSON.stringify({ removedAt: now.toISOString(), runs, findings }, null, 2), { mode: 0o600, flag: "wx" });
+      await writeFile(backup, JSON.stringify({ removedAt: now.toISOString(), runs, findings, installed }, null, 2), { mode: 0o600, flag: "wx" });
       state.runs = state.runs.filter((r) => r.projectId !== projectId);
       state.findings = state.findings.filter((f) => f.projectId !== projectId);
+      // The records go; the skill files stay in the project (§3.5).
+      state.installed = state.installed.filter((i) => i.projectId !== projectId);
+      delete state.collectingSince[projectId];
       return { value: backup, changed: true };
     });
   }
 }
 
 const log = (what: string) => (e: unknown) => logFailure(`Workflow insights ${what} failed:`, e);
+
+/** Cards with a turn or a move to Done since `cutoff`, the most recently active first (INSIGHTS-REDESIGN-SPEC §3.2). */
+export function recentCards(entries: readonly { taskId: string; action: string; to?: string; at: string }[], cutoff: number): string[] {
+  const last = new Map<string, string>();
+  for (const e of entries) {
+    if (!(e.action === "agent.turn_ended" || (e.action === "status_changed" && e.to === "done"))) continue;
+    if (Date.parse(e.at) < cutoff) continue;
+    if ((last.get(e.taskId) ?? "") < e.at) last.set(e.taskId, e.at);
+  }
+  return [...last].sort((a, b) => b[1].localeCompare(a[1])).map(([id]) => id);
+}

@@ -29,7 +29,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "summary-models", "first-memory-candidate", "settings-entry"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "summary-models", "first-skill-draft", "first-memory-candidate", "settings-entry"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -75,6 +75,9 @@ export interface TipFacts {
   cardWithSession: boolean;
   /** A card of the current project has an AI progress summary, so AI-written text is in view (AI-LANGUAGE-SPEC §7). */
   hasSummary: boolean;
+  /** The current project has 3 or more finished cards and no card is open, so Insights has history to show (INSIGHTS-REDESIGN-SPEC §8). */
+  /** An open skill draft in the current project, Insights and Skills on (INSIGHTS-REDESIGN-SPEC §5). */
+  skillDraft: boolean;
   /** The current project has a project-memory candidate waiting for review (PROJECT-MEMORY-SPEC §11). */
   memoryCandidate: boolean;
 }
@@ -103,6 +106,7 @@ const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
   "session-history": "cardWithSession",
   "ai-language": "hasSummary",
   "summary-models": "hasSummary",
+  "first-skill-draft": "skillDraft",
   "first-memory-candidate": "memoryCandidate",
 };
 
@@ -110,7 +114,7 @@ const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-workflow-insight", "ai-language", "summary-models", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
+  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-skill-draft", "first-workflow-insight", "ai-language", "summary-models", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 

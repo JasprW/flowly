@@ -27,6 +27,13 @@ export const INLINE_SAMPLE = 280;
 export const FAILED_SAMPLE = 60;
 export const FAILED_CHARS = 260;
 export const MAX_FINDINGS = 8;
+/** Skill drafts per run, new and updates together (INSIGHTS-REDESIGN-SPEC §3.1). */
+export const MAX_SKILLS = 3;
+/** Cards with turns since the last run that make a run worth it even with few commands (§3.1). */
+export const ACTIVE_CARDS = 3;
+/** Card material reaches back this far (§3.2). */
+export const CARD_DAYS = 30;
+export const skillLimits = { name: 64, description: 1024, bodyMin: 200, body: 8000, current: 6000 } as const;
 export const RUNS_KEPT = 20;
 export const CLOSED_KEPT_DAYS = 90;
 export const DISMISS_COOLDOWN_DAYS = 30;
@@ -44,7 +51,8 @@ export const workflowInsightsSettings = defineSettings({
   scope: "host",
   version: 1,
   schema: z.object({
-    enabled: z.boolean().default(false),
+    /** On by default since INSIGHTS-REDESIGN-SPEC §3.1 (2026-10-25); a stored false stays off. */
+    enabled: z.boolean().default(true),
     /** `provider/model`; empty picks WORKFLOW_AUTO_MODELS, then the Summary model. */
     model: z.string().max(200).default(""),
     intervalDays: z
@@ -414,9 +422,69 @@ function roundRobin<T>(queues: T[][]): T[] {
  * QUIET_ACTIONS new actions, or fewer than QUIET_CARDS cards in the window
  * unless BUSY_ACTIONS new actions make up for it.
  */
-export function quiet(sinceLast: readonly CommandRecord[], windowCards: number): boolean {
+export function quiet(sinceLast: readonly CommandRecord[], windowCards: number, activeCards = 0): boolean {
   const actions = sinceLast.reduce((n, r) => n + r.actions.length, 0);
-  return actions < QUIET_ACTIONS || (windowCards < QUIET_CARDS && actions < BUSY_ACTIONS);
+  const fewCommands = actions < QUIET_ACTIONS || (windowCards < QUIET_CARDS && actions < BUSY_ACTIONS);
+  // Projects that run few commands (docs, design, research) still get skills (INSIGHTS-REDESIGN-SPEC §3.1).
+  return fewCommands && activeCards < ACTIVE_CARDS;
+}
+
+// ---- Skill material (INSIGHTS-REDESIGN-SPEC §3.2) ---------------------------------
+
+export const CLUES_PER_CARD = 8;
+export const CLUE_CHARS = 400;
+export const SUMMARY_CHARS = 600;
+const ACCEPTANCE_ITEMS = 5;
+const ACCEPTANCE_CHARS = 120;
+const MEMORY_CHARS = 300;
+const TAG_CLUSTER = 3;
+
+export type SkillMaterial = {
+  /** Cards with a turn or a move to Done in the last CARD_DAYS days, newest first. */
+  cards: (CardInfo & { summary: string; acceptance: readonly string[]; clues: readonly { kind: string; text: string }[] })[];
+  /** False when project memory is off: no clues were collected. */
+  memoryOn: boolean;
+  memory: readonly { kind: string; title: string; body: string }[];
+  /** Skills found in the project; `body` only for those Flowly added. */
+  skills: readonly { name: string; description: string; body?: string }[];
+  closedSkills: readonly { status: string; name: string; title: string }[];
+};
+
+const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+const clueRank: Record<string, number> = { answer: 0, feedback: 1, message: 2 };
+
+export function skillMaterial(m: SkillMaterial, cut = { clues: CLUES_PER_CARD, summary: SUMMARY_CHARS, cards: m.cards.length }): string {
+  const cards = m.cards.slice(0, cut.cards);
+  const tags = new Map<string, string[]>();
+  for (const c of m.cards) for (const tag of c.tags) tags.set(tag, [...(tags.get(tag) || []), shortId(c.id)]);
+  const clusters = [...tags].filter(([, ids]) => ids.length >= TAG_CLUSTER).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const cardPart = cards
+    .map((c) => {
+      const lines = [`## ${shortId(c.id)} · ${c.title} · ${c.type || "untyped"} · ${c.tags.join(", ") || "-"} · ${c.lane}`];
+      if (c.summary) lines.push(`Summary: ${clip(c.summary, cut.summary)}`);
+      if (c.acceptance.length) lines.push(`Acceptance: ${c.acceptance.slice(0, ACCEPTANCE_ITEMS).map((a) => clip(oneLine(a), ACCEPTANCE_CHARS)).join(" | ")}`);
+      const clues = [...c.clues]
+        .map((x, i) => ({ ...x, i }))
+        .sort((a, b) => (clueRank[a.kind] ?? 3) - (clueRank[b.kind] ?? 3) || b.i - a.i)
+        .slice(0, cut.clues);
+      for (const x of clues) lines.push(`Owner (${x.kind}): ${clip(oneLine(x.text), CLUE_CHARS)}`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+  return [
+    `\n# Cards of the last ${CARD_DAYS} days with their summary, acceptance criteria and the owner's own words, newest first (${cards.length} of ${m.cards.length})\n${cardPart || "(none)"}`,
+    `\n# Tags used by ${TAG_CLUSTER}+ of these cards (tag · cards)\n${clusters.map(([tag, ids]) => `- ${tag} · ${ids.length}: ${ids.join(" ")}`).join("\n") || "(none)"}`,
+    m.memoryOn ? "" : "\n(Project memory is off: the owner's own words were not collected.)",
+    `\n# Project memory the owner confirmed\n${m.memory.map((x) => `- ${x.kind}: ${x.title}${x.body ? ` — ${clip(oneLine(x.body), MEMORY_CHARS)}` : ""}`).join("\n") || "(none)"}`,
+    `\n# Skills already in the project (name · description); never reuse a name for a new skill\n${m.skills.map((x) => `- ${x.name} · ${clip(oneLine(x.description), 300)}`).join("\n") || "(none)"}`,
+    ...m.skills
+      .filter((x) => x.body !== undefined)
+      .map((x) => `\n# Current text of skill ${x.name} (Flowly added it; you may propose an update)\n${clip(x.body!, skillLimits.current)}`),
+    `\n# Skill drafts the owner already added or dismissed (status · name: title); never propose them again\n${m.closedSkills.map((x) => `- ${x.status} · ${x.name}: ${x.title}`).join("\n") || "(none)"}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export type ExistingConfig = { paseoScripts: string[]; paseoWorktree: string; packageScripts: Record<string, string>; commands: string };
@@ -428,6 +496,8 @@ export function buildMaterial(input: {
   cards: readonly CardInfo[];
   config: ExistingConfig;
   previous: readonly { target: string; title: string; status: string; proposal?: string }[];
+  /** Cards, the user's words, memory and skills (INSIGHTS-REDESIGN-SPEC §3.2). */
+  skills?: SkillMaterial;
 }): string {
   const { agg } = input;
   const head = [
@@ -447,11 +517,19 @@ export function buildMaterial(input: {
     `\n# Inline scripts (python heredoc / node -e …), ${agg.inline.length} distinct, redacted and truncated, sampled across cards, up to ${n}\n${agg.inline.slice(0, n).map((s) => `[card ${s.card}] ${s.text}`).join("\n\n") || "(none)"}`;
   let inlineN = INLINE_SAMPLE,
     failedN = FAILED_SAMPLE;
-  let text = head + failedPart(failedN) + inlinePart(inlineN);
-  while (text.length > MATERIAL_LIMIT && (inlineN > 0 || failedN > 0)) {
+  const cut = { clues: CLUES_PER_CARD, summary: SUMMARY_CHARS, cards: input.skills?.cards.length ?? 0 };
+  const skillPart = () => (input.skills ? skillMaterial(input.skills, cut) : "");
+  const build = () => head + failedPart(failedN) + inlinePart(inlineN) + skillPart();
+  let text = build();
+  // Cut order (§3.2): inline scripts, failed commands, the user's words per card, summary length, then the oldest cards.
+  while (text.length > MATERIAL_LIMIT) {
     if (inlineN > 0) inlineN = Math.max(0, inlineN - 20);
-    else failedN = Math.max(0, failedN - 10);
-    text = head + failedPart(failedN) + inlinePart(inlineN);
+    else if (failedN > 0) failedN = Math.max(0, failedN - 10);
+    else if (cut.clues > 0) cut.clues--;
+    else if (cut.summary > 100) cut.summary = Math.max(100, cut.summary - 100);
+    else if (cut.cards > 0) cut.cards = Math.max(0, cut.cards - 5);
+    else break;
+    text = build();
   }
   return text.length > MATERIAL_LIMIT ? text.slice(0, MATERIAL_LIMIT) : text;
 }
@@ -471,10 +549,16 @@ Targets you may recommend:
 - "worktree_setup": commands for paseo.json "worktree.setup" (run once when a new git worktree is created) or "worktree.teardown".
 - "repo_tool": a new script or CLI in the repository (e.g. scripts/x.mjs plus an npm script) for work agents currently redo by hand with inline code.
 - "agents_md": a rule or command to add to AGENTS.md so agents stop rediscovering it.
-- "skill": a reusable agent skill or checklist for a multi-step routine that needs judgement.
+- "skill": an agent skill written into the project (.agents/skills/<name>/SKILL.md) that later agents load and follow. Two kinds:
+  - a procedure: a multi-step routine that recurs on 2+ cards and needs judgement (for example shipping a change through a pull request);
+  - domain know-how: what 3+ cards of one kind of work taught (how to measure, usual causes, pitfalls, standards; a tag shared by several cards is a hint).
 
 Rules:
 - Base every finding on evidence in the material; cite counts and card short ids (the 8-character ids in brackets). Do not invent commands.
+- Skills matter most. Where agents did the same thing in different ways, or the owner corrected them, the skill must settle on one way and state the decision points (for example when a review counts as done). Quote the owner's words as evidence.
+- A skill must not copy rules AGENTS.md already states word for word, but may gather rules scattered across AGENTS.md, project memory and cards into one coherent procedure. No one-off fixes, nothing seen on one card only, nothing an existing skill already covers.
+- For a skill, give "skill": {"name": "lowercase-hyphenated, at most 64 characters, not a name already in the project", "description": "English, at most 1024 characters, first sentence starting with 'Use when'", "body": "English Markdown of 200 to 8000 characters without front matter: When to use, Steps, Commands (only commands seen in the material or existing scripts), Pitfalls, Sources (card short ids); repository-relative paths, no home paths, no secrets"}. Its "proposal" may be empty. At most ${MAX_SKILLS} skills.
+- To improve a skill Flowly added (its current text is in the material), return it with "skill": {"name": its name, "updates": true, "description", "body": the complete new text, "change": one sentence on what changed}, only when the material adds something real.
 - Do not recommend what already exists (package.json scripts, paseo.json, AGENTS.md commands) unless combining them saves real effort; say so explicitly.
 - Never turn git write operations (add, commit, push, tag) or one-off exploration into scripts.
 - For inline scripts, infer their purpose and cluster them; this is where most of the value is expected.
@@ -482,7 +566,8 @@ Rules:
 - Suggestions the owner already accepted or dismissed are listed. Do not propose them again, even reworded or narrowed. This run's findings replace the open suggestions of earlier runs, so list everything still worth doing, not only what is new.
 - ${outputLanguageRule(language)}
 - Do not use any tools. Answer with only one JSON object and nothing else:
-{"findings":[{"target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"]}],"noise":"what in the material was noise","verdict":"one or two sentences"}
+{"findings":[{"target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"],"skill":{"name":"…","description":"…","body":"…","updates":false,"change":"…"}}],"noise":"what in the material was noise","verdict":"one or two sentences"}
+"skill" only for target "skill".
 
 ${material}`;
 }
@@ -499,6 +584,10 @@ const finding = {
     benefit: { type: "string" },
     confidence: { enum: [...confidences] },
     cards: { type: "array", items: { type: "string" } },
+    skill: {
+      type: "object",
+      properties: { name: { type: "string" }, description: { type: "string" }, body: { type: "string" }, updates: { type: "boolean" }, change: { type: "string" } },
+    },
   },
 };
 /** Passed as outputSchema, but Claude does not enforce it: parsing stays lenient. */
@@ -510,7 +599,8 @@ export const workflowJsonSchema = {
 } as const;
 export const RETRY_PROMPT = "Reply again with only the JSON object described above, and nothing else.";
 
-export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[] };
+export type RawSkill = { name: string; description: string; body: string; updates: boolean; change: string };
+export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[]; skill?: RawSkill };
 
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : Array.isArray(v) ? v.filter((x) => typeof x === "string").join("\n").trim() : "");
 
@@ -540,6 +630,12 @@ export function parseWorkflowOutput(reply: string | null | undefined): { finding
         benefit: text(f.benefit),
         confidence: text(f.confidence).toLowerCase(),
         cards: (Array.isArray(f.cards) ? f.cards : []).filter((c): c is string => typeof c === "string").map((c) => c.trim()),
+        ...(f.skill && typeof f.skill === "object"
+          ? (() => {
+              const k = f.skill as Record<string, unknown>;
+              return { skill: { name: text(k.name).toLowerCase(), description: text(k.description), body: typeof k.body === "string" ? k.body.trim() : "", updates: k.updates === true, change: text(k.change) } };
+            })()
+          : {}),
       })),
   };
 }
@@ -571,6 +667,18 @@ export const findingSchema = z.object({
   cards: z.array(z.string()).max(20),
   status: z.enum(findingStatuses),
   acceptedTaskId: z.string().optional(),
+  /** A skill draft (INSIGHTS-REDESIGN-SPEC §3.5): its SKILL.md fields; `updates` revises a skill Flowly added. */
+  skill: z
+    .object({
+      name: z.string().max(skillLimits.name),
+      description: z.string().max(skillLimits.description),
+      body: z.string().max(skillLimits.body),
+      updates: z.boolean().optional(),
+      change: z.string().max(findingLimits.benefit).optional(),
+    })
+    .optional(),
+  /** The skill name this draft wrote into the project. */
+  acceptedSkill: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -611,7 +719,17 @@ export function similarFinding(a: { target: string; title: string }, b: { target
  * or recently dismissed suggestion (same fingerprint or a similar title) is
  * dropped, and so is one repeating an earlier finding of the same run.
  */
-export function validateFindings(raw: readonly RawFinding[], ctx: { cardIds: readonly string[]; existing: readonly Finding[]; now: number }): FindingDraft[] {
+export function validateFindings(
+  raw: readonly RawFinding[],
+  ctx: {
+    cardIds: readonly string[];
+    existing: readonly Finding[];
+    now: number;
+    /** Skill names already in the project, and the bodies of those Flowly added (INSIGHTS-REDESIGN-SPEC §3.4). */
+    skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> };
+    redact?: RedactContext;
+  },
+): FindingDraft[] {
   const byShort = new Map<string, string>();
   const ambiguous = new Set<string>();
   for (const id of ctx.cardIds) {
@@ -627,7 +745,13 @@ export function validateFindings(raw: readonly RawFinding[], ctx: { cardIds: rea
   for (const f of raw) {
     if (out.length >= MAX_FINDINGS) break;
     if (!(findingTargets as readonly string[]).includes(f.target)) continue;
-    if (!f.title || !f.proposal) continue;
+    let skill: FindingDraft["skill"];
+    if (f.target === "skill" && f.skill) {
+      if (out.filter((d) => d.skill).length >= MAX_SKILLS) continue;
+      skill = checkSkill(f.skill, ctx, out);
+      if (!skill) continue;
+    }
+    if (!f.title || (!f.proposal && !skill)) continue;
     if (f.title.length > findingLimits.title || f.evidence.length > findingLimits.evidence || f.proposal.length > findingLimits.proposal || f.benefit.length > findingLimits.benefit) continue;
     const cards = [
       ...new Set(
@@ -647,19 +771,113 @@ export function validateFindings(raw: readonly RawFinding[], ctx: { cardIds: rea
       benefit: f.benefit,
       confidence: (confidences as readonly string[]).includes(f.confidence) ? (f.confidence as Finding["confidence"]) : "medium",
       cards: cards.slice(0, 20),
+      ...(skill ? { skill } : {}),
     };
-    if (prints.has(draft.fingerprint) || closed.some((e) => similarFinding(draft, e)) || out.some((a) => similarFinding(draft, a))) continue;
+    // Updates revise a known skill: only the same name's closed draft blocks them, not similar titles.
+    const repeat = skill?.updates
+      ? closed.some((e) => e.skill?.name === skill.name && e.skill.body === skill.body)
+      : prints.has(draft.fingerprint) || closed.some((e) => similarFinding(draft, e) || (!!skill && e.skill?.name === skill.name)) || out.some((a) => similarFinding(draft, a));
+    if (repeat) continue;
     prints.add(draft.fingerprint);
     out.push(draft);
   }
   return out;
 }
 
-/** Replaces the project's open suggestions with a run's new ones (in place); returns how many were removed (§5.3). */
+export const SKILL_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * A skill draft's own rules (INSIGHTS-REDESIGN-SPEC §3.4): name and lengths; a new name
+ * free in the project and in this run; an update only of a skill Flowly added, and only
+ * with a changed body; redacted, and dropped when a secret survives the redaction.
+ */
+function checkSkill(
+  raw: RawSkill,
+  ctx: { skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> }; redact?: RedactContext },
+  sameRun: readonly FindingDraft[],
+): FindingDraft["skill"] | undefined {
+  const name = raw.name;
+  if (!SKILL_NAME.test(name) || name.length > skillLimits.name) return;
+  if (!raw.description || raw.description.length > skillLimits.description) return;
+  if (raw.body.length < skillLimits.bodyMin || raw.body.length > skillLimits.body || raw.body.startsWith("---")) return;
+  if (sameRun.some((d) => d.skill?.name === name)) return;
+  const installed = ctx.skills?.installed;
+  if (raw.updates) {
+    const current = installed?.get(name);
+    if (current === undefined || current.trim() === raw.body.trim()) return;
+  } else if (ctx.skills?.names.includes(name)) return;
+  const clean = (t: string) => (ctx.redact ? redact(t, ctx.redact) : t);
+  const description = clean(raw.description),
+    body = clean(raw.body);
+  if (/<secret>|<cred>/.test(description + body)) return;
+  return { name, description, body, ...(raw.updates ? { updates: true, change: raw.change.slice(0, findingLimits.benefit) } : {}) };
+}
+
+/** YAML scalar that survives any text: double-quoted with escapes. */
+const yamlString = (v: string) => JSON.stringify(v.replace(/\r?\n/g, " "));
+
+/** The SKILL.md Flowly writes (INSIGHTS-REDESIGN-SPEC §4.2): front matter, a blank line, the body. */
+export function skillFile(skill: { name: string; description: string; body: string }): string {
+  return `---\nname: ${skill.name}\ndescription: ${yamlString(skill.description)}\n---\n\n${skill.body.trim()}\n`;
+}
+
+/** The body of a SKILL.md: what follows its front matter. */
+export function skillBody(file: string): string {
+  const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(file);
+  return (m ? file.slice(m[0].length) : file).trim();
+}
+
+/** The description in a SKILL.md front matter; "" when there is none. */
+export function skillDescription(file: string): string {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(file);
+  const line = m?.[1].split(/\r?\n/).find((l) => /^description:/.test(l));
+  if (!line) return "";
+  const v = line.replace(/^description:\s*/, "").trim();
+  try {
+    return v.startsWith('"') ? String(JSON.parse(v)) : v.replace(/^'(.*)'$/, "$1");
+  } catch {
+    return v;
+  }
+}
+
+export type DiffLine = { kind: "same" | "add" | "remove"; text: string };
+/** Line diff by longest common subsequence; skills are a few hundred lines at most (§4.6). */
+export function lineDiff(before: string, after: string): DiffLine[] {
+  const a = before.split("\n"),
+    b = after.split("\n");
+  const n = a.length,
+    m = b.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  const out: DiffLine[] = [];
+  let i = 0,
+    j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      out.push({ kind: "same", text: a[i] });
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) out.push({ kind: "remove", text: a[i++] });
+    else out.push({ kind: "add", text: b[j++] });
+  }
+  while (i < n) out.push({ kind: "remove", text: a[i++] });
+  while (j < m) out.push({ kind: "add", text: b[j++] });
+  return out;
+}
+
+/**
+ * Replaces the project's open suggestions with a run's new ones (in place), per kind: new
+ * skill drafts replace open skill drafts, other new suggestions replace the other open
+ * ones (INSIGHTS-REDESIGN-SPEC §3.1). Returns how many were removed (§5.3).
+ */
 export function replaceOpen(findings: Finding[], projectId: string, added: readonly Finding[]): number {
+  const isSkill = (f: Finding) => f.target === "skill";
+  const skills = added.some(isSkill),
+    others = added.some((f) => !isSkill(f));
   let removed = 0;
   for (let i = findings.length - 1; i >= 0; i--) {
-    if (findings[i].projectId === projectId && findings[i].status === "open") {
+    const f = findings[i];
+    if (f.projectId === projectId && f.status === "open" && (isSkill(f) ? skills : others)) {
       findings.splice(i, 1);
       removed++;
     }
@@ -698,14 +916,20 @@ export const runSchema = z.object({
   stats: z.object({ calls: z.number(), actions: z.number(), cards: z.number(), sessions: z.number() }),
 });
 export type WorkflowRun = z.infer<typeof runSchema>;
+export const installedSkillSchema = z.object({ projectId: z.string(), name: z.string(), findingId: z.string(), at: z.string() });
+export type InstalledSkill = z.infer<typeof installedSkillSchema>;
 export const workflowStateSchema = z.object({
   version: z.literal(1),
   revision: z.number().int().min(0),
   runs: z.array(runSchema),
   findings: z.array(findingSchema),
+  /** Skills Flowly wrote into a project: the only proof a skill is Flowly's (INSIGHTS-REDESIGN-SPEC §3.5). */
+  installed: z.array(installedSkillSchema).default([]),
+  /** When collecting started per project; the first scheduled run waits one interval after it (§3.1). */
+  collectingSince: z.record(z.string(), z.string()).default({}),
 });
 export type WorkflowState = z.infer<typeof workflowStateSchema>;
-export const emptyWorkflowState = (): WorkflowState => ({ version: 1, revision: 0, runs: [], findings: [] });
+export const emptyWorkflowState = (): WorkflowState => ({ version: 1, revision: 0, runs: [], findings: [], installed: [], collectingSince: {} });
 
 /** Keep the newest runs per project, open findings always, closed ones for CLOSED_KEPT_DAYS. */
 export function trimState(state: WorkflowState, now: number) {
@@ -726,6 +950,10 @@ export const workflowViewSchema = z.object({
   windowDays: z.number(),
   lastRun: runSchema.nullable(),
   findings: z.array(findingSchema),
+  /** Skills Flowly added to this project, with their current file text (§4.6). */
+  installed: z.array(z.object({ name: z.string(), path: z.string(), content: z.string() })),
+  /** Current body of each skill an open update draft would change, by name. */
+  current: z.record(z.string(), z.string()),
   revision: z.number(),
 });
 export type WorkflowView = z.infer<typeof workflowViewSchema>;

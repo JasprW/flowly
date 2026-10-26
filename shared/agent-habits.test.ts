@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { flowEntry, type FlowEntry } from "./insights";
-import { FLAG_MIN, habits, matchPick, modellessAgents, turnPick, userTexts, withMoveDetails } from "./agent-habits";
+import { FLAG_MIN, habits, matchPick, modellessAgents, startedByUser, turnPick, userTexts, withMoveDetails } from "./agent-habits";
 import type { BoardEvent } from "./model";
 
 // ---- Fixtures: one session unless a test says otherwise -----------------------------
@@ -450,6 +450,23 @@ describe("flow log entries", () => {
   it("stay as they were for events without the new fields", () => {
     const e = flowEntry({ id: "x", at: at(0), taskId: "t1", actor: "system", action: "agent.turn_started", agentId: "a1" });
     expect(e).toEqual({ id: "x", at: at(0), taskId: "t1", actor: "system", action: "agent.turn_started", agentId: "a1" });
+  });
+});
+
+describe("startedByUser (INSIGHTS-REDESIGN-SPEC §7.1)", () => {
+  it("is true for a real message, false for injections only, undefined without a timeline", () => {
+    expect(startedByUser([{ type: "user_message", text: "Fix the bug" }, { type: "assistant_message", text: "ok" }])).toBe(true);
+    expect(startedByUser([{ type: "user_message", text: "  <task-notification>done</task-notification>" }, { type: "user_message", text: "<system-reminder>x" }])).toBe(false);
+    expect(startedByUser([{ type: "user_message", text: "<task-notification>x" }, { type: "user_message", text: "and also this" }])).toBe(true);
+    expect(startedByUser([{ type: "assistant_message", text: "hi" }])).toBe(false);
+    expect(startedByUser([])).toBe(false);
+    expect(startedByUser(undefined)).toBeUndefined();
+  });
+  it("keeps byUser (false too) and tool in the flow log", () => {
+    const ended = flowEntry({ id: "b", at: at(1), taskId: "t1", actor: "system", action: "agent.turn_ended", agentId: "a1", byUser: false } as never);
+    expect(ended.byUser).toBe(false);
+    const asked = flowEntry({ id: "c", at: at(1), taskId: "t1", actor: "system", action: "agent.permission_requested", agentId: "a1", tool: "Bash" } as never);
+    expect(asked.tool).toBe("Bash");
   });
 });
 

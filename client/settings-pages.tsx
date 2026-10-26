@@ -441,7 +441,7 @@ export function MemoryFeatureGroup({ bare = false }: { bare?: boolean }) {
   );
 }
 
-/** Insights as a whole, its daily digest and, in the welcome tour, the Workflow insights switch. */
+/** Insights as a whole, its daily digest and, in the welcome tour, the Skills switch. */
 export function InsightsFeatureGroup({ bare = false, workflow = false }: { bare?: boolean; workflow?: boolean }) {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const features = useStored(useSettings(featureSettings), featureSettingsValues);
@@ -468,14 +468,14 @@ export function InsightsFeatureGroup({ bare = false, workflow = false }: { bare?
   );
 }
 
-/** Just the Workflow insights switch; its model and cadence stay in Settings. */
+/** Just the Skills switch (workflow insights); its model and cadence stay in Settings. */
 function WorkflowSwitch({ disabled }: { disabled: boolean }) {
   const prefs = useStored(useSettings(workflowInsightsSettings), workflowSettingsValues);
   const on = !disabled && !!prefs.values?.enabled;
   return (
     <SettingSwitch
-      title={t("Workflow insights")}
-      detail={`${t("Off by default: every few days a model reads the commands agents ran and suggests scripts and rules. Spends tokens and keeps a log of commands. Model and schedule are in Settings.")} ${aiCostText("workflow", prefs.values?.model || WORKFLOW_AUTO_MODELS[0])}`}
+      title={t("Skills")}
+      detail={`${t("A model reads your cards and commands each week and drafts skills. Spends tokens; model and schedule are in Settings.")} ${aiCostText("workflow", prefs.values?.model || WORKFLOW_AUTO_MODELS[0])}`}
       value={on}
       disabled={prefs.busy || disabled}
       onChange={(enabled) => prefs.save({ enabled, timeZone: localZone() || "" })}
@@ -486,7 +486,7 @@ function WorkflowSwitch({ disabled }: { disabled: boolean }) {
 const intervalLabels: Record<(typeof INTERVALS)[number], string> = { 1: msg("Daily"), 3: msg("Every 3 days"), 7: msg("Weekly"), 14: msg("Every 2 weeks") };
 const hourLabel = (hour: number) => new Date(Date.UTC(2020, 0, 1, hour)).toLocaleTimeString(formatLocale(), { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 
-/** Workflow insights (WORKFLOW-INSIGHTS-SPEC §2.3): the switch, model, cadence and the collected data. */
+/** Skills, formerly Workflow insights (INSIGHTS-REDESIGN-SPEC §5, WORKFLOW-INSIGHTS-SPEC §2.3): the switch, model, cadence and the collected data. */
 function WorkflowInsightsGroup() {
   const paseo = usePaseo();
   const prefs = useStored(useSettings(workflowInsightsSettings), workflowSettingsValues);
@@ -536,11 +536,11 @@ function WorkflowInsightsGroup() {
   return (
     <>
       <SettingsGroup
-        title={t("Workflow insights")}
+        title={t("Skills")}
       >
         <SettingSwitch
-          title={t("Workflow insights")}
-          detail={`${on ? t("Collecting commands. Suggestions appear in each project's Insights.") : t("Collecting starts when you turn this on; the last 7 days are read once from the sessions' history.")} ${aiCostText("workflow", values?.model || WORKFLOW_AUTO_MODELS[0])}`}
+          title={t("Skills")}
+          detail={`${t("Every week a model reads this project's cards, your messages and the commands agents ran, and drafts skills and scripts worth keeping. Spends tokens and keeps a local log of commands.")} ${aiCostText("workflow", values?.model || WORKFLOW_AUTO_MODELS[0])}`}
           value={on}
           disabled={prefs.busy}
           onChange={(enabled) => save({ enabled })}

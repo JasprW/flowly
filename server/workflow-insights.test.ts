@@ -213,7 +213,8 @@ test("Run now on an empty log reads the last week first", async () => {
   const empty = await setup();
   empty.service.run("p", empty.paseo, true);
   await settle(empty.service);
-  expect((await empty.service.view("p")).lastRun).toMatchObject({ status: "skipped", reason: "No commands collected yet." });
+  // No commands and no card active in 30 days: nothing to analyze (INSIGHTS-REDESIGN-SPEC §3.1).
+  expect((await empty.service.view("p")).lastRun).toMatchObject({ status: "skipped", reason: "No recent activity." });
 });
 
 test("a configured model that is not offered fails without falling back", async () => {
@@ -350,14 +351,79 @@ test("the cost of one cycle adds up each included project's latest priced run", 
   expect(overview.cycleCostUsd).toBeCloseTo(0.9);
 });
 
-test("a busy project with two cards is analyzed on schedule", async () => {
+test("a busy project with two cards is analyzed on schedule, one interval after collecting started", async () => {
   const x = await setup();
   x.service.attach(x.paseo);
   await x.log.append("p", records(30, 2));
+  // The first check starts collecting (and reads the last week); no run yet (INSIGHTS-REDESIGN-SPEC §3.1).
+  await x.service.tick();
+  await settle(x.service);
+  await new Promise((r) => setTimeout(r, 20));
+  expect((await x.state.read()).collectingSince.p).toBe(new Date(NOW).toISOString());
+  await x.service.tick();
+  await settle(x.service);
+  expect((await x.service.view("p")).lastRun).toBeNull();
+  expect(x.created).toHaveLength(0);
+  const later = NOW + 7 * 86_400_000;
+  x.setNow(later);
+  await x.log.append("p", records(30, 2).map((r) => ({ ...r, id: `l${r.id}`, at: new Date(later - 3_600_000).toISOString() })));
   await x.service.tick();
   await settle(x.service);
   expect((await x.service.view("p")).lastRun).toMatchObject({ status: "ok", manual: false });
   expect(x.created).toHaveLength(1);
+});
+
+test("skill drafts: material from cards and memory, Run now without commands, add to project, then an update", async () => {
+  const x = await setup();
+  const body = "## When to use\n" + "Ship through a pull request and wait for the review. ".repeat(6);
+  // Two cards active this week, no commands at all.
+  await x.board.mutate((b) => {
+    for (const [i, id] of ["aaaaaaaa-1", "bbbbbbbb-2"].entries()) {
+      b.events.push({ id: `t${i}`, taskId: id, actor: "system", action: "agent.turn_ended", agentId: `s${i}`, at: "2026-10-19T09:00:00.000Z" });
+      b.events.push({ id: `d${i}`, taskId: id, actor: "human", action: "status_changed", from: "in_review", to: "done", at: "2026-10-19T10:00:00.000Z" });
+    }
+    b.tasks[0].tags = [{ tag: "release", by: "agent", at: "" }];
+  });
+  await x.service.flow.reconcile(await x.board.read());
+  x.service.skillSources = {
+    summaries: async () => [{ taskId: "aaaaaaaa-1", target: "Ship v1.6.0", recap: "Merged after CodeRabbit", at: "2026-10-19T10:00:00.000Z" }],
+    memory: async () => ({ clues: [{ taskId: "aaaaaaaa-1", kind: "feedback", text: "要等 CodeRabbit 评审完再合", at: "2026-10-19T09:30:00.000Z" }], entries: [{ projectId: "p", kind: "pitfall", title: "auto merge 不等于已评审", body: "", status: "active" }] }),
+    memoryOn: () => true,
+  };
+  const draft = (over: Record<string, unknown> = {}) =>
+    JSON.stringify({ findings: [{ target: "skill", title: "PR 交付与合入", evidence: "2 张卡", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], skill: { name: "flowly-ship", description: "Use when shipping a change.", body, ...over } }], noise: "", verdict: "" });
+  x.replies.push(draft());
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  const prompt = x.created[0].prompt;
+  expect(prompt).toContain("Summary: Ship v1.6.0");
+  expect(prompt).toContain("Owner (feedback): 要等 CodeRabbit 评审完再合");
+  expect(prompt).toContain("- pitfall: auto merge 不等于已评审");
+  let view = await x.service.view("p");
+  expect(view.lastRun).toMatchObject({ status: "ok", findings: 1 });
+  const f = view.findings[0];
+  expect(f.skill).toMatchObject({ name: "flowly-ship" });
+
+  await expect(x.service.installSkill({ projectId: "p", findingId: f.id, expectedRevision: view.revision + 5 })).rejects.toThrow("REVISION_CONFLICT");
+  const result = await x.service.installSkill({ projectId: "p", findingId: f.id, expectedRevision: view.revision });
+  expect(result).toMatchObject({ path: ".agents/skills/flowly-ship/SKILL.md", linked: true });
+  expect(await readFile(join(x.root, ".claude/skills/flowly-ship/SKILL.md"), "utf8")).toContain("Use when shipping a change.");
+  view = await x.service.view("p");
+  expect(view.findings[0]).toMatchObject({ status: "accepted", acceptedSkill: "flowly-ship" });
+  expect(view.installed.map((i) => i.name)).toEqual(["flowly-ship"]);
+  await expect(x.service.installSkill({ projectId: "p", findingId: f.id, expectedRevision: view.revision })).rejects.toThrow("FINDING_NOT_OPEN");
+
+  // The next run sees the installed text and proposes an update; the view carries the current body for the diff.
+  x.replies.push(draft({ updates: true, body: body + "\n## Pitfalls\nAuto merge is not a review.", change: "加了坑" }));
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  expect(x.created[1].prompt).toContain("# Current text of skill flowly-ship");
+  view = await x.service.view("p");
+  const update = view.findings.find((g) => g.status === "open")!;
+  expect(update.skill).toMatchObject({ name: "flowly-ship", updates: true, change: "加了坑" });
+  expect(view.current["flowly-ship"]).toBe(body.trim());
+  await x.service.installSkill({ projectId: "p", findingId: update.id, expectedRevision: view.revision });
+  expect(await readFile(join(x.root, ".agents/skills/flowly-ship/SKILL.md"), "utf8")).toContain("Auto merge is not a review.");
 });
 
 for (const secondLookupFails of [false, true]) {

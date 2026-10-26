@@ -24,13 +24,18 @@ export const flowEntrySchema = z.object({
   /** next_moves_suggested: how many moves (0 is an explicit "none"), and whether one of them is "Move to Done" (the moves themselves are not kept). */
   offered: z.number().int().min(0).optional(),
   offersDone: z.boolean().optional(),
+  /** agent.turn_ended: started by a real user message (INSIGHTS-REDESIGN-SPEC §7.1). */
+  byUser: z.boolean().optional(),
+  /** agent.permission_requested: the tool's name (§7.2). */
+  tool: z.string().max(80).optional(),
 });
 export type FlowEntry = z.infer<typeof flowEntrySchema>;
 
 export function flowEntry(event: FlowEntry & { note?: string; moves?: readonly { moveTo?: string }[] }): FlowEntry {
   const entry: FlowEntry = { id: event.id, at: event.at, taskId: event.taskId, actor: event.actor, action: event.action };
-  for (const key of ["from", "to", "reportKind", "outcome", "rule", "agentId", "model"] as const) if (event[key]) entry[key] = event[key];
+  for (const key of ["from", "to", "reportKind", "outcome", "rule", "agentId", "model", "tool"] as const) if (event[key]) entry[key] = event[key];
   if (typeof event.pick === "number") entry.pick = event.pick;
+  if (typeof event.byUser === "boolean") entry.byUser = event.byUser;
   // An empty list is the session's explicit "no next steps" and stays distinguishable: offered 0.
   const offered = event.moves ? event.moves.length : event.offered;
   if (offered !== undefined) entry.offered = offered;
@@ -46,7 +51,8 @@ export const thresholds = {
   reviewCount: 3,
   reviewWaitMs: 24 * HOUR,
   staleMs: 48 * HOUR,
-  reworkCount: 2,
+  /** R3: review rounds on an unfinished card (INSIGHTS-REDESIGN-SPEC §3.7). */
+  reworkCount: 3,
   inversionMs: 3 * DAY_MS,
   wipMin: 5,
   wipFactor: 2,
@@ -122,7 +128,7 @@ export function dayStart(day: string, tz: string | undefined): number {
 // ---- Replay ---------------------------------------------------------------
 
 export type Interval = { status: Status; start: number; end: number };
-type TaskLike = Pick<Task, "id" | "title" | "status" | "priority" | "createdAt" | "archivedAt" | "workspaceId">;
+type TaskLike = Pick<Task, "id" | "title" | "status" | "priority" | "createdAt" | "archivedAt" | "workspaceId"> & Partial<Pick<Task, "type" | "tags">>;
 
 /** Retired In progress reads as Development; unknown values are dropped. */
 function asStatus(value: string | undefined): Status | null {
@@ -300,7 +306,9 @@ export function withoutRevertedResumes(entries: readonly FlowEntry[]): FlowEntry
   return drop.size ? entries.filter((e) => !drop.has(e.id)) : [...entries];
 }
 
-export function analyze(raw: AnalyzeInput): ProjectInsights {
+/** The replay and per-day stats both the page view and the work statistics read. */
+export type Prepared = ReturnType<typeof prepare>;
+export function prepare(raw: AnalyzeInput) {
   const input = { ...raw, entries: withoutRevertedResumes(raw.entries) };
   const { now, tz } = input;
   const today = dayKey(now, tz);
@@ -314,7 +322,21 @@ export function analyze(raw: AnalyzeInput): ProjectInsights {
     if (list) list.push(c);
     else commitDays.set(k, [c]);
   }
-  const statsFor = (d: string) => dayStats(d, tz, now, histories, input.entries, sessions, commitDays.get(d) || []);
+  const cache = new Map<string, DayStats>();
+  const statsFor = (d: string) => {
+    let s = cache.get(d);
+    if (!s) cache.set(d, (s = dayStats(d, tz, now, histories, input.entries, sessions, commitDays.get(d) || [])));
+    return s;
+  };
+  return { input, now, tz, today, day, histories, sessions, commitDays, statsFor };
+}
+
+export function analyze(raw: AnalyzeInput): ProjectInsights {
+  return analyzePrepared(prepare(raw));
+}
+
+export function analyzePrepared(prepared: Prepared): ProjectInsights {
+  const { input, now, tz, today, day, histories, commitDays, statsFor } = prepared;
   const stats = statsFor(day);
   const previous = Array.from({ length: TREND_DAYS }, (_, i) => statsFor(addDays(day, -(i + 1))));
   const mean = (pick: (s: DayStats) => number) => previous.reduce((sum, s) => sum + pick(s), 0) / previous.length;
@@ -578,11 +600,12 @@ export const TOP_TOKEN_TASKS = 5;
 export const tokenInsightsSchema = z.object({
   day: z.string(),
   today: z.string(),
+  /** Tokens over the period ending on `day` (one day unless the request names a longer one). */
   tokens: tokenUsageSchema,
-  /** Mean total tokens over the 7 days before `day`. */
+  /** Mean total tokens per period over the baseline before it (the 7 days before, for a day). */
   average: z.number(),
-  trend: z.array(z.object({ day: z.string(), total: z.number() })),
-  /** Cards that used the most tokens on `day`, most first. */
+  trend: z.array(z.object({ day: z.string(), total: z.number(), usage: tokenUsageSchema.optional() })),
+  /** Cards that used the most tokens in the period, most first. */
   tasks: z.array(z.object({ taskId: z.string(), tokens: tokenUsageSchema })),
   /** Sessions read, and sessions without a local Claude Code / Codex log. */
   sessions: z.number().int(),
@@ -590,34 +613,46 @@ export const tokenInsightsSchema = z.object({
 });
 export type TokenInsights = z.infer<typeof tokenInsightsSchema>;
 
-/** Sums 15-minute token slots into the zone's days. */
+/**
+ * Sums 15-minute token slots into the zone's days. `span` is the period length
+ * in days, `chart` the days on the trend, `baseline` how many earlier periods
+ * the average covers (INSIGHTS-REDESIGN-SPEC §7).
+ */
 export function tokenInsights(input: {
   series: readonly { taskId: string; buckets: ReadonlyMap<number, TokenUsage> | null }[];
   now: number;
   tz: string | undefined;
   day?: string;
+  span?: number;
+  chart?: number;
+  baseline?: number;
 }): TokenInsights {
   const { tz, now } = input;
+  const span = input.span ?? 1,
+    chart = input.chart ?? TREND_DAYS,
+    baseline = input.baseline ?? TREND_DAYS;
   const today = dayKey(now, tz);
   const day = input.day && isDay(input.day) && input.day <= today ? input.day : today;
-  const range = (d: string) => [Math.floor(dayStart(d, tz) / TOKEN_SLOT_MS), Math.floor(dayStart(addDays(d, 1), tz) / TOKEN_SLOT_MS)] as const;
-  const sum = (d: string, taskId?: string) => {
-    const [from, to] = range(d);
+  const slot = (d: string) => Math.floor(dayStart(d, tz) / TOKEN_SLOT_MS);
+  const sum = (from: string, to: string, taskId?: string) => {
+    const a = slot(from),
+      b = slot(addDays(to, 1));
     let out = zeroUsage();
     for (const s of input.series) {
       if (!s.buckets || (taskId && s.taskId !== taskId)) continue;
-      for (const [slot, tokens] of s.buckets) if (slot >= from && slot < to) out = addUsage(out, tokens);
+      for (const [k, tokens] of s.buckets) if (k >= a && k < b) out = addUsage(out, tokens);
     }
     return out;
   };
-  const tokens = sum(day);
-  const previous = Array.from({ length: TREND_DAYS }, (_, i) => totalTokens(sum(addDays(day, -(i + 1)))));
-  const trend = Array.from({ length: TREND_DAYS }, (_, i) => addDays(day, i - TREND_DAYS + 1)).map((d) => ({
-    day: d,
-    total: d === day ? totalTokens(tokens) : totalTokens(sum(d)),
-  }));
+  const from = addDays(day, 1 - span);
+  const tokens = sum(from, day);
+  const before = totalTokens(sum(addDays(from, -span * baseline), addDays(from, -1)));
+  const trend = Array.from({ length: chart }, (_, i) => addDays(day, i + 1 - chart)).map((d) => {
+    const usage = sum(d, d);
+    return { day: d, total: totalTokens(usage), usage };
+  });
   const tasks = [...new Set(input.series.map((s) => s.taskId))]
-    .map((taskId) => ({ taskId, tokens: sum(day, taskId) }))
+    .map((taskId) => ({ taskId, tokens: sum(from, day, taskId) }))
     .filter((t) => totalTokens(t.tokens) > 0)
     .sort((a, b) => totalTokens(b.tokens) - totalTokens(a.tokens))
     .slice(0, TOP_TOKEN_TASKS);
@@ -625,7 +660,7 @@ export function tokenInsights(input: {
     day,
     today,
     tokens,
-    average: previous.reduce((a, b) => a + b, 0) / previous.length,
+    average: before / baseline,
     trend,
     tasks,
     sessions: input.series.length,

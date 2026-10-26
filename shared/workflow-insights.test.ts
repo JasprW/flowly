@@ -22,6 +22,11 @@ import {
   validateFindings,
   windowDays,
   workflowSettingsValues,
+  lineDiff,
+  skillBody,
+  skillDescription,
+  skillFile,
+  skillMaterial,
   type CommandRecord,
   type Finding,
   type RawFinding,
@@ -170,6 +175,9 @@ describe("aggregation and material", () => {
     expect(quiet(actions(50), 2)).toBe(false);
     expect(quiet(actions(199), 1)).toBe(true);
     expect(quiet(actions(200), 1)).toBe(false);
+    // Few commands, but 3 cards with turns since the last run: worth a run (INSIGHTS-REDESIGN-SPEC §3.1).
+    expect(quiet(actions(0), 0, 3)).toBe(false);
+    expect(quiet(actions(0), 0, 2)).toBe(true);
   });
   test("sequences count once per session; inline samples alternate between cards", () => {
     const records: CommandRecord[] = [];
@@ -323,6 +331,8 @@ describe("state, settings and project scripts", () => {
       revision: 0,
       runs: Array.from({ length: 25 }, (_, i) => run(i)),
       findings: [f("old-open", "open", "2025-01-01T00:00:00.000Z"), f("old-dismissed", "dismissed", "2025-01-01T00:00:00.000Z"), f("new-accepted", "accepted", "2026-10-01T00:00:00.000Z")],
+      installed: [],
+      collectingSince: {},
     };
     trimState(state, Date.parse("2026-10-19T00:00:00.000Z"));
     expect(state.runs).toHaveLength(20);
@@ -330,7 +340,9 @@ describe("state, settings and project scripts", () => {
     expect(state.findings.map((x) => x.id)).toEqual(["old-open", "new-accepted"]);
   });
   test("settings default to off, weekly at 09:00; an invalid interval falls back", () => {
-    expect(workflowSettingsValues(undefined)).toEqual({ enabled: false, model: "", intervalDays: 7, runHour: 9, timeZone: "" });
+    // On by default since INSIGHTS-REDESIGN-SPEC §3.1; an explicit false stays off.
+    expect(workflowSettingsValues(undefined)).toEqual({ enabled: true, model: "", intervalDays: 7, runHour: 9, timeZone: "" });
+    expect(workflowSettingsValues({ enabled: false }).enabled).toBe(false);
     expect(workflowSettingsValues({ enabled: true, intervalDays: 5 }).intervalDays).toBe(7);
     expect(workflowSettingsValues({ intervalDays: 1, runHour: 30 })).toMatchObject({ intervalDays: 1, runHour: 9 });
   });
@@ -341,5 +353,116 @@ describe("state, settings and project scripts", () => {
     ]);
     expect(projectScriptsFrom("not json")).toEqual([]);
     expect(projectScriptsFrom("{}")).toEqual([]);
+  });
+});
+
+describe("skills (INSIGHTS-REDESIGN-SPEC §3)", () => {
+  const now = Date.parse("2026-10-25T00:00:00.000Z");
+  const cardIds = ["aaaaaaaa-1111", "bbbbbbbb-2222"];
+  const body = "## When to use\n" + "Ship through a pull request. ".repeat(10);
+  const raw = (skill: Partial<NonNullable<RawFinding["skill"]>> = {}, over: Partial<RawFinding> = {}): RawFinding => ({
+    target: "skill",
+    title: "PR 交付与合入",
+    evidence: "35 次 push→PR",
+    proposal: "",
+    benefit: "",
+    confidence: "high",
+    cards: ["aaaaaaaa", "bbbbbbbb"],
+    skill: { name: "flowly-ship", description: "Use when shipping a change.", body, updates: false, change: "", ...skill },
+    ...over,
+  });
+  const ctx = (over: Partial<Parameters<typeof validateFindings>[1]> = {}) => ({ cardIds, existing: [], now, skills: { names: ["hand-written"], installed: new Map([["perf", "old body"]]) }, ...over });
+
+  test("parses the skill object and keeps a draft without a proposal", () => {
+    const parsed = parseWorkflowOutput(JSON.stringify({ findings: [{ ...raw(), skill: { name: "Flowly-Ship", description: " d ", body: " b ", updates: "yes" } }], verdict: "" }))!;
+    expect(parsed.findings[0].skill).toEqual({ name: "flowly-ship", description: "d", body: "b", updates: false, change: "" });
+    const [draft] = validateFindings([raw()], ctx());
+    expect(draft.skill).toMatchObject({ name: "flowly-ship", description: "Use when shipping a change." });
+    expect(draft.proposal).toBe("");
+  });
+
+  test("drops bad names, lengths, front matter, taken names and repeats in a run", () => {
+    expect(validateFindings([raw({ name: "Flowly Ship" })], ctx())).toEqual([]);
+    expect(validateFindings([raw({ body: "short" })], ctx())).toEqual([]);
+    expect(validateFindings([raw({ body: "---\n" + body })], ctx())).toEqual([]);
+    expect(validateFindings([raw({ description: "" })], ctx())).toEqual([]);
+    expect(validateFindings([raw({ name: "hand-written" })], ctx())).toEqual([]);
+    expect(validateFindings([raw(), raw({}, { title: "Another title entirely" })], ctx())).toHaveLength(1);
+  });
+
+  test("updates only skills Flowly added, and only with a changed body", () => {
+    expect(validateFindings([raw({ name: "hand-written", updates: true })], ctx())).toEqual([]);
+    expect(validateFindings([raw({ name: "perf", updates: true, body: "old body".padEnd(250, ".") })], ctx({ skills: { names: ["perf"], installed: new Map([["perf", "old body".padEnd(250, ".")]]) } }))).toEqual([]);
+    const [update] = validateFindings([raw({ name: "perf", updates: true, change: "Adds a step" })], ctx({ skills: { names: ["perf"], installed: new Map([["perf", "old"]]) } }));
+    expect(update.skill).toMatchObject({ name: "perf", updates: true, change: "Adds a step" });
+  });
+
+  test("redacts paths and drops a draft whose secret survives", () => {
+    const [ok] = validateFindings([raw({ body: body + " see /repo/docs/x.md" })], ctx({ redact: { repo: "/repo", home: "/home/u" } }));
+    expect(ok.skill!.body).toContain("see ./docs/x.md");
+    expect(validateFindings([raw({ body: body + " token ghp_abcdefghijklmnopqrstuvwx" })], ctx({ redact: { repo: "/repo", home: "/home/u" } }))).toEqual([]);
+  });
+
+  test("keeps at most 3 skill drafts a run", () => {
+    const titles = ["PR delivery", "Plugin performance", "Release notes", "Screenshot fixtures"];
+    const many = ["a-one", "b-two", "c-three", "d-four"].map((name, i) => raw({ name }, { title: titles[i] }));
+    expect(validateFindings(many, ctx()).map((d) => d.skill!.name)).toEqual(["a-one", "b-two", "c-three"]);
+  });
+
+  test("a closed draft of the same name does not come back", () => {
+    const closed = { id: "x", projectId: "p", runId: "r", fingerprint: "skill:x", target: "skill" as const, title: "完全不同的标题", evidence: "", proposal: "", benefit: "", confidence: "low" as const, cards: [], status: "dismissed" as const, createdAt: "2026-10-24T00:00:00.000Z", updatedAt: "2026-10-24T00:00:00.000Z", skill: { name: "flowly-ship", description: "d", body: "b" } };
+    expect(validateFindings([raw()], ctx({ existing: [closed] }))).toEqual([]);
+  });
+
+  test("new skill drafts replace open drafts only; other suggestions replace the others", () => {
+    const f = (id: string, target: Finding["target"], status: Finding["status"] = "open"): Finding => ({ id, projectId: "p", runId: "r", fingerprint: id, target, title: id, evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status, createdAt: "", updatedAt: "" });
+    const list = [f("s1", "skill"), f("t1", "repo_tool"), f("s2", "skill", "accepted")];
+    expect(replaceOpen(list, "p", [f("t2", "paseo_script")])).toBe(1);
+    expect(list.map((x) => x.id)).toEqual(["s1", "s2", "t2"]);
+    expect(replaceOpen(list, "p", [f("s3", "skill")])).toBe(1);
+    expect(list.map((x) => x.id)).toEqual(["s2", "t2", "s3"]);
+  });
+
+  test("writes SKILL.md with safe front matter and reads it back", () => {
+    const file = skillFile({ name: "flowly-ship", description: 'Use when: "shipping"\nnow', body: "\nBody\n" });
+    expect(file).toBe('---\nname: flowly-ship\ndescription: "Use when: \\"shipping\\" now"\n---\n\nBody\n');
+    expect(skillBody(file)).toBe("Body");
+    expect(skillDescription(file)).toBe('Use when: "shipping" now');
+    expect(skillDescription("---\nname: x\ndescription: plain words\n---\nB")).toBe("plain words");
+    expect(skillBody("no front matter")).toBe("no front matter");
+  });
+
+  test("diffs lines", () => {
+    expect(lineDiff("a\nb\nc", "a\nc\nd")).toEqual([
+      { kind: "same", text: "a" },
+      { kind: "remove", text: "b" },
+      { kind: "same", text: "c" },
+      { kind: "add", text: "d" },
+    ]);
+  });
+
+  test("material lists cards, the owner's words by priority, tag clusters, memory and skills", () => {
+    const card = (id: string, tags: string[], clues: { kind: string; text: string }[] = []) => ({ id, title: `T ${id}`, tags, lane: "done", summary: "S".repeat(700), acceptance: ["a"], clues });
+    const text = skillMaterial({
+      cards: [card("aaaaaaaa-1", ["performance"], [{ kind: "message", text: "m1" }, { kind: "answer", text: "要等 CodeRabbit 评审完再合" }]), card("bbbbbbbb-2", ["performance"]), card("cccccccc-3", ["performance"])],
+      memoryOn: true,
+      memory: [{ kind: "pitfall", title: "auto merge 不等于已评审", body: "b" }],
+      skills: [{ name: "perf", description: "Use when slow", body: "old body" }, { name: "mine", description: "hand" }],
+      closedSkills: [{ status: "dismissed", name: "old", title: "旧的" }],
+    });
+    expect(text).toContain("- performance · 3: aaaaaaaa bbbbbbbb cccccccc");
+    expect(text.indexOf("Owner (answer)")).toBeLessThan(text.indexOf("Owner (message)"));
+    expect(text).toContain(`Summary: ${"S".repeat(599)}…`);
+    expect(text).toContain("# Current text of skill perf");
+    expect(text).not.toContain("# Current text of skill mine");
+    expect(text).toContain("- dismissed · old: 旧的");
+  });
+
+  test("the material budget cuts the owner's words and cards after the command samples", () => {
+    const cards = Array.from({ length: 300 }, (_, i) => ({ id: `card${String(i).padStart(4, "0")}`, title: "T", tags: [], lane: "done", summary: "S".repeat(600), acceptance: [], clues: Array.from({ length: 8 }, () => ({ kind: "message", text: "W".repeat(400) })) }));
+    const agg = aggregate([]);
+    const text = buildMaterial({ days: 7, agg, cards: [], config: { paseoScripts: [], paseoWorktree: "", packageScripts: {}, commands: "" }, previous: [], skills: { cards, memoryOn: true, memory: [], skills: [], closedSkills: [] } });
+    expect(text.length).toBeLessThanOrEqual(MATERIAL_LIMIT);
+    expect(text).toContain("# Cards of the last 30 days");
   });
 });

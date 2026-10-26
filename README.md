@@ -79,9 +79,9 @@ Once an agent understands the work it fills in the card's metadata itself. It se
 
 ### 6. Project insights
 
-One page for the day: cards done, new and reworked, turns, agent time, commits and tokens (with cache hit rate), the list of what is **waiting on you**, rule-based suggestions, an AI-written daily summary, per-card token use and a 7-day trend.
+Insights shows a year of the project's activity, GitHub style: one square per day, darker for more agent turns, with no totals or streaks. Tap a day, or page through days with the arrows, to see its AI summary (written the first time you open a past day), its turns, agent time and tokens, and its cards, each with a bar for how much of the day it took. Below it, **Skills** turns what agents keep redoing into project skills (see below); other suggestions (scripts, repo tools, AGENTS.md rules) are folded underneath, followed by the last 7 days' review rounds, one-pass share and tokens per card by model.
 
-![Project insights: tiles, waiting on you, suggestions, summary and token use](docs/promo/screenshots/05-insights.png)
+![Project insights: a year of activity, the selected day and skill drafts](docs/promo/screenshots/05-insights.png)
 
 <details>
 <summary>Dark theme</summary>
@@ -90,9 +90,8 @@ One page for the day: cards done, new and reworked, turns, agent time, commits a
 
 </details>
 
-**Agent habits** (always on, no tokens): a small block on the Insights page shows, for the last seven days, how often agents' deliveries come with suggested next steps and ideas, by day and by model, how many suggestions you took, and flags a model or session that made none over ten or more deliveries, so a rule that stops being followed shows up within a day.
 
-**Workflow insights** (optional, off by default): Flowly keeps a redacted log of the shell commands agents run on your cards, and on the schedule you pick (daily when tokens are plentiful, up to every two weeks when they are not) a model you choose reads the last week of it. It suggests what is worth keeping: `paseo.json` scripts and worktree setup, small repo tools for work agents keep redoing with inline code, AGENTS.md rules and skills. Each run replaces the previous run's suggestions, so the list always shows the latest analysis; each suggestion becomes a card with one click; quiet weeks are skipped without calling the model. Agents see the project's `paseo.json` scripts in their task context and run them instead of retyping commands.
+**Skills** (on by default, turn it off in the welcome tour or Settings → AI features): every week a model you choose reads the project's cards (summaries, acceptance criteria, your own corrections kept by project memory), confirmed memory and the redacted shell commands agents ran, and drafts complete skills, a procedure agents did differently each time (shipping through a pull request and waiting for review) or what several cards of one kind taught (plugin performance). **Add to project** writes `.agents/skills/<name>/SKILL.md` (read by Codex) and links it from `.claude/skills/<name>` (read by Claude Code); nothing is committed for you. Later runs propose updates to the skills Flowly added, shown as a diff. The same run still suggests `paseo.json` scripts, worktree setup, repo tools and AGENTS.md rules; each becomes a card with one click. Each run replaces the drafts nobody acted on; quiet weeks are skipped without calling the model, and the first scheduled run waits one full period. Agents see the project's `paseo.json` scripts in their task context.
 
 ## Languages
 

@@ -77,9 +77,9 @@ agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型
 
 ### 6. Project insights
 
-一页看完当天：完成 / 新建 / 返工的卡片数、回合数、agent 时长、commits、token（含缓存命中率）；**等你处理**的列表、基于规则的建议、AI 生成的日报、每张卡的 token 用量和 7 日趋势。
+Insights 用 GitHub 式的热力图显示项目一年的活跃度：每天一格，agent 轮次越多颜色越深，不显示总数和连续天数。点某一天或用箭头左右翻页，可以看那天的 AI 总结（过去的日子第一次打开时生成）、轮次、agent 用时和 token，以及那天的卡片，每张卡下面一条横条表示它占了当天多少。下面是 **Skills**，把 agent 反复在做的事沉淀成项目 skill（见下文）；其它建议（脚本、仓库工具、AGENTS.md 规则）默认收起，再下面是最近 7 天的来回轮数、一次通过率、每卡 token（按模型）。
 
-![Project insights：指标、等你处理、建议、日报与 token 用量](docs/promo/screenshots/05-insights.png)
+![Project insights：一年活跃度、选中的那一天和 skill 草稿](docs/promo/screenshots/05-insights.png)
 
 <details>
 <summary>深色主题</summary>
@@ -88,9 +88,8 @@ agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型
 
 </details>
 
-**Agent 使用习惯**（始终开启，不花 token）：Insights 页的一个小区块，按天和按模型显示最近 7 天 agent 交付时带下一步建议和 ideas 的比例、你采纳了多少条建议；某个模型或 session 在 10 次以上交付里一次都没有时会标出，规则失效当天就能看到。
 
-**Workflow insights**（可选，默认关闭）：Flowly 会记录 agent 在卡片上执行的 shell 命令（已脱敏），并按你设定的周期（token 充裕可以每天，不充裕可以拉长到每两周），用你选的模型分析最近一周的记录，建议值得沉淀的东西：`paseo.json` 脚本和 worktree setup、agent 反复用内联代码完成的工作可以做成的仓库小工具、AGENTS.md 规则和 skill。每次运行的结果会替换上一次的建议，列表只反映最近一次分析；每条建议一键生成卡片；没有新活动的周期直接跳过，不调用模型。agent 的任务上下文会列出项目 `paseo.json` 中的脚本，让它直接运行，不再手敲命令。
+**Skills**（默认开启，可在欢迎导览或 设置 → AI 功能 里关闭）：每周由你选的模型阅读项目的卡片（总结、验收条目、项目记忆记下的你的纠正）、确认过的记忆和 agent 执行过的 shell 命令（已脱敏），写出完整的 skill 草稿：agent 每次做法都不一样的流程（例如走 PR 合入、等评审），或同一类卡积累下来的经验（例如插件性能优化）。点 **加入项目** 会写入 `.agents/skills/<name>/SKILL.md`（Codex 读取），并在 `.claude/skills/<name>` 建软链接（Claude Code 读取），不会替你提交。之后的运行会对 Flowly 加入的 skill 提出更新，以 diff 显示。同一次运行仍会建议 `paseo.json` 脚本、worktree setup、仓库工具和 AGENTS.md 规则，每条一键生成卡片。每次运行替换没人处理的草稿；没有新活动的周期直接跳过，不调用模型；第一次定时运行要等满一个周期。agent 的任务上下文会列出项目 `paseo.json` 中的脚本。
 
 ## 界面语言
 

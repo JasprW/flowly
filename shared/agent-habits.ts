@@ -136,6 +136,17 @@ export function userTexts(items: readonly { type?: unknown; text?: unknown }[]):
   return items.flatMap((item) => (item.type === "user_message" && typeof item.text === "string" && item.text.trim() ? [item.text] : []));
 }
 
+/** Text the provider injects as a user message (background task notices, reminders, slash-command echoes); same filter as USAGE-STATS-SPEC §3. */
+const injected = /^(<task-notification|<system-reminder|<command-|<local-command)/;
+/**
+ * Whether a turn began with a real user message (INSIGHTS-REDESIGN-SPEC §7.1): a non-empty
+ * user_message that is not an injection. undefined when the timeline is missing.
+ */
+export function startedByUser(items: readonly { type?: unknown; text?: unknown }[] | null | undefined): boolean | undefined {
+  if (!items) return undefined;
+  return userTexts(items).some((text) => !injected.test(text.trim()));
+}
+
 /**
  * Flow entries written before the log kept `offered`/`offersDone` get them from the
  * board's events of the same id; entries the board no longer holds stay as they are (§12.4).
