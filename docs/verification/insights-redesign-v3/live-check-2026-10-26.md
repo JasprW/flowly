@@ -45,3 +45,5 @@ Workflow now opens by default and a "Last 7 days" list (date, finished cards, tu
 
 ## Day summary card (same day, user's redesign of the day panel)
 Paging back from Today lands on Sun, Oct 25 and moves the heatmap selection: 97 turns (equals the heatmap and the hand count), 11 cards, 8 done, agent 11h 28m (session run time, parallel sessions add up), 578M tokens; the cards are ordered by agent time with bars (46 turns, 7h 20m, 313M for the busiest), 8 shown and "Show 3 more". Images: `live-day-card-desktop.png`, `live-day-card-compact.png`. `npm run typecheck` 0 errors; `npm test` 135 files, 1127 passed, 1 skipped.
+
+Day change animation: after Previous day the content starts at translateX(-16px), opacity 0, and settles to no transform in about 220 ms; after Next day it starts at +15 px. Samples every 45 ms in the real page; header and arrows do not move. `npm run typecheck` 0 errors; client and i18n tests 39 files passed.

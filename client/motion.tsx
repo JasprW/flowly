@@ -391,8 +391,8 @@ export function useMarquee(active: boolean) {
   return on ? marquee.value : null;
 }
 
-/** Mount-in rise for newly appearing items (callouts, queued rows, menus). */
-export function Enter({ children, distance = 6, style }: { children: ReactNode; distance?: number; style?: ViewProps["style"] }) {
+/** Mount-in rise for newly appearing items (callouts, queued rows, menus); `axis="x"` slides in sideways (a negative distance comes from the left). */
+export function Enter({ children, distance = 6, axis = "y", style }: { children: ReactNode; distance?: number; axis?: "x" | "y"; style?: ViewProps["style"] }) {
   const reduced = useContext(ReduceMotion);
   const [progress] = useState(() => new Animated.Value(reduced ? 1 : 0));
   // After the entrance the view carries no animated props (see MotionReveal on stale native writes).
@@ -413,7 +413,7 @@ export function Enter({ children, distance = 6, style }: { children: ReactNode; 
         style,
         {
           opacity: progress,
-          transform: [{ translateY: lerp(progress, [distance, 0]) }],
+          transform: [axis === "x" ? { translateX: lerp(progress, [distance, 0]) } : { translateY: lerp(progress, [distance, 0]) }],
         },
       ]}
     >

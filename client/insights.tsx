@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { useRpc } from "@getpaseo/plugin/client";
@@ -237,6 +237,12 @@ function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask
   const client = useQueryClient();
   const [failed, setFailed] = useState("");
   const [limit, setLimit] = useState(DAY_CARDS);
+  // The day before the change: an earlier day slides in from the left, a later one from the right.
+  const shown = useRef(day);
+  const from = day < shown.current ? -DAY_SLIDE : DAY_SLIDE;
+  useEffect(() => {
+    shown.current = day;
+  }, [day]);
   const view = digest.data;
   const running = !!view?.running;
   const entry = view?.entry;
@@ -285,58 +291,60 @@ function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask
             </Button>
           )}
         </View>
-        <Label muted size={font.sm} selectable={false}>
-          {numbers}
-        </Label>
-        {!!stats &&
-          (entry ? (
-            <View style={{ flexDirection: "row", gap: space[1.5], alignItems: "flex-start" }}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Label size={font.md}>{entry.headline}</Label>
-              </View>
-              <AiMark label={t("AI generated")} />
-            </View>
-          ) : running ? (
-            <Empty>{t("Writing the summary…")}</Empty>
-          ) : !view ? (
-            <Empty>{digest.error ? message(digest.error) : t("Loading…")}</Empty>
-          ) : (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
-              <Empty>{day === today ? t("Generate a summary of today so far.") : view.enabled ? t("No summary for this day yet.") : t("Daily digest is off in settings. Generate one here.")}</Empty>
-              <Button small onPress={() => void generate()}>
-                {t("Generate summary")}
-              </Button>
-            </View>
-          ))}
-        {!!entry?.issues.length && (
-          <View style={{ gap: space[1] }}>
-            <Label muted size={font.xs} selectable={false}>
-              {t("Issues")}
-            </Label>
-            {entry.issues.map((item, i) => (
-              <DigestLine key={i} item={item} title={item.taskId ? titleOf(item.taskId) : ""} onOpenTask={onOpenTask} />
-            ))}
-          </View>
-        )}
-        {!!entry && (
-          <Label muted size={font.xs} selectable={false}>
-            {t("Updated {time}", { time: relativeTime(entry.at) })} · {modelLabel(entry.model)}
+        <Enter key={day} axis="x" distance={from} style={{ gap: space[2] }}>
+          <Label muted size={font.sm} selectable={false}>
+            {numbers}
           </Label>
-        )}
-        {!!(failed || (view?.error && !running && !entry)) && <Empty>{failed || t("Last attempt failed: {message}", { message: view?.error?.message ?? "" })}</Empty>}
-        {!!stats && list.length > 0 && (
-          <View style={{ marginHorizontal: -space[3], borderTopWidth: 1, borderColor: colors.border }}>
-            {list.slice(0, limit).map((c, i) => (
-              <DayCardRow key={c.taskId} first={i === 0} card={c} share={complexityShare(c, list)} title={titleOf(c.taskId)} onOpenTask={onOpenTask} />
-            ))}
-            {list.length > limit && (
-              <View style={{ paddingHorizontal: space[3] }}>
-                <ShowMore count={list.length - limit} onPress={() => setLimit((n) => n + DAY_CARDS)} />
+          {!!stats &&
+            (entry ? (
+              <View style={{ flexDirection: "row", gap: space[1.5], alignItems: "flex-start" }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Label size={font.md}>{entry.headline}</Label>
+                </View>
+                <AiMark label={t("AI generated")} />
               </View>
-            )}
-          </View>
-        )}
-        {!!stats && !detail && (fast.error ? <Empty>{message(fast.error)}</Empty> : null)}
+            ) : running ? (
+              <Empty>{t("Writing the summary…")}</Empty>
+            ) : !view ? (
+              <Empty>{digest.error ? message(digest.error) : t("Loading…")}</Empty>
+            ) : (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
+                <Empty>{day === today ? t("Generate a summary of today so far.") : view.enabled ? t("No summary for this day yet.") : t("Daily digest is off in settings. Generate one here.")}</Empty>
+                <Button small onPress={() => void generate()}>
+                  {t("Generate summary")}
+                </Button>
+              </View>
+            ))}
+          {!!entry?.issues.length && (
+            <View style={{ gap: space[1] }}>
+              <Label muted size={font.xs} selectable={false}>
+                {t("Issues")}
+              </Label>
+              {entry.issues.map((item, i) => (
+                <DigestLine key={i} item={item} title={item.taskId ? titleOf(item.taskId) : ""} onOpenTask={onOpenTask} />
+              ))}
+            </View>
+          )}
+          {!!entry && (
+            <Label muted size={font.xs} selectable={false}>
+              {t("Updated {time}", { time: relativeTime(entry.at) })} · {modelLabel(entry.model)}
+            </Label>
+          )}
+          {!!(failed || (view?.error && !running && !entry)) && <Empty>{failed || t("Last attempt failed: {message}", { message: view?.error?.message ?? "" })}</Empty>}
+          {!!stats && list.length > 0 && (
+            <View style={{ marginHorizontal: -space[3], borderTopWidth: 1, borderColor: colors.border }}>
+              {list.slice(0, limit).map((c, i) => (
+                <DayCardRow key={c.taskId} first={i === 0} card={c} share={complexityShare(c, list)} title={titleOf(c.taskId)} onOpenTask={onOpenTask} />
+              ))}
+              {list.length > limit && (
+                <View style={{ paddingHorizontal: space[3] }}>
+                  <ShowMore count={list.length - limit} onPress={() => setLimit((n) => n + DAY_CARDS)} />
+                </View>
+              )}
+            </View>
+          )}
+          {!!stats && !detail && (fast.error ? <Empty>{message(fast.error)}</Empty> : null)}
+        </Enter>
       </View>
     </Panel>
   );
@@ -344,6 +352,8 @@ function DayPanel({ projectId, day, today, activity, active, titleOf, onOpenTask
 
 /** Cards shown at first in the day summary card, and added by each Show more. */
 const DAY_CARDS = 8;
+/** How far a day's content slides in when the day changes. */
+const DAY_SLIDE = 16;
 
 /** A card in the day summary: done or not, its title, that day's turns, time and tokens, and a bar for its share of the day's busiest card. */
 const DayCardRow = memo(function DayCardRow({ first, card, share, title, onOpenTask }: { first: boolean; card: DayCard; share: number; title: string; onOpenTask(id: string): void }) {
