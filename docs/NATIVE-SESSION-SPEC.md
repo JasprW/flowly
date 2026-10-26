@@ -162,6 +162,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
   - **New card**：打开 Flowly，进入该 idea 预填的新建卡表单（与侧栏 Create task 同一表单）。新增 board screen 参数 `{ ideaId, requestId }`，按 SESSION-CHIP-SPEC 的方式一次性消费、严格校验，idea 不存在或不再 open 时报错，不替换成别的卡。
   - **Dismiss**：`ideas.update` 置为 dismissed（可在 Flowly 内 Restore）。
 - 卡片在 Done/Cancelled 或已归档时，与 IDEAS-INBOX-SPEC 一致只提供 New card 与 Dismiss。
+- 弹层任何时候只有一层在滚（2026-10-26）：宽屏锚定弹层里标题行固定在顶部，只有下面的 ideas 列表滚动；Flowly 内容的总高度不超过 host 弹层的可滚高度（`min(440, 窗口高 − 16)` 减去 host 上下共 32 的内边距：menu page 各 4、插件内容各 12），所以 host 外层从不溢出。手机底部 sheet（`layout.compact`）由 sheet 整体滚动，Flowly 不再嵌套 `ScrollView`。两层同时可滚会抢鼠标滚轮：内层到底后外层才动，看起来像滚不动或乱跳。
 
 ## 8. 注册、数据与性能
 
