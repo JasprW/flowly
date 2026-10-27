@@ -317,7 +317,7 @@ function GroupHeader({ task, count, nameOf, onOpenTask }: { task: Task | undefin
   );
 }
 
-function FilterChip({ on, icon, label, hint, onPress }: { on: boolean; icon: string; label: string; hint?: string; onPress(): void }): ReactNode {
+export function FilterChip({ on, icon, label, hint, onPress }: { on: boolean; icon: string; label: string; hint?: string; onPress(): void }): ReactNode {
   const { colors } = useTheme();
   return (
     <Pressable

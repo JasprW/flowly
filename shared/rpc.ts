@@ -4,6 +4,7 @@ import { defineRpc } from "@getpaseo/plugin";
 import { overviewResponseSchema } from "./overview";
 import { storageStatusSchema } from "./storage";
 import { sessionInsightViewSchema } from "./session-insights";
+import { searchInputSchema, searchResultSchema } from "./search";
 import { z } from "zod";
 /** Lightweight sidebar: no board/events/agents cross the phone connection. */
 export const readAttentionCount = defineRpc({
@@ -746,6 +747,9 @@ export const purgeWorkflowCommands = defineRpc({
   input: z.strictObject({}),
   output: z.object({ deletedProjects: z.number() }),
 });
+
+// ---- Search (SEARCH-SPEC §4) ----
+export const searchQuery = defineRpc({ name: "search.query", input: searchInputSchema, output: searchResultSchema });
 
 // ---- Project memory (PROJECT-MEMORY-SPEC §5.1) ----
 const memoryRef = { id: z.string().min(1).max(200), revision: z.number().int().positive() };

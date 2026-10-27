@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createServer, request } from "node:http";
 import { ToolServer } from "./tool-server";
+import { SearchService } from "./search";
 import { agentFixture } from "./agent-fixture";
 import { skillText } from "./skill-source";
 import { turnChecklist } from "../shared/turn-checklist";
@@ -83,6 +84,7 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
     "flowly_remove_idea",
     "flowly_remember",
     "flowly_recall",
+    "flowly_search",
     "flowly_add_artifact",
     "flowly_remove_artifact",
     "flowly_read_external",
@@ -540,6 +542,35 @@ test("CLI outputs and first refusal: real transport, persisted IDs and exact rep
   await expect(cli(...ack)).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining("SETUP_INCOMPLETE") });
   expect(await readFile(x.store.path, "utf8")).toBe(before);
   expect((await cli(...ack)).receipt.status).toBe("in_review");
+});
+test("flowly_search over HTTP and the CLI: this project only, own card excluded, same result (SEARCH-SPEC §6)", async () => {
+  const x = await setup();
+  const prepared = await x.server.prepareExisting("t", "actor", x.paseo);
+  const stamp = new Date().toISOString();
+  await x.store.mutate((board) => {
+    const base = board.tasks[0];
+    board.tasks[0].title = "Searchable own card";
+    board.tasks.push({ ...base, id: "u", workspaceId: "w2", operationId: "u", title: "Searchable earlier card", tags: [] });
+    board.projects.push({ ...board.projects[0], id: "q", paseoProjectId: "other" });
+    board.tasks.push({ ...base, id: "v", projectId: "q", workspaceId: "w3", operationId: "v", title: "Searchable other project" });
+    board.events.push({ id: "n1", taskId: "u", actor: "agent", action: "progress_reported", note: "verified with npm test", at: stamp });
+  });
+  x.server.agents.search = new SearchService({
+    board: () => x.store.read(),
+    summaries: { path: x.root + "/no-summaries.json", read: async () => [{ id: "s", taskId: "u", at: stamp, model: "m", agentIds: [], state: "Done", target: "", recap: "Shipped", next: "" }] },
+    memory: { path: x.root + "/no-memory.json", read: async () => [] },
+    memoryOn: () => true,
+    ideasOn: async () => true,
+    artifactsOn: async () => true,
+  });
+  const http = (await x.api("search", { query: "searchable" })).result;
+  expect(http.cards.map((c: { taskId: string }) => c.taskId)).toEqual(["u"]);
+  expect(http.cards[0]).toMatchObject({ title: "Searchable earlier card", summary: "Done\nShipped", archived: false });
+  expect((await x.api("search", { query: "npm test", sources: ["note"] })).result.cards[0].hits[0]).toEqual({ source: "note", snippet: "verified with npm test" });
+  expect((await x.api("search", { query: "" })).error.code).toBe("INVALID_INPUT");
+  const cli = await run(process.execPath, [prepared.cliPath, "--context-file", prepared.contextFile, "search", "--query", "searchable"], { env: { ...process.env, PASEO_AGENT_ID: "actor" } });
+  expect(JSON.parse(cli.stdout)).toEqual(http);
+  await expect(run(process.execPath, [prepared.cliPath, "--context-file", prepared.contextFile, "search", "--query", "x", "--limit", "zero"], { env: { ...process.env, PASEO_AGENT_ID: "actor" } })).rejects.toMatchObject({ stderr: expect.stringContaining("--limit") });
 });
 test("port collision preserves discovery/key/board; after conflict removal listener recovers", async () => {
   const x = await setup(),

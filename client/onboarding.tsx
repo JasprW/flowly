@@ -402,6 +402,7 @@ function MoreFeatures() {
     { icon: "ListChecks", title: t("Workpad"), text: t("Agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them. Delivering without them needs a note.") },
     { icon: "Package", title: t("Inputs and outputs"), text: t("Each card lists the files and links it worked from and delivered, added by agents or by you.") },
     { icon: "Ticket", title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, GitHub/GitLab issue or pull request, or Azure DevOps work item, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
+    { icon: "Search", title: t("Search"), text: t("Search past cards, summaries, notes and deliverables.") },
     { icon: "Tags", title: t("Tags"), text: t("Tag cards by module or direction. Agents tag their own cards too; filter and search by #tag.") },
     { icon: "FolderGit2", title: t("Saved with your project"), text: t("Each project's board is also kept in its folder (.flowly, ignored by git). Add the folder again to restore it.") },
     { icon: "Database", title: t("Backups"), text: t("Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.") },

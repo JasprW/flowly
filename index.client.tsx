@@ -16,6 +16,7 @@ import { i18nCatalog } from "./shared/rpc";
 const intentItems: { intent: BoardIntent; title: string; icon: string; keywords: string[] }[] = [
   { intent: "new-task", title: msg("Flowly: New task"), icon: "Plus", keywords: ["kanban", "card", "create"] },
   { intent: "projects", title: msg("Flowly: Switch project"), icon: "Folder", keywords: ["kanban", "project"] },
+  { intent: "search", title: msg("Flowly: Search"), icon: "Search", keywords: ["kanban", "search", "find", "history"] },
   { intent: "filters", title: msg("Flowly: Search and filter tasks"), icon: "ListFilter", keywords: ["kanban", "search", "filter"] },
   { intent: "attention", title: msg("Flowly: Needs attention"), icon: "Bell", keywords: ["kanban", "attention", "unread", "approval"] },
   { intent: "shortcuts", title: msg("Flowly: Keyboard shortcuts"), icon: "Keyboard", keywords: ["kanban", "keyboard", "hotkey", "help"] },
