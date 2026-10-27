@@ -43,7 +43,8 @@ vi.mock("node:child_process", async (original) => {
     ...actual,
     execFile: (file: string, args: string[], options: unknown, callback: (e: unknown, r?: unknown) => void) => {
       const cb = typeof options === "function" ? (options as typeof callback) : callback;
-      if (file === "paseo" && args[0] === "project" && args[1] === "create") {
+      // The resolved CLI: bare `paseo` or the installed app's.
+      if (/(^|\/)paseo$/.test(file) && args[0] === "project" && args[1] === "create") {
         registry.projects.push({ projectId: `native-${registry.projects.length}`, projectRootPath: args[2], projectDisplayName: args[2] });
         cb(null, { stdout: "{}", stderr: "" });
         return;

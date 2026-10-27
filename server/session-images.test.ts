@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import type { PaseoApi } from "@getpaseo/client";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BoardStore } from "./store";
@@ -47,4 +47,12 @@ test("refuses images not in the transcript, other workspaces and non-images", as
   await expect(y.service.read({ taskId: "t", agentId: "a", src: y.png }, y.paseo)).rejects.toThrow(/different workspace/);
   await expect(y.service.read({ taskId: "t", agentId: "a", src: join(y.root, "secret.txt") }, y.paseo)).rejects.toThrow(/Not a local image/);
   await expect(y.service.read({ taskId: "t", agentId: "a", src: "https://x/y.png" }, y.paseo)).rejects.toThrow(/Not a local image/);
+});
+
+test("an image file that is gone is a plain answer, not a system error", async () => {
+  const x = await setup("see [Image: source: $PNG]");
+  await unlink(x.png);
+  const error = await x.service.read({ taskId: "t", agentId: "a", src: x.png }, x.paseo).catch((e: unknown) => e);
+  expect((error as Error).message).toBe("The image file no longer exists.");
+  expect((error as NodeJS.ErrnoException).code).toBeUndefined();
 });

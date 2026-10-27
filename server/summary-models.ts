@@ -14,6 +14,11 @@ export async function availableModels(paseo: PaseoApi, configured: SummaryModelC
   }));
 }
 
+/** Every configured summary model failed or none is available: provider trouble, not a Flowly bug. */
+export class SummaryModelError extends Error {
+  override name = "SummaryModelError";
+}
+
 type ModelAgent = RemovableAgent & {
   waitForFinish(timeout: number): Promise<{ status: string; error?: string | null; lastMessage?: string | null }>;
 };
@@ -24,7 +29,13 @@ export async function runSummaryModels<T>(
   configured: SummaryModelChoice,
   options: { create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number },
 ): Promise<{ model: string; output: T }> {
-  const models = resolveModels(configured, await availableModels(paseo, configured));
+  const available = await availableModels(paseo, configured);
+  let models: ReturnType<typeof resolveModels>;
+  try {
+    models = resolveModels(configured, available);
+  } catch (error) {
+    throw new SummaryModelError(error instanceof Error ? error.message : String(error));
+  }
   const failures: string[] = [];
   for (const model of models) {
     try {
@@ -46,5 +57,5 @@ export async function runSummaryModels<T>(
       failures.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  throw new Error(failures.join("; "));
+  throw new SummaryModelError(failures.join("; ") || "No summary model is available.");
 }

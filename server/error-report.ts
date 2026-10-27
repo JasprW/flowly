@@ -5,7 +5,9 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { ZodError } from "zod";
 import { StoreInvalidError } from "./board-file";
 import { ExternalError } from "./connectors/http";
+import { LocalDaemonUnavailable } from "./local-daemon";
 import { MemoryError } from "./memory";
+import { SummaryModelError } from "./summary-models";
 import { ToolError } from "./tool-error";
 
 /**
@@ -115,12 +117,22 @@ export function exceptionReport(error: unknown, source: string, handled: boolean
 }
 
 /**
+ * Failures outside Flowly's control, never reported (§11.2): the daemon connection dropped
+ * (`DaemonConnectionError`, matched by name because the host's client is a separate copy), the
+ * local daemon is unavailable (restarting, no local credential) and every summary model failed
+ * (provider or model trouble; the card or insight shows the error).
+ */
+export function outsideError(error: unknown) {
+  return error instanceof LocalDaemonUnavailable || error instanceof SummaryModelError || (error instanceof Error && error.name === "DaemonConnectionError");
+}
+
+/**
  * Errors an RPC handler throws on purpose, as its answer to the caller (validation, conflicts,
  * disabled features): not reported. A plain `Error` without a system code is such a message too.
  */
 export function expectedRpcError(error: unknown) {
   if (!(error instanceof Error)) return false;
-  if (error instanceof ToolError || error instanceof MemoryError || error instanceof StoreInvalidError || error instanceof ExternalError || error instanceof ZodError)
+  if (error instanceof ToolError || error instanceof MemoryError || error instanceof StoreInvalidError || error instanceof ExternalError || error instanceof ZodError || outsideError(error))
     return true;
   return error.constructor === Error && typeof (error as NodeJS.ErrnoException).code !== "string";
 }
@@ -142,15 +154,15 @@ export function reportError(source: string, error: unknown, handled = true) {
 }
 
 /**
- * Logs a background failure (label, optional log-only context, message) and reports it. Every
- * daemon-side error log goes through here; `server/error-report.test.ts` fails on a bare
- * `console.error` elsewhere. `context` (ids, paths) is printed but never reported.
+ * Logs a background failure (label, optional log-only context, message) and reports it unless it
+ * is an `outsideError`. Every daemon-side error log goes through here; `server/error-report.test.ts`
+ * fails on a bare `console.error` elsewhere. `context` (ids, paths) is printed but never reported.
  */
 export function logFailure(label: string, error: unknown, context?: string) {
   const text = error instanceof Error ? error.message : String(error);
   if (context) console.error(label, context, text);
   else console.error(label, text);
-  reportError(label, error);
+  if (!outsideError(error)) reportError(label, error);
 }
 
 /** The plugin context with every RPC handler's unexpected failures reported, then rethrown unchanged. */

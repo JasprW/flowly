@@ -44,7 +44,10 @@ export class SessionImageService {
     // JSON-escaped form is what appears inside the serialized timeline.
     if (!(await this.transcript(input.agentId, paseo)).includes(JSON.stringify(path).slice(1, -1)))
       throw new Error("That image is not part of this session.");
-    const real = await realpath(path);
+    // Screenshots are often temporary files that are gone by the time the timeline is read.
+    const real = await realpath(path).catch((e: NodeJS.ErrnoException) => {
+      throw e.code === "ENOENT" || e.code === "ENOTDIR" ? new Error("The image file no longer exists.") : e;
+    });
     const type = mime[extname(real).toLowerCase()];
     if (!type) throw new Error("Unsupported image type.");
     const info = await stat(real);

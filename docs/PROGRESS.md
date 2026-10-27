@@ -1,5 +1,14 @@
 # Implementation progress
 
+## Telemetry error fixes (card "遥测错误分析") — 2026-10-27
+
+- First two days of `$exception` reports (34 events, 35 installs) grouped and mapped to source with `scripts/map-bundle-lines.mjs`: [verification/telemetry-errors-2026-10-27.md](verification/telemetry-errors-2026-10-27.md).
+- Local daemon connection (`server/local-daemon.ts`, 13 events): `paseo.pid` addresses are resolved like the `paseo` CLI, including Unix sockets and Windows named pipes (through the bundled `ws`, now a pinned dependency; typed by `server/ws.d.ts` because `@types/ws` breaks the daemon's timer types). An empty address (Paseo restarting the daemon) is `LocalDaemonUnavailable`. Fixes read-state sync, workspace restore, background-workspace reuse, attention clearing, summarizer delete and `paseo_version` on those installs. [WORKSPACE-RESTORE-SPEC](WORKSPACE-RESTORE-SPEC.md)
+- Windows CLI (`server/paseo-cli.ts`, 3 events): `paseo.cmd` is started as the command it wraps (`Paseo.exe` + runner + CLI entry, or Node + npm's `bin/paseo`), never through cmd.exe; session settings and native project create/delete share it. [UI-REFRESH-SPEC](UI-REFRESH-SPEC.md)
+- Not reported any more (logged as before): `DaemonConnectionError`, `LocalDaemonUnavailable`, `SummaryModelError`. A missing folder or session image is answered with a plain message instead of `ENOENT`. [TELEMETRY-SPEC §11.2](TELEMETRY-SPEC.md)
+- Not verified on Linux or Windows hardware; see the report.
+- Onboarding: no tour, tip or What's new change; these are fixes to existing behavior.
+
 ## v1.7.0 release preparation (card "v1.7.0发布") — 2026-10-26
 
 - Version 1.7.0 (`make bump` now also sets `shared/version.ts`, which `server/telemetry.test.ts` keeps equal to package.json). Release notes: [release-notes/v1.7.0.md](release-notes/v1.7.0.md), covering v1.6.0..main (#57–#67 and the Insights redesign).

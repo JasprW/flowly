@@ -1,39 +1,10 @@
 import type { PaseoApi } from "@getpaseo/client";
-import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
-import { constants } from "node:fs";
-import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 import type { BoardStore } from "./store";
 import { paseoHome } from "./service";
+import { resolvePaseoCli, runPaseo } from "./paseo-cli";
 
-const execute = promisify(execFile);
 type Run = (file: string, args: string[]) => Promise<string>;
-const defaultRun: Run = async (file, args) =>
-  (await execute(file, args, { timeout: 20000, maxBuffer: 1 << 20 })).stdout;
-
-/**
- * The official Paseo CLI ships inside the app bundle next to the daemon. The
- * plugin SDK has no session-settings API, so changes go through the CLI
- * (argument arrays only), which talks to the same daemon.
- */
-export async function resolvePaseoCli(execPath = process.execPath, env = process.env) {
-  const candidates = [
-    env.PASEO_CLI,
-    // .../Paseo.app/Contents/Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper
-    join(dirname(execPath), "..", "..", "..", "..", "Resources", "bin", "paseo"),
-    "/Applications/Paseo.app/Contents/Resources/bin/paseo",
-  ].filter((p): p is string => !!p);
-  for (const path of candidates) {
-    try {
-      await access(path, constants.X_OK);
-      return path;
-    } catch {
-      /* try next */
-    }
-  }
-  return "paseo";
-}
+const defaultRun: Run = (file, args) => runPaseo(args, { timeout: 20000, maxBuffer: 1 << 20 }, file);
 
 export type SessionSettingsInput = {
   taskId: string;
