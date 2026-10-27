@@ -11,7 +11,7 @@ import { IdeaRow, useExitList } from "./task-ideas";
 import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
 import { SessionMarkdown } from "./session-content";
 import { PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
-import { FocusTarget, limitFor, useFocusTarget } from "./drawer-focus";
+import { FocusTarget, Marked, limitFor, useFocusTarget, useMark } from "./drawer-focus";
 import { AiMark, Actions, Button, Choices, Field, IconButton, Label, Notice, Theme, font, message, space, touch, useTheme, noFocusRing } from "./ui";
 import { t, tn } from "../shared/i18n";
 import { BrandIcon } from "./brand-icons";
@@ -222,6 +222,8 @@ const ArtifactRow = memo(function ArtifactRow({
   onRemove(artifact: Artifact): void;
 }) {
   const { colors } = useTheme();
+  // A search hit on this row unclips it and adds the full link or path (DRAWER-SPEC "Focus from search" 7).
+  const mark = useMark(`artifact:${artifact.id}`);
   const agent = artifact.createdBy === "agent";
   const source = agent ? t("Added by an agent") : t("Added by you");
   const role = artifact.role === "input" ? t("Input") : t("Output");
@@ -240,8 +242,14 @@ const ArtifactRow = memo(function ArtifactRow({
       >
         {external ? <BrandIcon family={familyOf(external.provider)} size={14} /> : <Icon name={icon} size={14} color={missing ? colors.foregroundMuted : colors.foreground} />}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Label size={font.md} muted={missing} lines={1} selectable={false}>{artifact.title}</Label>
-          <Label size={font.sm} muted lines={1} selectable={false}>{missing ? `${t("Missing")} · ${detail}` : detail}</Label>
+          <Label size={font.md} muted={missing} lines={mark ? undefined : 1} selectable={false}><Marked text={artifact.title} terms={mark?.terms} /></Label>
+          <Label size={font.sm} muted lines={mark ? undefined : 1} selectable={false}>
+            {missing && `${t("Missing")} · `}
+            <Marked text={detail} terms={mark?.terms} />
+          </Label>
+          {!!mark && detail !== artifact.target && (
+            <Label size={font.sm} muted mono selectable={false}><Marked text={artifact.target} terms={mark.terms} /></Label>
+          )}
         </View>
         {agent ? <AiMark size={12} /> : <Icon name="User" size={12} color={colors.foregroundMuted} />}
       </Pressable>

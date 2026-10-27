@@ -12,6 +12,19 @@ describe("focus from search (DRAWER-SPEC)", () => {
     expect(focusOfHit({ source: "card" })).toBeNull();
     expect(focusOfHit({ source: "memory", refId: "m" })).toBeNull();
   });
+  test("a hit carries its field and matched words for the highlight", () => {
+    expect(focusOfHit({ source: "note", refId: "e1", field: "note", snippet: "ran the Search test", ranges: [[8, 14]] })).toEqual({
+      section: "activity",
+      target: "event:e1",
+      field: "note",
+      terms: ["search"],
+    });
+    expect(focusOfHit({ source: "summary", refId: "s1", field: "target", snippet: "ship it", ranges: [[0, 4]] })).toEqual({
+      section: "progress",
+      field: "target",
+      terms: ["ship"],
+    });
+  });
   test("Activity keeps its last 12 and widens back to an older target only", () => {
     const ids = Array.from({ length: 30 }, (_, i) => `e${i}`);
     expect(activityStart(ids, "")).toBe(18);

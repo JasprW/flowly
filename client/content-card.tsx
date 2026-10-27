@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Marked } from "./drawer-focus";
 import { Animated, Pressable, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useMotionHeight, useMotionValue } from "./motion";
@@ -23,19 +24,22 @@ export function ContentCard({
   footer,
   after,
   defaultOpen = false,
+  openWhen,
   children,
 }: {
   footer?: ReactNode;
   after?: ReactNode;
   /** Start expanded (the welcome tour shows every field); Show less still collapses it. */
   defaultOpen?: boolean;
+  /** Expands whenever this changes to a value (a search hit on the card); Show less still collapses it. */
+  openWhen?: unknown;
   children: ReactNode;
 }) {
   const { colors } = useTheme();
   return (
     <View style={cardFrameStyle(colors)}>
       <View style={{ padding: space[3], paddingBottom: space[3] }}>
-        <Clamped background={colors.surface1} footer={footer} defaultOpen={defaultOpen}>
+        <Clamped background={colors.surface1} footer={footer} defaultOpen={defaultOpen} openWhen={openWhen}>
           {children}
         </Clamped>
       </View>
@@ -67,15 +71,17 @@ export function CardText({ children }: { children: ReactNode }) {
   );
 }
 
-/** A titled block (Target, Recap, What to do…). Renders nothing for empty text. */
-export function CardField({ title, text }: { title: string; text: string }) {
+/** A titled block (Target, Recap, What to do…). Renders nothing for empty text. `terms` are marked (search). */
+export function CardField({ title, text, terms }: { title: string; text: string; terms?: readonly string[] | null }) {
   if (!text.trim()) return null;
   return (
     <View style={{ gap: 2 }}>
       <Label muted size={font.xs} selectable={false}>
         {title}
       </Label>
-      <CardText>{text}</CardText>
+      <CardText>
+        <Marked text={text} terms={terms} />
+      </CardText>
     </View>
   );
 }
@@ -114,9 +120,24 @@ const CLAMP_HEIGHT = 104;
  * bottom-left corner and `footer` on the right of the same row.
  * `background` is the surface the fade blends into.
  */
-function Clamped({ background, footer, defaultOpen = false, children }: { background: string; footer?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
+function Clamped({
+  background,
+  footer,
+  defaultOpen = false,
+  openWhen,
+  children,
+}: {
+  background: string;
+  footer?: ReactNode;
+  defaultOpen?: boolean;
+  openWhen?: unknown;
+  children: ReactNode;
+}) {
   const [natural, setNatural] = useState(0);
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (openWhen) setOpen(true);
+  }, [openWhen]);
   const overflows = natural > CLAMP_HEIGHT + 8;
   const target = natural ? (open || !overflows ? natural : CLAMP_HEIGHT) : null;
   const height = useMotionHeight(target);

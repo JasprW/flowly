@@ -10,7 +10,7 @@ import type { AcceptanceItem, CheckState, ConfusionItem, PlanSnapshot, Task, Val
 import { plansOf, validationFreshness, workpadOf } from "../shared/workpad";
 import { useLiveAgents } from "./queries";
 import { Collapse, PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
-import { FocusTarget, limitFor, useFocusTarget } from "./drawer-focus";
+import { FocusTarget, Marked, limitFor, useFocusTarget, useMark } from "./drawer-focus";
 import { AiMark, IconButton, Label, font, message, radius, relativeTime, space, touch, useTheme, noFocusRing } from "./ui";
 import { t } from "../shared/i18n";
 
@@ -264,6 +264,7 @@ function ByYou({ by }: { by: "agent" | "human" }) {
 }
 
 function AcceptanceRow({ item, disabled, onToggle }: { item: AcceptanceItem; disabled: boolean; onToggle(): void }) {
+  const mark = useMark(`workpad:${item.id}`);
   return (
     <Pressable
       accessibilityRole="checkbox"
@@ -276,7 +277,7 @@ function AcceptanceRow({ item, disabled, onToggle }: { item: AcceptanceItem; dis
     >
       <Box checked={item.done} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Label size={font.md}>{item.text}</Label>
+        <Label size={font.md}><Marked text={item.text} terms={mark?.terms} /></Label>
       </View>
       <ByYou by={item.by} />
     </Pressable>
@@ -291,7 +292,12 @@ function stateLabel(item: ValidationItem, stale: boolean) {
 
 function CheckRow({ item, workpad, disabled, onCycle }: { item: ValidationItem; workpad: Workpad; disabled: boolean; onCycle(): void }) {
   const { colors } = useTheme();
+  const mark = useMark(`workpad:${item.id}`);
   const [open, setOpen] = useState(false);
+  // A search hit on this check shows the whole command and its output (DRAWER-SPEC "Focus from search" 7).
+  useEffect(() => {
+    if (mark) setOpen(true);
+  }, [mark]);
   const stale = validationFreshness(item, workpad.head) === "stale";
   const icon =
     item.state === "pass"
@@ -319,12 +325,12 @@ function CheckRow({ item, workpad, disabled, onCycle }: { item: ValidationItem; 
         <Icon name={icon.name} size={16} color={icon.color} />
       </Pressable>
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Label size={font.md}>{item.text}</Label>
+        <Label size={font.md}><Marked text={item.text} terms={mark?.terms} /></Label>
         {!!item.command && (
           // One line until the output is shown (or the command is tapped), so long commands don't fill the sidebar.
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={noFocusRing}>
             <Label size={font.sm} muted mono selectable lines={open ? undefined : 1}>
-              {item.command}
+              <Marked text={item.command} terms={mark?.terms} />
             </Label>
           </Pressable>
         )}
@@ -351,7 +357,7 @@ function CheckRow({ item, workpad, disabled, onCycle }: { item: ValidationItem; 
             </Pressable>
             <Collapse open={open} id="output">
               <Label size={font.sm} muted mono selectable>
-                {item.evidence}
+                <Marked text={item.evidence} terms={mark?.terms} />
               </Label>
             </Collapse>
           </>
@@ -396,11 +402,12 @@ function PlanList({ plan, title }: { plan: PlanSnapshot; title: string }) {
 
 function ConfusionRow({ item, disabled, onResolve }: { item: ConfusionItem; disabled: boolean; onResolve(): void }) {
   const { colors } = useTheme();
+  const mark = useMark(`workpad:${item.id}`);
   return (
     <View style={{ ...rowStyle(), alignItems: "center" }}>
       <Icon name="CircleHelp" size={14} color={colors.statusWarning} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Label size={font.md}>{item.text}</Label>
+        <Label size={font.md}><Marked text={item.text} terms={mark?.terms} /></Label>
       </View>
       <IconButton icon="Check" size={touch ? 36 : 24} label={t("Mark resolved: {text}", { text: item.text })} disabled={disabled} onPress={onResolve} />
     </View>
