@@ -1,5 +1,10 @@
 # Implementation progress
 
+## v1.7.1 release (card "遥测错误分析") — 2026-10-27
+
+- Version 1.7.1 (`make bump`). Release notes: [release-notes/v1.7.1.md](release-notes/v1.7.1.md), covering v1.7.0..main (#69, db1d734, 4476b43).
+- No What's new entry and no tour or tip change: the release fixes existing behavior; the tabbed questions are found where questions already appear.
+
 ## Telemetry error fixes (card "遥测错误分析") — 2026-10-27
 
 - First two days of `$exception` reports (34 events, 35 installs) grouped and mapped to source with `scripts/map-bundle-lines.mjs`: [verification/telemetry-errors-2026-10-27.md](verification/telemetry-errors-2026-10-27.md).
