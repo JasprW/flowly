@@ -580,6 +580,10 @@ export const MemoryPage = memo(function MemoryPage({
                 value={search}
                 onChangeText={setSearch}
                 commitDelay={200}
+                // Shortcuts are blocked while typing, so Esc is handled here to leave the page.
+                onKeyPress={(event) => {
+                  if (event.nativeEvent.key === "Escape") onBack();
+                }}
                 placeholder={t("Search memory")}
                 accessibilityLabel={t("Search memory")}
                 style={{ height: touch ? 40 : 32, paddingHorizontal: space[3], borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.foreground, fontSize: font.base }}

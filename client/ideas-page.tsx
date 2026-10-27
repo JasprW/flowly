@@ -198,6 +198,10 @@ export const IdeasPage = memo(function IdeasPage({
                 value={search}
                 onChangeText={setSearch}
                 commitDelay={200}
+                // Shortcuts are blocked while typing, so Esc is handled here to leave the page.
+                onKeyPress={(event) => {
+                  if (event.nativeEvent.key === "Escape") onBack();
+                }}
                 placeholder={t("Search ideas and cards")}
                 accessibilityLabel={t("Search ideas")}
                 style={{

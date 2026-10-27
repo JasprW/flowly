@@ -275,10 +275,13 @@ type TextBoxProps = Omit<ComponentProps<typeof TextInput>, "value" | "defaultVal
  * Native pushes any changed value/defaultValue back into the native view, which
  * erases characters typed meanwhile and breaks IME composition. Web: local
  * state, so a keystroke re-renders only this input. `commitDelay` keeps
- * expensive parents (board filtering) out of the typing path.
+ * expensive parents (board filtering) out of the typing path. Like Field, it
+ * blocks board shortcuts while focused (SHORTCUTS-SPEC §2.2).
  */
-export function TextBox({ value, onChangeText, commitDelay = 0, onBlur, ...props }: TextBoxProps) {
+export function TextBox({ value, onChangeText, commitDelay = 0, onFocus, onBlur, ...props }: TextBoxProps) {
   const native = Platform.OS !== "web";
+  const [focused, setFocused] = useState(false);
+  useShortcutBlock(focused);
   const [shown, setShown] = useState(value);
   const [mount, setMount] = useState(0);
   const committed = useRef(value);
@@ -316,7 +319,12 @@ export function TextBox({ value, onChangeText, commitDelay = 0, onBlur, ...props
         if (timer.current) clearTimeout(timer.current);
         timer.current = setTimeout(commit, commitDelay);
       }}
+      onFocus={(event) => {
+        setFocused(true);
+        onFocus?.(event);
+      }}
       onBlur={(event) => {
+        setFocused(false);
         commit();
         onBlur?.(event);
       }}
