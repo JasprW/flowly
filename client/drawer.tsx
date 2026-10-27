@@ -1140,7 +1140,7 @@ const CardRequests = memo(function CardRequests({
         </View>
         <Button quiet icon="MessageSquare" onPress={() => onOpen(agentId)}>{t("Open")}</Button>
       </View>
-      <PendingRequests requests={requests} disabled={disabled} compact={compact} onRespond={respond} />
+      <PendingRequests requests={requests} disabled={disabled} compact={compact} bounded={false} onRespond={respond} />
     </View>
   );
 });

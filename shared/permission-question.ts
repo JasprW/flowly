@@ -106,6 +106,27 @@ export function isAnswered(q: FormQuestion, index: number, draft: QuestionDraft)
 export const allAnswered = (questions: readonly FormQuestion[], draft: QuestionDraft) =>
   questions.every((q, i) => isAnswered(q, i, draft));
 
+/** ←/→ (no modifier, not repeated) moves between tabbed questions without wrapping; null when the key is not ours. */
+export function stepQuestion(
+  event: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean; repeat?: boolean; isComposing?: boolean },
+  index: number,
+  count: number,
+): number | null {
+  if (count < 2 || event.repeat || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;
+  if (event.key === "ArrowLeft") return index > 0 ? index - 1 : null;
+  if (event.key === "ArrowRight") return index < count - 1 ? index + 1 : null;
+  return null;
+}
+
+/** The first unanswered question after `from` (wrapping around), or -1 when every question is answered. */
+export function nextUnanswered(questions: readonly FormQuestion[], draft: QuestionDraft, from: number): number {
+  for (let step = 1; step <= questions.length; step++) {
+    const i = (from + step) % questions.length;
+    if (!isAnswered(questions[i], i, draft)) return i;
+  }
+  return -1;
+}
+
 export function buildAnswers(questions: readonly FormQuestion[], draft: QuestionDraft): Record<string, string> {
   const answers: Record<string, string> = {};
   questions.forEach((q, i) => {

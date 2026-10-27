@@ -1038,7 +1038,7 @@ function SessionPreviewView({
           {!!error && (
             <Notice>{error}</Notice>
           )}
-          <PendingRequests requests={requests} disabled={!canWrite || busy} compact={compact} onRespond={respond} />
+          <PendingRequests requests={requests} disabled={!canWrite || busy} compact={compact} bounded onRespond={respond} />
           {showMoves && (
             <NextMoves key={suggestion.id} moves={moves} disabled={!canWrite} onPick={pickMove} onDismiss={hideMoves} />
           )}

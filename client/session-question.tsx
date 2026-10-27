@@ -1,5 +1,5 @@
 import { memo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, View } from "react-native";
+import { Platform, Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import {
   allAnswered,
@@ -8,8 +8,11 @@ import {
   dismissLabel,
   dismissReply,
   emptyDraft,
+  isAnswered,
+  nextUnanswered,
   parseQuestions,
   showsTextInput,
+  stepQuestion,
   typeOther,
   type FormQuestion,
   type PendingRequest,
@@ -21,32 +24,58 @@ import { Enter } from "./motion";
 import { composerEnterAction, type ComposerKey } from "./session-input";
 import { t } from "../shared/i18n";
 
+/** RN-Web forwards React keyboard events on View; React Native's types omit them. */
+type WebKeyEvent = {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+  repeat: boolean;
+  nativeEvent?: { isComposing?: boolean };
+  preventDefault(): void;
+  stopPropagation(): void;
+};
+
 type Respond = (request: PendingRequest, reply: PermissionReply) => void;
 
 /**
  * The session's open agent questions and permission requests, answered in
- * place (SESSION-QUESTION-SPEC). Sits above the composer so it stays in view;
- * tall forms scroll inside a bounded box.
+ * place (SESSION-QUESTION-SPEC). Above the composer (`bounded`) a tall form
+ * scrolls inside a box of up to 60% of the window; in the drawer it grows with
+ * the drawer's own scroll.
  */
 export const PendingRequests = memo(function PendingRequests({
   requests,
   disabled,
   compact,
+  bounded,
   onRespond,
 }: {
   requests: readonly PendingRequest[];
   disabled: boolean;
   compact: boolean;
+  bounded: boolean;
   onRespond: Respond;
 }) {
   const { colors } = useTheme();
+  const { height } = useWindowDimensions();
   if (!requests.length) return null;
+  const body = { padding: space[3], gap: space[3] };
+  const forms = requests.map((request) => {
+    const questions = parseQuestions(request);
+    return questions ? (
+      <QuestionForm key={request.id} request={request} questions={questions} disabled={disabled} onRespond={onRespond} />
+    ) : (
+      <Approval key={request.id} request={request} disabled={disabled} onRespond={onRespond} />
+    );
+  });
   return (
     <Enter distance={6}>
       <View
         testID="session-pending-requests"
         style={{
-          maxHeight: compact ? 320 : 420,
+          ...(bounded ? { maxHeight: Math.max(compact ? 320 : 420, Math.round(height * 0.6)) } : {}),
           borderRadius: radius.lg,
           borderWidth: 1,
           borderColor: tint(colors.statusWarning, 0.45),
@@ -54,16 +83,13 @@ export const PendingRequests = memo(function PendingRequests({
           overflow: "hidden",
         }}
       >
-        <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space[3], gap: space[3] }}>
-          {requests.map((request) => {
-            const questions = parseQuestions(request);
-            return questions ? (
-              <QuestionForm key={request.id} request={request} questions={questions} disabled={disabled} onRespond={onRespond} />
-            ) : (
-              <Approval key={request.id} request={request} disabled={disabled} onRespond={onRespond} />
-            );
-          })}
-        </ScrollView>
+        {bounded ? (
+          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={body}>
+            {forms}
+          </ScrollView>
+        ) : (
+          <View style={body}>{forms}</View>
+        )}
       </View>
     </Enter>
   );
@@ -97,26 +123,59 @@ function QuestionForm({
     latest.current = next(latest.current);
     setDraftState(latest.current);
   };
+  // Several questions are answered one tab at a time.
+  const [tab, setTab] = useState(0);
+  const tabbed = questions.length > 1;
+  const index = Math.min(tab, questions.length - 1);
+  const q = questions[index];
   const ready = allAnswered(questions, draft);
+  // Enter in a typed answer submits once everything is answered, otherwise moves on.
   const submit = () => {
-    if (disabled || !allAnswered(questions, latest.current)) return;
+    if (disabled) return;
+    if (!allAnswered(questions, latest.current)) {
+      const next = nextUnanswered(questions, latest.current, index);
+      if (next >= 0) setTab(next);
+      return;
+    }
     onRespond(request, answerReply(request, questions, latest.current));
   };
+  // Web: ←/→ switch questions while focus is in the form (not in a typed answer). The
+  // focused option unmounts with its question, so focus moves to the form itself.
+  const form = useRef<View>(null);
+  const typing = useRef(false);
+  const keys =
+    Platform.OS === "web" && tabbed
+      ? {
+          focusable: true,
+          onKeyDown: (e: WebKeyEvent) => {
+            if (typing.current) return;
+            const next = stepQuestion({ ...e, isComposing: e.nativeEvent?.isComposing }, index, questions.length);
+            if (next === null) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setTab(next);
+            (form.current as unknown as { focus?: () => void } | null)?.focus?.();
+          },
+        }
+      : {};
   return (
-    <View accessibilityLabel={t("Agent question")} style={{ gap: space[3] }}>
+    <View ref={form} {...(keys as {})} accessibilityLabel={t("Agent question")} style={{ ...noFocusRing, gap: space[3] }}>
       <Heading icon="MessageCircleQuestion" text={t("The agent is asking")} />
-      {questions.map((q, index) => (
-        <QuestionItem
-          key={`${index}:${q.header}`}
-          question={q}
-          selected={draft.selected[index] || []}
-          other={draft.other[index] || ""}
-          disabled={disabled}
-          onChoose={(option) => setDraft((d) => choose(d, questions, index, option))}
-          onType={(value) => setDraft((d) => typeOther(d, questions, index, value))}
-          onSubmit={submit}
-        />
-      ))}
+      {tabbed && (
+        <QuestionTabs questions={questions} draft={draft} active={index} onSelect={setTab} />
+      )}
+      <QuestionItem
+        key={`${index}:${q.header}`}
+        question={q}
+        showHeader={!tabbed}
+        selected={draft.selected[index] || []}
+        other={draft.other[index] || ""}
+        disabled={disabled}
+        onChoose={(option) => setDraft((d) => choose(d, questions, index, option))}
+        onTyping={(on) => (typing.current = on)}
+        onType={(value) => setDraft((d) => typeOther(d, questions, index, value))}
+        onSubmit={submit}
+      />
       <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: space[2] }}>
         <Button quiet small disabled={disabled} onPress={() => onRespond(request, dismissReply(request, questions, draft))}>
           {dismissLabel(questions) || t("Dismiss")}
@@ -129,21 +188,77 @@ function QuestionForm({
   );
 }
 
+/** One tab per question, titled by its header; answered ones carry a check. */
+function QuestionTabs({
+  questions,
+  draft,
+  active,
+  onSelect,
+}: {
+  questions: FormQuestion[];
+  draft: ReturnType<typeof emptyDraft>;
+  active: number;
+  onSelect(index: number): void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View accessibilityRole="tablist" style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1.5] }}>
+      {questions.map((q, i) => {
+        const on = i === active;
+        const done = isAnswered(q, i, draft);
+        const label = q.header || String(i + 1);
+        return (
+          <Pressable
+            key={`${i}:${q.header}`}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on, checked: done }}
+            accessibilityLabel={label}
+            onPress={() => onSelect(i)}
+            style={(state) => {
+              const { hovered } = state as typeof state & { hovered?: boolean };
+              return {
+                ...noFocusRing,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space[1],
+                minHeight: touch ? 36 : 26,
+                paddingHorizontal: space[2],
+                borderRadius: radius.md,
+                borderWidth: 1,
+                borderColor: on ? colors.accent : colors.border,
+                backgroundColor: on ? tint(colors.accent, 0.1) : hovered ? colors.surface2 : colors.surface0,
+              };
+            }}
+          >
+            {done && <Icon name="Check" size={12} color={colors.statusSuccess} />}
+            <Label size={font.sm} medium={on} muted={!on && !done} lines={1} selectable={false}>{label}</Label>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function QuestionItem({
   question,
+  showHeader,
   selected,
   other,
   disabled,
   onChoose,
   onType,
+  onTyping,
   onSubmit,
 }: {
   question: FormQuestion;
+  /** The header doubles as the tab title when there are several questions. */
+  showHeader: boolean;
   selected: number[];
   other: string;
   disabled: boolean;
   onChoose(option: number): void;
   onType(value: string): void;
+  onTyping(on: boolean): void;
   /** Enter (web) submits the form; Shift+Enter is a new line. */
   onSubmit(): void;
 }) {
@@ -152,7 +267,7 @@ function QuestionItem({
   useShortcutBlock(focused);
   return (
     <View style={{ gap: space[1.5] }}>
-      {!!question.header && (
+      {showHeader && !!question.header && (
         <Label muted size={font.xs} medium selectable={false}>{question.header.toUpperCase()}</Label>
       )}
       <Label size={font.base}>{question.question}</Label>
@@ -232,8 +347,14 @@ function QuestionItem({
                 },
               }
             : {})}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={() => {
+            setFocused(true);
+            onTyping(true);
+          }}
+          onBlur={() => {
+            setFocused(false);
+            onTyping(false);
+          }}
           style={{
             borderWidth: 1,
             borderColor: focused ? colors.foregroundMuted : colors.border,

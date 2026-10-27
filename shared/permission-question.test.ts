@@ -7,8 +7,10 @@ import {
   choose,
   dismissReply,
   emptyDraft,
+  nextUnanswered,
   parseQuestions,
   pendingRequests,
+  stepQuestion,
   typeOther,
   type PendingRequest,
 } from "./permission-question";
@@ -101,4 +103,27 @@ test("pending requests tolerate missing or malformed host data", () => {
   expect(pendingRequests({ pendingPermissions: [null, {}, { id: "" }, request] })).toEqual([request]);
   expect(asksQuestion({ pendingPermissions: [request] })).toBe(true);
   expect(asksQuestion({ pendingPermissions: [{ id: "t", kind: "tool" }] })).toBe(false);
+});
+
+test("nextUnanswered moves to the next open question, wrapping, and -1 when all are answered", () => {
+  const qs = [0, 1, 2].map((i) => ({ question: `Q${i}`, header: `H${i}`, options: [{ label: "A" }], multiSelect: false, allowOther: false, allowEmpty: false }));
+  let draft = emptyDraft(qs);
+  expect(nextUnanswered(qs, draft, 0)).toBe(1);
+  draft = choose(draft, qs, 1, 0);
+  expect(nextUnanswered(qs, draft, 0)).toBe(2);
+  draft = choose(draft, qs, 2, 0);
+  expect(nextUnanswered(qs, draft, 2)).toBe(0);
+  draft = choose(draft, qs, 0, 0);
+  expect(nextUnanswered(qs, draft, 0)).toBe(-1);
+});
+
+test("stepQuestion moves with plain arrow keys inside the bounds only", () => {
+  expect(stepQuestion({ key: "ArrowRight" }, 0, 3)).toBe(1);
+  expect(stepQuestion({ key: "ArrowLeft" }, 2, 3)).toBe(1);
+  expect(stepQuestion({ key: "ArrowLeft" }, 0, 3)).toBeNull();
+  expect(stepQuestion({ key: "ArrowRight" }, 2, 3)).toBeNull();
+  expect(stepQuestion({ key: "ArrowRight", metaKey: true }, 0, 3)).toBeNull();
+  expect(stepQuestion({ key: "ArrowRight", repeat: true }, 0, 3)).toBeNull();
+  expect(stepQuestion({ key: "ArrowRight" }, 0, 1)).toBeNull();
+  expect(stepQuestion({ key: "l" }, 0, 3)).toBeNull();
 });

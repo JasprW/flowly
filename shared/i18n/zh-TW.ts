@@ -1196,6 +1196,7 @@ const catalog: Catalog = {
   "Search and filter": "搜尋和篩選",
   "Project ideas": "專案想法",
   "Next / previous card in column": "欄內下一張 / 上一張卡片",
+  "Previous / next agent question": "智慧體的上一個 / 下一個問題",
   "Card in left / right column": "左 / 右欄的卡片",
   "Move the open card to the left / right column": "將開啟的卡片移到左 / 右欄",
   "Edit the open card": "編輯開啟的卡片",

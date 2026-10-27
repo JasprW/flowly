@@ -1196,6 +1196,7 @@ const catalog: Catalog = {
   "Search and filter": "검색 및 필터",
   "Project ideas": "프로젝트 아이디어",
   "Next / previous card in column": "열의 다음 / 이전 카드",
+  "Previous / next agent question": "에이전트의 이전 / 다음 질문",
   "Card in left / right column": "왼쪽 / 오른쪽 열의 카드",
   "Move the open card to the left / right column": "열린 카드를 왼쪽 / 오른쪽 열로 이동",
   "Edit the open card": "열린 카드 편집",

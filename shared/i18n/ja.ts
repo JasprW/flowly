@@ -1196,6 +1196,7 @@ const catalog: Catalog = {
   "Search and filter": "検索とフィルター",
   "Project ideas": "プロジェクトのアイデア",
   "Next / previous card in column": "列内の次 / 前のカード",
+  "Previous / next agent question": "エージェントの前 / 次の質問",
   "Card in left / right column": "左 / 右の列のカード",
   "Move the open card to the left / right column": "開いているカードを左 / 右の列に移動",
   "Edit the open card": "開いているカードを編集",

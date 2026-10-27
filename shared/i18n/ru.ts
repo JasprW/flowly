@@ -1196,6 +1196,7 @@ const catalog: Catalog = {
   "Search and filter": "Поиск и фильтр",
   "Project ideas": "Идеи проекта",
   "Next / previous card in column": "Следующая / предыдущая карточка в колонке",
+  "Previous / next agent question": "Предыдущий / следующий вопрос агента",
   "Card in left / right column": "Карточка в левой / правой колонке",
   "Move the open card to the left / right column": "Переместить открытую карточку в левую / правую колонку",
   "Edit the open card": "Редактировать открытую карточку",
