@@ -153,6 +153,11 @@ describe("sources (§2)", () => {
     expect(found.cards.map((c) => c.taskId)).toEqual(["a"]);
     if (source) expect(found.cards[0].hits[0]).toMatchObject({ source, field });
   });
+  test("workpad hits name their item, so the drawer can land on it", () => {
+    expect(search(board, "checkword").cards[0].hits[0].refId).toBe("v");
+    expect(search(board, "acceptword").cards[0].hits[0].refId).toBe("x");
+    expect(search(board, "confusionword").cards[0].hits[0].refId).toBe("c");
+  });
   test("ideas carry their status", () => {
     expect(search(board, "ideaword").cards[0].hits[0].status).toBe("dismissed");
   });

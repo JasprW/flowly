@@ -2,6 +2,7 @@
 
 ## Search (card "搜索功能") — 2026-10-27
 
+- Focus from search: a hit row opens the card at its section and item (Progress, Activity, Workpad, Ideas, Artifacts), widening Activity's last-12 window, Workpad/Artifacts pages and Ideas → Closed to reach it, then a short accent ring; the stored section choices are untouched ([DRAWER-SPEC](DRAWER-SPEC.md#focus-from-search), `client/drawer-focus.tsx`).
 - [SEARCH-SPEC](SEARCH-SPEC.md): `search.query` scans the cached board, the latest summary per card and active project memory in the daemon (`server/search.ts`); summaries/memory are re-read only when their file changes and the text index is rebuilt per board revision.
 - Search page (`client/search-page.tsx`): header icon, `S`, Command Center `Flowly: Search`, Search everywhere in the filter dialog; This project / All projects, source chips, results open their card (switching project).
 - `flowly_search` MCP tool, CLI `search`, HTTP `/api` action `search`; skill text points agents to it. Ideas, deliverables and memory follow their switches.

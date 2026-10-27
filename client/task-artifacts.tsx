@@ -11,6 +11,7 @@ import { IdeaRow, useExitList } from "./task-ideas";
 import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
 import { SessionMarkdown } from "./session-content";
 import { PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
+import { FocusTarget, limitFor, useFocusTarget } from "./drawer-focus";
 import { AiMark, Actions, Button, Choices, Field, IconButton, Label, Notice, Theme, font, message, space, touch, useTheme, noFocusRing } from "./ui";
 import { t, tn } from "../shared/i18n";
 import { BrandIcon } from "./brand-icons";
@@ -51,6 +52,15 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     () => (detail ? artifactsOf(detail.artifacts, task.id).filter((a) => !removing.has(a.id)) : []),
     [detail, task.id, removing],
   );
+  // A search hit on an artifact past the first page shows the pages up to it (DRAWER-SPEC "Focus from search").
+  const focusTarget = useFocusTarget();
+  useEffect(() => {
+    if (!focusTarget.startsWith("artifact:")) return;
+    const target = list.find((a) => a.id === focusTarget.slice("artifact:".length));
+    if (!target) return;
+    const at = list.filter((a) => a.role === target.role).indexOf(target);
+    setLimit((current) => ({ ...current, [target.role]: limitFor(at, current[target.role], pageSize) }));
+  }, [focusTarget, list]);
   const fileKey = list.filter((a) => a.kind === "file").map((a) => `${a.id}:${a.target}`).join("|");
   // One batched check when the drawer shows the card or its files change (CARD-ARTIFACTS-SPEC §9).
   const status = useQuery({
@@ -118,6 +128,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     <>
     <Section
       id={task.id}
+      focusId="artifacts"
       title={t("Artifacts")}
       count={list.length}
       empty={!rows.length}
@@ -148,6 +159,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
             <Label muted size={font.xs} bold selectable={false}>{t(group.title)}</Label>
             <PagedRows items={own} limit={limit[group.role]} render={(row) => (
               <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} spacing={0}>
+                <FocusTarget id={`artifact:${row.item.id}`}>
                 <ArtifactRow
                   artifact={row.item}
                   missing={missing.has(row.item.id)}
@@ -157,6 +169,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
                   onEdit={setEditing}
                   onRemove={remove}
                 />
+                </FocusTarget>
               </IdeaRow>
             )} />
             {rest > 0 && (

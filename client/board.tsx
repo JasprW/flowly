@@ -100,7 +100,8 @@ import { OverviewBar } from "./overview-bar";
 import { InsightsPage } from "./insights";
 import { IdeasPage } from "./ideas-page";
 import { SearchPage } from "./search-page";
-import { searchSources as allSearchSources, type SearchCard, type SearchMemoryHit } from "../shared/search";
+import { focusOfHit, type DrawerFocus } from "./drawer-focus";
+import { searchSources as allSearchSources, type SearchCard, type SearchHit, type SearchMemoryHit } from "../shared/search";
 import { MemoryPage } from "./memory";
 import { lastViewedProject, pickProject, rememberViewedProject } from "./project-memory";
 import { ProjectTabs } from "./project-tabs";
@@ -329,6 +330,8 @@ function BoardContent(
     [page, setPage] = useState<"insights" | "ideas" | "memory" | "search" | null>(null),
     // Search page (SEARCH-SPEC §5): the text it opens with and a key that remounts it for a new seed.
     [searchSeed, setSearchSeed] = useState({ text: "", key: 0 }),
+    // A search hit for the drawer to land on (DRAWER-SPEC "Focus from search"); any other way of opening a card clears it.
+    [drawerFocus, setDrawerFocus] = useState<(DrawerFocus & { taskId: string }) | null>(null),
     // Ideas page: only this card's ideas ("All ideas" from a card).
     [ideaCard, setIdeaCard] = useState(""),
     // `idea`: Start session prefilled from an idea on the Ideas page (IDEAS-SPEC §6.3).
@@ -928,12 +931,16 @@ function BoardContent(
   // Stable for every card (memoized cards; PERFORMANCE-SPEC §3).
   const openCard = useStableCallback((t: Task) => {
     perfMark("drawer.open");
+    setDrawerFocus(null);
     setTask(t.id);
   });
   const openCardActions = useStableCallback((t: Task) => setActionTask(t));
   const cardMenuFor = useStableCallback((t: Task) => cardMenu(t));
   // Stable drawer callbacks (memoized drawer).
-  const closeDrawer = useStableCallback(() => setTask(""));
+  const closeDrawer = useStableCallback(() => {
+    setDrawerFocus(null);
+    setTask("");
+  });
   const editDrawerTask = useStableCallback(() => task && setTaskForm({ task, status: task.status }));
   // IDEAS-SPEC §6: the new-task form, prefilled from the idea and its source card.
   const createFromIdea = useStableCallback((idea: Idea) =>
@@ -1022,6 +1029,7 @@ function BoardContent(
   );
   const linkFrom = useStableCallback((source: Task) => setLinking(source));
   const openTaskById = useStableCallback((id: string) => {
+    setDrawerFocus(null);
     const target = currentDetail?.relatedTasks.find(t => t.id === id) ?? board?.tasks.find(t => t.id === id);
     if (target) { setDetailTarget(target); setProject(target.projectId); }
     setTask(id);
@@ -1035,8 +1043,10 @@ function BoardContent(
   const closePage = useStableCallback(() => setPage(null));
   const openMemoryPage = useStableCallback(() => { ignoredLink.current = linkKey; setPage("memory"); });
   // SEARCH-SPEC §5.3: a result opens its card, switching project first; the Search page stays open.
-  const openSearchCard = useStableCallback((card: SearchCard) => {
+  const openSearchCard = useStableCallback((card: SearchCard, hit?: SearchHit) => {
     ignoredLink.current = linkKey;
+    const focus = hit ? focusOfHit(hit) : null;
+    setDrawerFocus(focus ? { ...focus, key: `${card.taskId}:${Date.now()}`, taskId: card.taskId } : null);
     setDetailTarget({ id: card.taskId, workspaceId: card.workspaceId, projectId: card.projectId });
     setProject(card.projectId);
     setTask(card.taskId);
@@ -1608,6 +1618,7 @@ function BoardContent(
         onAttention={toggleDrawerAttention}
         sectionOrder={(view.values?.drawerOrder || []).join(",")}
         sectionOpen={JSON.stringify(view.values?.drawerOpen || {})}
+        focus={drawerFocus?.taskId === drawer.item.task.id ? drawerFocus : undefined}
       />
       </CardDetailProvider>
     </Animated.View>
