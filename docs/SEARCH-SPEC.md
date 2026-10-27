@@ -115,6 +115,7 @@ output = {
   - 记忆单独一组，组标题 Memory。
 - 状态：查询为空时什么都不显示；没有结果显示 **No results**；卡片达到上限且 `truncated` 时列表末尾一行 **Showing the first 30 cards**（只有记忆被截断时不显示）；`partial` 时顶部一行 **Summaries could not be read** / **Memory could not be read**。不加说明文字。
 - 范围和来源筛选只在本次打开期间记住；查询文字不持久化。
+- 动画：请求进行中旧结果保留并淡到半透明（约 120 ms）；每次新结果到达，整个结果列表淡入并轻微上移（共享 `Enter`，约 220 ms）。筛选项的选中状态即时变化。系统开了 Reduce Motion 时都不做动画。
 
 ### 5.3 点击
 

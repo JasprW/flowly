@@ -1,6 +1,6 @@
 import { usePerfRender } from "./perf";
 import { memo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Animated, Pressable, Text, View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { taskTypeLabels, type Status } from "../shared/model";
 import { searchLimits, searchSources, type SearchCard, type SearchHit, type SearchMemoryHit, type SearchSource } from "../shared/search";
 import { FilterChip } from "./ideas-page";
 import { kindLabels } from "./memory";
+import { Enter, useMotionValue } from "./motion";
 import { StatusIcon } from "./status";
 import { useStableCallback } from "./stable";
 import { Button, Choices, Label, Notice, TextBox, font, message, noFocusRing, pageBarHeight, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
@@ -213,6 +214,8 @@ export const SearchPage = memo(function SearchPage({
   const picked = searchSources.filter((s) => chosen.has(s) && allowed.includes(s));
   const result = useSearchQuery(query, scope === "all" ? null : projectId, picked.length ? picked : allowed, true);
   const data = query.trim() ? result.data : undefined;
+  // While a new query runs the previous results stay, dimmed; each new response rises in (SEARCH-SPEC §5.2).
+  const dim = useMotionValue(!!query.trim() && result.isFetching ? 0.5 : 1);
   const toggle = (source: SearchSource) =>
     setChosen((previous) => {
       const next = new Set(previous);
@@ -269,6 +272,8 @@ export const SearchPage = memo(function SearchPage({
           {result.error && !!query.trim() && <Notice>{message(result.error)}</Notice>}
           {data?.partial.includes("summaries") && <Notice tone="warning">{t("Summaries could not be read")}</Notice>}
           {data?.partial.includes("memory") && <Notice tone="warning">{t("Memory could not be read")}</Notice>}
+          <Animated.View style={{ opacity: dim }}>
+          <Enter key={result.dataUpdatedAt} style={{ gap: space[3] }}>
           {data && !data.cards.length && !data.memory.length && (
             <View style={{ paddingVertical: space[4], alignItems: "center" }}>
               <Label muted selectable={false}>{t("No results")}</Label>
@@ -290,6 +295,8 @@ export const SearchPage = memo(function SearchPage({
             <Label muted size={font.sm} selectable={false}>
               {t("Showing the first {n} cards", { n: searchLimits.cardsDefault })}</Label>
           )}
+          </Enter>
+          </Animated.View>
         </View>
       </ScrollView>
     </View>
