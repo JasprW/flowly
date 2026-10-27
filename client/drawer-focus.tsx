@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { matchRanges } from "../shared/search-text";
-import { CueRing, radius, useTheme } from "./ui";
+import { CueRing, radius, tint, useTheme } from "./ui";
 
 export * from "./drawer-focus-logic";
 import { FOCUS_RING_MS } from "./drawer-focus-logic";
@@ -23,7 +23,7 @@ export function useMark(id: string): FocusMark | null {
   return mark && mark.target === id && mark.terms.length ? mark : null;
 }
 
-/** `text` with the marked words in bold accent (like the Search page snippets); plain text without terms. Put inside a Label. */
+/** `text` with the marked words highlighted (accent background, bold accent text); plain text without terms. Put inside a Label. */
 export function Marked({ text, terms }: { text: string; terms?: readonly string[] | null }) {
   const { colors } = useTheme();
   if (!terms?.length) return <>{text}</>;
@@ -32,7 +32,7 @@ export function Marked({ text, terms }: { text: string; terms?: readonly string[
   matchRanges(text, terms).forEach(([start, end], i) => {
     if (start > at) parts.push(text.slice(at, start));
     parts.push(
-      <Text key={i} style={{ fontWeight: "600", color: colors.accent }}>
+      <Text key={i} style={{ fontWeight: "600", color: colors.accent, backgroundColor: tint(colors.accent, 0.2), borderRadius: 2 }}>
         {text.slice(start, end)}
       </Text>,
     );
@@ -49,6 +49,8 @@ export function Marked({ text, terms }: { text: string; terms?: readonly string[
 export function FocusTarget({ id, round = radius.md, children }: { id: string; round?: number; children: ReactNode }) {
   const focus = useContext(FocusContext);
   const hit = !!focus && focus.target === id;
+  // Marked words are the cue; the ring is only for targets without them.
+  const marked = !!focus?.mark && focus.mark.target === id && focus.mark.terms.length > 0;
   const key = hit ? focus.key : "";
   const node = useRef<View>(null);
   const [ring, setRing] = useState(false);
@@ -71,7 +73,7 @@ export function FocusTarget({ id, round = radius.md, children }: { id: string; r
   return (
     <View ref={node} collapsable={false}>
       {children}
-      {hit && <CueRing on={ring} radius={round} inset={3} />}
+      {hit && !marked && <CueRing on={ring} radius={round} inset={3} />}
     </View>
   );
 }

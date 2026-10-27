@@ -41,7 +41,9 @@ async function hitCase(s, { name, chip, query, label, expect, minX, shot }) {
   note(`${name}: hit row found`, !!hit);
   if (!hit) return;
   await hit.click();
-  await page.waitForTimeout(5000); // past the ring and the focus timers: marks must remain
+  await page.waitForTimeout(900); // when the ring would show
+  await page.screenshot({ path: `${out}/${shot}-early.png`, clip: minX > 0 ? { x: SIDEBAR_WIDTH, y: 0, width: 1700 - SIDEBAR_WIDTH, height: 1000 } : undefined });
+  await page.waitForTimeout(4100); // past the ring and the focus timers: marks must remain
   const m = await marks(page, minX);
   note(`${name}: marks after 5 s`, JSON.stringify(m));
   note(`${name}: target text visible`, await visible(page, expect));

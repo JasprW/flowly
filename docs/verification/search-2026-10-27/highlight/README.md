@@ -16,3 +16,7 @@ No page errors.
 Not checked:
 - Artifact hits and closed ideas. Tinylink has neither; the logic is covered by unit tests.
 - Native phone apps.
+
+## Rerun after rework
+
+The user reported that the highlight looked like the whole block was highlighted, not the text. Changes: the marked words get an accent background, and a target with marked words no longer gets the ring. Rerun on the main working tree with this change applied (plugin reloaded) using the same script, which now also saves `*-early.png` 0.9 s after the click. In `d-note-early.png` only "counter" carries the highlight and the block has no ring. All the checks above still pass, and there are no page errors.
