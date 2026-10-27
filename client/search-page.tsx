@@ -10,7 +10,8 @@ import { searchLimits, searchSources, type SearchCard, type SearchHit, type Sear
 import { FilterChip } from "./ideas-page";
 import { kindLabels } from "./memory";
 import { StatusIcon } from "./status";
-import { Button, Choices, Label, Notice, TextBox, font, message, noFocusRing, pageBarHeight, radius, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
+import { useStableCallback } from "./stable";
+import { Button, Choices, Label, Notice, TextBox, font, message, noFocusRing, pageBarHeight, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg } from "../shared/i18n";
 
 /** The Search page (SEARCH-SPEC §5). Replaces the board area while open, like Ideas and Memory. */
@@ -71,10 +72,20 @@ function Snippet({ snippet, ranges, lines = 2 }: { snippet: string; ranges: read
   );
 }
 
-const HitRow = memo(function HitRow({ hit }: { hit: SearchHit }) {
+const HitRow = memo(function HitRow({ hit, onOpen }: { hit: SearchHit; onOpen(hit: SearchHit): void }) {
+  const { colors } = useTheme();
   const label = hit.status && hit.status !== "open" ? `${t(hitLabels[hit.source])} · ${t(ideaStatusLabels[hit.status])}` : t(hitLabels[hit.source]);
+  // Opens the card at this hit (DRAWER-SPEC "Focus from search").
   return (
-    <View style={{ flexDirection: "row", gap: space[2], alignItems: "flex-start" }}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${hit.snippet}`}
+      onPress={() => onOpen(hit)}
+      style={(state) => {
+        const { pressed, hovered } = state as typeof state & { hovered?: boolean };
+        return { ...noFocusRing, flexDirection: "row", gap: space[2], alignItems: "flex-start", marginHorizontal: -space[1.5], paddingHorizontal: space[1.5], paddingVertical: 2, borderRadius: radius.sm, backgroundColor: pressed || hovered ? tint(colors.accent, 0.08) : "transparent" };
+      }}
+    >
       <View style={{ width: 84, flexShrink: 0, paddingTop: 1 }}>
         <Label size={font.xs} muted medium selectable={false} lines={1}>
           {label}
@@ -83,7 +94,7 @@ const HitRow = memo(function HitRow({ hit }: { hit: SearchHit }) {
       <View style={{ flex: 1, minWidth: 0 }}>
         <Snippet snippet={hit.snippet} ranges={hit.ranges} />
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -96,9 +107,10 @@ const CardResult = memo(function CardResult({
   card: SearchCard;
   showProject: boolean;
   nameOf(status: Status): string;
-  onOpen(card: SearchCard): void;
+  onOpen(card: SearchCard, hit?: SearchHit): void;
 }) {
   const { colors } = useTheme();
+  const openHit = useStableCallback((hit: SearchHit) => onOpen(card, hit));
   const hits = card.hits.filter((h) => !(h.source === "card" && h.field === "title"));
   const meta = [nameOf(card.status), card.type ? taskTypeLabels[card.type] : "", showProject ? card.projectTitle : "", card.archived ? t("Archived") : ""].filter(Boolean).join(" · ");
   return (
@@ -131,7 +143,7 @@ const CardResult = memo(function CardResult({
         {meta}
       </Label>
       {hits.map((hit, i) => (
-        <HitRow key={`${hit.source}:${hit.refId || ""}:${hit.field}:${i}`} hit={hit} />
+        <HitRow key={`${hit.source}:${hit.refId || ""}:${hit.field}:${i}`} hit={hit} onOpen={openHit} />
       ))}
     </Pressable>
   );
@@ -189,7 +201,7 @@ export const SearchPage = memo(function SearchPage({
   /** Sources that are turned on (Ideas, deliverables and memory follow their switches). */
   sources: readonly SearchSource[];
   nameOf(status: Status): string;
-  onOpenCard(card: SearchCard): void;
+  onOpenCard(card: SearchCard, hit?: SearchHit): void;
   onOpenMemory(hit: SearchMemoryHit): void;
   onBack(): void;
 }) {

@@ -9,6 +9,7 @@ import { continuesInCard } from "../shared/ideas";
 import { eventPoint, useMenuOpener, type MenuEntry, type Point } from "./context-menu";
 import { CardBody, CardField, CardHeadline, CardMeta, CardMetaRow, CardText, ContentCard } from "./content-card";
 import { Disclosure, Section, type SectionState } from "./disclosure";
+import { FocusTarget, useFocusTarget } from "./drawer-focus";
 import { lerp, motionDuration, useReducedMotion } from "./motion";
 import { exitRows } from "./idea-rows";
 import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
@@ -58,11 +59,18 @@ export function TaskIdeas({
   const closed = ideas.filter((i) => i.status !== "open" || hidden.has(i.id)).reverse();
   const rows = useExitList(open);
   const closedRows = useExitList(closed);
+  // A search hit on an accepted or dismissed idea opens Closed (DRAWER-SPEC "Focus from search").
+  const focusTarget = useFocusTarget();
+  const closedTarget = focusTarget.startsWith("idea:") && closed.some((i) => `idea:${i.id}` === focusTarget);
+  useEffect(() => {
+    if (closedTarget) setClosedOpen(true);
+  }, [closedTarget]);
   if (!ideas.length) return null;
   const titleOf = (id: string) => detail?.relatedTasks.find((t) => t.id === id)?.title;
   return (
     <Section
       id={taskId}
+      focusId="ideas"
       title={t("Ideas")}
       ai
       count={open.length}
@@ -79,7 +87,9 @@ export function TaskIdeas({
         <View>
           {rows.map((row) => (
             <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} restored={actions.restored.has(row.item.id)}>
-              <IdeaCard idea={row.item} disabled={disabled || row.leaving} onGood={actions.choose} onDismiss={actions.dismiss} />
+              <FocusTarget id={`idea:${row.item.id}`}>
+                <IdeaCard idea={row.item} disabled={disabled || row.leaving} onGood={actions.choose} onDismiss={actions.dismiss} />
+              </FocusTarget>
             </IdeaRow>
           ))}
         </View>
@@ -91,6 +101,7 @@ export function TaskIdeas({
           <View>
             {closedRows.map((row) => (
               <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} spacing={space[1]}>
+                <FocusTarget id={`idea:${row.item.id}`}>
                 <ClosedIdea
                   idea={row.item}
                   acceptedTitle={row.item.acceptedTaskId ? titleOf(row.item.acceptedTaskId) : undefined}
@@ -99,6 +110,7 @@ export function TaskIdeas({
                   onOpenTask={onOpenTask}
                   onRestore={actions.restore}
                 />
+                </FocusTarget>
               </IdeaRow>
             ))}
           </View>

@@ -47,7 +47,8 @@ import { SessionPreview } from "./session-preview";
 import { useSessionReads } from "./session-reads";
 import { sessionAttention } from "../shared/session-attention";
 import type { SessionEntry } from "./session-link";
-import { Enter, MotionReveal, useSettled } from "./motion";
+import { Enter, MotionReveal, useReducedMotion, useSettled } from "./motion";
+import { DrawerFocusProvider, FOCUS_FALLBACK_MS, FOCUS_RING_MS, FocusTarget, activityStart, type DrawerFocus } from "./drawer-focus";
 import { perfLap, perfStart, perfEnd, usePerfRender } from "./perf";
 import { TaskMetadata } from "./task-metadata";
 import { Chevron, Collapse, Disclosure, Section, useSectionStates } from "./disclosure";
@@ -108,6 +109,7 @@ function TaskDrawerView({
   onAttention,
   sectionOrder,
   sectionOpen,
+  focus,
 }: {
   task: Task;
   project: Project;
@@ -155,6 +157,8 @@ function TaskDrawerView({
   sectionOrder?: string;
   /** The stored open/closed choices as JSON, compared by value (DRAWER-SPEC, Section order). */
   sectionOpen?: string;
+  /** A search hit to land on (DRAWER-SPEC "Focus from search"); each key is handled once. */
+  focus?: DrawerFocus;
 }) {
   usePerfRender("switch.drawer.commit");
   const switchStart = perfStart();
@@ -198,6 +202,47 @@ function TaskDrawerView({
     if (active) setOpened(openDefaults);
   }, [active, openDefaults]);
   const sectionStates = useSectionStates(opened, setOpened);
+  // Focus from search: open the section for this opening only (never the stored choice), let it render the
+  // target, scroll there and ring it; without a rendered target in time, the section itself is the target.
+  const reduced = useReducedMotion();
+  const scroller = useRef<{ scrollTo(to: { y: number; animated?: boolean }): void } | null>(null);
+  const content = useRef<View>(null);
+  const [focusTarget, setFocusTarget] = useState<{ key: string; target: string } | null>(null);
+  // An older event a hit pointed at stays listed until the sidebar closes, after its ring is gone.
+  const [keptEvent, setKeptEvent] = useState("");
+  useEffect(() => {
+    if (!active) setKeptEvent("");
+  }, [active]);
+  const handledFocus = useRef("");
+  const foundFocus = useRef("");
+  const focusTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => focusTimers.current.forEach(clearTimeout), []);
+  useEffect(() => {
+    if (!active || !focus || handledFocus.current === focus.key) return;
+    handledFocus.current = focus.key;
+    foundFocus.current = "";
+    focusTimers.current.forEach(clearTimeout);
+    setOpened((current) => ({ ...current, [focus.section]: true }));
+    setFocusTarget({ key: focus.key, target: focus.target || `section:${focus.section}` });
+    setKeptEvent(focus.target?.startsWith("event:") ? focus.target : "");
+    focusTimers.current = [
+      setTimeout(() => {
+        if (foundFocus.current !== focus.key) setFocusTarget({ key: focus.key, target: `section:${focus.section}` });
+      }, FOCUS_FALLBACK_MS),
+      // Once shown, the request is over: reopening or toggling a section later never applies it again.
+      setTimeout(() => setFocusTarget((current) => (current?.key === focus.key ? null : current)), FOCUS_FALLBACK_MS + FOCUS_RING_MS + 600),
+    ];
+  }, [active, focus]);
+  const focusFound = useStableCallback((key: string, node: View) => {
+    if (!focusTarget || key !== focusTarget.key || !content.current) return;
+    foundFocus.current = key;
+    node.measureLayout(
+      content.current as never,
+      (_x: number, y: number) => scroller.current?.scrollTo({ y: Math.max(0, y - space[3]), animated: !reduced }),
+      () => undefined,
+    );
+  });
+  const focusState = useMemo(() => (focusTarget ? { ...focusTarget, found: focusFound } : null), [focusTarget, focusFound]);
   // Heavy sections and their reads start once the open transition is over.
   const settled = useSettled(task.id);
   const ready = active && settled;
@@ -875,15 +920,19 @@ function TaskDrawerView({
             {!compact && heading}
           </View>
           <Divider />
+          <DrawerFocusProvider value={focusState}>
           <ScrollView
+            ref={scroller as never}
             {...verticalScroll}
             // Avoid recording offscreen section views on compact surfaces.
             removeClippedSubviews={compact}
             style={{ flex: 1, minHeight: 0 }}
             nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ ...verticalContent, padding: space[4], paddingBottom: space[6] + space[2], gap: space[5] }}
+            contentContainerStyle={{ ...verticalContent, padding: space[4], paddingBottom: space[6] + space[2] }}
           >
+            {/* One measured node for search focus (DRAWER-SPEC "Focus from search"). */}
+            <View ref={content} collapsable={false} style={{ gap: space[5] }}>
             {compact && <View style={{ gap: space[2] }}>{heading}</View>}
             {!!resourceIssue && !wrapped && (
               <View style={{ gap: space[2] }}>
@@ -1029,18 +1078,20 @@ function TaskDrawerView({
             {meaningful.length > 0 && (
               <Section
                 id={task.id}
+                focusId="activity"
                 title={t("Activity")}
                 count={meaningful.length}
                 open={sectionStates.activity.open}
                 onToggle={sectionStates.activity.onToggle}
               >
                 <View>
+                  {/* The last 12, widened back to an older event a search hit points at. */}
                   {meaningful
-                    .slice(-12)
+                    .slice(activityStart(meaningful.map((e) => e.id), keptEvent))
                     .reverse()
                     .map((e, index, list) => (
+                      <FocusTarget key={e.id} id={`event:${e.id}`}>
                       <ActivityItem
-                        key={e.id}
                         event={e}
                         nameOf={(status) => laneName(project, status)}
                         last={index === list.length - 1}
@@ -1054,13 +1105,16 @@ function TaskDrawerView({
                                 : t("Agent")
                         }
                       />
+                      </FocusTarget>
                     ))}
                 </View>
               </Section>
             )}
             </Enter>
             )}
+            </View>
           </ScrollView>
+          </DrawerFocusProvider>
         </>
       )}
       </MotionReveal>

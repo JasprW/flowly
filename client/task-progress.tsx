@@ -52,6 +52,7 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
   perfEnd("switch.progress.own", switchStart);
   return (
     <Section
+      focusId="progress"
       id={taskId}
       title={t("Progress")}
       ai

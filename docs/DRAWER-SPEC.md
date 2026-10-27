@@ -44,6 +44,16 @@ Status: implemented 2026-10-19. Card: UI/UX 调整. Title kept for links; covers
 5. **Phones.** On compact layouts only the action row (Back, project, Edit, More) stays fixed; the title, Status/Priority/Type and tags scroll with the sections, so the content gets the screen.
 6. A `Collapse` mounted open stays in normal layout until it is measured, so an expanded section does not flash at zero height. Progress → History rows start at the section's left edge (`Disclosure` `flush`) and an opened version's fields line up with its title. Each version shows a compact time (`shared/compact-time.ts`): today the time only, this year month, day and time, earlier years the date with its year; no seconds.
 
+## Focus from search
+
+Status: implemented 2026-10-27. Card: 搜索功能 (SEARCH-SPEC §5.3).
+
+1. The board passes the drawer a focus request: a fresh key, a section (Progress, Workpad, Artifacts, Ideas or Activity) and an optional item target (`event:<id>`, `workpad:<item id>`, `idea:<id>`, `artifact:<id>`). Each new key is handled once.
+2. The drawer opens that section in its own open state for this opening only (item 3 above); the stored *Starts open* choices are never written.
+3. The section makes the target rendered: Activity widens its last-12 window back to the target event, Workpad and Artifacts raise their page limit to include it, Ideas opens *Closed* for an accepted or dismissed idea.
+4. When the target is laid out the drawer scrolls it near the top of the sidebar's scroll area (`measureLayout` against the scroll content) and rings it with the accent `CueRing` for about 1.6 s. With Reduce Motion the scroll is not animated. If the target has not rendered 1.5 s after the request (removed item, section off), the section itself is the target.
+5. Toggling any section, scrolling or closing the sidebar never re-applies an old request.
+
 ## Type scale
 
 Status: implemented 2026-10-19. Card: UI/UX 调整. One scale for every sidebar section (`font` in `client/ui.tsx`):
