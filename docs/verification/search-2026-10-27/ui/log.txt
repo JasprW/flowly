@@ -1,0 +1,14 @@
+desktop search button: 1
+search box focused: true
+typing n opened New task dialog: false
+results contain rate limiting card: true
+no results label: 1
+result button found right of sidebar: true
+search page still open with drawer: 1
+back to board: search box gone: true
+S opens search page: 1
+Esc closes search page (box gone): true
+desktop page errors: []
+compact search button: 1
+compact results contain expired card: false
+compact page errors: []

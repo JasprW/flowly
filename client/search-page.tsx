@@ -235,6 +235,10 @@ export const SearchPage = memo(function SearchPage({
                 autoFocus
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
+                // Shortcuts are blocked while typing, so Esc is handled here to leave the page (SEARCH-SPEC §5.1).
+                onKeyPress={(event) => {
+                  if (event.nativeEvent.key === "Escape") onBack();
+                }}
                 placeholder={t("Search cards, notes and deliverables")}
                 accessibilityLabel={t("Search")}
                 style={{ height: touch ? 40 : 32, paddingHorizontal: space[3], borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.foreground, fontSize: font.base }}
