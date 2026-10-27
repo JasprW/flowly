@@ -99,6 +99,8 @@ import { BoardOutputActive, boardIsActive } from "./query-activity";
 import { OverviewBar } from "./overview-bar";
 import { InsightsPage } from "./insights";
 import { IdeasPage } from "./ideas-page";
+import { SearchPage } from "./search-page";
+import { searchSources as allSearchSources, type SearchCard, type SearchMemoryHit } from "../shared/search";
 import { MemoryPage } from "./memory";
 import { lastViewedProject, pickProject, rememberViewedProject } from "./project-memory";
 import { ProjectTabs } from "./project-tabs";
@@ -154,6 +156,7 @@ const tipText: Record<TipId, () => string> = {
   "summary-models": () => t("Choose summary models and their fallback order in Settings → Models. The default is Haiku, then Luna."),
   "ai-language": () => t("AI-written text follows Settings → AI features → AI output language. It starts as your interface language."),
   "first-skill-draft": () => t("Insights drafted a skill from your cards. Open Insights to add it to the project."),
+  search: () => t("Find past cards, notes, workpads and deliverables with the search button or S."),
   "first-memory-candidate": () => t("An agent suggested something to remember. Confirm it in Memory and new sessions on this project will know it; you can edit or delete it any time."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
   "card-display": () => t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
@@ -283,6 +286,7 @@ function BoardContent(
   // The Ideas switch (IDEAS-INBOX-SPEC §10); on until the setting has loaded.
   const ideasPrefs = useSettings(ideasSettings);
   const ideasOn = ideasPrefs.status !== "ready" || ideasSettingsValues(ideasPrefs.values).ideas;
+  const artifactsOn = ideasPrefs.status !== "ready" || ideasSettingsValues(ideasPrefs.values).artifacts;
   // Project memory and Insights as a whole (Settings → AI features; ONBOARDING-SETUP-SPEC §6).
   const featurePrefs = useSettings(featureSettings);
   const features = featureSettingsValues(featurePrefs.status === "ready" ? featurePrefs.values : {});
@@ -322,7 +326,9 @@ function BoardContent(
     [movedToFinished, setMovedToFinished] = useState(false),
     [escapeRequest, setEscapeRequest] = useState<{ taskId: string; key: string } | null>(null),
     // Project-level page over the board area: Insights or Ideas (IDEAS-INBOX-SPEC §3.3).
-    [page, setPage] = useState<"insights" | "ideas" | "memory" | null>(null),
+    [page, setPage] = useState<"insights" | "ideas" | "memory" | "search" | null>(null),
+    // Search page (SEARCH-SPEC §5): the text it opens with and a key that remounts it for a new seed.
+    [searchSeed, setSearchSeed] = useState({ text: "", key: 0 }),
     // Ideas page: only this card's ideas ("All ideas" from a card).
     [ideaCard, setIdeaCard] = useState(""),
     // `idea`: Start session prefilled from an idea on the Ideas page (IDEAS-SPEC §6.3).
@@ -1020,7 +1026,7 @@ function BoardContent(
     if (target) { setDetailTarget(target); setProject(target.projectId); }
     setTask(id);
   });
-  const togglePage = (next: "insights" | "ideas" | "memory") => {
+  const togglePage = (next: "insights" | "ideas" | "memory" | "search") => {
     ignoredLink.current = linkKey;
     // Opening Insights is acting on the skill-draft tip (INSIGHTS-REDESIGN-SPEC §5).
     if (next === "insights" && onboarding.values && !onboarding.values.tipsSeen.includes("first-skill-draft")) void onboarding.markTipSeen("first-skill-draft");
@@ -1028,6 +1034,27 @@ function BoardContent(
   };
   const closePage = useStableCallback(() => setPage(null));
   const openMemoryPage = useStableCallback(() => { ignoredLink.current = linkKey; setPage("memory"); });
+  // SEARCH-SPEC §5.3: a result opens its card, switching project first; the Search page stays open.
+  const openSearchCard = useStableCallback((card: SearchCard) => {
+    ignoredLink.current = linkKey;
+    setDetailTarget({ id: card.taskId, workspaceId: card.workspaceId, projectId: card.projectId });
+    setProject(card.projectId);
+    setTask(card.taskId);
+  });
+  const openSearchMemory = useStableCallback((hit: SearchMemoryHit) => {
+    ignoredLink.current = linkKey;
+    setProject(hit.projectId);
+    setPage("memory");
+  });
+  const openSearch = (text: string) => {
+    ignoredLink.current = linkKey;
+    setSearchSeed((current) => ({ text, key: current.key + 1 }));
+    setPage("search");
+  };
+  const searchSources = useMemo(
+    () => allSearchSources.filter((s) => (s !== "idea" || ideasOn) && (s !== "artifact" || artifactsOn) && (s !== "memory" || features.memory)),
+    [ideasOn, artifactsOn, features.memory],
+  );
   // Turning Ideas off closes its page.
   useEffect(() => {
     if (!ideasOn) setPage((current) => (current === "ideas" ? null : current));
@@ -1173,6 +1200,7 @@ function BoardContent(
           workflowSuggestion: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open" && !(f.target === "skill" && f.skill)),
           skillDraft: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open" && f.target === "skill" && !!f.skill),
           memoryCandidate: !task && !!memoryCandidates,
+          searchable: !task && projectTasks.filter((x) => !x.archivedAt).length >= 10,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
       });
@@ -1345,6 +1373,11 @@ function BoardContent(
       case "memory":
         if (!project || !features.memory) return false;
         togglePage("memory");
+        return true;
+      case "search":
+        if (!project) return false;
+        if (page === "search") setPage(null);
+        else openSearch("");
         return true;
       case "escape":
         if (!task && page) {
@@ -1684,6 +1717,9 @@ function BoardContent(
                 ])
               }
             />
+            {project && (
+              <IconButton icon="Search" label={withKey(t("Search"), "S")} active={page === "search"} onPress={() => (page === "search" ? setPage(null) : openSearch(""))} />
+            )}
             <FilterButton
               count={filterCount}
               compact={compact}
@@ -1844,6 +1880,18 @@ function BoardContent(
                     onOpenTask={openTaskById}
                     onCreate={createFromIdea}
                     onNewSession={ideaInNewSession}
+                    onBack={closePage}
+                  />
+                ) : page === "search" && board ? (
+                  <SearchPage
+                    key={searchSeed.key}
+                    projectId={project.id}
+                    seed={searchSeed.text}
+                    compact={compact}
+                    sources={searchSources}
+                    nameOf={nameOf}
+                    onOpenCard={openSearchCard}
+                    onOpenMemory={openSearchMemory}
                     onBack={closePage}
                   />
                 ) : page === "memory" && board ? (
@@ -2040,6 +2088,21 @@ function BoardContent(
                 commitDelay={150}
                 placeholder={t("Title, description or #tag")}
               />
+              {!!search.trim() && (
+                <View style={{ flexDirection: "row" }}>
+                  <Button
+                    small
+                    quiet
+                    icon="Search"
+                    onPress={() => {
+                      const text = search.trim();
+                      setMenu(null);
+                      afterModalClose(() => openSearch(text));
+                    }}
+                  >
+                    {t("Search everywhere")}</Button>
+                </View>
+              )}
               {!!(projectTags.length || tagFilter.length) && (
                 <View style={{ gap: space[1.5] }}>
                   <Label medium size={font.sm} muted>

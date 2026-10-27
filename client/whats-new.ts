@@ -22,6 +22,11 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
+    // SEARCH-SPEC §8.
+    version: "1.8.0",
+    items: [{ icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") }],
+  },
+  {
     // INSIGHTS-REDESIGN-SPEC §5: Skills turn on for everyone who never touched the switch.
     version: "1.7.0",
     items: [

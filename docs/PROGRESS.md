@@ -1,5 +1,13 @@
 # Implementation progress
 
+## Search (card "搜索功能") — 2026-10-27
+
+- [SEARCH-SPEC](SEARCH-SPEC.md): `search.query` scans the cached board, the latest summary per card and active project memory in the daemon (`server/search.ts`); summaries/memory are re-read only when their file changes and the text index is rebuilt per board revision.
+- Search page (`client/search-page.tsx`): header icon, `S`, Command Center `Flowly: Search`, Search everywhere in the filter dialog; This project / All projects, source chips, results open their card (switching project).
+- `flowly_search` MCP tool, CLI `search`, HTTP `/api` action `search`; skill text points agents to it. Ideas, deliverables and memory follow their switches.
+- Onboarding: tip `search`, tour More features entry, What's new 1.8.0, README highlight; 19 new strings in all catalogs.
+- Self-test results: see the card's workpad; UI verification on Tinylink and the independent haiku run are recorded separately.
+
 ## v1.7.1 release (card "遥测错误分析") — 2026-10-27
 
 - Version 1.7.1 (`make bump`). Release notes: [release-notes/v1.7.1.md](release-notes/v1.7.1.md), covering v1.7.0..main (#69, db1d734, 4476b43).

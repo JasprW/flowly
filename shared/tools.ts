@@ -3,6 +3,7 @@ import { relations } from "./links";
 import { setupItems } from "./card-setup";
 import { connectorProviderSchema, itemTypeSchema } from "./connectors";
 import { memoryKinds, memoryLimits } from "./memory";
+import { agentSearchSources, searchLimits } from "./search";
 import {
   taskSchema,
   projectSchema,
@@ -211,6 +212,28 @@ const memoryItemSchema = z.object({
   confirmedAt: z.string().optional(),
 });
 export const recallResultSchema = z.object({ entries: z.array(memoryItemSchema), total: z.number() });
+/** flowly_search (SEARCH-SPEC §6): read-only search of this project's other cards. */
+export const agentSearchInputSchema = z.strictObject({
+  query: z.string().trim().min(1).max(searchLimits.query).describe('Words to look for; every word must appear in the card. "Quoted phrases" and #tag filters work.'),
+  sources: z.array(z.enum(agentSearchSources)).max(agentSearchSources.length).optional().describe("Limit to some sources; all when omitted."),
+  limit: z.number().int().min(1).max(searchLimits.agentMax).default(searchLimits.agentDefault),
+});
+export const agentSearchResultSchema = z.object({
+  cards: z.array(
+    z.object({
+      taskId: z.string(),
+      title: z.string(),
+      status: z.string(),
+      type: z.string().optional(),
+      tags: z.array(z.string()),
+      archived: z.boolean(),
+      updatedAt: z.string(),
+      summary: z.string().optional(),
+      hits: z.array(z.object({ source: z.string(), snippet: z.string() })),
+    }),
+  ),
+  truncated: z.boolean(),
+});
 /** flowly_set_tags (CARD-TAGS-SPEC §4.1): tag this card with modules and directions. */
 export const tagsInputSchema = z.strictObject({
   expectedRevision: revisionSchema,
@@ -533,6 +556,7 @@ export type IdeaUpdateInput = z.infer<typeof ideaUpdateInputSchema>;
 export type IdeaRemovalInput = z.infer<typeof ideaRemovalSchema>;
 export type RememberInput = z.infer<typeof rememberInputSchema>;
 export type RecallInput = z.input<typeof recallInputSchema>;
+export type AgentSearchInput = z.input<typeof agentSearchInputSchema>;
 export type TagsToolInput = z.infer<typeof tagsInputSchema>;
 export type TypeToolInput = z.infer<typeof typeInputSchema>;
 export type NextMovesInput = z.infer<typeof nextMovesInputSchema>;

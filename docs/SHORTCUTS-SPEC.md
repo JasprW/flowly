@@ -23,6 +23,7 @@
 | `N` | 打开“新建任务”表单（默认 Todo） | 存在当前项目且未归档 |
 | `P` | 打开项目切换弹层 | — |
 | `/` 或 `F` | 打开筛选/搜索弹层 | 存在当前项目 |
+| `S` | 打开 / 关闭 Search 页（SEARCH-SPEC §5） | 存在当前项目 |
 | `A` | 打开 Needs attention 弹层 | — |
 | `?` | 打开快捷键帮助弹层 | — |
 | `Esc` | 侧栏在 session 预览中 → 返回卡片详情；侧栏在详情 → 关闭侧栏 | 侧栏已打开 |
@@ -58,12 +59,13 @@
 | `Ultra Kanban: New task` | 打开看板并打开新建任务表单 |
 | `Ultra Kanban: Switch project` | 打开看板并打开项目切换 |
 | `Ultra Kanban: Search and filter tasks` | 打开看板并打开筛选/搜索 |
+| `Flowly: Search` | 打开看板并打开 Search 页（intent `search`，SEARCH-SPEC §5） |
 | `Ultra Kanban: Needs attention` | 打开看板并打开 Attention |
 | `Ultra Kanban: Keyboard shortcuts` | 打开看板并打开快捷键帮助 |
 
 数据契约：`openScreen({ screenId: "board", params: { intent, at } })`。
 
-- `intent ∈ {"new-task","projects","filters","attention","shortcuts"}`；`at` 为 `Date.now()` 的十进制字符串。
+- `intent ∈ {"new-task","projects","filters","attention","shortcuts","welcome","search"}`；`at` 为 `Date.now()` 的十进制字符串。
 - 看板对每个 `(intent, at)` 只消费一次；`at` 距当前超过 30 秒（例如刷新页面后 URL 里残留）或格式无效、未知 intent 时忽略，不报错。
 - 与 session chip 链接参数（`taskId/sessionId/workspaceId/requestId`）互不冲突；intent 参数不进入 `parseSessionLink`。
 - `new-task` 在没有项目或项目已归档时不打开表单（与按钮的禁用状态一致）；其余 intent 在数据加载完成后执行。

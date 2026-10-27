@@ -25,6 +25,8 @@ import {
   rememberInputSchema,
   recallInputSchema,
   recallResultSchema,
+  agentSearchInputSchema,
+  agentSearchResultSchema,
   artifactInputSchema,
   artifactRemovalSchema,
   readExternalInputSchema,
@@ -289,6 +291,17 @@ export class ToolServer {
           (input) => wrap(() => this.agents.recall(identity, input)),
         );
         mcp.registerTool(
+          "flowly_search",
+          {
+            description:
+              "Search earlier cards in this project: their titles, descriptions, summaries, progress notes, workpads, ideas and deliverables (PR links, Jira keys, file paths). Use it when you start on an area to find related or duplicate work and how it was verified. Project memory is not included; use flowly_recall for it. Read-only; no request needed.",
+            inputSchema: agentSearchInputSchema,
+            outputSchema: agentSearchResultSchema,
+            annotations: { readOnlyHint: true, openWorldHint: false },
+          },
+          (input) => wrap(() => this.agents.searchCards(identity, input)),
+        );
+        mcp.registerTool(
           "flowly_add_artifact",
           {
             description:
@@ -453,7 +466,7 @@ export class ToolServer {
     }
     const body = z
       .strictObject({
-        action: z.enum(["get", "status", "progress", "idea", "idea_update", "idea_remove", "remember", "recall", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
+        action: z.enum(["get", "status", "progress", "idea", "idea_update", "idea_remove", "remember", "recall", "search", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
         input: z.unknown(),
       })
       .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
@@ -465,6 +478,8 @@ export class ToolServer {
           ? await this.agents.readExternal(identity, readExternalInputSchema.parse(body.input))
           : body.action === "recall"
             ? await this.agents.recall(identity, recallInputSchema.parse(body.input))
+            : body.action === "search"
+              ? await this.agents.searchCards(identity, agentSearchInputSchema.parse(body.input))
             : await this.agents.write(identity, body.action, body.input);
     this.json(res, { ok: true, result: value });
   }

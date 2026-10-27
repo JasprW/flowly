@@ -33,6 +33,7 @@ import {
   ideaUpdateInputSchema,
   rememberInputSchema,
   recallInputSchema,
+  agentSearchInputSchema,
   artifactInputSchema,
   artifactRemovalSchema,
   tagsInputSchema,
@@ -51,6 +52,7 @@ import {
   type IdeaUpdateInput,
   type RememberInput,
   type RecallInput,
+  type AgentSearchInput,
   type ArtifactToolInput,
   type ArtifactRemovalInput,
   type TagsToolInput,
@@ -67,6 +69,7 @@ import { ToolError } from "./tool-error";
 import { ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Receipt, type Status } from "../shared/model";
 import { isLegacyScope } from "../shared/scope";
 import { MemoryError, type MemoryService } from "./memory";
+import type { SearchService } from "./search";
 import { logFailure } from "./error-report";
 
 /** A project-memory refusal as the tool error agents read (PROJECT-MEMORY-SPEC §4.1). */
@@ -111,6 +114,17 @@ export class AgentService {
       throw memoryToolError(e);
     });
     this.accesses.set(identity.agentId, { at: new Date(this.clock()).toISOString(), action: "recall" });
+    return found;
+  }
+  /** Search (SEARCH-SPEC); set by the plugin entry. */
+  search?: SearchService;
+  /** flowly_search (SEARCH-SPEC §6): read-only. */
+  async searchCards(identity: ToolIdentity, raw: AgentSearchInput) {
+    const input = agentSearchInputSchema.parse(raw);
+    const r = await this.resources(identity);
+    if (!this.search) throw new ToolError("SERVICE_UNAVAILABLE", "Search is unavailable in this Flowly build.");
+    const found = await this.search.forAgent(r.project, r.task.id, input);
+    this.accesses.set(identity.agentId, { at: new Date(this.clock()).toISOString(), action: "search" });
     return found;
   }
   /** Per-session external content last seen, for external `unread`. */

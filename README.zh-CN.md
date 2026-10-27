@@ -67,6 +67,8 @@ agent 工作时发现的后续事项（顺带发现的 bug、现有方案的局�
 
 需要比卡片活得更久的东西进入**项目记忆**：你做的决策（包括否决的方案）、踩过的坑和走不通的路、你希望怎么做事，以及相关的人和系统。agent 用 `flowly_remember` 提出候选；卡片移入 Done 时，一个便宜的模型还会复盘它，最多再提 1 条，而且只提跨卡通用的。所有条目都要你在项目的 **Memory** 页（快捷键 `M`）确认后才生效。确认过的条目会进入这个项目新 session 的初始指令（放得下就全部给，放不下就给置顶的和最相关的，其余由 agent 用 `flowly_recall` 查）。每条都可以修改、置顶、归档或删除，也可以复制成 `AGENTS.md` 规则；可以按项目关闭。记忆只存在本机，不进仓库。
 
+**搜索**（快捷键 `S` 或搜索按钮）查找过去的卡片：标题、摘要、进度说明、Workpad、想法和交付物，粘贴 PR 链接或 Jira 编号就能找到对应的卡。可以搜当前项目或全部项目，完全在本机进行。agent 开始做某个方向时也能用 `flowly_search` 查同样的历史。
+
 ### 5. 输入与产出
 
 每张卡有一个 **Artifacts** 列表：它依据的文档、链接（输入）和产出的交付物（输出）。agent 工作时通过看板工具登记，你也可以在卡片上添加、编辑或删除自己的条目。只保存引用，文件留在原处，以只读预览打开。每条都标明是你还是 agent 添加的，agent 不能删除你添加的条目。
@@ -111,7 +113,7 @@ Insights 用 GitHub 式的热力图显示项目一年的活跃度：每天一格
 
 - **一个看板 project 对应一个原生 Paseo project 根目录。** 要跨多个仓库工作，可以把它们放进同一个父目录并注册该目录；也可以让插件建一个“链接根目录”，里面为每个仓库放一个软链接（移除链接不会动目标目录）。
 - **一张卡对应一个 workspace**，workspace 里可以有多个 session。由你选择哪个 session 接收指令；普通追问只发送你输入的原文。
-- **Agent 工具。** 从卡片创建的 session 会获得受限 MCP 工具：`flowly_get_task`、`flowly_update_status`、`flowly_report_progress`、`flowly_propose_idea`、`flowly_suggest_next_moves`、`flowly_set_tags`、`flowly_set_type`、`flowly_add_artifact`、`flowly_remove_artifact`、`flowly_update_workpad` 和 `flowly_read_external`（`flowly_read_ticket` 作为旧 session 的别名保留），以及说明它们用法的 `flowly` skill。agent 可以在工作阶段之间和 In review 之间移动自己的卡片；Done 与 Cancelled 由人决定。交付或提问的那次调用（`flowly_update_status`、`flowly_report_progress`）还可以带上 `nextMoves`，即显示在输入框上方的建议下一步；没有需要用户做的事就传 `[]`。没有 MCP 的 session 可使用 CLI 兜底。
+- **Agent 工具。** 从卡片创建的 session 会获得受限 MCP 工具：`flowly_get_task`、`flowly_update_status`、`flowly_report_progress`、`flowly_propose_idea`、`flowly_suggest_next_moves`、`flowly_set_tags`、`flowly_set_type`、`flowly_add_artifact`、`flowly_remove_artifact`、`flowly_update_workpad`、`flowly_search` 和 `flowly_read_external`（`flowly_read_ticket` 作为旧 session 的别名保留），以及说明它们用法的 `flowly` skill。agent 可以在工作阶段之间和 In review 之间移动自己的卡片；Done 与 Cancelled 由人决定。交付或提问的那次调用（`flowly_update_status`、`flowly_report_progress`）还可以带上 `nextMoves`，即显示在输入框上方的建议下一步；没有需要用户做的事就传 `[]`。没有 MCP 的 session 可使用 CLI 兜底。
 - **卡片业务状态与 session 执行状态相互独立。** 一轮结束不代表卡片完成。
 - **其他能力：** 拖拽（含列内排序）、卡片关联（follow-up、blocks、related）、任务类型与优先级、Done 卡片收尾（预检后归档其 session 和自有 workspace）、键盘快捷键（`?`）、按卡片统计 token、手机紧凑布局，以及在 *设置 → 卡片* 中自选看板卡片显示哪些信息（带实时预览）。
 

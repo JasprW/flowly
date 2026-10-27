@@ -21,16 +21,18 @@ export type ShortcutAction =
   | "edit"
   | "insights"
   | "ideas"
-  | "memory";
+  | "memory"
+  | "search";
 
 export type BoardIntent = Extract<
   ShortcutAction,
-  "new-task" | "projects" | "filters" | "attention" | "shortcuts" | "welcome"
+  "new-task" | "projects" | "filters" | "attention" | "shortcuts" | "welcome" | "search"
 >;
 
 export const shortcutHelp: readonly { keys: string[]; title: string }[] = [
   { keys: ["N"], title: msg("New task") },
   { keys: ["P"], title: msg("Switch project") },
+  { keys: ["S"], title: msg("Search") },
   { keys: ["/", "F"], title: msg("Search and filter") },
   { keys: ["A"], title: msg("Needs attention") },
   { keys: ["I"], title: msg("Project insights") },
@@ -58,6 +60,7 @@ const letters: Record<string, ShortcutAction> = {
   i: "insights",
   b: "ideas",
   m: "memory",
+  s: "search",
 };
 
 export interface ShortcutKey {
@@ -131,6 +134,7 @@ const intents: readonly BoardIntent[] = [
   "attention",
   "shortcuts",
   "welcome",
+  "search",
 ];
 export const intentMaxAgeMs = 5_000;
 
