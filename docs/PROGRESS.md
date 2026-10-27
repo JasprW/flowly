@@ -970,3 +970,10 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 ## 2026-10-24 宽屏点阵连续性修正
 
 连续开卡反复重放是全局高度让路后phase0恢复的可见代价。按MOBILE-SMOOTHNESS-SPEC §7仅在宿主窗口<760让装饰时钟让路；宽屏保留同一loop/phase，lease和resize通知不重启。只改motion.tsx，无新增缓存、timer、框架或RPC；fresh归属、连续220/160ms与450ms交接保持。既有三星局部收起约39→26–28ms，展开不稳定，无桌面/FPS收益结论。已有typecheck、Luna mounted11/11、focused5文件37项通过，首次旧文档断言失败留存；本地Flowly重载running，真实UI/FPS未运行。用户要求停止后续测试直接合入，未再跑候选全量或设备矩阵；仅选择本修复和规范按PR流程发运。无需tour/tip/What's new。证据保留于verification/marquee-width-2026-10-24。
+
+## 2026-10-27 summary 不再生成：Paseo 0.13 的 turn_ended 不带 timeline
+
+- 现象：Agent SMITH 的多张卡片没有 progress。数据：daemon 0.13.0 于 10-26 02:04Z 启动，之后全项目已完成回合里只有手动 Refresh 的 summary 写入（Flowly 10-26 为 1/77，10-27 为 0/18；SMITH 10-27 为 2/27）。
+- 根因：Paseo 0.13 的 `publishAgentStream` 对 turn_completed/failed/canceled 一律发 `timeline: []`（SDK 类型仍声明该字段，所以编译无报错）。`SummaryService.enqueue` 对空文本直接返回，无错误记录。同一个空数组还影响 `byUser`/`pick`（Agent habits）、记忆线索、workpad 计划、外部会话 insights。
+- 修复：`server/turn-timeline.ts` 在空时读 timeline 最新一页的最后一轮，`agent.turn_ended` 入口统一使用；`agent.turn_ended` 的 `byUser` 在 10-26 起的事件里被记成 false，未回填。
+

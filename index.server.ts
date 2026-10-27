@@ -49,6 +49,7 @@ import { WorkflowInsightsService, WorkflowStore } from "./server/workflow-insigh
 import { workflowInsightsSettings, workflowSettingsValues } from "./shared/workflow-insights";
 import { sessionModel } from "./server/agent-model";
 import { startedByUser, turnPick, userTexts } from "./shared/agent-habits";
+import { turnTimeline } from "./server/turn-timeline";
 import { MemoryService, setMemoryEverywhere, memoryOn } from "./server/memory";
 import { POSTHOG_KEY, TelemetryService } from "./server/telemetry";
 import { FLOWLY_VERSION } from "./shared/version";
@@ -591,35 +592,38 @@ export default function contribute(host: PluginServerContext) {
     if (!identity) {
       // A session Flowly does not manage (NATIVE-SESSION-SPEC §12): insights after a completed turn, when switched on.
       if (event.outcome.kind === "completed")
-        void sessionInsights.enqueue(event.agent, event.timeline, paseo, endedAt).catch((e) =>
-          logFailure("Flowly session insight failed:", e),
-        );
+        void turnTimeline(paseo, event.agent.id, event.timeline)
+          .then((timeline) => sessionInsights.enqueue(event.agent, timeline, paseo, endedAt))
+          .catch((e) => logFailure("Flowly session insight failed:", e));
       return;
     }
     // This turn's suggested next steps as a card under the reply in Paseo's timeline. First thing, before the
     // settings read, the model lookup (up to 2 s) and the board write: the suggestion is already in the board's
     // events and none of those steps changes it, so the card waits for nothing. Never blocks the hook.
     if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
+    // The hook's timeline is empty from Paseo 0.13; read alongside the settings and model lookups below.
+    const turn = turnTimeline(paseo, event.agent.id, event.timeline);
     const auto = await autoStatusOn();
     // Agent habits (WORKFLOW-INSIGHTS-SPEC §12.4): the model this turn ran on, and whether the user's message took one of the suggestions that were open.
     const model = await sessionModel(paseo, event.agent);
-    const texts = userTexts(event.timeline);
+    const timeline = await turn;
+    const texts = userTexts(timeline);
     await store.mutate((board) => {
-      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(event.timeline) });
+      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(timeline) });
       if (auto) applyTurnEnded(store, board, identity, event.outcome);
     });
     // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
     void store
       .read()
-      .then((board) => memory.recordTurn(identity, event.timeline, board))
+      .then((board) => memory.recordTurn(identity, timeline, board))
       .catch((e) => logFailure("Flowly memory clue not recorded:", e));
     // The session's plan and the workspace HEAD for the workpad (WORKPAD-SPEC §2.2, §5.2); never blocks the hook.
-    void workpads.recordTurn(identity, event.timeline, paseo).catch((e) =>
+    void workpads.recordTurn(identity, timeline, paseo).catch((e) =>
       logFailure("Kanban workpad plan not recorded:", e),
     );
     // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
     if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
-      void summaries.enqueue(identity.taskId, identity.agentId, event.timeline, paseo, endedAt);
+      void summaries.enqueue(identity.taskId, identity.agentId, timeline, paseo, endedAt);
   });
   // Queued follow-ups go out when any session's turn ends (Paseo "queue").
   server.on("agent.turn_ended", async (event, { paseo }) => {
