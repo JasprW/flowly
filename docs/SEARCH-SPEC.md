@@ -23,7 +23,7 @@
 | `note` | `events` 里 `status_changed` 和 `progress_reported` 且 `note` 非空的记录（人和 agent 都算） | note | 2 |
 | `workpad` | `workpads` | 验收条目、检查的说明/命令/证据、疑问 | 2 |
 | `idea` | `ideas`，所有状态（open / accepted / dismissed） | 标题、detail、rationale、context | 标题 4，其余 2 |
-| `artifact` | `artifacts` | 标题、备注、target（链接或路径）、外部条目的 key 和标题 | 3 |
+| `artifact` | `artifacts` | 标题、备注、target（链接或路径）、外部条目的 key（外部条目的标题就是交付物标题） | 3 |
 | `memory` | `memory.json`，只取 `active` | 标题、正文、关键词、标签 | 4 |
 
 Ideas 和交付物分别跟随 Settings 里的 Ideas、Artifacts 开关，关掉时不搜；项目记忆在全局关闭或该项目关闭时不搜。
@@ -111,9 +111,9 @@ output = {
 - 下面一行来源筛选：Cards、Summaries、Notes、Workpads、Ideas、Deliverables、Memory，可多选；都不选等于全选。
 - 结果列表：
   - 卡片行：标题、泳道名、类型；全部项目时加项目名；已归档的卡标 Archived。
-  - 卡片行下面是命中行：来源名（Summary / Note / Workpad / Idea / Deliverable）+ 片段，命中词用粗体和主题强调色。Idea 命中带上它的状态（Dismissed 等）。
+  - 卡片行下面是命中行（卡片标题本身的命中不再单列一行，标题已在卡片行上）：来源名（Summary / Note / Workpad / Idea / Deliverable）+ 片段，命中词用粗体和主题强调色。Idea 命中带上它的状态（Dismissed 等）。
   - 记忆单独一组，组标题 Memory。
-- 状态：查询为空时什么都不显示；没有结果显示 **No results**；`truncated` 时列表末尾一行 **Showing the first 30 cards**；`partial` 时顶部一行 **Summaries could not be read** / **Memory could not be read**。不加说明文字。
+- 状态：查询为空时什么都不显示；没有结果显示 **No results**；卡片达到上限且 `truncated` 时列表末尾一行 **Showing the first 30 cards**（只有记忆被截断时不显示）；`partial` 时顶部一行 **Summaries could not be read** / **Memory could not be read**。不加说明文字。
 - 范围和来源筛选只在本次打开期间记住；查询文字不持久化。
 
 ### 5.3 点击

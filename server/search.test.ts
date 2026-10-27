@@ -292,6 +292,38 @@ describe("SearchService (§4, §6)", () => {
     expect((await s.query({ query: "memhit", projectId: "p" })).memory).toEqual([]);
     expect((await s.query({ query: "ideahit", projectId: "p" })).cards).toEqual([]);
   });
+  test("turning memory off applies to the next search without any data change", async () => {
+    let on = true;
+    dir = await mkdtemp(join(tmpdir(), "flowly-search-"));
+    const s = new SearchService({
+      board: async () => board(),
+      summaries: { path: join(dir, "summaries.json"), read: async () => [] },
+      memory: { path: join(dir, "memory.json"), read: async () => [memoryEntry("m", { title: "memhit" })] },
+      memoryOn: () => on,
+      ideasOn: async () => true,
+      artifactsOn: async () => true,
+    });
+    expect((await s.query({ query: "memhit", projectId: "p" })).memory).toHaveLength(1);
+    on = false;
+    expect((await s.query({ query: "memhit", projectId: "p" })).memory).toEqual([]);
+  });
+  test("flowly_search drops the summary when the summaries file cannot be read", async () => {
+    let fail = false;
+    dir = await mkdtemp(join(tmpdir(), "flowly-search-"));
+    const s = new SearchService({
+      board: async () => board(),
+      summaries: { path: join(dir, "summaries.json"), read: async () => (fail ? Promise.reject(new Error("bad")) : [summary("b", { state: "old state" })]) },
+      memory: { path: join(dir, "memory.json"), read: async () => [] },
+      memoryOn: () => true,
+      ideasOn: async () => true,
+      artifactsOn: async () => true,
+    });
+    const p = board().projects[0];
+    expect((await s.forAgent(p, "a", agentSearchInputSchema.parse({ query: "beta" }))).cards[0].summary).toBe("old state");
+    fail = true;
+    await writeFile(join(dir, "summaries.json"), "changed");
+    expect((await s.forAgent(p, "a", agentSearchInputSchema.parse({ query: "beta" }))).cards[0].summary).toBeUndefined();
+  });
   test("flowly_search: own project only, own card excluded, no memory, latest summary clipped", async () => {
     const long = "word ".repeat(200);
     const s = await service(board(), { summaries: async () => [summary("b", { state: "state", recap: long })] });

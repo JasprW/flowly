@@ -300,9 +300,10 @@ export class SearchService {
       this.cached("summaries", this.io.summaries).catch(() => (partial.push("summaries"), undefined)),
       this.cached("memory", this.io.memory).catch(() => (partial.push("memory"), undefined)),
     ]);
-    const key = `${board.revision}|${summaries?.stamp ?? "-"}|${memory?.stamp ?? "-"}`;
+    // The memory switches (global and per project) are part of the key: turning memory off applies at once.
+    const enabled = new Set(board.projects.filter((p) => this.io.memoryOn(p)).map((p) => p.id));
+    const key = `${board.revision}|${summaries?.stamp ?? "-"}|${memory?.stamp ?? "-"}|${[...enabled].sort().join(",")}`;
     if (this.index?.key !== key) {
-      const enabled = new Set(board.projects.filter((p) => this.io.memoryOn(p)).map((p) => p.id));
       this.index = {
         key,
         value: buildSearchIndex({
@@ -313,7 +314,7 @@ export class SearchService {
       };
     }
     partial.sort();
-    return { index: this.index.value, partial };
+    return { index: this.index.value, partial, summaries: summaries?.value || [] };
   }
   private async allowed(sources: readonly SearchSource[] | undefined, base: readonly SearchSource[]) {
     const [ideas, artifacts] = await Promise.all([this.io.ideasOn().catch(() => true), this.io.artifactsOn().catch(() => true)]);
@@ -338,13 +339,12 @@ export class SearchService {
 
   /** flowly_search (§6): the caller's project, without its own card or project memory. */
   async forAgent(project: Project, taskId: string, input: { query: string; sources?: readonly SearchSource[]; limit: number }) {
-    const { index } = await this.load();
+    const { index, summaries } = await this.load();
     const base = (input.sources?.length ? input.sources : agentSearchSources).filter((s) => s !== "memory");
     const sources = await this.allowed(base, agentSearchSources);
     const found = sources.length
       ? runSearch(index, { query: input.query, projectIds: new Set([project.id]), sources, limit: input.limit, excludeTaskId: taskId, memoryLimit: 0 })
       : { cards: [], memory: [], truncated: false };
-    const summaries = this.summaries?.value || [];
     const latest = new Map<string, SummaryEntry>();
     for (const s of summaries) {
       const seen = latest.get(s.taskId);

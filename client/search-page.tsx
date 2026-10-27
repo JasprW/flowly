@@ -270,7 +270,7 @@ export const SearchPage = memo(function SearchPage({
               ))}
             </View>
           )}
-          {data?.truncated && (
+          {data?.truncated && data.cards.length >= searchLimits.cardsDefault && (
             <Label muted size={font.sm} selectable={false}>
               {t("Showing the first {n} cards", { n: searchLimits.cardsDefault })}</Label>
           )}
