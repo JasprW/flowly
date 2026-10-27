@@ -38,7 +38,7 @@ Keep project CRUD, task search/priority/archive/finished filters, task creation/
 ## 4. Resizable task drawer
 
 - Expanded layout has a visible vertical resize grip between board and right drawer. Mouse drag changes width immediately; accessible Narrower/Wider/Reset controls provide the same operation without dragging.
-- Preferred initial width is 440 points. Clamp to a minimum of 340, maximum of 720 and enough remaining board width (at least 300 points plus grip). Re-clamp on window resize. Store preferred width in component state for the open board surface; do not add persisted board fields or localStorage.
+- Preferred initial width is 440 points. Clamp to a minimum of 340, maximum of 720 and enough remaining board width (at least 300 points plus grip). Re-clamp on window resize. The dragged width is remembered (user decision 2026-10-27): saved once on release as host-scoped `board-view` `drawerWidth` (0 = never resized, default 440), restored when the board opens, and re-clamped like any preferred width. No localStorage.
 - If host layout is compact, platform is iOS/Android, or measured surface width is below 760, show task detail at full width with Back to board; hide the resize grip. Preserve the selected card and session when crossing the breakpoint.
 - Drawer content has a bounded vertical host ScrollView. Status/session/model/mode choices wrap instead of requiring horizontal swipe; headers/action rows wrap on narrow widths. The latest output remains bounded and vertically scrollable.
 

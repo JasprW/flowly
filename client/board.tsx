@@ -366,6 +366,7 @@ function BoardContent(
     setTaskTypeState(view.values.filterType);
     setTagFilterState(view.values.filterTags);
     setArchivedState(view.values.showArchived);
+    if (view.values.drawerWidth) setPreferredWidth(view.values.drawerWidth);
   }, [!!view.values]);
   const searchSave = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -1573,7 +1574,11 @@ function BoardContent(
           width={width}
           maxWidth={drawerWidth(720, surfaceWidth || 1000)}
           onStart={() => setResizing(true)}
-          onEnd={() => setResizing(false)}
+          onEnd={() => {
+            setResizing(false);
+            // Saved once, on release, never per frame.
+            if (preferredWidth !== view.values?.drawerWidth) void view.update({ drawerWidth: Math.round(preferredWidth) });
+          }}
           onChange={(next) =>
             setPreferredWidth(drawerWidth(next, surfaceWidth))
           }
