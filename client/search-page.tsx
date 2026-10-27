@@ -10,6 +10,7 @@ import { searchLimits, searchSources, type SearchCard, type SearchHit, type Sear
 import { FilterChip } from "./ideas-page";
 import { kindLabels } from "./memory";
 import { StatusIcon } from "./status";
+import { useShortcutBlock } from "./shortcuts";
 import { Button, Choices, Label, Notice, TextBox, font, message, noFocusRing, pageBarHeight, radius, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg } from "../shared/i18n";
 
@@ -198,6 +199,9 @@ export const SearchPage = memo(function SearchPage({
   const [query, setQuery] = useState(seed);
   const [scope, setScope] = useState<"project" | "all">("project");
   const [chosen, setChosen] = useState<ReadonlySet<SearchSource>>(() => new Set());
+  // Typing in the box must not trigger board shortcuts (N, S, ...), like Field.
+  const [focused, setFocused] = useState(false);
+  useShortcutBlock(focused);
   const picked = searchSources.filter((s) => chosen.has(s) && allowed.includes(s));
   const result = useSearchQuery(query, scope === "all" ? null : projectId, picked.length ? picked : allowed, true);
   const data = query.trim() ? result.data : undefined;
@@ -229,6 +233,8 @@ export const SearchPage = memo(function SearchPage({
                 onChangeText={setQuery}
                 commitDelay={250}
                 autoFocus
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
                 placeholder={t("Search cards, notes and deliverables")}
                 accessibilityLabel={t("Search")}
                 style={{ height: touch ? 40 : 32, paddingHorizontal: space[3], borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.foreground, fontSize: font.base }}
