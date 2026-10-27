@@ -238,11 +238,17 @@ Content-Type: application/json
 
 | 来源 | `source` | 说明 |
 |---|---|---|
-| RPC handler 抛出的错误 | `rpc <rpc 名>`，如 `rpc task.update` | 包在 `server.handle` 外层，上报后原样抛出，调用方看到的结果不变。**不报**预期错误，也就是 handler 故意返回给调用方的答复：`ToolError`、`MemoryError`、`StoreInvalidError`、`ExternalError`、`ZodError`，以及没有系统错误码的普通 `Error`（如 "Task not found."、版本冲突）。`TypeError` 等程序错误、带系统错误码的错误（`ENOENT`、`SQLITE_BUSY`）照常上报 |
+| RPC handler 抛出的错误 | `rpc <rpc 名>`，如 `rpc task.update` | 包在 `server.handle` 外层，上报后原样抛出，调用方看到的结果不变。**不报**预期错误，也就是 handler 故意返回给调用方的答复：`ToolError`、`MemoryError`、`StoreInvalidError`、`ExternalError`、`ZodError`，以及没有系统错误码的普通 `Error`（如 "Task not found."、版本冲突），和下面的“Flowly 之外的失败”。`TypeError` 等程序错误、带系统错误码的错误（`ENOENT`、`SQLITE_BUSY`）照常上报；用户给的路径不存在（文件夹浏览、新建项目）或会话里的图片文件已被删除，handler 改为抛出普通 `Error`（"Expected an existing directory."、"The image file no longer exists."），不再带 `ENOENT` |
 | 后台任务失败 | 日志标签去掉末尾冒号，如 `Kanban auto wrap-up failed` | 原来的 `console.error(label, message)` 统一改用 `logFailure(label, error, context?)`：日志输出不变，再上报一次。标签是固定字符串；id、路径等只写进日志的内容放在 `context` 参数里，不上报。存储层的失败状态（`fail()`）没有错误对象，上报为 `StorageError`，`value` 为存储错误码。daemon 代码里不再有裸 `console.error`，由 `server/error-report.test.ts` 检查 |
 | 未捕获异常 | `uncaught` | `process.on("uncaughtExceptionMonitor")`，不改变崩溃行为；插件卸载时移除。整个 daemon 进程共用这个事件，所以只有堆栈里有 Flowly 自身帧时才上报。进程随后退出时请求可能来不及发出，属尽力而为 |
 
 插件启动完成（遥测服务建立）之前的错误不上报。
+
+**Flowly 之外的失败**（`outsideError`，`server/error-report.ts`）在 RPC 和 `logFailure` 两处都只记日志、不上报（2026-10-27，卡片“遥测错误分析”：前两天 34 条事件里约一半属于这类，代码修不了）：
+
+- `DaemonConnectionError`：到 Paseo daemon 的连接断开（daemon 重启时进行中的请求）。宿主的 client 是另一份代码，所以按 `name` 判断；
+- `LocalDaemonUnavailable`：本地连接（`server/local-daemon.ts`）没有地址（Paseo 的 supervisor 正在重启 daemon，`paseo.pid` 的 `listen` 为 `null`）或没有本地凭据；
+- `SummaryModelError`：所有摘要模型都失败或没有可用模型（provider 的问题，卡片或洞察里会显示错误）。
 
 ### 11.3 事件内容（白名单）
 
@@ -279,3 +285,4 @@ Content-Type: application/json
 7. `paseo_version`：取到时随事件发出并缓存；第一次取不到时发 `""`，之后再取到就用新值；取值抛错不影响上报（`server/error-report.test.ts`）。
 5. RPC 包装：同步和异步 handler 的程序错误被上报并原样抛出；`ToolError` 只抛出不上报；正常返回值不变。
 6. `properties` 的键集合与 11.3 节完全一致，`distinct_id` 与 `telemetry.json` 的 `installId` 相同；全新安装时同时上报的多个错误使用同一个 `installId`。
+8. Flowly 之外的失败（`DaemonConnectionError`、`LocalDaemonUnavailable`、`SummaryModelError`）经 RPC 包装和 `logFailure` 都不上报，日志照常；其他后台失败照常上报（`server/error-report.test.ts`）。

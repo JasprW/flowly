@@ -26,6 +26,7 @@ import { memoryContext } from "./memory";
 import type { z } from "zod";
 import type { removeProject as removeProjectRpc, restoreProjectCheck as restoreProjectCheckRpc } from "../shared/rpc";
 import { logFailure } from "./error-report";
+import { runPaseo } from "./paseo-cli";
 
 const execute = promisify(execFile);
 type RemoveResult = z.infer<typeof removeProjectRpc.output>;
@@ -139,7 +140,10 @@ export async function directory(path: string): Promise<string> {
   const expanded = path.startsWith("~/")
     ? resolve(homedir(), path.slice(2))
     : path;
-  const canonical = await realpath(resolve(expanded));
+  // A missing path is the caller's mistake (a typed or stale folder), answered like a file is.
+  const canonical = await realpath(resolve(expanded)).catch((e: NodeJS.ErrnoException) => {
+    throw e.code === "ENOENT" || e.code === "ENOTDIR" ? new Error("Expected an existing directory.") : e;
+  });
   if (!(await stat(canonical)).isDirectory())
     throw new Error("Expected an existing directory.");
   return canonical;
@@ -335,8 +339,7 @@ export class BoardService {
       if (!check) return removed;
       if (!check.paseoExists) return { ...removed, paseo: { removed: false, workspaces: 0, error: "" } };
       try {
-        const { stdout } = await execute(
-          "paseo",
+        const stdout = await runPaseo(
           ["project", "delete", check.paseoProjectId, "--home", paseoHome(), "--json"],
           { timeout: 60000, maxBuffer: 1024 * 1024 },
         );
@@ -361,7 +364,7 @@ export class BoardService {
     if (!native) {
       // From here on the directory may be referenced by a native project; keep it on failure.
       onRegistered?.();
-      await execute("paseo", ["project", "create", primaryPath, "--home", paseoHome(), "--json"], {
+      await runPaseo(["project", "create", primaryPath, "--home", paseoHome(), "--json"], {
         timeout: 30000,
         maxBuffer: 1024 * 1024,
       });

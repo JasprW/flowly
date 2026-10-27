@@ -15,7 +15,8 @@ vi.mock("node:child_process", async (original) => {
     ...actual,
     execFile: (file: string, args: string[], options: unknown, callback: (e: unknown, r?: unknown) => void) => {
       const cb = typeof options === "function" ? (options as typeof callback) : callback;
-      if (file === "paseo") {
+      // The resolved CLI: bare `paseo` or the installed app's.
+      if (/(^|\/)paseo$/.test(file)) {
         calls.push(args);
         if (deleteFails) cb(Object.assign(new Error("failed"), { stderr: "Error: project busy\n" }));
         else cb(null, { stdout: JSON.stringify({ projectId: args[2], removedWorkspaceIds: ["w1", "w2"] }), stderr: "" });

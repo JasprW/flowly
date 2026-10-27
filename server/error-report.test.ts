@@ -3,7 +3,9 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, logFailure, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
+import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, logFailure, outsideError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
+import { LocalDaemonUnavailable } from "./local-daemon";
+import { SummaryModelError } from "./summary-models";
 import { MAX_ERRORS_PER_DAY, TelemetryService } from "./telemetry";
 import { ToolError } from "./tool-error";
 import { FLOWLY_VERSION } from "../shared/version";
@@ -88,6 +90,25 @@ test("expected RPC errors are not reported: tool errors and plain messages; bugs
   expect(expectedRpcError(failure("Error", "ENOENT"))).toBe(false);
   expect(expectedRpcError(new TypeError("x"))).toBe(false);
   expect(expectedRpcError("x")).toBe(false);
+});
+
+test("failures outside Flowly are never reported: lost daemon connection, unavailable local daemon, summary models", () => {
+  const lost = Object.assign(new Error("Transport closed"), { name: "DaemonConnectionError", code: "DAEMON_CONNECTION_LOST" });
+  for (const error of [lost, new LocalDaemonUnavailable("restarting"), new SummaryModelError("a: timed out")]) {
+    expect(outsideError(error)).toBe(true);
+    expect(expectedRpcError(error)).toBe(true);
+  }
+  expect(outsideError(new Error("x"))).toBe(false);
+  expect(outsideError(failure("Error", "ENOENT"))).toBe(false);
+  const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
+  logFailure("Flowly read-state sync failed:", new LocalDaemonUnavailable("restarting"));
+  logFailure("Flowly session insight failed:", new SummaryModelError("a: timed out"));
+  logFailure("Kanban auto wrap-up failed:", new Error("boom"));
+  expect(log).toHaveBeenCalledTimes(3);
+  expect(reported).toEqual(["Kanban auto wrap-up failed:"]);
+  log.mockRestore();
 });
 
 async function harness(options: { env?: NodeJS.ProcessEnv; enabled?: boolean; now?: () => number; paseoVersion?: () => Promise<string> } = {}) {

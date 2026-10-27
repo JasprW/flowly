@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { PaseoApi } from "@getpaseo/client";
-import { availableModels, runSummaryModels } from "./summary-models";
+import { availableModels, runSummaryModels, SummaryModelError } from "./summary-models";
 
 const paseo = {
   providers: {
@@ -34,5 +34,13 @@ test("provider-list failure cannot mark unknown models as available", async () =
   const broken = { providers: { ...paseo.providers, listModels: async () => { throw new Error("discovery offline"); } } } as unknown as PaseoApi;
   const create = vi.fn();
   await expect(runSummaryModels(broken, ["one/a"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100 })).rejects.toThrow(/No configured summary model/);
+  await expect(runSummaryModels(broken, ["one/a"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100 })).rejects.toBeInstanceOf(SummaryModelError);
   expect(create).not.toHaveBeenCalled();
+});
+
+test("every model failing is a SummaryModelError naming each failure", async () => {
+  const create = async (model: string) => ({ id: model, archive: async () => undefined, waitForFinish: async () => ({ status: "timeout" }) });
+  const error = await runSummaryModels(paseo, ["one/a", "two/c"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100 }).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(SummaryModelError);
+  expect((error as Error).message).toBe("one/a: The summary model timed out.; two/c: The summary model timed out.");
 });
