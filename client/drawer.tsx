@@ -48,7 +48,7 @@ import { useSessionReads } from "./session-reads";
 import { sessionAttention } from "../shared/session-attention";
 import type { SessionEntry } from "./session-link";
 import { Enter, MotionReveal, useReducedMotion, useSettled } from "./motion";
-import { DrawerFocusProvider, FOCUS_FALLBACK_MS, FOCUS_RING_MS, FocusTarget, activityStart, type DrawerFocus } from "./drawer-focus";
+import { DrawerFocusProvider, FOCUS_FALLBACK_MS, FOCUS_RING_MS, FocusTarget, Marked, activityStart, useMark, type DrawerFocus } from "./drawer-focus";
 import { perfLap, perfStart, perfEnd, usePerfRender } from "./perf";
 import { TaskMetadata } from "./task-metadata";
 import { Chevron, Collapse, Disclosure, Section, useSectionStates } from "./disclosure";
@@ -242,7 +242,16 @@ function TaskDrawerView({
       () => undefined,
     );
   });
-  const focusState = useMemo(() => (focusTarget ? { ...focusTarget, found: focusFound } : null), [focusTarget, focusFound]);
+  // The highlight follows the focus prop itself: the board clears it when the sidebar closes or another card opens,
+  // and a new hit replaces it (DRAWER-SPEC "Focus from search" 6).
+  const mark = useMemo(
+    () => (focus?.terms?.length ? { target: focus.target || `section:${focus.section}`, terms: focus.terms, field: focus.field } : null),
+    [focus],
+  );
+  const focusState = useMemo(
+    () => (focusTarget || mark ? { key: focusTarget?.key ?? "", target: focusTarget?.target ?? "", found: focusFound, mark } : null),
+    [focusTarget, focusFound, mark],
+  );
   // Heavy sections and their reads start once the open transition is over.
   const settled = useSettled(task.id);
   const ready = active && settled;
@@ -1326,6 +1335,7 @@ function ActivityItem({
   last: boolean;
 }) {
   const { colors } = useTheme();
+  const mark = useMark(`event:${event.id}`);
   const question = event.reportKind === "question";
   const verb = question
     ? t("Asked")
@@ -1359,8 +1369,8 @@ function ActivityItem({
           </View>
         )}
         {!!event.note && !isNoMoves(event) && (
-          <Label muted={!question} size={font.sm} lines={question ? 8 : 4}>
-            {event.action === "type_set" && (taskTypes as readonly string[]).includes(event.note) ? taskTypeLabels[event.note as Task["type"] & string] : event.note}
+          <Label muted={!question} size={font.sm} lines={mark ? undefined : question ? 8 : 4}>
+            {event.action === "type_set" && (taskTypes as readonly string[]).includes(event.note) ? taskTypeLabels[event.note as Task["type"] & string] : <Marked text={event.note} terms={mark?.terms} />}
           </Label>
         )}
         <Label muted size={font.xs}>

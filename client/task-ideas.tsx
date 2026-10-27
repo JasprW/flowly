@@ -9,7 +9,7 @@ import { continuesInCard } from "../shared/ideas";
 import { eventPoint, useMenuOpener, type MenuEntry, type Point } from "./context-menu";
 import { CardBody, CardField, CardHeadline, CardMeta, CardMetaRow, CardText, ContentCard } from "./content-card";
 import { Disclosure, Section, type SectionState } from "./disclosure";
-import { FocusTarget, useFocusTarget } from "./drawer-focus";
+import { FocusTarget, Marked, useFocusTarget, useMark } from "./drawer-focus";
 import { lerp, motionDuration, useReducedMotion } from "./motion";
 import { exitRows } from "./idea-rows";
 import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
@@ -453,6 +453,9 @@ export const IdeaCard = memo(function IdeaCard({
   onDismiss(idea: Idea): void;
 }) {
   const { colors } = useTheme();
+  // A search hit on this idea marks its words and opens it past Show more (DRAWER-SPEC "Focus from search" 7).
+  const mark = useMark(`idea:${idea.id}`);
+  const terms = mark?.terms;
   const meta = [
     <CardMeta
       key="scope"
@@ -474,6 +477,7 @@ export const IdeaCard = memo(function IdeaCard({
   return (
     <ContentCard
       after={source}
+      openWhen={mark}
       footer={
         <View style={{ flexShrink: 1, flexDirection: "row", justifyContent: "flex-end", gap: space[2] }}>
           <Button quiet disabled={disabled} label={t("Dismiss {title}", { title: idea.title })} onPress={() => onDismiss(idea)}>
@@ -495,15 +499,21 @@ export const IdeaCard = memo(function IdeaCard({
       <CardBody>
         {/* Title and meta stay together. */}
         <View style={{ gap: space[1.5] }}>
-          <CardHeadline selectable={false}>{idea.title}</CardHeadline>
+          <CardHeadline selectable={false}>
+            <Marked text={idea.title} terms={terms} />
+          </CardHeadline>
           <CardMetaRow>
             {meta}
             <CardMeta text={relativeTime(idea.createdAt)} />
           </CardMetaRow>
         </View>
-        {!!idea.rationale.trim() && <CardText>{idea.rationale}</CardText>}
-        <CardField title={t("What to do")} text={idea.detail} />
-        <CardField title={t("Context")} text={idea.context} />
+        {!!idea.rationale.trim() && (
+          <CardText>
+            <Marked text={idea.rationale} terms={terms} />
+          </CardText>
+        )}
+        <CardField title={t("What to do")} text={idea.detail} terms={terms} />
+        <CardField title={t("Context")} text={idea.context} terms={terms} />
       </CardBody>
     </ContentCard>
   );
@@ -527,11 +537,21 @@ export function ClosedIdea({
 }) {
   const { colors } = useTheme();
   const accepted = idea.status === "accepted";
+  // A search hit here: mark the title and, when the words are in another field, show that field under it.
+  const mark = useMark(`idea:${idea.id}`);
+  const matched = mark && mark.field && mark.field !== "title" ? idea[mark.field as "detail" | "rationale" | "context"] : "";
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: touch ? 44 : 32 }}>
       <Icon name={accepted ? "ThumbsUp" : "CircleSlash"} size={14} color={accepted ? colors.statusSuccess : colors.foregroundMuted} />
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Label size={font.sm} muted={!accepted} lines={1} selectable={false}>{idea.title}</Label>
+        <Label size={font.sm} muted={!accepted} lines={mark ? undefined : 1} selectable={false}>
+          <Marked text={idea.title} terms={mark?.terms} />
+        </Label>
+        {!!matched && (
+          <Label size={font.sm} muted selectable={false}>
+            <Marked text={matched} terms={mark?.terms} />
+          </Label>
+        )}
         {accepted &&
           (sentTo ? (
             <Label muted size={font.xs} lines={1} selectable={false}>{`→ ${t("Sent to {session}", { session: sentTo })}`}</Label>

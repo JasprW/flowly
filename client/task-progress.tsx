@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import { modelLabel, targetText, type SummaryEntry, type SummaryOverview } from "../shared/summary";
 import { CardBody, CardField, CardFootnote, CardHeadline, ContentCard } from "./content-card";
+import { Marked, useMark } from "./drawer-focus";
 import { Section, type SectionState } from "./disclosure";
 import { summariesKey, useSummariesQuery } from "./queries";
 import { workpadEnabled, workpadOf } from "../shared/workpad";
@@ -36,6 +37,7 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
   const refreshRpc = useRpc(rpc.refreshSummary);
   const [requesting, setRequesting] = useState(false);
   const latest = cardProgress(overview.data, taskId);
+  const mark = useMark("section:progress");
   const running = !!overview.data?.running.includes(taskId);
   const error = overview.data?.errors.find((e) => e.taskId === taskId);
   const refresh = async () => {
@@ -66,8 +68,12 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
       }
     >
       {latest ? (
-        <ContentCard footer={<CardFootnote>{t("Updated {time}", { time: relativeTime(latest.at) })} · {modelLabel(latest.model)}</CardFootnote>}>
-          <SummaryBody entry={hideTarget ? { ...latest, target: "" } : latest} />
+        <ContentCard
+          openWhen={mark}
+          footer={<CardFootnote>{t("Updated {time}", { time: relativeTime(latest.at) })} · {modelLabel(latest.model)}</CardFootnote>}
+        >
+          {/* A search hit in Target shows it even where the workpad replaces it (DRAWER-SPEC "Focus from search" 7). */}
+          <SummaryBody entry={hideTarget && mark?.field !== "target" ? { ...latest, target: "" } : latest} terms={mark?.terms} />
         </ContentCard>
       ) : (
         <Label muted size={font.sm}>
@@ -88,13 +94,24 @@ export function TaskProgress({ taskId, active, section }: { taskId: string; acti
 }
 
 /** Each field in full: brevity comes from the prompt, never from cutting text (TASK-SUMMARY-SPEC §3, §7). */
-export function SummaryBody({ entry }: { entry: Pick<SummaryEntry, "state" | "target" | "recap" | "next"> }) {
+export function SummaryBody({
+  entry,
+  terms,
+}: {
+  entry: Pick<SummaryEntry, "state" | "target" | "recap" | "next">;
+  /** Search words to mark. */
+  terms?: readonly string[] | null;
+}) {
   return (
     <CardBody>
-      {!!entry.state && <CardHeadline>{entry.state}</CardHeadline>}
-      {!!entry.target && <CardField title={t("Target")} text={targetText(entry.target)} />}
-      {!!entry.recap && <CardField title={t("Recap")} text={entry.recap} />}
-      {!!entry.next && <CardField title={t("Next")} text={entry.next} />}
+      {!!entry.state && (
+        <CardHeadline>
+          <Marked text={entry.state} terms={terms} />
+        </CardHeadline>
+      )}
+      {!!entry.target && <CardField title={t("Target")} text={targetText(entry.target)} terms={terms} />}
+      {!!entry.recap && <CardField title={t("Recap")} text={entry.recap} terms={terms} />}
+      {!!entry.next && <CardField title={t("Next")} text={entry.next} terms={terms} />}
     </CardBody>
   );
 }

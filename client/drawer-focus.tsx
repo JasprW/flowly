@@ -1,17 +1,45 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { View } from "react-native";
-import { CueRing, radius } from "./ui";
+import { Text, View } from "react-native";
+import { matchRanges } from "../shared/search-text";
+import { CueRing, radius, useTheme } from "./ui";
 
 export * from "./drawer-focus-logic";
 import { FOCUS_RING_MS } from "./drawer-focus-logic";
 
-type FocusState = { key: string; target: string; found(key: string, node: View): void };
+/** The words to mark in one item until the sidebar closes (DRAWER-SPEC "Focus from search" 6–7). */
+export type FocusMark = { target: string; terms: readonly string[]; field?: string };
+type FocusState = { key: string; target: string; found(key: string, node: View): void; mark: FocusMark | null };
 const FocusContext = createContext<FocusState | null>(null);
 export const DrawerFocusProvider = FocusContext.Provider;
 
 /** The current target id (`section:…`, `event:…`, `workpad:…`, `idea:…`, `artifact:…`), or "". */
 export function useFocusTarget(): string {
   return useContext(FocusContext)?.target ?? "";
+}
+
+/** The mark for this item (`event:…`, `section:progress`…), or null when it is not the one a hit opened. */
+export function useMark(id: string): FocusMark | null {
+  const mark = useContext(FocusContext)?.mark;
+  return mark && mark.target === id && mark.terms.length ? mark : null;
+}
+
+/** `text` with the marked words in bold accent (like the Search page snippets); plain text without terms. Put inside a Label. */
+export function Marked({ text, terms }: { text: string; terms?: readonly string[] | null }) {
+  const { colors } = useTheme();
+  if (!terms?.length) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  let at = 0;
+  matchRanges(text, terms).forEach(([start, end], i) => {
+    if (start > at) parts.push(text.slice(at, start));
+    parts.push(
+      <Text key={i} style={{ fontWeight: "600", color: colors.accent }}>
+        {text.slice(start, end)}
+      </Text>,
+    );
+    at = end;
+  });
+  if (at < text.length) parts.push(text.slice(at));
+  return <>{parts}</>;
 }
 
 /**
