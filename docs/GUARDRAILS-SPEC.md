@@ -34,6 +34,17 @@
 | B6 | 返工回合只认 A1，关了自动状态的项目就不学 | 改为与记忆线索 `feedback` 同一事实：回合由用户自己的消息开始，且开始时卡片在 In review；不依赖 A1/A1r，归纳本身负责把“提交并推送”判为 `none`（§4.1） |
 | B7 | 争议怎么跨轮保存 | 存在 `task.disputes`，随卡保留到 Done/Cancelled；之后各轮该项直接记 `disputed`，不再引用、不再判 fail（§6.1、§6.6） |
 
+### 0.2 实现中记下的偏差（阶段 A，2026-10-28，已接受）
+
+- `counts.usedBy` 存 `{ taskId, at }[]`（一小时节流和“被几张卡用过”都要时间）；另有 `lastMissedAt`、`misfireAt[]`（最近 10 条）、`unavailableRun`，§6.7 的三条规则靠它们计算。
+- 备忘保留旧的 `source { taskId, agentId, eventId }`，`flowly_remember` 据此幂等；复盘的依据放在 `sources[0].quote`。
+- `flowly_remember` 每卡最多 5 条（`MEMORY_LIMIT`），因为备忘现在写入即生效。
+- pinned 备忘不被挤出、不因 90 天没用归档。
+- 大小未知视为在范围内（同类型未知）；升级时范围取已知类型与大小之并，都未知为 `all`。
+- 迁移的 LLM 规则：`text` 取 prompt 前 200 字，更长的全文进 `body`；`off` 的命令规则也迁为 paused。
+- `guardrails.detect` 返回 `{ found, added }`，只加识别时默认勾选的脚本（build、e2e 不加）；`guardrails.counts` 返回 `{ observing, added }`，`added` 为近 7 天学到的准则数。
+- 没有 memory.json 也没有任何 autoReview 时不写迁移文件，第一次写入时才出现；迁移失败后库按空运行，第一次写入会创建文件，迁移不再重试，原 memory.json 留在磁盘上。
+
 ## 1. 目的
 
 ### 1.1 本机数据（Flowly 项目流转日志，2026-10-14 至 10-28）
@@ -146,8 +157,8 @@ CardItem {
   createdAt, updatedAt }
 ```
 
-- 每卡最多 5 条 `open`，超过时关闭最早的（`closed`）。
-- 卡进 Done、Cancelled 或被永久删除时，`open` 的项关闭；`promoted` 的保留作来源。
+- 每卡最多 5 条 `open`，超过时关闭最早的（`closed`）。这是 `closed` 唯一的来源。
+- 卡进 Done 或 Cancelled 时项**不关闭**：第一张卡多半在第二张卡遇到同一问题之前就已经 Done，关闭会让升级永远发生不了（实现时发现，2026-10-28）。完成的卡不再评审，所以它的 `open` 项只剩一个用途：§4.2 的“其他卡近 30 天的 open 项”。永久删除卡片时它的项随卡删除（§3.5）；`promoted` 的保留作来源。
 
 ### 3.4 上限
 
@@ -186,7 +197,7 @@ CardItem {
 
 ### 4.1 返工回合
 
-与记忆线索 `feedback` 同一事实（PROJECT-MEMORY-SPEC §4.0，`server/memory.ts` 的 `messageClue`）：回合由用户自己写的消息开始（不是点选的 next move 或 idea），且回合开始时卡片在 In review。不依赖 A1/A1r，自动状态关闭的项目同样学习。“提交并推送”“谢谢”这类回合也会进入归纳，由 §4.2 判为 `none`，不另设规则。
+与记忆线索 `feedback` 同一事实（PROJECT-MEMORY-SPEC §4.0，`server/memory.ts` 的 `messageClue`）：回合由用户自己写的消息开始（不是点选的 next move 或 idea，不含密钥），且回合开始时卡片在 In review。不依赖 A1/A1r，自动状态关闭的项目同样学习。“提交并推送”“谢谢”这类回合也会进入归纳，由 §4.2 判为 `none`，不另设规则。线索存储的 15 字符下限**不适用**于返工判定：“测试没跑”四个字就是一次纠正。
 
 ### 4.2 归纳：搭卡片总结的便车
 
@@ -213,8 +224,8 @@ CardItem {
 | `new` | 本卡新增 `open` 项：`text`、`quote`（本轮用户原话前 300 字）、`shape`（本卡最近一次交付的形状，§6.2），`count: 1` |
 | `same`，匹配本卡 `open` 项 | `count + 1` |
 | `same`，匹配**其他卡**的 `open` 项 | **升级**：新建 `guideline` active，`text` 用那条项的文字，`sources` 为两张卡及原话，`scope.types` = 两张卡类型之并，`scope.sizes` = 两张卡大小之并；两条项标 `promoted`。记事件 `guardrail_learned` |
-| `same`，匹配 active 准则 | `counts.missed + 1`（评审放过了，用户抓到了）。本卡形状不在范围内时把范围扩大到包含它 |
-| `same`，匹配 `paused` 或 `archived` 准则 | 复活为 active（`stateReason: "revived"`），`missed + 1`，范围同上。不新建重复条目 |
+| `same`，匹配 active 准则 | 本卡最近一次评审判过它 `passed` 或 `na` 时 `counts.missed + 1`（评审放过了，用户抓到了）；没评审过（例如 Auto review 关着）只记来源，不计漏掉。本卡形状不在范围内时把范围扩大到包含它 |
+| `same`，匹配 `paused` 或 `archived` 准则 | 复活为 active（`stateReason: "revived"`），漏掉的计法同上，范围同上。不新建重复条目。被合并或取代的条目（有 `supersededBy`）沿链找到活着的那条，不复活旧的 |
 
 范围只扩不缩。准则升级后，“本卡范围内”的判断见 §6.2。
 
