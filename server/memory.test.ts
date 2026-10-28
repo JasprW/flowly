@@ -7,7 +7,7 @@ import { BoardService } from "./service";
 import { SummaryStore } from "./summaries";
 import { MemoryError, MemoryService, memoryContext, memoryOn, memoryStore, setMemoryEverywhere } from "./memory";
 import type { SummarySettings } from "../shared/summary";
-import type { MemoryEntry } from "../shared/memory";
+import { emptyCounts, type GuardrailEntry } from "../shared/guardrails";
 import { BackgroundWorkspaces } from "./background-workspace";
 
 const roots: string[] = [];
@@ -76,7 +76,7 @@ async function setup() {
       ...extra,
     });
   };
-  const entries = async () => (await memory.store.read()).entries;
+  const entries = async () => (await memory.memoryState()).entries;
   return { ...f, memory, summaries, settings, model, created, replies, archived: () => archived, wsArchived: () => wsArchived, removed, remember, entries };
 }
 type Fixture = Awaited<ReturnType<typeof setup>>;
@@ -90,7 +90,7 @@ async function addCardB(x: Fixture, title = "Card B") {
   });
 }
 
-test("flowly_remember stores a candidate with a card event and receipt, without touching the card", async () => {
+test("flowly_remember stores an active memory at once, with a card event and receipt, without touching the card", async () => {
   const x = await setup();
   const before = (await x.store.read()).tasks[0];
   const result = await x.remember();
@@ -100,10 +100,10 @@ test("flowly_remember stores a candidate with a card event and receipt, without 
   expect(result.receipt).toMatchObject({ action: "remember", taskRevision: 1 });
   const e = await one(x);
   expect(result.memoryId).toBe(e.id);
-  expect(e).toMatchObject({ status: "candidate", kind: "decision", projectId: "p", tags: ["release"], source: { by: "agent", taskId: "t", agentId: "actor", eventId: board.events.at(-1)!.id } });
-  expect(result.current?.memory?.candidates).toEqual([{ id: e.id, title: e.title, status: "candidate" }]);
-  // A candidate is never injected.
-  expect(result.current?.memory?.entries).toEqual([]);
+  expect(e).toMatchObject({ status: "active", kind: "decision", projectId: "p", tags: ["release"], source: { by: "agent", taskId: "t", agentId: "actor", eventId: board.events.at(-1)!.id } });
+  // It takes effect at once (GUARDRAILS-SPEC D2); get_task no longer lists candidates.
+  expect(result.current?.memory?.entries.map((x) => x.id)).toEqual([e.id]);
+  expect(result.current?.memory).not.toHaveProperty("candidates");
 });
 
 test("a replay of the same request returns the same candidate; the same event never stores twice", async () => {
@@ -138,17 +138,16 @@ test("refusals: duplicate title, secrets, a full card, memory off, an unknown su
   expect(board.agentReceipts.filter((r) => r.action === "remember").length).toBe(5);
 });
 
-test("a decision confirmed on card A is in the first instructions of a card B created later", async () => {
+test("a decision remembered on card A is in the first instructions of a card B created later", async () => {
   const x = await setup();
   await x.remember();
   const candidate = await one(x);
-  // Not before it is confirmed.
   await addCardB(x);
-  expect((await new BoardService(x.store).context("b", x.paseo)).context).not.toContain("Do not pin a Paseo upper bound");
-  await x.memory.confirm({ id: candidate.id, revision: candidate.revision, edits: { body: "No real upper limit exists (user, 2026-10-19)." } });
+  // Nothing waits for review: confirming is refused.
+  await expect(x.memory.confirm({ id: candidate.id, revision: candidate.revision })).rejects.toThrow("waiting for review");
   const ctx = await new BoardService(x.store).context("b", x.paseo);
   expect(ctx.context).toContain("Project memory (all 1 entries):");
-  expect(ctx.context).toContain(`- [Decision] Do not pin a Paseo upper bound: No real upper limit exists (user, 2026-10-19). (memory ${candidate.id.slice(0, 8)}, from "Card")`);
+  expect(ctx.context).toContain(`- [Decision] Do not pin a Paseo upper bound: The user confirmed there is no real upper limit. (memory ${candidate.id.slice(0, 8)}, from "Card")`);
   expect(ctx.context.indexOf("Project memory")).toBeLessThan(ctx.context.indexOf("Project: Project"));
   expect(ctx.memoryIds).toEqual([candidate.id]);
   // Session creation counts it as used by B.
@@ -184,49 +183,51 @@ test("a stale revision is refused and changes nothing", async () => {
   expect((await one(x)).body).toBe("first");
 });
 
-test("confirming a replacement archives the old entry in the same write", async () => {
+test("a replacement archives the old entry at once, in the same write", async () => {
   const x = await setup();
   const old = await x.memory.create({ projectId: "p", kind: "decision", title: "Summaries every turn", body: "", tags: [], keywords: [], pinned: false });
-  await x.remember({ title: "Summaries every completed turn", supersedes: old.id });
-  const next = (await x.entries()).find((e) => e.status === "candidate")!;
-  await x.memory.confirm({ id: next.id, revision: next.revision });
+  const result = await x.remember({ title: "Summaries every completed turn", supersedes: old.id });
+  const next = (await x.entries()).find((e) => e.id === result.memoryId)!;
   const all = await x.entries();
   expect(all.find((e) => e.id === old.id)).toMatchObject({ status: "archived", archivedReason: "superseded" });
   expect(all.find((e) => e.id === next.id)).toMatchObject({ status: "active" });
 });
 
-test("a full project never evicts on its own: confirming asks for room; pins are capped", async () => {
+test("a full project gives up its longest-unused, unpinned note for a new one; pins are capped", async () => {
   const x = await setup();
-  const stamp = new Date().toISOString();
+  const stamp = (i: number) => new Date(Date.now() - (200 - i) * 60_000).toISOString();
   await x.memory.store.update((state) => {
-    for (let i = 0; i < 200; i++)
-      state.entries.push({ id: `a${i}`, projectId: "p", kind: "pitfall", title: `Active ${i}`, body: "", tags: [], keywords: [], pinned: i < 5, status: "active", source: { by: "human" }, revision: 1, createdAt: stamp, updatedAt: stamp, confirmedAt: stamp } as MemoryEntry);
+    for (let i = 0; i < 100; i++)
+      state.entries.push({ id: `a${i}`, projectId: "p", kind: "note", noteKind: "pitfall", text: `Active ${i}`, tags: [], keywords: [], ...(i < 5 ? { pinned: true } : {}), state: "active", stateAt: stamp(i), counts: emptyCounts(), sources: [], by: "user", revision: 1, createdAt: stamp(i), updatedAt: stamp(i) } satisfies GuardrailEntry);
     return { value: undefined, changed: true };
   });
-  await x.remember({ title: "One more" });
-  const c = (await x.entries()).find((e) => e.status === "candidate")!;
-  await expect(x.memory.confirm({ id: c.id, revision: c.revision })).rejects.toMatchObject({ code: "MEMORY_FULL" });
-  expect((await x.entries()).filter((e) => e.status === "active").length).toBe(200);
-  const unpinned = (await x.entries()).find((e) => e.id === "a10")!;
+  const added = await x.remember({ title: "One more" });
+  const all = await x.entries();
+  expect(all.filter((e) => e.status === "active").length).toBe(100);
+  expect(all.find((e) => e.id === added.memoryId)!.status).toBe("active");
+  // a0–a4 are pinned; a5 is the oldest unpinned one.
+  expect(all.find((e) => e.id === "a5")!.status).toBe("archived");
+  expect((await x.memory.store.read()).entries.find((e) => e.id === "a5")!.stateReason).toBe("displaced");
+  const unpinned = all.find((e) => e.id === "a10")!;
   await expect(x.memory.update({ id: unpinned.id, revision: 1, pinned: true })).rejects.toThrow("at most 5");
-  await x.memory.archive({ id: unpinned.id, revision: 1, reason: "retired" });
-  await x.memory.confirm({ id: c.id, revision: c.revision });
-  expect((await x.entries()).find((e) => e.id === c.id)!.status).toBe("active");
 });
 
-test("deleting a card drops its candidates and clues but keeps confirmed memory; removing a project drops all", async () => {
+test("deleting a card drops its clues but keeps its memories; removing a project drops all", async () => {
   const x = await setup();
   await x.remember({ title: "Kept" });
-  await x.remember({ title: "Dropped" });
-  const kept = (await x.entries()).find((e) => e.title === "Kept")!;
-  await x.memory.confirm({ id: kept.id, revision: kept.revision });
+  await x.remember({ title: "Also kept" });
+  await x.memory.store.update((state) => {
+    state.clues.push({ id: "c1", taskId: "t", projectId: "p", at: new Date().toISOString(), kind: "message", text: "Keep the README short please" });
+    return { value: undefined, changed: true };
+  });
   await x.memory.removeTask("t");
-  expect((await x.entries()).map((e) => e.title)).toEqual(["Kept"]);
+  expect((await x.entries()).map((e) => e.title)).toEqual(["Kept", "Also kept"]);
+  expect((await x.memory.store.read()).clues).toEqual([]);
   await x.memory.removeProject("p", new Set(["t"]));
   expect(await x.entries()).toEqual([]);
   const removed = await readdir(join(x.store.directory, "removed"));
-  expect(removed.some((n) => n.startsWith("task-t-memory"))).toBe(true);
-  expect(removed.some((n) => n.startsWith("p-memory"))).toBe(true);
+  expect(removed.some((n) => n.startsWith("task-t-guardrails"))).toBe(true);
+  expect(removed.some((n) => n.startsWith("p-guardrails"))).toBe(true);
 });
 
 test("clues: the user's own words are kept as answer, feedback or message; picks and short replies are not", async () => {
@@ -288,7 +289,7 @@ test("native question answers become answer clues once; the Codex answers messag
   ]);
 });
 
-test("the finished-card review stores at most one general candidate with evidence, hard-deletes its session, and does not rerun without new material", async () => {
+test("the finished-card review stores at most one general memory with evidence, hard-deletes its session, and does not rerun without new material", async () => {
   const x = await setup();
   x.memory.attach(x.model);
   await x.summaries.update((state) => {
@@ -323,7 +324,7 @@ test("the finished-card review stores at most one general candidate with evidenc
   // The background workspace is archived once the review is done.
   expect(x.wsArchived()).toBe(1);
   const list = await x.entries();
-  expect(list.map((e) => [e.title, e.source.by, e.evidence])).toEqual([["Two modals in one frame freeze Paseo", "retro", "Root cause: two modals in one frame"]]);
+  expect(list.map((e) => [e.title, e.source.by, e.evidence, e.status])).toEqual([["Two modals in one frame freeze Paseo", "retro", "Root cause: two modals in one frame", "active"]]);
   expect((await x.memory.store.read()).errors).toEqual([]);
   expect((await x.store.read()).events.at(-1)).toMatchObject({ action: "memory_proposed", actor: "system" });
   // An automatic run with the same summary and no new clues is skipped.
@@ -351,9 +352,9 @@ test("a failed review records the error and still hard-deletes the session", asy
 test("invalid memory data is preserved, not reset", async () => {
   const x = await setup();
   await mkdir(x.store.directory, { recursive: true });
-  await writeFile(join(x.store.directory, "memory.json"), "{ broken");
+  await writeFile(join(x.store.directory, "guardrails.json"), "{ broken");
   await expect(memoryStore(x.store.directory).read()).rejects.toThrow("preserved");
-  expect(await readFile(join(x.store.directory, "memory.json"), "utf8")).toBe("{ broken");
+  expect(await readFile(join(x.store.directory, "guardrails.json"), "utf8")).toBe("{ broken");
   // A session still starts: unreadable memory adds nothing.
   const board = await x.store.read();
   expect((await memoryContext(x.store.directory, board.tasks[0], board.projects[0], board)).lines).toEqual([]);

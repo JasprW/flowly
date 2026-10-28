@@ -122,6 +122,8 @@ test("new board project links the exact native Paseo root and persists only that
     paseoProjectId: "new-native",
     primaryPath: nativeRoot,
     repos: [nativeRoot],
+    // Auto review is on for new projects (GUARDRAILS-SPEC D1).
+    autoReview: { enabled: true, maxRounds: 2 },
   });
   await expect(
     x.service.createProject(

@@ -7,6 +7,7 @@ import { StoreInvalidError } from "./board-file";
 import { ExternalError } from "./connectors/http";
 import { LocalDaemonUnavailable } from "./local-daemon";
 import { MemoryError } from "./memory";
+import { GuardrailError } from "./guardrails";
 import { SummaryModelError } from "./summary-models";
 import { ToolError } from "./tool-error";
 
@@ -132,7 +133,7 @@ export function outsideError(error: unknown) {
  */
 export function expectedRpcError(error: unknown) {
   if (!(error instanceof Error)) return false;
-  if (error instanceof ToolError || error instanceof MemoryError || error instanceof StoreInvalidError || error instanceof ExternalError || error instanceof ZodError || outsideError(error))
+  if (error instanceof ToolError || error instanceof MemoryError || error instanceof GuardrailError || error instanceof StoreInvalidError || error instanceof ExternalError || error instanceof ZodError || outsideError(error))
     return true;
   return error.constructor === Error && typeof (error as NodeJS.ErrnoException).code !== "string";
 }

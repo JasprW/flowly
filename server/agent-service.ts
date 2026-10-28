@@ -73,6 +73,7 @@ import { ToolError } from "./tool-error";
 import { ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Project, type Receipt, type Status, type Task } from "../shared/model";
 import { isLegacyScope } from "../shared/scope";
 import { MemoryError, type MemoryService } from "./memory";
+import type { GuardrailsService } from "./guardrails";
 import type { SearchService } from "./search";
 import { logFailure } from "./error-report";
 
@@ -109,6 +110,8 @@ export class AgentService {
   connectors?: ConnectorService;
   /** Project memory (PROJECT-MEMORY-SPEC); set by the plugin entry. */
   memory?: MemoryService;
+  /** Project guardrails for get_task.guardrails (GUARDRAILS-SPEC §5.2); set by the plugin entry. */
+  guardrails?: GuardrailsService;
   /** Starts the automatic review of an agent delivery (AUTO-REVIEW-SPEC §3.1); set by the plugin entry. Never awaited. */
   onDelivered?: (delivery: DeliveredReview, paseo: PaseoApi) => void;
   /** flowly_recall (PROJECT-MEMORY-SPEC §6.4): read-only. */
@@ -396,7 +399,9 @@ export class AgentService {
           ...(workpadEnabled(r.project)
             ? { workpadEnabled: true, ...workpadContext(board.workpads, board.plans, r.task.id, identity.agentId) }
             : { workpadEnabled: false, workpad: null, plan: [] }),
-          ...(this.memory ? { memory: await this.memory.taskContext(r.task, r.project).catch(() => ({ enabled: false, total: 0, entries: [], candidates: [] })) } : {}),
+          ...(this.memory ? { memory: await this.memory.taskContext(r.task, r.project).catch(() => ({ enabled: false, total: 0, entries: [] })) } : {}),
+          // What this delivery is checked against (GUARDRAILS-SPEC §5.2); unreadable guardrails leave it out.
+          ...(this.guardrails ? await this.guardrails.taskContext(r.task, r.project, autoReviewOf(r.project).maxRounds).then((guardrails) => ({ guardrails }), () => ({})) : {}),
           ...(scripts.length ? { projectScripts: scripts } : {}),
           links: linksOf(board, r.task.id)
             .filter((v) => v.other)

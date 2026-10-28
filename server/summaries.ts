@@ -12,6 +12,7 @@ import {
   lastTurn,
   outputJsonSchema,
   parseModelOutput,
+  reworkOutputJsonSchema,
   summaryModelsOf,
   summaryPrompt,
   summaryStateSchema,
@@ -27,6 +28,14 @@ import { runSummaryModels } from "./summary-models";
 import { logFailure } from "./error-report";
 export { availableModels } from "./summary-models";
 import { summaryRow } from "../shared/native-session";
+import { correctionOf, type Correction } from "../shared/guardrails";
+
+/** Learning from rework turns (GUARDRAILS-SPEC §4.2); set by the plugin entry. */
+export type SummaryGuardrails = {
+  /** The rework turn's `Guardrails` lines, or null when this card does not learn (Guardrails off). */
+  section(taskId: string): Promise<string[] | null>;
+  learn(input: { taskId: string; correction: Correction; quote: string }): Promise<void>;
+};
 
 /** `summaries.json`: serialized writes, backup, atomic replacement; invalid data is preserved. */
 export class SummaryStore {
@@ -137,8 +146,11 @@ export class SummaryStore {
   }
 }
 
-/** `endedAt`: when the (last merged) turn ended; a later turn of that session skips the timeline row (NATIVE-SESSION-SPEC §5.1). */
-type Batch = { text: string; agentIds: string[]; endedAt: string };
+/**
+ * `endedAt`: when the (last merged) turn ended; a later turn of that session skips the timeline row (NATIVE-SESSION-SPEC §5.1).
+ * `rework`: the user's words that opened a rework turn (GUARDRAILS-SPEC §4.1); the latest one when turns merge.
+ */
+type Batch = { text: string; agentIds: string[]; endedAt: string; rework?: string };
 type TimelineEntry = { item: { type: string }; timestamp?: string };
 
 export const SUMMARY_TIMEOUT_MS = 120_000;
@@ -161,6 +173,8 @@ export function within<T>(work: Promise<T>, ms: number): Promise<T> {
 export class SummaryService {
   private queues = new Map<string, Batch[]>();
   private drains = new Map<string, Promise<void>>();
+  /** Learning from rework turns (GUARDRAILS-SPEC §4.2); absent: summaries only. */
+  guardrails?: SummaryGuardrails;
   constructor(
     readonly board: BoardStore,
     readonly store: SummaryStore,
@@ -189,10 +203,12 @@ export class SummaryService {
     timeline: readonly { type: string }[],
     paseo: PaseoApi,
     endedAt = new Date().toISOString(),
+    /** The user's words when this was a rework turn (GUARDRAILS-SPEC §4.1). */
+    rework?: string | null,
   ): Promise<void> {
     const text = turnText(timeline);
     if (!text.trim()) return Promise.resolve();
-    const batch = { text, agentIds: [agentId], endedAt };
+    const batch: Batch = { text, agentIds: [agentId], endedAt, ...(rework ? { rework } : {}) };
     const queue = this.queues.get(taskId);
     if (queue) {
       queue.push(batch);
@@ -221,6 +237,7 @@ export class SummaryService {
           text: merged.map((b) => b.text).join("\n\n---\n\n"),
           agentIds: [...new Set(merged.flatMap((b) => b.agentIds))],
           endedAt: merged[merged.length - 1].endedAt,
+          rework: [...merged].reverse().find((b) => b.rework)?.rework,
         };
         const entry = await this.run(taskId, batch, paseo).catch((e) =>
           this.store
@@ -244,6 +261,8 @@ export class SummaryService {
     if (!task || !project || task.archivedAt || project.archivedAt) return null;
     const settings = await this.settings();
     const previous = await this.store.latest(taskId);
+    // A rework turn also asks whether the user corrected the delivered work (GUARDRAILS-SPEC §4.2); no extra model call.
+    const section = batch.rework && this.guardrails ? await this.guardrails.section(taskId).catch(() => null) : null;
     const prompt = summaryPrompt({
       title: task.title,
       description: task.description,
@@ -251,6 +270,7 @@ export class SummaryService {
       previous,
       transcript: truncateTranscript(batch.text),
       language: await this.language(),
+      ...(section ? { guardrails: section } : {}),
     });
     const { model, output } = await runSummaryModels(paseo, summaryModelsOf(settings), {
       create: (model) => paseo.workspaces.ref(task.workspaceId).agents.create({
@@ -259,12 +279,14 @@ export class SummaryService {
         title: `Kanban summary · ${task.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-task": taskId },
         prompt,
-        outputSchema: outputJsonSchema as unknown as Record<string, unknown>,
+        outputSchema: (section ? reworkOutputJsonSchema : outputJsonSchema) as unknown as Record<string, unknown>,
       }),
-      parse: parseModelOutput,
+      parse: (text) => ({ ...parseModelOutput(text), correction: section ? correctionOf(text) : null }),
       remove: this.remove,
       timeoutMs: this.timeoutMs,
     });
+    if (section && output.correction && output.correction.kind !== "none")
+      await this.guardrails!.learn({ taskId, correction: output.correction, quote: batch.rework! }).catch((e) => logFailure("Flowly guardrail not learned:", e, taskId));
     if (!output.update && previous) {
       await this.store.clearError(taskId);
       return null;

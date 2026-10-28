@@ -54,7 +54,8 @@ import { summaryEntrySchema, summaryOverviewSchema } from "./summary";
 import { taskUsageSchema } from "./usage";
 import { TURN_MAX_ENTRIES, tailPageSchema, timelineCursorSchema } from "./session-tail";
 import { digestViewSchema } from "./digest";
-import { memoryEntrySchema, memoryInputFields, memoryKeywordsSchema, memoryTagsSchema, memoryViewSchema } from "./memory";
+import { memoryEntrySchema, memoryInputFields, memoryKeywordsSchema, memoryKinds, memoryTagsSchema, memoryViewSchema } from "./memory";
+import { guardrailEntrySchema, guardrailLimits, guardrailScopeSchema, guardrailStates, guardrailsViewSchema } from "./guardrails";
 import { perfReportSchema } from "./perf";
 import { localeCodes } from "./i18n";
 import { workflowOverviewSchema, workflowViewSchema } from "./workflow-insights";
@@ -867,6 +868,70 @@ export const archiveStaleMemory = defineRpc({
 export const deleteMemory = defineRpc({ name: "memory.delete", input: z.strictObject(memoryRef), output: z.object({ id: z.string() }) });
 export const reviewForMemory = defineRpc({
   name: "memory.retro",
+  input: z.strictObject({ taskId: z.string().min(1).max(200) }),
+  output: z.object({ queued: z.boolean() }),
+});
+// ---- Project guardrails (GUARDRAILS-SPEC §7.5) ----
+const guardrailRef = { id: z.string().min(1).max(200), revision: z.number().int().positive() };
+const commandName = z.string().trim().min(1).max(guardrailLimits.commandName);
+const commandArgv = z.array(z.string().min(1).max(guardrailLimits.arg)).min(1).max(guardrailLimits.args);
+const commandTimeout = z.number().int().min(guardrailLimits.minTimeout).max(guardrailLimits.maxTimeout);
+export const readGuardrails = defineRpc({
+  name: "guardrails.read",
+  input: z.strictObject({ projectId: z.string().min(1).max(200), etag: z.string().max(200).optional() }),
+  output: z.object({ etag: z.string(), value: guardrailsViewSchema.optional() }),
+});
+/** The overview chip: per project, observing commands and guidelines learned this week. */
+export const guardrailCounts = defineRpc({
+  name: "guardrails.counts",
+  input: etagInput,
+  output: z.object({ etag: z.string(), value: z.record(z.string(), z.object({ observing: z.number(), added: z.number() })).optional() }),
+});
+/** A person's command or note, active at once; guidelines only grow from cards sent back (§7.4). */
+export const createGuardrail = defineRpc({
+  name: "guardrails.create",
+  input: z.discriminatedUnion("kind", [
+    z.strictObject({ projectId: z.string().min(1).max(200), kind: z.literal("command"), text: commandName, argv: commandArgv, timeoutSec: commandTimeout.optional() }),
+    z.strictObject({
+      projectId: z.string().min(1).max(200),
+      kind: z.literal("note"),
+      noteKind: z.enum(memoryKinds),
+      text: memoryInputFields.title,
+      body: memoryInputFields.body.optional(),
+      tags: memoryTagsSchema.optional(),
+      keywords: memoryKeywordsSchema.optional(),
+      pinned: z.boolean().optional(),
+    }),
+  ]),
+  output: guardrailEntrySchema,
+});
+export const updateGuardrail = defineRpc({
+  name: "guardrails.update",
+  input: z.strictObject({
+    ...guardrailRef,
+    text: z.string().trim().min(1).max(guardrailLimits.guidelineText).optional(),
+    body: z.string().trim().max(guardrailLimits.body).optional(),
+    argv: commandArgv.optional(),
+    timeoutSec: commandTimeout.optional(),
+    scope: guardrailScopeSchema.optional(),
+    tags: memoryTagsSchema.optional(),
+    keywords: memoryKeywordsSchema.optional(),
+    pinned: z.boolean().optional(),
+    state: z.enum(guardrailStates).optional(),
+    stateReason: z.string().trim().max(guardrailLimits.stateReason).optional(),
+  }),
+  output: guardrailEntrySchema,
+});
+export const deleteGuardrail = defineRpc({ name: "guardrails.delete", input: z.strictObject(guardrailRef), output: z.object({ id: z.string() }) });
+/** The project's check commands found in its root, added as observing; never runs them (§4.5). */
+export const detectGuardrails = defineRpc({
+  name: "guardrails.detect",
+  input: z.strictObject({ projectId: z.string().min(1).max(200) }),
+  output: z.object({ found: z.array(z.string()), added: z.array(guardrailEntrySchema) }),
+});
+/** The finished-card review by hand (for developers; not in the UI). */
+export const retroGuardrails = defineRpc({
+  name: "guardrails.retro",
   input: z.strictObject({ taskId: z.string().min(1).max(200) }),
   output: z.object({ queued: z.boolean() }),
 });

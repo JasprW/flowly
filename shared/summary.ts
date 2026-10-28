@@ -106,6 +106,21 @@ export const outputJsonSchema = {
   },
 } as const;
 
+/** On a rework turn the summarizer also says whether the user corrected the delivered work (GUARDRAILS-SPEC §4.2). */
+export const reworkOutputJsonSchema = {
+  ...outputJsonSchema,
+  required: [...outputJsonSchema.required, "correction"],
+  properties: {
+    ...outputJsonSchema.properties,
+    correction: {
+      type: "object",
+      additionalProperties: false,
+      required: ["kind"],
+      properties: { kind: { type: "string", enum: ["none", "new", "same"] }, text: { type: "string" }, matches: { type: "string" } },
+    },
+  },
+} as const;
+
 const clip = (text: string, max: number) => (text.length > max ? text.slice(0, max - 1) + "…" : text);
 // Lenient: small models sometimes omit fields when not updating, or quote the boolean.
 // Claude does not enforce outputSchema: lists come back as arrays of bullet strings.
@@ -216,6 +231,8 @@ export function summaryPrompt(input: {
   previous: Pick<SummaryEntry, "state" | "target" | "recap" | "next"> | null;
   transcript: string;
   language: LocaleCode;
+  /** A rework turn's `Guardrails` lines (GUARDRAILS-SPEC §4.2); absent on every other turn. */
+  guardrails?: readonly string[];
 }): string {
   return [
     "You keep a short progress summary for a task on a Kanban board. An AI coding agent works on the task in conversation with a person.",
@@ -231,6 +248,7 @@ export function summaryPrompt(input: {
     '- "next": the single next step, or who is being waited on, in one sentence of at most 20 words (or 40 Chinese characters).',
     `- ${outputLanguageRule(input.language)}`,
     "- Be concrete and terse; no filler, no file paths or IDs unless they are the point.",
+    ...(input.guardrails ? correctionRules : []),
     "",
     `Task: ${input.title}`,
     input.description ? `Description:\n${clip(input.description, DESCRIPTION_LIMIT)}` : "",
@@ -242,10 +260,15 @@ export function summaryPrompt(input: {
     "",
     "Latest conversation:",
     input.transcript || "(empty)",
+    ...(input.guardrails ? ["", "Guardrails (what this project already checks; each line: #id, what it is, its text):", ...(input.guardrails.length ? input.guardrails : ["(none)"])] : []),
   ]
     .filter((line, i, all) => line !== "" || all[i - 1] !== "")
     .join("\n");
 }
+const correctionRules = [
+  '- "correction": the user wrote the first message of this conversation after the agent had delivered the task for review. Decide whether the user is correcting the delivered work: something it does wrong, breaks or left out. Adding a new requirement, asking a question, chatting, thanking, or asking to commit, push or merge is not a correction.',
+  '  Not a correction: {"kind": "none"}. The same problem as a line of the Guardrails list below: {"kind": "same", "matches": "<that line\'s #id>", "text": "<that line\'s text, unchanged>"}. Otherwise: {"kind": "new", "text": "<one sentence of at most 120 characters that a reviewer can check on a later delivery, e.g. Every new UI string is in all language catalogs>"}.',
+];
 const previous = (p: unknown) =>
   p ? "- When updating, revise the current summary rather than starting over." : '- There is no summary yet, so "update" must be true.';
 

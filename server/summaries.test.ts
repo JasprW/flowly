@@ -26,7 +26,7 @@ async function setup(options: { claude?: boolean } = {}) {
     b.tasks.push({ id: "t", projectId: "p", workspaceId: "w", sourcePath: root, repoPaths: [root], title: "T", description: "", status: "development", priority: "normal", position: 0, revision: 1, operationId: "o", createdAt: now, updatedAt: now, archivedAt: null });
   });
   const replies: Reply[] = [];
-  const created: { workspaceId: string; parent: string; provider: string; prompt: string; labels: Record<string, string> }[] = [];
+  const created: { workspaceId: string; parent: string; provider: string; prompt: string; labels: Record<string, string>; schema?: { required?: readonly string[] } }[] = [];
   let archived = 0;
   const appended: { agentId: string; row: unknown }[] = [];
   const archivedIds = new Set<string>(), gone = new Set<string>();
@@ -45,8 +45,8 @@ async function setup(options: { claude?: boolean } = {}) {
     workspaces: {
       ref: (workspaceId: string) => ({
         agents: {
-      create: async (o: { parent: string; config: { provider: string }; prompt: string; labels: Record<string, string> }) => {
-        created.push({ workspaceId, parent: o.parent, provider: o.config.provider, prompt: o.prompt, labels: o.labels });
+      create: async (o: { parent: string; config: { provider: string }; prompt: string; labels: Record<string, string>; outputSchema?: { required?: readonly string[] } }) => {
+        created.push({ workspaceId, parent: o.parent, provider: o.config.provider, prompt: o.prompt, labels: o.labels, schema: o.outputSchema });
         const reply = replies.shift() || {};
         if (reply.createError) throw new Error(reply.createError);
         return {
@@ -427,4 +427,37 @@ test("custom priority retries three models and saves only the successful model",
   expect(x.archived()).toBe(3);
   expect(await x.store.history("t")).toHaveLength(1);
   expect(await x.store.latest("t")).toMatchObject({ state: "third", model: "codex/gpt-6-luna" });
+});
+
+test("a rework turn adds the Guardrails section and the correction field, and learns even when the summary does not change", async () => {
+  const x = await setup();
+  const learned: unknown[] = [];
+  x.service.guardrails = {
+    section: async () => ["#abcd1234 guideline: Every new UI string is in all language catalogs"],
+    learn: async (input) => void learned.push(input),
+  };
+  x.replies.push({ text: x.json("first") });
+  await x.service.enqueue("t", "a1", x.turn("start"), x.paseo);
+  // An ordinary turn: no section, no correction.
+  expect(x.created[0].prompt).not.toContain("Guardrails (what this project already checks");
+  expect(x.created[0].schema?.required).not.toContain("correction");
+  x.replies.push({ text: JSON.stringify({ update: false, state: "", target: "", recap: "", next: "", correction: { kind: "same", matches: "#abcd1234", text: "Every new UI string is in all language catalogs" } }) });
+  await x.service.enqueue("t", "a1", x.turn("zh-TW 又漏了新文案"), x.paseo, undefined, "zh-TW 又漏了新文案");
+  expect(x.created[1].prompt).toContain("Guardrails (what this project already checks; each line: #id, what it is, its text):\n#abcd1234 guideline: Every new UI string is in all language catalogs");
+  expect(x.created[1].prompt).toContain('"correction"');
+  expect(x.created[1].schema?.required).toContain("correction");
+  expect(learned).toEqual([{ taskId: "t", correction: { kind: "same", matches: "abcd1234", text: "Every new UI string is in all language catalogs" }, quote: "zh-TW 又漏了新文案" }]);
+  // update: false kept the earlier version.
+  expect((await x.store.latest("t"))?.state).toBe("first");
+});
+
+test("a rework turn of a card that does not learn (Guardrails off) is summarized as usual", async () => {
+  const x = await setup();
+  const learned: unknown[] = [];
+  x.service.guardrails = { section: async () => null, learn: async (input) => void learned.push(input) };
+  x.replies.push({ text: JSON.stringify({ update: true, state: "s", target: "g", recap: "r", next: "n", correction: { kind: "new", text: "x" } }) });
+  await x.service.enqueue("t", "a1", x.turn("not like this"), x.paseo, undefined, "not like this");
+  expect(x.created[0].prompt).not.toContain("Guardrails (what this project already checks");
+  expect(learned).toEqual([]);
+  expect((await x.store.latest("t"))?.state).toBe("s");
 });

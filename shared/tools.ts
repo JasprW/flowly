@@ -3,6 +3,7 @@ import { relations } from "./links";
 import { setupItems } from "./card-setup";
 import { connectorProviderSchema, itemTypeSchema } from "./connectors";
 import { memoryKinds, memoryLimits } from "./memory";
+import { guardrailScopeSchema } from "./guardrails";
 import { agentSearchSources, searchLimits } from "./search";
 import {
   taskSchema,
@@ -31,6 +32,7 @@ import {
   gitHeadSchema,
   planStatuses,
   reviewStates,
+  reviewSchema,
   ruleStates,
   reviewRuleSchema,
   autoReviewLimits,
@@ -449,16 +451,27 @@ export const toolContextSchema = z.object({
       acceptedAgentId: z.string().optional(),
     }),
   ),
-  /**
-   * Project memory the user confirmed on earlier cards (PROJECT-MEMORY-SPEC §6.3), chosen for this card;
-   * `candidates` are the ones proposed from this card, to avoid duplicates.
-   */
+  /** Project memory (the guardrails' notes, PROJECT-MEMORY-SPEC §6.3), chosen for this card. */
   memory: z
     .object({
       enabled: z.boolean(),
       total: z.number(),
       entries: z.array(memoryItemSchema),
-      candidates: z.array(z.object({ id: z.string(), title: z.string(), status: z.string() })),
+    })
+    .optional(),
+  /**
+   * What a delivery of this card is checked against (GUARDRAILS-SPEC §5.2): the project's commands (active and
+   * observing), the active guidelines in scope for the card's current shape and the card's own open items.
+   * Guidelines and items are empty while Guardrails is off.
+   */
+  guardrails: z
+    .object({
+      enabled: z.boolean(),
+      maxRounds: z.number(),
+      commands: z.array(z.object({ id: z.string(), name: z.string(), argv: z.array(z.string()), state: z.enum(["active", "observing"]) })),
+      guidelines: z.array(z.object({ id: z.string(), text: z.string(), scope: guardrailScopeSchema })),
+      items: z.array(z.object({ id: z.string(), text: z.string(), count: z.number() })),
+      lastReview: reviewSchema.optional(),
     })
     .optional(),
   /** Scripts in the project root's paseo.json (WORKFLOW-INSIGHTS-SPEC §5.4); absent when it has none. */
