@@ -405,11 +405,11 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
  ◌ Reviewing · 3/7 passed · running npm test
 ```
 
-- 强调色一句话，三段用 `·` 分开：`Reviewing`；`{passed}/{total} passed`（通过含不适用；observing 命令不计入 total；有失败时改为 `{passed}/{total} passed · {n} failed`，失败数危险色）；现在在做什么，弱化色：命令阶段 `running {name}`，评审 session 阶段 `judging {n} checks`，还没有结果时 `starting…`，投递返工消息时 `sending back…`。
-- 数据来自 `task.review.items`（§6.4），随现有看板 etag 读取更新，不新增轮询。shared 的 `reviewProgress()` 返回 `{ passed, failed, total, phase, current }`，客户端只渲染。
+- 强调色一句话，三段用 `·` 分开：`Reviewing`；`{passed}/{total} passed`（通过含不适用；observing 命令不计入 total；有失败时改为 `{passed}/{total} passed · {n} failed`，失败数危险色）；现在在做什么，弱化色：命令阶段 `running {name}`，评审 session 阶段 `judging {n} checks`，还没有结果时 `starting…`。
+- 数据来自 `task.review.items`（§6.4），随现有看板 etag 读取更新，不新增轮询。shared 的 `reviewProgress(review)`（`shared/auto-review.ts`，阶段 B 提供）返回 `{ passed, failed, total, phase: "starting" | "running" | "judging" | "done", current?: string, judging?: number }`：`total` 只数 gating 的项，`current` 是正在跑的命令名，`judging` 是评审 session 正在判的项数；客户端只渲染。
 - 结束时保持最后一帧 600 ms（让人看到 `7/7 passed` 或 `1 failed`）再随 `Collapse` 收起，信号行同时切到 Checked / Sent back；Reduce Motion 时立即收起。
 - 无障碍：label 读作 “Auto review running, 3 of 7 passed, running npm test”。
-- 文案键（英文，进全部目录）：`Reviewing`、`{passed}/{total} passed`、`{n} failed`、`running {name}`、`judging {n} checks`、`starting…`、`sending back…`。命令名是用户内容，不翻译。
+- 文案键（英文，进全部目录）：`Reviewing`、`{passed}/{total} passed`、`{n} failed`、`running {name}`、`judging {n} checks`、`starting…`。命令名是用户内容，不翻译。
 
 工具 `flowly_update_workpad` 收窄为 `{ expectedRevision, request, workpadRevision, acceptance: [{ id?, text, done }] }`，返回与错误码不变（`WORKPAD_CONFLICT`、`WORKPAD_INVALID`、`WORKPAD_DISABLED`）。`Workpad` 数据去掉 `validation`、`confusions`、`env`、`head`、`delivery`；旧数据读取时丢弃这些字段。CLI `workpad` 的 JSON 只接受 `{acceptance}`。
 
@@ -467,6 +467,7 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 | `guardrails.detect` | `{ projectId }` | §4.5 开启时的识别，不执行命令 |
 | `guardrails.retro` | `{ taskId }` | 手动复盘（保留给开发者，不在界面上） |
 | `reviews.rerun` | `{ taskId }` | 不变 |
+| `insights.guardrails` | `{ projectId, tz }` | 近 14 天的闭环账（§7.2）：`{ deliveries, reviewed, firstPass, judged, misfires, changes: { learned, widened, revived, retired, observing } }`。`deliveries` 为 agent 的交付次数，`reviewed` 为其中被评审的，`firstPass` 为第一轮 Passed 的，`judged` 为判断类 `failed` 之和（30 天），`misfires` 为同期误判之和，`changes` 为本周 `guardrail_*` 事件的计数加当前 observing 命令数。daemon 从流转日志、`review_finished.results` 与 `guardrail_*` 事件算出；阶段 B 提供，客户端只渲染 |
 | `insights.*`、`workflow-insights.*`、`summaries.*`、`workpads.*` | | 不变，`workpads.check` 只剩 acceptance |
 
 去掉：`memory.*` 全部；`reviews.detect-commands`、`analyze-history`、`analysis-status`、`apply-draft`、`discard-draft`、`setup-card`；`insights.add-review-check`、`pause-review-check`、`dismiss-review-nudge`。
