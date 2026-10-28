@@ -465,23 +465,24 @@ export function AiPage() {
   );
 }
 
-/** Project memory as a whole and its finished-card review (Settings → AI features and the welcome tour). */
+/** Guardrails as a whole (the `memory` feature key) and the finished-card review (Settings → AI features and the welcome tour). */
 export function MemoryFeatureGroup({ bare = false }: { bare?: boolean }) {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const features = useStored(useSettings(featureSettings), featureSettingsValues);
   const on = features.values?.memory ?? true;
   return (
     <SettingsGroup
-      title={bare ? undefined : t("Project memory")}
+      title={bare ? undefined : t("Guardrails")}
     >
       <SettingSwitch
-        title={t("Project memory")}
+        title={t("Guardrails")}
+        detail={t("Flowly remembers what you send cards back for and checks the next cards for it. Learning uses a few tokens per card.")}
         value={on}
         disabled={features.busy}
         onChange={(memory) => features.save({ memory })}
       />
       <SettingSwitch
-        title={t("Find memories in finished cards")}
+        title={t("Find notes in finished cards")}
         detail={aiCostText("memoryReview", summaryModelOf(summary.values))}
         value={on && (summary.values?.retroEnabled ?? true)}
         disabled={summary.busy || !on}

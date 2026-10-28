@@ -22,9 +22,9 @@ export function OverviewBar({
   openIdeas,
   onIdeas,
   ideasShortcut,
-  memoryCandidates,
-  onMemory,
-  memoryShortcut,
+  guardrailCount,
+  onGuardrails,
+  guardrailsShortcut,
 }: {
   overview: BoardOverview;
   nameOf(status: Status): string;
@@ -37,10 +37,10 @@ export function OverviewBar({
   openIdeas: number | null;
   onIdeas(): void;
   ideasShortcut: string;
-  /** Project memory candidates waiting for review (PROJECT-MEMORY-SPEC §8.1); null when memory is off for the project. */
-  memoryCandidates: number | null;
-  onMemory(): void;
-  memoryShortcut: string;
+  /** Observing commands plus guidelines learned this week (GUARDRAILS-SPEC §7.4); null when guardrails are off for the project. */
+  guardrailCount: number | null;
+  onGuardrails(): void;
+  guardrailsShortcut: string;
   /** Jump to a lane (compact: switch tabs; desktop: expand it if collapsed). */
   onLane(status: Status): void;
 }) {
@@ -110,13 +110,13 @@ export function OverviewBar({
           {openIdeas ? t("Ideas {openIdeas}", { openIdeas }) : t("Ideas")}
         </Chip>
         )}
-        {memoryCandidates !== null && (
+        {guardrailCount !== null && (
           <Chip
-            label={`${t("Project memory: {n} to review", { n: memoryCandidates })}${memoryShortcut ? ` (${memoryShortcut})` : ""}`}
-            icon={<Icon name="BookMarked" size={13} color={memoryCandidates ? colors.accent : colors.foregroundMuted} />}
-            onPress={onMemory}
+            label={`${guardrailCount ? t("Guardrails: {n} new or observing", { n: guardrailCount }) : t("Guardrails")}${guardrailsShortcut ? ` (${guardrailsShortcut})` : ""}`}
+            icon={<Icon name="ShieldCheck" size={13} color={guardrailCount ? colors.accent : colors.foregroundMuted} />}
+            onPress={onGuardrails}
           >
-            {memoryCandidates ? t("Memory {n}", { n: memoryCandidates }) : t("Memory")}
+            {guardrailCount ? t("Guardrails {n}", { n: guardrailCount }) : t("Guardrails")}
           </Chip>
         )}
         {onInsights && (

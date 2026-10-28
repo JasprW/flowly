@@ -1,5 +1,7 @@
 # 交付自动验收（AUTO-REVIEW-SPEC）
 
+> 2026-10-28：本文部分内容被 [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) 取代（§12）。被取代：§1.1 用户路径、§4.1 L1、§4.2 的规则种类与 `types`、§6 全部配置、§7 Insights、§8.1 的 rules / guidance / reviewDraft、§8.4、§8.5 的多数 RPC、§9.2 的“Auto review 在 Workpad 之前、Workpad 默认收起”（评审现在是 Workpad 里的 Review 组，Workpad 默认展开）、§9.3、§9.6 的 What's new、§12 P3 的 2、4、5、D7、D8、D10、D11、D13–D16；仍有效：§2、§3、§4.3、§4.4 的 session 跑法、§4.5、§5、§8.2 骨架、§8.3、§9.1、§9.2 的 Rerun、§9.4、D1–D6、D9、D12、D17。
+
 状态：P1、P2、P3 已实现，未提交（§12）。决定见 §11。卡片 `4286f00a`（Auto Review）。
 
 ## 1. 目标与用户路径
@@ -391,7 +393,7 @@ Review {
 
 ### 9.2 抽屉（D17）
 
-- 项目开启 Auto review 时，**Auto review** 区块放在 Workpad 之前，Workpad 默认收起（可展开）。项目关闭时 Workpad 照旧展开。
+- （2026-10-28 删除：原“项目开启 Auto review 时 Auto review 区块放在 Workpad 之前、Workpad 默认收起”。评审现在是 Workpad 里的 **Review** 组，Workpad 按用户的抽屉默认展开，见 GUARDRAILS-SPEC §7.1。）
 - Auto review 区块：分 **Commands** 和 **LLM review** 两组（内置检查在 LLM review 组第一行），每组标题右侧 “通过数/条数”；每行状态图标、名称、耗时。`failed` 行展开显示命令输出末尾或判定理由与文件位置；`passed` 的判断类检查点开可看理由；`skipped`、`unavailable` 行显示原因；共享工作区时注明。评审中逐条更新（沿用卡片详情的 etag 读取，不新增轮询）。
 - 卡片在 In review、项目开启且有生效的检查、没有评审在跑时有 **Rerun**（round 重置为 1，返工发给最近一次交付的 session）。
 - 设置卡片的抽屉显示项目草案（§6.4）。

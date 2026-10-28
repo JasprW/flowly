@@ -1,12 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Animated, PanResponder, Pressable, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { taskTypeLabels, type Task } from "../shared/model";
+import { taskTypeLabels, type Review, type Task } from "../shared/model";
 import { AiMark, Badge, Dot, IconButton, Label, font, radius, relativeTime, space, tint, touch, useTheme, noFocusRing } from "./ui";
 import { PriorityIcon, TypeIcon, priorityAccent, priorityLabels } from "./status";
 import type { Point } from "./geometry";
 import type { SessionAttentionSummary } from "../shared/session-attention";
-import { PulseDot, motionDuration, useMotionValue } from "./motion";
+import { PulseDot, motionDuration, useMotionValue, useReducedMotion } from "./motion";
 import { RunningDots } from "./running-motion";
 import { useCardOutput, type CardOutput, type OutputSession } from "./card-output";
 import { menuHandlers, useMenuOpener, type MenuEntry } from "./context-menu";
@@ -18,6 +18,7 @@ import { BrandIcon } from "./brand-icons";
 import { reviewing, visibleReview } from "../shared/auto-review";
 import { Collapse } from "./disclosure";
 import { reviewIcon, reviewLabel } from "./task-review";
+import { reviewProgress } from "./review-progress";
 import type { ConnectorFamily } from "../shared/connectors";
 
 export type CardDrag = {
@@ -325,7 +326,7 @@ export function TaskCard({
           display={display}
         />
       </Pressable>
-      <ReviewStrip taskId={task.id} open={reviewing(task)} label={task.review ? reviewLabel(task.review) : ""} />
+      <ReviewStrip taskId={task.id} review={task.review} running={reviewing(task)} />
       {accent && (
         // Urgent/High: a stripe down the left edge, readable from across the board.
         <View
@@ -438,15 +439,50 @@ function Signal({ color, icon, text, pulse = false }: { color?: string; icon?: s
 }
 
 /**
- * While an automatic review runs, a strip opens under the card with the dot sweep (AUTO-REVIEW-SPEC §7). `Collapse`
- * expands it when the review starts and folds it when it ends; a card mounted mid-review shows it at once.
+ * While an automatic review runs, a strip opens under the card with the dot sweep (GUARDRAILS-SPEC §7.1.1): one line,
+ * "Reviewing · 3/7 passed · running npm test". `Collapse` expands it when the review starts; when it ends the last
+ * frame stays 600 ms (none under Reduce Motion) before it folds. A card mounted mid-review shows it at once.
  */
-function ReviewStrip({ taskId, open, label }: { taskId: string; open: boolean; label: string }) {
+function ReviewStrip({ taskId, review, running }: { taskId: string; review: Review | undefined; running: boolean }) {
   const { colors } = useTheme();
+  const reduced = useReducedMotion();
+  const [held, setHeld] = useState(false);
+  const was = useRef(running);
+  useEffect(() => {
+    const ended = was.current && !running;
+    was.current = running;
+    if (!ended || reduced) {
+      setHeld(false);
+      return;
+    }
+    setHeld(true);
+    const timer = setTimeout(() => setHeld(false), 600);
+    return () => clearTimeout(timer);
+  }, [running, reduced]);
+  const open = running || held;
+  const progress = review ? reviewProgress(review) : null;
+  const passed = progress && progress.total ? t("{passed}/{total} passed", { passed: progress.passed, total: progress.total }) : "";
+  const failed = progress?.failed ? tn(progress.failed, "{n} failed", "{n} failed") : "";
+  const now =
+    progress?.phase === "running" && progress.current
+      ? t("running {name}", { name: progress.current })
+      : progress?.phase === "judging"
+        ? tn(progress.judging ?? 0, "judging {n} check", "judging {n} checks")
+        : progress?.phase === "starting"
+          ? t("starting…")
+          : "";
+  const label = [
+    t("Auto review running"),
+    progress?.total ? t("{passed} of {total} passed", { passed: progress.passed, total: progress.total }) : "",
+    failed,
+    now,
+  ].filter(Boolean).join(", ");
   return (
     <Collapse open={open} id={`${taskId}:review`}>
       <View
         pointerEvents="none"
+        accessible
+        accessibilityLabel={label}
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -464,10 +500,26 @@ function ReviewStrip({ taskId, open, label }: { taskId: string; open: boolean; l
         <RunningDots color={colors.accent} seed={`${taskId}:review`} />
         <Icon name="Loader" size={13} color={colors.accent} />
         <Label size={font.sm} color={colors.accent} selectable={false}>
-          {label}
+          {t("Reviewing")}
         </Label>
+        {!!passed && <StripPart text={passed} color={colors.accent} />}
+        {!!failed && <StripPart text={failed} color={colors.statusDanger} />}
+        {!!now && (
+          <View style={{ flexShrink: 1, minWidth: 0 }}>
+            <StripPart text={now} />
+          </View>
+        )}
       </View>
     </Collapse>
+  );
+}
+
+/** "· text" after the strip's lead word; muted unless coloured. */
+function StripPart({ text, color }: { text: string; color?: string }) {
+  return (
+    <Label size={font.sm} color={color} muted={!color} lines={1} selectable={false}>
+      {`· ${text}`}
+    </Label>
   );
 }
 
@@ -555,14 +607,7 @@ function CardSignals({
       />,
     );
   if (attentionDismissed) items.push(<Signal key="dismissed" icon="BellOff" text={t("Dismissed")} />);
-  if (workpad && display.workpad)
-    items.push(
-      <Signal
-        key="workpad"
-        icon="ListChecks"
-        text={workpadText(workpad)}
-      />,
-    );
+  if (workpad && display.workpad && workpadText(workpad)) items.push(<Signal key="workpad" icon="ListChecks" text={workpadText(workpad)} />);
   if (ideas && display.ideas) items.push(<Signal key="ideas" icon="Lightbulb" color={colors.statusWarning} text={`${ideas}`} />);
   if (task.archivedAt) items.push(<Badge key="archived">{t("Archived")}</Badge>);
   if (legacy) items.push(<Badge key="legacy">{t("Legacy")}</Badge>);
@@ -618,7 +663,7 @@ function Meta({ label, icon, text, color }: { label: string; icon: ReactNode; te
   );
 }
 
-/** The card's workpad signal (GUARDRAILS-SPEC §7.1). */
+/** The card's workpad signal: only `Acceptance n/m` (GUARDRAILS-SPEC §7.1). */
 function workpadText(signal: WorkpadSignal) {
-  return t("Acceptance {done}/{total}", { done: signal.done, total: signal.total });
+  return signal.kind === "acceptance" ? t("Acceptance {done}/{total}", { done: signal.done, total: signal.total }) : "";
 }

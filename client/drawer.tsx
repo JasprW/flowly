@@ -1,7 +1,7 @@
 import { useCardDetailQuery, useTaskDetail } from "./card-detail-query";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isNoMoves, nextMovesAction } from "../shared/next-moves";
-import { workpadCheckedAction, workpadEnabled, workpadUpdatedAction } from "../shared/workpad";
+import { workpadCheckedAction, workpadUpdatedAction } from "../shared/workpad";
 import type { PaseoAgent } from "@getpaseo/client";
 import { Pressable, View } from "react-native";
 import { drawerNeedsBoard } from "./query-activity";
@@ -65,12 +65,9 @@ import { TaskProgress } from "./task-progress";
 import { TaskUsage } from "./task-usage";
 import { SessionMarkdown } from "./session-content";
 import { TaskIdeas } from "./task-ideas";
-import { TaskMemorySection } from "./memory";
 import { LinkOrigin, TaskLinks } from "./task-links";
 import { TaskArtifacts } from "./task-artifacts";
 import { TaskWorkpad } from "./task-workpad";
-import { TaskReview } from "./task-review";
-import { autoReviewEnabled } from "../shared/auto-review";
 import { TaskTags } from "./task-tags";
 import { drawerSectionOrder, drawerSectionsOpen, type AnyDrawerSection, type DrawerSection } from "../shared/drawer-sections";
 import { ideaInstruction } from "../shared/ideas";
@@ -104,7 +101,7 @@ function TaskDrawerView({
   startRequest,
   startIdea,
   onAllIdeas,
-  onMemoryPage,
+  guardrails = false,
   onFilterTag,
   escapeRequest,
   attention,
@@ -145,8 +142,8 @@ function TaskDrawerView({
   startIdea?: Idea;
   /** Opens the project Ideas page showing only this card (IDEAS-INBOX-SPEC §5). */
   onAllIdeas?(taskId: string): void;
-  /** Opens the project Memory page (PROJECT-MEMORY-SPEC §8.2). */
-  onMemoryPage?(): void;
+  /** Guardrails on (Settings and the project switch): the Workpad shows what this card was sent back for (GUARDRAILS-SPEC §7.1). */
+  guardrails?: boolean;
   /** Adds a tag to the board filter (CARD-TAGS-SPEC §6.3). */
   onFilterTag?(tag: string): void;
   /** Changes on each board Esc shortcut: leave the session preview, else close. */
@@ -198,12 +195,7 @@ function TaskDrawerView({
   const order = useMemo(() => drawerSectionOrder(sectionOrder ? sectionOrder.split(",") : []), [sectionOrder]);
   // Which sections are open: the user's defaults each time the sidebar opens, then their own toggles.
   // Activity and Usage are history, not status: closed by default (USAGE-STATS-SPEC §5).
-  // With Auto review on the review result leads and the agent's workpad starts closed (AUTO-REVIEW-SPEC §9.2, D17).
-  const reviewFirst = autoReviewEnabled(project);
-  const openDefaults = useMemo(() => {
-    const defaults = drawerSectionsOpen(sectionOpen ? (JSON.parse(sectionOpen) as Record<string, boolean>) : {});
-    return reviewFirst ? { ...defaults, workpad: false } : defaults;
-  }, [sectionOpen, reviewFirst]);
+  const openDefaults = useMemo(() => drawerSectionsOpen(sectionOpen ? (JSON.parse(sectionOpen) as Record<string, boolean>) : {}), [sectionOpen]);
   const [opened, setOpened] = useState(openDefaults);
   useEffect(() => {
     if (active) setOpened(openDefaults);
@@ -741,13 +733,7 @@ function TaskDrawerView({
         );
       case "workpad":
         return (
-          <>
-            {reviewFirst && <TaskReview task={task} project={project} disabled={!active || !!task.archivedAt || !!project.archivedAt} />}
-            {workpadEnabled(project) && (
-              <TaskWorkpad task={task} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
-            )}
-            {!reviewFirst && <TaskReview task={task} project={project} disabled={!active || !!task.archivedAt || !!project.archivedAt} />}
-          </>
+          <TaskWorkpad task={task} project={project} guardrails={guardrails} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
         );
       case "artifacts":
         return (
@@ -841,8 +827,6 @@ function TaskDrawerView({
               section={sectionStates.ideas}
             />
           )}
-          {/* Project memory proposed from this card, right after its ideas (PROJECT-MEMORY-SPEC §8.2). */}
-          {onMemoryPage && <TaskMemorySection task={task} project={project} onOpenPage={onMemoryPage} />}
           </>
         );
       case "links":

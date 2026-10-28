@@ -8,14 +8,14 @@ import * as rpc from "../shared/rpc";
 import { taskTypeLabels, type Status } from "../shared/model";
 import { searchLimits, searchSources, type SearchCard, type SearchHit, type SearchMemoryHit, type SearchSource } from "../shared/search";
 import { FilterChip } from "./ideas-page";
-import { kindLabels } from "./memory";
+import { kindLabels } from "./guardrails";
 import { Enter, useMotionValue } from "./motion";
 import { StatusIcon } from "./status";
 import { useStableCallback } from "./stable";
 import { Button, Choices, Label, Notice, TextBox, font, message, noFocusRing, pageBarHeight, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg } from "../shared/i18n";
 
-/** The Search page (SEARCH-SPEC §5). Replaces the board area while open, like Ideas and Memory. */
+/** The Search page (SEARCH-SPEC §5). Replaces the board area while open, like Ideas and Guardrails. */
 
 const sourceChips: Record<SearchSource, { label: string; icon: string }> = {
   card: { label: msg("Cards"), icon: "SquareKanban" },
@@ -24,7 +24,7 @@ const sourceChips: Record<SearchSource, { label: string; icon: string }> = {
   workpad: { label: msg("Workpads"), icon: "ListChecks" },
   idea: { label: msg("Ideas"), icon: "Lightbulb" },
   artifact: { label: msg("Deliverables"), icon: "Package" },
-  memory: { label: msg("Memory"), icon: "BookMarked" },
+  memory: { label: msg("Project notes"), icon: "BookMarked" },
 };
 const hitLabels: Record<SearchSource, string> = {
   card: msg("Card"),
@@ -33,7 +33,7 @@ const hitLabels: Record<SearchSource, string> = {
   workpad: msg("Workpad"),
   idea: msg("Idea"),
   artifact: msg("Deliverable"),
-  memory: msg("Memory"),
+  memory: msg("Project note"),
 };
 const ideaStatusLabels = { open: msg("Open"), accepted: msg("Accepted"), dismissed: msg("Dismissed") } as const;
 
@@ -271,7 +271,7 @@ export const SearchPage = memo(function SearchPage({
           </View>
           {result.error && !!query.trim() && <Notice>{message(result.error)}</Notice>}
           {data?.partial.includes("summaries") && <Notice tone="warning">{t("Summaries could not be read")}</Notice>}
-          {data?.partial.includes("memory") && <Notice tone="warning">{t("Memory could not be read")}</Notice>}
+          {data?.partial.includes("memory") && <Notice tone="warning">{t("Project notes could not be read")}</Notice>}
           <Animated.View style={{ opacity: dim }}>
           <Enter key={result.dataUpdatedAt} style={{ gap: space[3] }}>
           {data && !data.cards.length && !data.memory.length && (
@@ -285,7 +285,7 @@ export const SearchPage = memo(function SearchPage({
           {!!data?.memory.length && (
             <View style={{ gap: space[2], paddingTop: space[2] }}>
               <Label medium size={font.sm} muted selectable={false}>
-                {t("Memory")}</Label>
+                {t("Project notes")}</Label>
               {data.memory.map((hit) => (
                 <MemoryResult key={hit.id} hit={hit} onOpen={onOpenMemory} />
               ))}
