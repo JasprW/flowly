@@ -275,6 +275,8 @@ export const taskSchema = z.object({
   archivedAt: timestamp.nullable(),
   /** The plugin created this workspace for the card (not linked to an existing one). Absent on older cards. */
   ownsWorkspace: z.boolean().optional(),
+  /** A worktree card's base ref at creation (e.g. `refs/heads/main`), for its own change (GUARDRAILS-SPEC §6.2). Absent on directory, linked and older cards. */
+  baseRef: z.string().optional(),
   /** Created from an idea proposed on another card (IDEAS-SPEC §2.2). */
   origin: z.object({ taskId: z.string(), ideaId: z.string() }).optional(),
   /** The latest automatic review (AUTO-REVIEW-SPEC §6); written without a task revision. */

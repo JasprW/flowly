@@ -174,6 +174,8 @@ test("worktree originates from native root and default base resolves its named b
     x.paseo,
   );
   expect(card.sourcePath).toBe(x.a);
+  // Kept on the card for the review's own change (GUARDRAILS-SPEC §6.2).
+  expect(card.baseRef).toBe("refs/heads/root-main");
   expect(x.create.mock.calls[0][0]).toMatchObject({
     source: {
       kind: "worktree",

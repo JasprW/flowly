@@ -266,7 +266,9 @@ export function summaryPrompt(input: {
     .join("\n");
 }
 const correctionRules = [
-  '- "correction": the user wrote the first message of this conversation after the agent had delivered the task for review. Decide whether the user is correcting the delivered work: something it does wrong, breaks or left out. Adding a new requirement, asking a question, chatting, thanking, or asking to commit, push or merge is not a correction.',
+  '- "correction": the user wrote the first message of this conversation after the agent had delivered the task for review. Decide whether the user is correcting the delivered work: something it does wrong, breaks or left out.',
+  '  A message saying the delivered change should also, still or should have done something that could have been part of that change is a correction, even when it is short, has no subject or no negation (e.g. "the new endpoint also goes into the README", "new copy also goes into every language catalog").',
+  '  Not a correction: work unrelated to the delivered change (another feature, another page), a question, chatting, thanking, or asking to commit, push or merge.',
   '  Not a correction: {"kind": "none"}. The same problem as a line of the Guardrails list below: {"kind": "same", "matches": "<that line\'s #id>", "text": "<that line\'s text, unchanged>"}. Otherwise: {"kind": "new", "text": "<one sentence of at most 120 characters that a reviewer can check on a later delivery, e.g. Every new UI string is in all language catalogs>"}.',
 ];
 const previous = (p: unknown) =>

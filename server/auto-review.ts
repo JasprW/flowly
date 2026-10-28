@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { access } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { access, readFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type { PaseoApi } from "@getpaseo/client";
 import { laneEnabled } from "../shared/lanes";
@@ -108,16 +108,64 @@ export async function readHead(dir: string, git: Git, now = new Date().toISOStri
 
 const diffLimit = 64 * 1024;
 /**
- * What the review session reads: uncommitted changes plus the last few commits, cut at 64 KiB; with `since` (round ≥ 2,
- * §6.3) only what changed since that commit. Never fails: an empty diff when git does.
+ * Where a worktree card's own change starts (GUARDRAILS-SPEC §6.2): `git merge-base <baseRef> HEAD`. null for a card
+ * without a base ref (directory, linked or older cards) or when git cannot resolve it: the caller falls back.
  */
-export async function reviewDiff(directory: string, since?: string, git: Git = defaultGit): Promise<string> {
+export async function changeBase(directory: string, baseRef: string | undefined, git: Git = defaultGit): Promise<string | null> {
+  const ref = baseRef?.trim();
+  if (!ref || ref.startsWith("-")) return null;
+  const sha = await git(directory, ["merge-base", ref, "HEAD"]).then(
+    (s) => s.trim(),
+    () => "",
+  );
+  return shaPattern.test(sha) ? sha : null;
+}
+
+/** Files git does not track and does not ignore (§6.2); `git add -N` is never used, so the index stays as it is. */
+async function untrackedFiles(directory: string, git: Git): Promise<string[]> {
+  return (await git(directory, ["ls-files", "--others", "--exclude-standard", "-z"])).split("\0").filter((f) => f && !f.endsWith("/"));
+}
+/** A new file's lines as `git diff` would count them; a binary file (a NUL byte in the first 8 KiB) or an unreadable one counts 0. */
+async function fileLines(path: string): Promise<number> {
+  const data = await readFile(path).catch(() => null);
+  if (!data?.length || data.subarray(0, 8192).includes(0)) return 0;
+  let lines = 0;
+  for (const byte of data) if (byte === 10) lines++;
+  return data[data.length - 1] === 10 ? lines : lines + 1;
+}
+/** `git diff --no-index` exits 1 when the files differ, which for a new file is always: that output is the diff. */
+async function newFileDiff(directory: string, file: string, git: Git): Promise<string> {
+  return git(directory, ["diff", "--no-index", "--no-color", "--", "/dev/null", file]).catch((e: unknown) => {
+    const failure = e as { code?: unknown; stdout?: unknown } | null;
+    return failure?.code === 1 && typeof failure.stdout === "string" ? failure.stdout : "";
+  });
+}
+
+/**
+ * What the review session reads, cut at 64 KiB: a worktree card's change since it branched off `baseRef` (or, without
+ * one, uncommitted changes plus the last few commits); with `since` (round ≥ 2, §6.3) only what changed since that
+ * commit. Untracked new files follow in every mode. Never fails: an empty diff when git does.
+ */
+export async function reviewDiff(directory: string, options: { since?: string; baseRef?: string } = {}, git: Git = defaultGit): Promise<string> {
   const run = (args: string[]) => git(directory, args).catch(() => "");
+  const { since } = options;
   let text: string;
   if (since && shaPattern.test(since)) text = `# Changes since the previous delivery (git diff ${since})\n${(await run(["diff", since, "--no-color"])) || "(none)\n"}`;
   else {
-    const [uncommitted, recent] = await Promise.all([run(["diff", "HEAD", "--no-color"]), run(["log", "-5", "-p", "--no-color", "--format=commit %h %s"])]);
-    text = `# Uncommitted changes (git diff HEAD)\n${uncommitted || "(none)\n"}\n# Recent commits\n${recent}`;
+    const base = await changeBase(directory, options.baseRef, git);
+    if (base) text = `# Changes on this card's branch (git diff ${base})\n${(await run(["diff", base, "--no-color"])) || "(none)\n"}`;
+    else {
+      const [uncommitted, recent] = await Promise.all([run(["diff", "HEAD", "--no-color"]), run(["log", "-5", "-p", "--no-color", "--format=commit %h %s"])]);
+      text = `# Uncommitted changes (git diff HEAD)\n${uncommitted || "(none)\n"}\n# Recent commits\n${recent}`;
+    }
+  }
+  const added = await untrackedFiles(directory, git).catch(() => []);
+  if (added.length) {
+    text += "\n# New files (untracked)\n";
+    for (const file of added) {
+      if (text.length > diffLimit) break;
+      text += await newFileDiff(directory, file, git);
+    }
   }
   return text.length > diffLimit ? `${text.slice(0, diffLimit)}\n[diff truncated at 64 KiB]` : text;
 }
@@ -144,13 +192,25 @@ function renamedTo(path: string) {
 }
 
 /**
- * The delivery's shape (GUARDRAILS-SPEC §6.2): `git diff HEAD --numstat` plus the same last five commits the review's
- * diff reads. null when git fails.
+ * The delivery's shape (GUARDRAILS-SPEC §6.2): a worktree card's `git diff <merge-base> --numstat`, otherwise
+ * `git diff HEAD --numstat` plus the same last five commits the review's diff reads; untracked new files count too,
+ * one file each with their lines. null when git fails.
  */
-export async function reviewShape(directory: string, git: Git = defaultGit): Promise<{ shape: ChangeShape; paths: Set<string> } | null> {
+export async function reviewShape(directory: string, baseRef?: string, git: Git = defaultGit): Promise<{ shape: ChangeShape; paths: Set<string> } | null> {
   try {
-    const [uncommitted, recent] = await Promise.all([git(directory, ["diff", "HEAD", "--numstat"]), git(directory, ["log", "-5", "--numstat", "--format="])]);
-    return numstatShape(uncommitted, recent);
+    const base = await changeBase(directory, baseRef, git);
+    const tracked = base
+      ? [git(directory, ["diff", base, "--numstat"])]
+      : [git(directory, ["diff", "HEAD", "--numstat"]), git(directory, ["log", "-5", "--numstat", "--format="])];
+    const [outputs, added] = await Promise.all([Promise.all(tracked), untrackedFiles(directory, git)]);
+    const { shape, paths } = numstatShape(...outputs);
+    let lines = shape.lines;
+    for (const file of added) {
+      if (paths.has(file)) continue;
+      paths.add(file);
+      lines += await fileLines(join(directory, file));
+    }
+    return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
   } catch {
     return null;
   }
@@ -268,9 +328,9 @@ export type AutoReviewDeps = {
   /** The user's messages in the card's sessions (§4.2), for the built-in check; null when unreadable. */
   conversation?: (task: Task, paseo: PaseoApi) => Promise<string[] | null>;
   /** The diff the review session reads; `reviewDiff` by default. */
-  diff?: (directory: string, since?: string) => Promise<string>;
+  diff?: (directory: string, since?: string, baseRef?: string) => Promise<string>;
   /** The delivery's shape; `reviewShape` by default. */
-  shape?: (directory: string) => Promise<{ shape: ChangeShape; paths: Set<string> } | null>;
+  shape?: (directory: string, baseRef?: string) => Promise<{ shape: ChangeShape; paths: Set<string> } | null>;
   /** Whether a cited file exists in the workspace (B1); a file check by default. */
   exists?: (path: string) => Promise<boolean>;
   run?: RunCheck;
@@ -388,7 +448,7 @@ export class AutoReviewService {
     if (!task || !project || task.archivedAt || project.archivedAt || task.status !== "in_review" || !autoReviewRuns(project)) return;
     const where = await this.deps.workspace(task, paseo).catch(() => null);
     const head = where ? await readHead(where.directory, this.git, this.now()) : null;
-    const measured = where ? await (this.deps.shape ?? ((d: string) => reviewShape(d, this.git)))(where.directory).catch(() => null) : null;
+    const measured = where ? await (this.deps.shape ?? ((d: string, base?: string) => reviewShape(d, base, this.git)))(where.directory, task.baseRef).catch(() => null) : null;
     const config = autoReviewOf(project);
     // What is checked is fixed when it starts; editing the guardrails meanwhile does not change this review (§4.3).
     const guard = this.deps.guardrails
@@ -556,7 +616,11 @@ export class AutoReviewService {
       deliveryNote: deliveryEvent?.note ?? "",
       outputs: board.artifacts.filter((a) => a.taskId === task.id && a.role === "output").map((a) => a.target),
       commands: now.items.filter((r) => r.kind === "command").map((r) => `${r.name}: ${r.state}${r.gating ? "" : " (observing)"}`),
-      diff: await (this.deps.diff ?? ((d: string, since?: string) => reviewDiff(d, since, this.git)))(where.directory, incremental ? previous!.fingerprint.sha : undefined),
+      diff: await (this.deps.diff ?? ((d: string, since?: string, baseRef?: string) => reviewDiff(d, { since, baseRef }, this.git)))(
+        where.directory,
+        incremental ? previous!.fingerprint.sha : undefined,
+        task.baseRef,
+      ),
       ...(incremental ? { incremental: true } : {}),
       parentAgentId: delivery.agentId,
     };

@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "vitest";
-import { rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { agentFixture } from "./agent-fixture";
-import { AutoReviewService, numstatShape, repoPath, type Git, type LlmReview, type LlmReviewInput, type RunCheck } from "./auto-review";
+import { AutoReviewService, numstatShape, repoPath, reviewDiff, reviewShape, type Git, type LlmReview, type LlmReviewInput, type RunCheck } from "./auto-review";
 import { GuardrailsService } from "./guardrails";
 import type { AgentService } from "./agent-service";
 import type { ChangeShape, Lane } from "../shared/model";
@@ -70,6 +72,7 @@ async function setup(
     paths?: string[];
     exists?: (path: string) => Promise<boolean>;
     memory?: boolean;
+    baseRef?: string;
   } = {},
 ) {
   const x = await agentFixture();
@@ -78,6 +81,7 @@ async function setup(
     b.projects[0]!.autoReview = { enabled: true, maxRounds: options.maxRounds ?? 2 };
     if (options.lanes) b.projects[0]!.lanes = options.lanes;
     if (options.memory === false) b.projects[0]!.memory = false;
+    if (options.baseRef) b.tasks[0]!.baseRef = options.baseRef;
   });
   const guardrails = new GuardrailsService(x.store, () => Date.now(), async () => []);
   x.service.guardrails = guardrails;
@@ -106,6 +110,7 @@ async function setup(
     return "";
   };
   const diffs: (string | undefined)[] = [];
+  const bases: (string | undefined)[] = [];
   const sent: { agentId: string; text: string }[] = [];
   const reviews = new AutoReviewService(x.store, {
     workspace: async () => ({ directory: x.a, worktree: false }),
@@ -119,11 +124,12 @@ async function setup(
     guardrails,
     llm: options.llm ?? passAll,
     ...(options.conversation ? { conversation: options.conversation } : {}),
-    diff: async (_dir, since) => {
+    diff: async (_dir, since, baseRef) => {
       diffs.push(since);
+      bases.push(baseRef);
       return "diff --git a/x b/x";
     },
-    shape: async () => ({ shape: options.shape ?? { files: 1, lines: 10, size: "s" }, paths: new Set(options.paths ?? ["src/a.ts"]) }),
+    shape: async (_dir, baseRef) => (bases.push(baseRef), { shape: options.shape ?? { files: 1, lines: 10, size: "s" }, paths: new Set(options.paths ?? ["src/a.ts"]) }),
     exists: options.exists ?? (async () => false),
   });
   let delivering: Promise<void> = Promise.resolve();
@@ -147,7 +153,7 @@ async function setup(
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" });
     });
   const entry = async (id: string) => (await guardrails.store.read()).entries.find((e) => e.id === id)!;
-  return { ...x, reviews, guardrails, sent, runs, exits, repo, diffs, deliver, turnStarted, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
+  return { ...x, reviews, guardrails, sent, runs, exits, repo, diffs, bases, deliver, turnStarted, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
 }
 
 const card = async (x: { store: { read(): Promise<import("../shared/model").Board> } }) => (await x.store.read()).tasks[0]!;
@@ -613,4 +619,79 @@ test("the delivery's shape from git --numstat: files, changed lines (binary 0), 
   expect(repoPath("/w", "/w/src/a.ts")).toBe("src/a.ts");
   expect(repoPath("/w", "../x.ts")).toBeNull();
   expect(repoPath("/w", "/etc/passwd")).toBeNull();
+});
+
+test("a worktree card's base ref reaches the shape and the review diff (§6.2)", async () => {
+  const x = await setup({ baseRef: "refs/heads/main" });
+  await x.deliver("development");
+  expect(x.bases).toEqual(["refs/heads/main", "refs/heads/main"]);
+});
+
+/** A fake git that records each call's argv; `answers` maps an argv to its output, an Error to throw, or a `git diff --no-index` exit 1. */
+function recordingGit(answers: Record<string, string | Error | { exit1: string }>) {
+  const calls: string[] = [];
+  const git: Git = async (_cwd, args) => {
+    const key = args.join(" ");
+    calls.push(key);
+    const answer = answers[key] ?? "";
+    if (answer instanceof Error) throw answer;
+    if (typeof answer === "object") throw Object.assign(new Error("exit 1"), { code: 1, stdout: answer.exit1 });
+    return answer;
+  };
+  return { git, calls };
+}
+const base = "0123456789abcdef0123456789abcdef01234567";
+const untracked = "ls-files --others --exclude-standard -z";
+
+test("shape: a worktree card counts its own change since the merge-base plus untracked files, text by lines and binary 0 (§6.2)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-shape-"));
+  roots.push(dir);
+  await writeFile(join(dir, "fixture.txt"), Array.from({ length: 450 }, (_, i) => `line ${i}`).join("\n"));
+  await writeFile(join(dir, "logo.png"), Buffer.from([0x89, 0x50, 0x00, 0x4e, 0x0a]));
+  const { git, calls } = recordingGit({
+    "merge-base refs/heads/main HEAD": `${base}\n`,
+    [`diff ${base} --numstat`]: "3\t2\tsrc/a.ts\n",
+    [untracked]: "fixture.txt\0logo.png\0",
+  });
+  const measured = await reviewShape(dir, "refs/heads/main", git);
+  expect(calls).toEqual(["merge-base refs/heads/main HEAD", `diff ${base} --numstat`, untracked]);
+  expect(measured!.shape).toEqual({ files: 3, lines: 455, size: "l" });
+  expect([...measured!.paths].sort()).toEqual(["fixture.txt", "logo.png", "src/a.ts"]);
+});
+
+test("shape: a directory card, or a base ref git cannot resolve, keeps git diff HEAD plus the last five commits, with untracked files (§6.2)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-shape-"));
+  roots.push(dir);
+  await writeFile(join(dir, "new.ts"), "a\nb\n");
+  const answers = { "diff HEAD --numstat": "1\t1\tsrc/a.ts\n", "log -5 --numstat --format=": "10\t0\tsrc/b.ts\n", [untracked]: "new.ts\0" };
+  const directory = recordingGit(answers);
+  expect((await reviewShape(dir, undefined, directory.git))!.shape).toEqual({ files: 3, lines: 14, size: "s" });
+  expect(directory.calls).toEqual(["diff HEAD --numstat", "log -5 --numstat --format=", untracked]);
+  const failed = recordingGit({ ...answers, "merge-base gone HEAD": new Error("fatal: Not a valid object name gone") });
+  expect((await reviewShape(dir, "gone", failed.git))!.shape).toEqual({ files: 3, lines: 14, size: "s" });
+  expect(failed.calls).toEqual(["merge-base gone HEAD", "diff HEAD --numstat", "log -5 --numstat --format=", untracked]);
+});
+
+test("review diff: the card's branch since the merge-base, then untracked files under their own heading; round 2 adds them too (§6.3)", async () => {
+  const answers = {
+    "merge-base main HEAD": `${base}\n`,
+    [`diff ${base} --no-color`]: "diff --git a/src/a.ts b/src/a.ts\n",
+    "diff aaaaaaaaaaaa --no-color": "diff --git a/src/c.ts b/src/c.ts\n",
+    [untracked]: "docs/new.md\0",
+    "diff --no-index --no-color -- /dev/null docs/new.md": { exit1: "diff --git a/docs/new.md b/docs/new.md\n+hello\n" },
+  };
+  const worktree = recordingGit(answers);
+  const text = await reviewDiff("/w", { baseRef: "main" }, worktree.git);
+  expect(worktree.calls).toEqual(["merge-base main HEAD", `diff ${base} --no-color`, untracked, "diff --no-index --no-color -- /dev/null docs/new.md"]);
+  expect(text).toContain(`# Changes on this card's branch (git diff ${base})\ndiff --git a/src/a.ts`);
+  expect(text).toContain("# New files (untracked)\ndiff --git a/docs/new.md b/docs/new.md\n+hello");
+  expect(text).not.toContain("# Recent commits");
+  const round2 = recordingGit(answers);
+  const later = await reviewDiff("/w", { since: "aaaaaaaaaaaa", baseRef: "main" }, round2.git);
+  expect(round2.calls).toEqual(["diff aaaaaaaaaaaa --no-color", untracked, "diff --no-index --no-color -- /dev/null docs/new.md"]);
+  expect(later).toContain("# New files (untracked)\ndiff --git a/docs/new.md");
+  // A directory card: uncommitted changes and the last five commits, then the new files.
+  const directory = recordingGit(answers);
+  expect(await reviewDiff("/w", {}, directory.git)).toContain("# Recent commits\n\n# New files (untracked)\ndiff --git a/docs/new.md");
+  expect(directory.calls.slice(0, 3)).toEqual(["diff HEAD --no-color", "log -5 -p --no-color --format=commit %h %s", untracked]);
 });
