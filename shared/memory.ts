@@ -286,9 +286,9 @@ export const agentsRule = (entry: Pick<MemoryEntry, "title" | "body">) => `- ${e
 // ---- Clues (§4.0) ------------------------------------------------------------------
 
 /** The user's own words worth keeping for the review, or null (short, a picked suggestion, a secret). */
-export function clueText(value: string, picked: readonly string[] = []): string | null {
+export function clueText(value: string, picked: readonly string[] = [], min: number = memoryLimits.clueMin): string | null {
   const trimmed = value.trim();
-  if (trimmed.length < memoryLimits.clueMin) return null;
+  if (!trimmed || trimmed.length < min) return null;
   if (picked.some((p) => p.trim() === trimmed)) return null;
   if (containsSecret(trimmed)) return null;
   return trimmed.length > memoryLimits.clueText ? `${trimmed.slice(0, memoryLimits.clueText - 1)}…` : trimmed;

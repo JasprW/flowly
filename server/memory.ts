@@ -457,20 +457,22 @@ export class MemoryService {
   }
   /**
    * A rework turn (GUARDRAILS-SPEC §4.1, B6): the turn began with the user's own words while the card was In review,
-   * the same fact as a `feedback` clue. Returns those words, or null. Guardrails off: null.
+   * the same fact as a `feedback` clue, but with no minimum length: "测试没跑" is a correction. Returns those words, or
+   * null. Guardrails off: null.
    */
   reworkQuote(identity: { taskId: string; agentId: string }, timeline: readonly TurnItem[], board: Board): string | null {
     const task = board.tasks.find((t) => t.id === identity.taskId);
     if (!task || !memoryOn(board.projects.find((p) => p.id === task.projectId))) return null;
-    const clue = this.openingClue(identity, timeline, board, task.id);
+    const clue = this.openingClue(identity, timeline, board, task.id, 1);
     return clue?.kind === "feedback" ? clue.text : null;
   }
-  private openingClue(identity: { agentId: string }, timeline: readonly TurnItem[], board: Board, taskId: string) {
+  /** `min`: the shortest message kept; clues keep the 15-character rule (§4.0). */
+  private openingClue(identity: { agentId: string }, timeline: readonly TurnItem[], board: Board, taskId: string, min?: number) {
     const first = timeline.find((i) => i.type === "user_message" && typeof i.text === "string");
-    return first && !String(first.text).trimStart().startsWith(CODEX_ANSWERS_PREFIX) ? this.messageClue(identity, String(first.text), board, taskId) : null;
+    return first && !String(first.text).trimStart().startsWith(CODEX_ANSWERS_PREFIX) ? this.messageClue(identity, String(first.text), board, taskId, min) : null;
   }
   /** The turn's opening message as an answer (to a kind=question report), feedback (on a delivery) or a message; null when it is not the user's own words. */
-  private messageClue(identity: { agentId: string }, message: string, board: Board, taskId: string): Pick<MemoryClue, "kind" | "ask" | "text"> | null {
+  private messageClue(identity: { agentId: string }, message: string, board: Board, taskId: string, min?: number): Pick<MemoryClue, "kind" | "ask" | "text"> | null {
     const events = board.events.filter((e) => e.taskId === taskId);
     // The board events of this turn begin at its turn_started; what came before tells the situation.
     let start = events.length;
@@ -482,7 +484,7 @@ export class MemoryService {
     const before = events.slice(0, start);
     const picked = before.filter((e) => e.action === "next_moves_suggested" && e.moves).flatMap((e) => e.moves!.flatMap((m) => (m.prompt ? [m.prompt] : [])));
     const ideaTexts = board.ideas.filter((i) => i.taskId === taskId).flatMap((i) => [i.detail, `${i.title}\n\n${i.detail}`]);
-    const value = clueText(message, [...picked, ...ideaTexts]);
+    const value = clueText(message, [...picked, ...ideaTexts], min);
     if (!value || value.startsWith("Good idea — go ahead with it in this task:")) return null;
     const lastReport = [...before].reverse().find((e) => e.agentId === identity.agentId && e.actor === "agent" && (e.action === "progress_reported" || e.action === "status_changed"));
     const question = lastReport?.reportKind === "question" ? lastReport : undefined;

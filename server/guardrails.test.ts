@@ -337,6 +337,15 @@ test("a rework turn is one the user opened while the card was In review", async 
     return memory.reworkQuote(x.identity, [{ type: "user_message", text }], await x.store.read());
   };
   expect(await turn("The zh-TW catalog is missing the new strings", true)).toBe("The zh-TW catalog is missing the new strings");
+  // A short correction counts; it is still too short to be kept as a clue (§4.1).
+  expect(await turn("测试没跑", true)).toBe("测试没跑");
+  await memory.recordTurn(x.identity, [{ type: "user_message", text: "测试没跑" }], await x.store.read());
+  expect((await x.state()).clues).toEqual([]);
+  // A picked next move is not the user's own words, however short.
+  await x.store.mutate((board) => {
+    x.store.event(board, { taskId: "t", agentId: "actor", actor: "agent", action: "next_moves_suggested", moves: [{ label: "Push", prompt: "push" }] });
+  });
+  expect(await turn("push", true)).toBeNull();
   await x.store.mutate((board) => {
     x.store.event(board, { taskId: "t", agentId: "actor", actor: "human", action: "status_changed", from: "in_review", to: "development" });
   });
