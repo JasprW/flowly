@@ -72,6 +72,8 @@ export type MigrationResult = "present" | "migrated" | "failed";
 /** `guardrails.json` (GUARDRAILS-SPEC §3.1): serialized writes, `.bak` backup, atomic replacement; invalid data is preserved. */
 export class GuardrailsStore {
   private tail: Promise<unknown> = Promise.resolve();
+  /** The memory.json a failed migration could not move: writes are refused until a migration succeeds (§3.6). */
+  private migrationFailed: string | null = null;
   constructor(readonly directory: string) {}
   get path() {
     return join(this.directory, "guardrails.json");
@@ -114,6 +116,8 @@ export class GuardrailsStore {
   }
   update<T>(operation: (state: GuardrailsState) => Promise<{ value: T; changed: boolean }> | { value: T; changed: boolean }): Promise<T> {
     return this.queue(async () => {
+      // A write would create guardrails.json and the next start would never migrate.
+      if (this.migrationFailed) throw new Error(`Guardrails migration from memory.json failed; nothing is saved until it is fixed (see ${this.migrationFailed})`);
       const state = await this.load();
       const { value, changed } = await operation(state);
       if (!changed) return value;
@@ -125,12 +129,14 @@ export class GuardrailsStore {
   /**
    * The one-time move (§3.6), queued ahead of every read and write: when guardrails.json does not exist, the
    * former memory.json (if any) and the projects' review rules become its first content and memory.json is
-   * renamed to memory.json.migrated. On failure both files stay as they are and the store runs empty.
+   * renamed to memory.json.migrated. On failure both files stay as they are, the store reads empty and refuses
+   * writes until a later migration succeeds.
    */
   migrate(projects: () => Promise<readonly Project[]>, now = () => new Date().toISOString()): Promise<MigrationResult> {
     return this.queue(async () => {
       try {
         await readFile(this.path);
+        this.migrationFailed = null;
         return "present";
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -145,12 +151,17 @@ export class GuardrailsStore {
         }
         const list = await projects();
         // Nothing to carry over: the file appears with the first write.
-        if (!memory && !list.some((p) => p.autoReview)) return "present";
+        if (!memory && !list.some((p) => p.autoReview)) {
+          this.migrationFailed = null;
+          return "present";
+        }
         await this.write(migrateToGuardrails(memory, list, now(), randomUUID));
+        this.migrationFailed = null;
         if (memory) await rename(memoryPath, `${memoryPath}.migrated`).catch((e) => logFailure("Flowly guardrails: memory.json not renamed:", e));
         return "migrated";
       } catch (error) {
-        logFailure("Flowly guardrails migration failed:", error);
+        logFailure("Flowly guardrails migration failed:", error, memoryPath);
+        this.migrationFailed = memoryPath;
         return "failed";
       }
     });

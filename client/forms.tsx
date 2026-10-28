@@ -68,6 +68,7 @@ export function ProjectForm({
   onSaved: (id: string, restored?: { restored: number; title: string }) => void;
 }) {
   const theme = useTheme();
+  const toast = useToast();
   const [project] = useState(initialProject);
   const create = useRpc(rpc.createProject),
     createLinked = useRpc(rpc.createLinkedProject),
@@ -154,8 +155,11 @@ export function ProjectForm({
               ...(source === "native" && nativeId ? { paseoProjectId: nativeId } : {}),
             });
       // projects.create turns Auto review on with 2 rounds; anything else is saved right after.
+      // The project exists now: a failed follow-up write must not leave the form open for a second Create.
       if (review.on !== newProjectReview.on || review.rounds !== newProjectReview.rounds)
-        await update({ id: result.id, revision: result.revision, autoReview: autoReviewPatch(review) });
+        await update({ id: result.id, revision: result.revision, autoReview: autoReviewPatch(review) }).catch((e) =>
+          toast.error(t("Project created, but Auto review was not saved: {error}", { error: message(e) })),
+        );
       onSaved(result.id);
     } catch (e) {
       setError(message(e));

@@ -174,7 +174,7 @@ export class MemoryService {
     const found = recallMemory(notesOf(state, project.id).map(toMemoryEntry), input);
     // Guidelines too (GUARDRAILS-SPEC §5.3); only notes count as used.
     const guidelines = recallGuidelines(state.entries, project.id, input);
-    void this.recordRecall(project.id, taskId, found.entries.map((e) => e.id), guidelines.length > 0).catch(() => undefined);
+    void this.recordRecall(project.id, taskId, found.entries.map((e) => e.id), guidelines.length > 0).catch((e) => logFailure("Flowly recall stats not recorded:", e, taskId));
     return { entries: found.entries.map(agentEntry), total: found.total, ...(guidelines.length ? { guidelines } : {}) };
   }
   private recordRecall(projectId: string, taskId: string, ids: string[], other = false) {
@@ -383,7 +383,7 @@ export class MemoryService {
     const projectId = (await this.board.read()).tasks.find((t) => t.id === taskId)?.projectId || "";
     const previous = this.queues.get(projectId) || Promise.resolve();
     const run = previous.then(() => this.execute(taskId, paseo, manual)).catch(async (e) => {
-      await this.setError(projectId, taskId, e instanceof Error ? e.message : String(e)).catch(() => undefined);
+      await this.setError(projectId, taskId, e instanceof Error ? e.message : String(e)).catch((failure) => logFailure("Flowly memory review error not recorded:", failure, taskId));
     });
     this.queues.set(projectId, run);
     await run;

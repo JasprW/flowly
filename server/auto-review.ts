@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type { PaseoApi } from "@getpaseo/client";
@@ -125,8 +125,16 @@ export async function changeBase(directory: string, baseRef: string | undefined,
 async function untrackedFiles(directory: string, git: Git): Promise<string[]> {
   return (await git(directory, ["ls-files", "--others", "--exclude-standard", "-z"])).split("\0").filter((f) => f && !f.endsWith("/"));
 }
-/** A new file's lines as `git diff` would count them; a binary file (a NUL byte in the first 8 KiB) or an unreadable one counts 0. */
+const newFileLimit = 1 << 20;
+/** A new file over 1 MiB is not read, like a binary one (§6.2); an unreadable one neither. */
+const readable = (path: string) =>
+  stat(path).then(
+    (s) => s.isFile() && s.size <= newFileLimit,
+    () => false,
+  );
+/** A new file's lines as `git diff` would count them; a binary file (a NUL byte in the first 8 KiB), one over 1 MiB or an unreadable one counts 0. */
 async function fileLines(path: string): Promise<number> {
+  if (!(await readable(path))) return 0;
   const data = await readFile(path).catch(() => null);
   if (!data?.length || data.subarray(0, 8192).includes(0)) return 0;
   let lines = 0;
@@ -164,7 +172,7 @@ export async function reviewDiff(directory: string, options: { since?: string; b
     text += "\n# New files (untracked)\n";
     for (const file of added) {
       if (text.length > diffLimit) break;
-      text += await newFileDiff(directory, file, git);
+      text += (await readable(join(directory, file))) ? await newFileDiff(directory, file, git) : `new file ${file} (over 1 MiB or unreadable, not shown)\n`;
     }
   }
   return text.length > diffLimit ? `${text.slice(0, diffLimit)}\n[diff truncated at 64 KiB]` : text;

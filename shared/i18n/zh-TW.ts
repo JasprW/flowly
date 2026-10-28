@@ -141,6 +141,7 @@ const catalog: Catalog = {
   "{n} cards": "{n} 張卡片",
   "{title} removed from the board with {cards}, but Paseo kept the project: {error}": "{title} 已從看板移除（含 {cards}），但 Paseo 保留了該專案：{error}",
   "{title} removed from the board, but Paseo kept the project: {error}": "{title} 已從看板移除，但 Paseo 保留了該專案：{error}",
+  "Project created, but Auto review was not saved: {error}": "專案已建立，但自動驗收設定未儲存：{error}",
   "{title} removed from the board with {cards} and from Paseo; files stay on disk": "{title} 已從看板和 Paseo 移除（含 {cards}）；檔案保留在磁碟上",
   "{title} removed from the board and from Paseo; files stay on disk": "{title} 已從看板和 Paseo 移除；檔案保留在磁碟上",
   "{title} removed from the board with {cards}; it stays in Paseo": "{title} 已從看板移除（含 {cards}）；仍保留在 Paseo 中",

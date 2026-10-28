@@ -99,7 +99,7 @@ export default function contribute(host: PluginServerContext) {
   // Project guardrails (GUARDRAILS-SPEC): the one-time move from memory.json and the review rules is queued ahead of every read.
   let memoryRunning: () => readonly string[] = () => [];
   const guardrails = new GuardrailsService(store, undefined, undefined, () => memoryRunning());
-  void guardrails.store.migrate(async () => (await store.read()).projects);
+  void guardrails.store.migrate(async () => (await store.read()).projects).catch((e) => logFailure("Flowly guardrails migration failed:", e));
   // The Next moves card in Paseo's own timeline (NATIVE-SESSION-SPEC §6.1).
   const nextRows = new NextMoveRows(store);
   // The language of everything AI writes (AI-LANGUAGE-SPEC §3); unreadable settings fall back along the chain.

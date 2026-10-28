@@ -141,6 +141,7 @@ const catalog: Catalog = {
   "{n} cards": {"one": "{n} карточка", "few": "{n} карточки", "many": "{n} карточек", "other": "{n} карточки"},
   "{title} removed from the board with {cards}, but Paseo kept the project: {error}": "«{title}» удалён с доски (вместе с: {cards}), но Paseo сохранил проект: {error}",
   "{title} removed from the board, but Paseo kept the project: {error}": "«{title}» удалён с доски, но Paseo сохранил проект: {error}",
+  "Project created, but Auto review was not saved: {error}": "Проект создан, но автоматическая проверка не сохранена: {error}",
   "{title} removed from the board with {cards} and from Paseo; files stay on disk": "«{title}» удалён с доски (вместе с: {cards}) и из Paseo; файлы остались на диске",
   "{title} removed from the board and from Paseo; files stay on disk": "«{title}» удалён с доски и из Paseo; файлы остались на диске",
   "{title} removed from the board with {cards}; it stays in Paseo": "«{title}» удалён с доски (вместе с: {cards}); в Paseo он остаётся",

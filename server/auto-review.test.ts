@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentFixture } from "./agent-fixture";
@@ -648,15 +648,17 @@ test("shape: a worktree card counts its own change since the merge-base plus unt
   roots.push(dir);
   await writeFile(join(dir, "fixture.txt"), Array.from({ length: 450 }, (_, i) => `line ${i}`).join("\n"));
   await writeFile(join(dir, "logo.png"), Buffer.from([0x89, 0x50, 0x00, 0x4e, 0x0a]));
+  // Over 1 MiB: one file, 0 lines, not read.
+  await writeFile(join(dir, "dump.log"), "x\n".repeat(600_000));
   const { git, calls } = recordingGit({
     "merge-base refs/heads/main HEAD": `${base}\n`,
     [`diff ${base} --numstat`]: "3\t2\tsrc/a.ts\n",
-    [untracked]: "fixture.txt\0logo.png\0",
+    [untracked]: "fixture.txt\0logo.png\0dump.log\0",
   });
   const measured = await reviewShape(dir, "refs/heads/main", git);
   expect(calls).toEqual(["merge-base refs/heads/main HEAD", `diff ${base} --numstat`, untracked]);
-  expect(measured!.shape).toEqual({ files: 3, lines: 455, size: "l" });
-  expect([...measured!.paths].sort()).toEqual(["fixture.txt", "logo.png", "src/a.ts"]);
+  expect(measured!.shape).toEqual({ files: 4, lines: 455, size: "l" });
+  expect([...measured!.paths].sort()).toEqual(["dump.log", "fixture.txt", "logo.png", "src/a.ts"]);
 });
 
 test("shape: a directory card, or a base ref git cannot resolve, keeps git diff HEAD plus the last five commits, with untracked files (§6.2)", async () => {
@@ -673,25 +675,32 @@ test("shape: a directory card, or a base ref git cannot resolve, keeps git diff 
 });
 
 test("review diff: the card's branch since the merge-base, then untracked files under their own heading; round 2 adds them too (§6.3)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-diff-"));
+  roots.push(dir);
+  await mkdir(join(dir, "docs"));
+  await writeFile(join(dir, "docs/new.md"), "hello\n");
+  await writeFile(join(dir, "dump.log"), "x".repeat((1 << 20) + 1));
   const answers = {
     "merge-base main HEAD": `${base}\n`,
     [`diff ${base} --no-color`]: "diff --git a/src/a.ts b/src/a.ts\n",
     "diff aaaaaaaaaaaa --no-color": "diff --git a/src/c.ts b/src/c.ts\n",
-    [untracked]: "docs/new.md\0",
+    [untracked]: "docs/new.md\0dump.log\0",
     "diff --no-index --no-color -- /dev/null docs/new.md": { exit1: "diff --git a/docs/new.md b/docs/new.md\n+hello\n" },
   };
   const worktree = recordingGit(answers);
-  const text = await reviewDiff("/w", { baseRef: "main" }, worktree.git);
+  const text = await reviewDiff(dir, { baseRef: "main" }, worktree.git);
   expect(worktree.calls).toEqual(["merge-base main HEAD", `diff ${base} --no-color`, untracked, "diff --no-index --no-color -- /dev/null docs/new.md"]);
   expect(text).toContain(`# Changes on this card's branch (git diff ${base})\ndiff --git a/src/a.ts`);
   expect(text).toContain("# New files (untracked)\ndiff --git a/docs/new.md b/docs/new.md\n+hello");
   expect(text).not.toContain("# Recent commits");
+  // Over 1 MiB: named, never diffed.
+  expect(text).toContain("new file dump.log (over 1 MiB or unreadable, not shown)");
   const round2 = recordingGit(answers);
-  const later = await reviewDiff("/w", { since: "aaaaaaaaaaaa", baseRef: "main" }, round2.git);
+  const later = await reviewDiff(dir, { since: "aaaaaaaaaaaa", baseRef: "main" }, round2.git);
   expect(round2.calls).toEqual(["diff aaaaaaaaaaaa --no-color", untracked, "diff --no-index --no-color -- /dev/null docs/new.md"]);
   expect(later).toContain("# New files (untracked)\ndiff --git a/docs/new.md");
   // A directory card: uncommitted changes and the last five commits, then the new files.
   const directory = recordingGit(answers);
-  expect(await reviewDiff("/w", {}, directory.git)).toContain("# Recent commits\n\n# New files (untracked)\ndiff --git a/docs/new.md");
+  expect(await reviewDiff(dir, {}, directory.git)).toContain("# Recent commits\n\n# New files (untracked)\ndiff --git a/docs/new.md");
   expect(directory.calls.slice(0, 3)).toEqual(["diff HEAD --no-color", "log -5 -p --no-color --format=commit %h %s", untracked]);
 });

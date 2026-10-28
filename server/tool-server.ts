@@ -528,7 +528,7 @@ export class ToolServer {
         operationId,
       );
       // The injected memory counts as used by this card (PROJECT-MEMORY-SPEC §3.2).
-      void this.agents.memory?.markUsed(ctx.memoryIds, taskId).catch(() => undefined);
+      void this.agents.memory?.markUsed(ctx.memoryIds, taskId).catch((e) => logFailure("Flowly note use not recorded:", e, taskId));
       const existing = await paseo.agents.ref(identity.agentId).refresh();
       if (
         existing?.agent &&
@@ -557,7 +557,7 @@ export class ToolServer {
     if (current.task.archivedAt || current.project.archivedAt)
       throw new ToolError("ARCHIVED", "Task/project is archived.");
     const ctx = await new BoardService(this.store).context(taskId, paseo);
-    void this.agents.memory?.markUsed(ctx.memoryIds, taskId).catch(() => undefined);
+    void this.agents.memory?.markUsed(ctx.memoryIds, taskId).catch((e) => logFailure("Flowly note use not recorded:", e, taskId));
     return this.prepare(identity, ctx.context, "cli");
   }
   async sessionContext(

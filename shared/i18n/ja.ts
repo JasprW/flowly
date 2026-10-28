@@ -141,6 +141,7 @@ const catalog: Catalog = {
   "{n} cards": "カード {n} 枚",
   "{title} removed from the board with {cards}, but Paseo kept the project: {error}": "{title} をボードから削除しました（{cards}を含む）が、Paseo はプロジェクトを保持しました：{error}",
   "{title} removed from the board, but Paseo kept the project: {error}": "{title} をボードから削除しましたが、Paseo はプロジェクトを保持しました：{error}",
+  "Project created, but Auto review was not saved: {error}": "プロジェクトを作成しましたが、自動レビューの設定は保存されませんでした：{error}",
   "{title} removed from the board with {cards} and from Paseo; files stay on disk": "{title} をボードと Paseo から削除しました（{cards}を含む）。ファイルはディスクに残ります",
   "{title} removed from the board and from Paseo; files stay on disk": "{title} をボードと Paseo から削除しました。ファイルはディスクに残ります",
   "{title} removed from the board with {cards}; it stays in Paseo": "{title} をボードから削除しました（{cards}を含む）。Paseo には残ります",

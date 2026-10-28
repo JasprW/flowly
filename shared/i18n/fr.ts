@@ -141,6 +141,7 @@ const catalog: Catalog = {
   "{n} cards": {"one": "{n} carte", "other": "{n} cartes"},
   "{title} removed from the board with {cards}, but Paseo kept the project: {error}": "{title} retiré du tableau (avec {cards}), mais Paseo a conservé le projet : {error}",
   "{title} removed from the board, but Paseo kept the project: {error}": "{title} retiré du tableau, mais Paseo a conservé le projet : {error}",
+  "Project created, but Auto review was not saved: {error}": "Projet créé, mais la revue automatique n’a pas été enregistrée : {error}",
   "{title} removed from the board with {cards} and from Paseo; files stay on disk": "{title} retiré du tableau (avec {cards}) et de Paseo ; les fichiers restent sur le disque",
   "{title} removed from the board and from Paseo; files stay on disk": "{title} retiré du tableau et de Paseo ; les fichiers restent sur le disque",
   "{title} removed from the board with {cards}; it stays in Paseo": "{title} retiré du tableau (avec {cards}) ; il reste dans Paseo",

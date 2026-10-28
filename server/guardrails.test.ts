@@ -93,15 +93,33 @@ test("migration (§3.6): memory.json and the review rules move once; memory.json
   expect((await store.read()).entries).toHaveLength(4);
 });
 
-test("a failed migration leaves both files as they were and the store runs empty", async () => {
+test("a failed migration leaves both files as they were; the store reads empty, refuses writes, and a later migration still runs", async () => {
   const x = await setup();
   const dir = x.store.directory;
   await writeFile(join(dir, "memory.json"), "{ broken");
   const store = guardrailsStore(dir);
-  expect(await store.migrate(async () => (await x.store.read()).projects)).toBe("failed");
+  const projects = async () => (await x.store.read()).projects;
+  expect(await store.migrate(projects)).toBe("failed");
   expect(await readFile(join(dir, "memory.json"), "utf8")).toBe("{ broken");
-  expect(await exists(join(dir, "guardrails.json"))).toBe(false);
   expect((await store.read()).entries).toEqual([]);
+  // A write would create guardrails.json and the next start would skip the migration.
+  await expect(store.update(() => ({ value: undefined, changed: true }))).rejects.toThrow(`Guardrails migration from memory.json failed; nothing is saved until it is fixed (see ${join(dir, "memory.json")})`);
+  expect(await exists(join(dir, "guardrails.json"))).toBe(false);
+  // The next start, with memory.json fixed, migrates and writes work again.
+  const stamp = new Date().toISOString();
+  const memory: MemoryState = {
+    version: 1,
+    revision: 1,
+    entries: [{ id: "m1", projectId: "p", kind: "pitfall", title: "Two modals freeze Paseo", body: "", tags: [], keywords: [], pinned: false, status: "candidate", source: { by: "agent", taskId: "t" }, revision: 1, createdAt: stamp, updatedAt: stamp }],
+    errors: [],
+    retros: [],
+    recallStats: {},
+    clues: [],
+  };
+  await writeFile(join(dir, "memory.json"), JSON.stringify(memory));
+  expect(await store.migrate(projects)).toBe("migrated");
+  expect((await store.read()).entries.map((e) => e.id)).toEqual(["m1"]);
+  await store.update(() => ({ value: undefined, changed: true }));
 });
 
 test("learning (§4.3): new opens an item; the same on this card counts; the same on another card promotes both into a guideline", async () => {
