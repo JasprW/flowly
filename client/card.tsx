@@ -560,7 +560,6 @@ function CardSignals({
       <Signal
         key="workpad"
         icon="ListChecks"
-        color={workpad.kind === "failed" ? colors.statusDanger : workpad.kind === "delivered" || workpad.kind === "stale" ? colors.statusWarning : undefined}
         text={workpadText(workpad)}
       />,
     );
@@ -619,18 +618,7 @@ function Meta({ label, icon, text, color }: { label: string; icon: ReactNode; te
   );
 }
 
-/** The card's workpad signal (WORKPAD-SPEC §6.1). */
+/** The card's workpad signal (GUARDRAILS-SPEC §7.1). */
 function workpadText(signal: WorkpadSignal) {
-  switch (signal.kind) {
-    case "delivered":
-      return tn(signal.count, "Delivered with {n} open item", "Delivered with {n} open items");
-    case "failed":
-      return t("Checks {done}/{total} · {failed} failed", { done: signal.done, total: signal.total, failed: signal.count });
-    case "stale":
-      return t("Checks {done}/{total} · out of date", { done: signal.done, total: signal.total });
-    case "checks":
-      return t("Checks {done}/{total}", { done: signal.done, total: signal.total });
-    case "acceptance":
-      return t("Acceptance {done}/{total}", { done: signal.done, total: signal.total });
-  }
+  return t("Acceptance {done}/{total}", { done: signal.done, total: signal.total });
 }

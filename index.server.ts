@@ -6,7 +6,7 @@ import { BoardService, dataDirectory, migrateLegacyPluginData, paseoHome } from 
 import { readPaseoVersion } from "./server/paseo-version";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
-import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, modelSettingsValues, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
+import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { readAttentionCount } from "./server/attention-count";
@@ -35,18 +35,13 @@ import { linkedCardCounts } from "./shared/connectors";
 import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
 import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./server/progress-rules";
-import { AutoReviewService, applyReviewDraft, discardReviewDraft, readConversation } from "./server/auto-review";
-import { ReviewHistory } from "./server/review-history";
-import { backgroundWorkspaces } from "./server/background-workspace";
-import { daemonRemoveAgent } from "./server/summarizer-remove";
-import { detectProjectCommands } from "./server/review-detect";
+import { AutoReviewService, readConversation } from "./server/auto-review";
 import { llmReviewer } from "./server/review-session";
-import { hasLlmRules, reviewSetupInstructions, reviewSetupTitle } from "./shared/auto-review";
 import { NextMoveRows } from "./server/next-move-rows";
 import { SessionInsightService, SessionInsightStore } from "./server/session-insights";
 import { SummaryService, SummaryStore } from "./server/summaries";
 import { UsageService } from "./server/usage";
-import { AUTO_MODELS, summarySettings, summarySettingsValues, summaryModelsOf } from "./shared/summary";
+import { summarySettings, summarySettingsValues, summaryModelsOf } from "./shared/summary";
 import { enabledStatuses, laneEnabled } from "./shared/lanes";
 import { FlowLog } from "./server/flow-log";
 import { ProjectFolders, snapshotPath } from "./server/project-folder";
@@ -60,6 +55,8 @@ import { startedByUser, turnPick, userTexts } from "./shared/agent-habits";
 import { turnTimeline } from "./server/turn-timeline";
 import { MemoryService, setMemoryEverywhere, memoryOn } from "./server/memory";
 import { GuardrailsService } from "./server/guardrails";
+import { guardrailsLedger } from "./shared/guardrails";
+import { validZone } from "./shared/insights";
 import { SearchService } from "./server/search";
 import { POSTHOG_KEY, TelemetryService } from "./server/telemetry";
 import { FLOWLY_VERSION } from "./shared/version";
@@ -190,9 +187,6 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.runWorkflowInsights, (input, { paseo }) => workflow.run(input.projectId, paseo, true));
   server.handle(rpc.setWorkflowFinding, (input) => workflow.setStatus(input));
   server.handle(rpc.installSkill, (input) => workflow.installSkill(input));
-  server.handle(rpc.addReviewCheck, (input) => workflow.addReviewCheck(input.findingId));
-  server.handle(rpc.pauseReviewCheck, (input) => workflow.pauseReviewCheck(input.findingId));
-  server.handle(rpc.dismissReviewNudge, (input) => workflow.dismissReviewNudge(input.projectId));
   server.handle(rpc.workflowInsightsOverview, () => workflow.overview());
   server.handle(rpc.purgeWorkflowCommands, async () => ({ deletedProjects: await workflow.purge() }));
   const service = new BoardService(store);
@@ -307,6 +301,10 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.updateGuardrail, (input) => guardrails.update(input));
   server.handle(rpc.deleteGuardrail, (input) => guardrails.remove(input));
   server.handle(rpc.detectGuardrails, (input) => guardrails.detect(input.projectId));
+  server.handle(rpc.guardrailsInsights, async ({ projectId, tz }) => {
+    const [state, entries] = await Promise.all([guardrails.store.read(), flow.read(projectId)]);
+    return guardrailsLedger({ flow: entries, entries: state.entries, projectId, now: Date.now(), tz: validZone(tz) });
+  });
   server.handle(rpc.retroGuardrails, (input, { paseo }) => memory.manual(input.taskId, paseo));
   // Unreadable settings keep the default (on).
   tools.agents.ideasOn = async () => {
@@ -527,84 +525,14 @@ export default function contribute(host: PluginServerContext) {
     },
     send: (message, api) => composer.push(message, api),
     conversation: readConversation,
-    // L3 (§12.4): a temporary session judges the LLM rules, hard-deleted after like the summarizer.
+    guardrails,
+    // A temporary session judges the built-in check, guidelines and card items, hard-deleted after like the summarizer.
     llm: llmReviewer({
       reviewModel: async () => (await summaries.settings()).reviewModel ?? "",
       summaryModels: async () => summaryModelsOf(await summaries.settings()),
     }),
   });
   tools.agents.onDelivered = (delivery, api) => void reviews.delivered(delivery, api);
-  // History analysis (AUTO-REVIEW-SPEC §6.2): a temporary session in the project's background workspace, hard-deleted after.
-  const reviewHistory = new ReviewHistory(store, flow, {
-    background: backgroundWorkspaces(store.directory),
-    removeAgent: daemonRemoveAgent(),
-    model: (api) => workflow.pickModel(api),
-    summaries: async () => (await summaries.store.read()).entries,
-    memory: async () => memory.memoryState(),
-    memoryOn: (project) => memoryOn(project),
-  });
-  server.handle(rpc.detectReviewCommands, async (input) => {
-    const project = (await store.read()).projects.find((p) => p.id === input.projectId && !p.archivedAt);
-    if (!project) throw new Error("Project not found.");
-    return { commands: await detectProjectCommands(project.primaryPath) };
-  });
-  server.handle(rpc.analyzeReviewHistory, (input, { paseo }) => reviewHistory.analyze(input.projectId, paseo));
-  server.handle(rpc.reviewAnalysisStatus, (input) => reviewHistory.status(input.projectId));
-  server.handle(rpc.applyReviewDraft, (input) => applyReviewDraft(store, input));
-  server.handle(rpc.discardReviewDraft, (input) => discardReviewDraft(store, input));
-  // Set up with AI (§12.2): one setup card per project; the first time, its session starts with the setup instructions.
-  server.handle(rpc.reviewSetupCard, async (input, { paseo }) => {
-    tools.attach(paseo);
-    const board = await store.read();
-    const project = board.projects.find((p) => p.id === input.projectId && !p.archivedAt);
-    if (!project) throw new Error("Project not found.");
-    const existing = board.tasks.find((t) => t.projectId === project.id && t.reviewSetup && !t.archivedAt);
-    if (existing) return { taskId: existing.id, created: false };
-    const task = await service.createTask(
-      {
-        projectId: project.id,
-        operationId: `review-setup-${project.id}-${Date.now()}`,
-        title: reviewSetupTitle,
-        description: "Set up this project's auto review rules with the agent. Apply or discard its draft in the project settings.",
-        status: laneEnabled(project, "design") ? "design" : enabledStatuses(project)[0],
-        priority: "normal",
-        type: "chore",
-        mode: "directory",
-        baseRef: "",
-      },
-      paseo,
-    );
-    await store.mutate((b) => {
-      const t = b.tasks.find((x) => x.id === task.id);
-      if (t) t.reviewSetup = true;
-    });
-    try {
-      const state = await modelPrefs.read().catch(() => null);
-      const global = modelSettingsValues(state?.status === "ready" ? state.values : {});
-      const chosen = project.agentModel ?? (global.defaultProvider && global.defaultModel ? { provider: global.defaultProvider, model: global.defaultModel, ...(global.defaultMode ? { mode: global.defaultMode } : {}), ...(global.defaultThinking ? { thinking: global.defaultThinking } : {}) } : null);
-      const provider = chosen ? `${chosen.provider}/${chosen.model}` : AUTO_MODELS[0];
-      const prep = await tools.prepareSession(task.id, `review-setup-session-${task.id}`, paseo);
-      await paseo.workspaces.ref(task.workspaceId).agents.create({
-        agentId: prep.agentId,
-        idempotencyKey: `ultra-kanban-session:${prep.agentId}`,
-        config: {
-          provider,
-          systemPrompt: prep.instructions,
-          mcpServers: { flowly: prep.mcp },
-          ...(chosen?.mode ? { modeId: chosen.mode } : {}),
-          ...(chosen?.thinking ? { thinkingOptionId: chosen.thinking } : {}),
-        },
-        env: { FLOWLY_CONTEXT_FILE: prep.contextFile, FLOWLY_CLI: prep.cliPath, FLOWLY_SKILL: prep.skillPath },
-        title: reviewSetupTitle,
-        labels: { "flowly-task": task.id },
-        prompt: reviewSetupInstructions(),
-      });
-      return { taskId: task.id, created: true };
-    } catch (e) {
-      logFailure("Flowly auto review setup session did not start:", e, task.id);
-      return { taskId: task.id, created: true, sessionError: e instanceof Error ? e.message : String(e) };
-    }
-  });
   void reviews.recover().catch((e) => logFailure("Flowly auto review recovery failed:", e));
   server.handle(rpc.rerunReview, (input, { paseo }) => reviews.rerun(input.taskId, paseo));
   server.handle(rpc.listConnections, async () => {
@@ -642,9 +570,7 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.deleteArtifact, (input) => artifacts.delete(input));
   server.handle(rpc.artifactStatus, (input, { paseo }) => artifacts.status(input, paseo));
   server.handle(rpc.previewArtifact, (input, { paseo }) => artifacts.preview(input, paseo));
-  server.handle(rpc.checkWorkpad, (input, { paseo }) => workpads.check(input, paseo));
-  server.handle(rpc.resolveConfusion, (input) => workpads.resolveConfusion(input));
-  server.handle(rpc.refreshWorkpad, (input, { paseo }) => workpads.refresh(input, paseo));
+  server.handle(rpc.checkWorkpad, (input) => workpads.check(input));
   server.handle(rpc.deleteTask, async (input, { paseo }) => {
     const archived = input.archive
       ? await wrapups.run({ ...input, keepCard: true, purpose: "delete" }, paseo)
@@ -771,8 +697,8 @@ export default function contribute(host: PluginServerContext) {
       .read()
       .then((board) => memory.recordTurn(identity, timeline, board))
       .catch((e) => logFailure("Flowly memory clue not recorded:", e));
-    // The session's plan and the workspace HEAD for the workpad (WORKPAD-SPEC §2.2, §5.2); never blocks the hook.
-    void workpads.recordTurn(identity, timeline, paseo).catch((e) =>
+    // The session's plan for the workpad (WORKPAD-SPEC §2.2); never blocks the hook.
+    void workpads.recordTurn(identity, timeline).catch((e) =>
       logFailure("Kanban workpad plan not recorded:", e),
     );
     // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
@@ -841,9 +767,12 @@ export default function contribute(host: PluginServerContext) {
           workflowInsights: workflowState.enabled,
           summary: summary.summaryEnabled,
           autoReview: projects.some((p) => !!p.autoReview?.enabled),
-          autoReviewLlm: projects.some((p) => hasLlmRules(p)),
         },
         projects: projects.length,
+        guardrails: await guardrails.store
+          .read()
+          .then((g) => g.entries.filter((e) => e.kind === "guideline" && e.state === "active" && live.has(e.projectId)).length)
+          .catch(() => 0),
         cardsOpen: board.tasks.filter((t) => live.has(t.projectId) && !t.archivedAt && t.status !== "done" && t.status !== "cancelled").length,
       };
     },

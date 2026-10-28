@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { autoReviewRuns, continuesRound, conversationForReview, hasLlmRules, joinCommand, reviewChecks, splitCommand, visibleReview } from "./auto-review";
-import type { BoardEvent, Review } from "./model";
+import { autoReviewOf, autoReviewRuns, continuesRound, conversationForReview, hasEvidence, joinCommand, reviewContext, reviewProgress, reviewVerdict, reworkMessage, splitCommand, visibleReview } from "./auto-review";
+import { projectSchema, reviewSchema, type BoardEvent, type Review, type ReviewItem } from "./model";
 
 const review = (state: Review["state"], extra: Partial<Review> = {}): Review => ({
   trigger: { eventId: "e", agentId: "a", from: "development" },
@@ -9,7 +9,7 @@ const review = (state: Review["state"], extra: Partial<Review> = {}): Review => 
   state,
   fingerprint: { taskRevision: 1, workpadRevision: 1, dirty: false },
   shared: true,
-  rules: [],
+  items: [],
   startedAt: "2026-10-28T00:00:00.000Z",
   finishedAt: "2026-10-28T00:01:00.000Z",
   ...extra,
@@ -51,23 +51,105 @@ test("the card shows a review only where that review left it", () => {
   expect(visibleReview({ status: "in_review", review: review("passed"), archivedAt: "x" })).toBeNull();
 });
 
-test("P1 checks read as command rules with slug ids; effective rules honour types and off", async () => {
-  const { autoReviewOf, effectiveRules, draftDiff, autoReviewRuns } = await import("./auto-review");
-  const project = { autoReview: { enabled: true, maxRounds: 2, checks: [{ name: "Unit tests", argv: ["npm", "test"], timeoutSec: 30 }, { name: "Unit tests", argv: ["npm", "run", "x"] }] } };
-  expect(autoReviewOf(project).rules).toEqual([
-    { id: "unit-tests", name: "Unit tests", kind: "command", argv: ["npm", "test"], timeoutSec: 30 },
-    { id: "unit-tests-2", name: "Unit tests", kind: "command", argv: ["npm", "run", "x"] },
+const item = (id: string, kind: ReviewItem["kind"], state: ReviewItem["state"], extra: Partial<ReviewItem> = {}): ReviewItem => ({ id, kind, name: id, gating: true, state, ...extra });
+
+test("settings narrow to the switch and the rounds; stored rules, goal and guidance are kept on disk but ignored (GUARDRAILS-SPEC §8)", () => {
+  const stored = { enabled: true, maxRounds: 3, rules: [{ id: "a", name: "A", kind: "command", argv: ["x"] }], goal: false, guidance: "g", checks: [] };
+  expect(autoReviewOf({ autoReview: stored })).toEqual({ enabled: true, maxRounds: 3 });
+  expect(autoReviewOf(null)).toEqual({ enabled: false, maxRounds: 2 });
+  // Every delivery is reviewed while the switch is on: the built-in check always runs.
+  expect(autoReviewRuns({ autoReview: { enabled: true, maxRounds: 2 } })).toBe(true);
+  expect(autoReviewRuns({ autoReview: { enabled: false, maxRounds: 2 } })).toBe(false);
+  // A project saved before guardrails still reads; a reviewDraft is dropped.
+  const project = projectSchema.parse({ id: "p", title: "P", description: "", paseoProjectId: "n", primaryPath: "/p", repos: ["/p"], revision: 1, createdAt: "x", updatedAt: "x", archivedAt: null, autoReview: stored, reviewDraft: { rules: [] } });
+  expect(project.autoReview?.enabled).toBe(true);
+  expect(project).not.toHaveProperty("reviewDraft");
+});
+
+test("a review written before guardrails reads its rules as items", () => {
+  const old = { ...review("rework"), items: undefined, rules: [
+    { id: "unit", kind: "command", name: "Unit", state: "failed", argv: ["npm", "test"] },
+    { id: "goal", kind: "llm", name: "Does what you asked", state: "passed" },
+    { id: "i18n", kind: "llm", name: "i18n", state: "na" },
+  ] };
+  const read = reviewSchema.parse(old);
+  expect(read.items.map((i) => [i.id, i.kind, i.gating])).toEqual([["unit", "command", true], ["goal", "goal", true], ["i18n", "guideline", true]]);
+  expect(reviewSchema.parse({ ...review("passed"), items: undefined }).items).toEqual([]);
+});
+
+test("the verdict counts gating items only: observing commands never decide, disputed findings are not failures (§6.3)", () => {
+  expect(reviewVerdict([item("c", "command", "failed", { gating: false }), item("goal", "goal", "passed")])).toBe("passed");
+  expect(reviewVerdict([item("c", "command", "unavailable", { gating: false }), item("goal", "goal", "na")])).toBe("passed");
+  expect(reviewVerdict([item("goal", "goal", "passed"), item("g", "guideline", "disputed")])).toBe("passed");
+  expect(reviewVerdict([item("goal", "goal", "passed"), item("g", "guideline", "failed")])).toBe("failed");
+  expect(reviewVerdict([item("c", "command", "unavailable"), item("goal", "goal", "skipped")])).toBe("unavailable");
+  expect(reviewVerdict([item("c", "command", "failed"), item("x", "command", "unavailable")])).toBe("failed");
+});
+
+test("B1: a fail stands with a file in the diff, an existing repository file, or a quote", () => {
+  const diff = new Set(["shared/a.ts"]);
+  const existing = new Set(["shared/i18n/zh-TW.ts"]);
+  expect(hasEvidence({ file: "shared/a.ts" }, diff, existing)).toBe(true);
+  expect(hasEvidence({ file: "shared/i18n/zh-TW.ts" }, diff, existing)).toBe(true);
+  expect(hasEvidence({ quote: "the card asked for a Rerun button" }, diff, existing)).toBe(true);
+  expect(hasEvidence({ file: "nowhere.ts" }, diff, existing)).toBe(false);
+  expect(hasEvidence({ quote: "  " }, diff, existing)).toBe(false);
+  expect(hasEvidence({}, diff, existing)).toBe(false);
+});
+
+test("reviewProgress: passed (na included) and failed of the gating items; what runs now (§7.1.1)", () => {
+  const running = (items: ReviewItem[]) => reviewProgress({ state: "running", items });
+  expect(running([item("c", "command", "queued"), item("goal", "goal", "queued")])).toEqual({ passed: 0, failed: 0, total: 2, phase: "starting" });
+  expect(running([item("c", "command", "running", { name: "npm test" }), item("o", "command", "queued", { gating: false }), item("goal", "goal", "queued")])).toEqual({
+    passed: 0,
+    failed: 0,
+    total: 2,
+    phase: "running",
+    current: "npm test",
+  });
+  expect(running([item("c", "command", "passed"), item("o", "command", "failed", { gating: false }), item("goal", "goal", "running"), item("g", "guideline", "running"), item("d", "item", "disputed")])).toEqual({
+    passed: 1,
+    failed: 0,
+    total: 3,
+    phase: "judging",
+    judging: 2,
+  });
+  expect(running([item("c", "command", "passed"), item("x", "command", "queued")]).phase).toBe("running");
+  expect(reviewProgress({ state: "rework", items: [item("c", "command", "passed"), item("goal", "goal", "na"), item("g", "guideline", "failed")] })).toEqual({ passed: 2, failed: 1, total: 3, phase: "done" });
+});
+
+test("the rework message lists what failed in the user's words, with ids to dispute (§6.5)", () => {
+  const r = review("rework", {
+    items: [
+      item("c1", "command", "passed", { argv: ["npm", "run", "typecheck"] }),
+      item("c2", "command", "passed", { argv: ["npm", "test"] }),
+      item("o", "command", "failed", { gating: false, argv: ["npm", "run", "test:e2e"] }),
+      item("g1", "guideline", "failed", { name: "Every new UI string is in all catalogs", detail: 'zh-TW.ts has no entry for "Review passed"', file: "shared/i18n/zh-TW.ts", line: 412 }),
+      item("goal", "goal", "failed", { name: "Does what you asked", detail: "the card asked for a Rerun button; none was added" }),
+      item("g2", "guideline", "passed"),
+    ],
+  });
+  const text = reworkMessage(r, new Map([["g1", "新文案也要进所有语言"]]));
+  expect(text.split("\n")).toEqual([
+    "[Flowly auto review · rework 1/2]",
+    "Commands: 2/2 passed",
+    '✗ "新文案也要进所有语言" — zh-TW.ts has no entry for "Review passed" (shared/i18n/zh-TW.ts:412) [id: g1]',
+    "✗ Does what you asked — the card asked for a Rerun button; none was added [id: goal]",
+    "Fix these, rerun the checks, update the acceptance list and deliver to In review again. If a finding is wrong, deliver with disputes=[{id, reason}].",
   ]);
-  const rules = { autoReview: { enabled: true, maxRounds: 2, rules: [
-    { id: "a", name: "A", kind: "command" as const, argv: ["a"] },
-    { id: "b", name: "B", kind: "command" as const, argv: ["b"], types: ["bugfix" as const] },
-    { id: "c", name: "C", kind: "llm" as const, prompt: "p", off: true as const },
-  ] } };
-  expect(effectiveRules(rules, { type: "feature" }).map((r) => r.id)).toEqual(["a"]);
-  expect(effectiveRules(rules, { type: "bugfix" }).map((r) => r.id)).toEqual(["a", "b"]);
-  expect(effectiveRules(rules, {}).map((r) => r.id)).toEqual(["a", "b"]);
-  expect(autoReviewRuns(rules, { type: "feature", reviewSetup: true })).toBe(false);
-  expect(draftDiff(rules.autoReview.rules, [{ id: "a", name: "A2", kind: "command", argv: ["a"] }, { id: "d", name: "D", kind: "llm", prompt: "q" }])).toEqual({ added: ["d"], changed: ["a"], removed: ["b", "c"] });
+  const skipped = reworkMessage(review("rework", { items: [item("c", "command", "failed", { argv: ["npm", "test"], exitCode: 1, tail: "1 failing" }), item("goal", "goal", "skipped")] }));
+  expect(skipped).toContain("✗ c (npm test) exited 1. [id: c]");
+  expect(skipped).toContain("    1 failing");
+  expect(skipped).toContain("Review: skipped (a command failed)");
+});
+
+test("get_task's review lists items with kind, gating and the dispute reason; no fingerprint", () => {
+  const ctx = reviewContext(review("passed", { items: [item("o", "command", "failed", { gating: false, argv: ["npm", "test"] }), item("g", "guideline", "disputed", { disputeReason: "not this card" })] }))!;
+  expect(ctx.items).toEqual([
+    { id: "o", kind: "command", name: "o", gating: false, state: "failed", command: "npm test" },
+    { id: "g", kind: "guideline", name: "g", gating: true, state: "disputed", disputeReason: "not this card" },
+  ]);
+  expect(ctx).not.toHaveProperty("fingerprint");
 });
 
 test("P3: the conversation the built-in check reads drops rework messages and injections, keeps the newest within limits", () => {
@@ -89,15 +171,4 @@ test("P3: the conversation the built-in check reads drops rework messages and in
   const big = conversationForReview(Array.from({ length: 12 }, (_, i) => ({ at: `t${String(i).padStart(2, "0")}`, text: String(i % 10).repeat(1500) })));
   expect(big.join("").length).toBeLessThanOrEqual(12_000);
   expect(big.at(-1)).toBe("1".repeat(1500));
-});
-
-test("P3: the built-in check comes first and counts as a judgement check; paused, it is gone", () => {
-  const project = { autoReview: { enabled: true, maxRounds: 2, rules: [{ id: "a", name: "A", kind: "command" as const, argv: ["x"] }] } };
-  expect(reviewChecks(project, { type: "feature" }).map((r) => r.id)).toEqual(["goal", "a"]);
-  expect(hasLlmRules(project)).toBe(true);
-  const off = { autoReview: { ...project.autoReview, goal: false } };
-  expect(reviewChecks(off, null).map((r) => r.id)).toEqual(["a"]);
-  expect(hasLlmRules(off)).toBe(false);
-  expect(autoReviewRuns({ autoReview: { enabled: true, maxRounds: 2, rules: [], goal: false } }, {})).toBe(false);
-  expect(autoReviewRuns({ autoReview: { enabled: true, maxRounds: 2, rules: [] } }, {})).toBe(true);
 });

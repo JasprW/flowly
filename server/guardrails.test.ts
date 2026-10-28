@@ -40,7 +40,7 @@ function review(size: "s" | "m" | "l") {
     state: "passed" as const,
     fingerprint: { taskRevision: 1, workpadRevision: 1, dirty: false },
     shared: false,
-    rules: [],
+    items: [],
     shape: { files: 1, lines: size === "s" ? 10 : 100, size },
     startedAt: at,
   };
@@ -394,4 +394,67 @@ test("an invalid guardrails.json is preserved and reported, never reset", async 
   await writeFile(join(x.store.directory, "guardrails.json"), "[]");
   await expect(x.guardrails.create({ projectId: "p", kind: "note", noteKind: "pitfall", text: "x" })).rejects.toThrow("preserved");
   expect(await readFile(join(x.store.directory, "guardrails.json"), "utf8")).toBe("[]");
+});
+
+test("phase B surface: the removed RPCs are gone, insights.guardrails exists; project settings take only enabled and maxRounds (§7.5, §8)", async () => {
+  const rpc = await import("../shared/rpc");
+  const { projectEdit } = await import("../shared/model");
+  const names = Object.values(rpc).flatMap((v) => (v && typeof v === "object" && typeof (v as { name?: unknown }).name === "string" ? [(v as { name: string }).name] : []));
+  for (const gone of [
+    "reviews.detect-commands",
+    "reviews.analyze-history",
+    "reviews.analysis-status",
+    "reviews.apply-draft",
+    "reviews.discard-draft",
+    "reviews.setup-card",
+    "insights.add-review-check",
+    "insights.pause-review-check",
+    "insights.dismiss-review-nudge",
+    "workpads.resolve-confusion",
+    "workpads.refresh",
+  ])
+    expect(names).not.toContain(gone);
+  for (const kept of ["insights.guardrails", "reviews.rerun", "workpads.check", "guardrails.detect"]) expect(names).toContain(kept);
+  expect(projectEdit.safeParse({ id: "p", revision: 1, autoReview: { enabled: true, maxRounds: 2 } }).success).toBe(true);
+  for (const extra of [{ rules: [] }, { goal: false }, { guidance: "g" }, { checks: [] }])
+    expect(projectEdit.safeParse({ id: "p", revision: 1, autoReview: { enabled: true, maxRounds: 2, ...extra } }).success).toBe(false);
+});
+
+test("weekly helpers: a command's log keys in every package manager's spelling; a gone script or make target (§4.5)", async () => {
+  const { commandKeys, scriptMissing, usageCards } = await import("./guardrails");
+  expect(commandKeys(["npm", "run", "test"])).toEqual(expect.arrayContaining(["npm run test", "npm test", "pnpm test", "yarn test", "bun run test"]));
+  expect(commandKeys(["pnpm", "run", "test:e2e"])).toEqual(expect.arrayContaining(["npm run test:e2e", "yarn test:e2e"]));
+  expect(commandKeys(["go", "vet", "./..."])).toEqual(["go vet"]);
+  const record = (taskId: string, actions: string[]) => ({ id: `${taskId}${actions[0]}`, at: new Date().toISOString(), taskId, agentId: "a", lane: "development", provider: "claude", status: "completed" as const, actions, explore: 0 });
+  expect(usageCards(["npm", "run", "lint"], [record("a", ["npm run lint"]), record("b", ["yarn lint"]), record("b", ["pnpm run lint"]), record("c", ["npm test"])])).toBe(2);
+  const names = { scripts: new Set(["test", "lint"]), targets: new Set(["check"]) };
+  expect(scriptMissing(["npm", "run", "typecheck"], names)).toBe(true);
+  expect(scriptMissing(["npm", "test"], names)).toBe(false);
+  expect(scriptMissing(["make", "test"], names)).toBe(true);
+  expect(scriptMissing(["make", "check"], names)).toBe(false);
+  expect(scriptMissing(["cargo", "test"], names)).toBe(false);
+  // Unreadable package.json: nothing counts as missing.
+  expect(scriptMissing(["npm", "run", "typecheck"], { scripts: null, targets: null })).toBe(false);
+});
+
+test("reviewInput: commands always; guidelines in scope and the card's open items only while Guardrails is on, with the user's words", async () => {
+  const x = await setup();
+  await x.guardrails.store.update((state) => {
+    state.entries.push(
+      entry("g-in", { scope: { types: ["feature"], sizes: ["m"] }, sources: [{ taskId: "old", at: new Date().toISOString(), quote: "earlier words" }, { taskId: "u", at: new Date().toISOString(), quote: "latest words" }] }),
+      entry("g-out", { scope: { types: ["feature"], sizes: ["l"] } }),
+      { ...entry("c-obs"), kind: "command", text: "E2E", argv: ["npm", "run", "e2e"], scope: undefined, state: "observing" },
+      { ...entry("c-off"), kind: "command", text: "Old", argv: ["npm", "run", "old"], scope: undefined, state: "paused" },
+    );
+    state.items.push({ id: "i-1", projectId: "p", taskId: "t", text: "Keep scroll", quote: "滚动位置丢了", shape: {}, count: 1, state: "open", createdAt: "x", updatedAt: "x" });
+    return { value: undefined, changed: true };
+  });
+  const board = await x.store.read();
+  const input = await x.guardrails.reviewInput(board.tasks[0]!, board.projects[0]!, "m");
+  expect(input.commands.map((c) => c.id)).toEqual(["c-obs"]);
+  expect(input.guidelines.map((g) => g.id)).toEqual(["g-in"]);
+  expect(input.items.map((i) => i.id)).toEqual(["i-1"]);
+  expect([...input.words]).toEqual([["g-in", "latest words"], ["i-1", "滚动位置丢了"]]);
+  const off = await x.guardrails.reviewInput(board.tasks[0]!, { ...board.projects[0]!, memory: false }, "m");
+  expect([off.commands.length, off.guidelines.length, off.items.length]).toEqual([1, 0, 0]);
 });

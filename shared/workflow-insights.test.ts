@@ -328,7 +328,6 @@ describe("state, settings and project scripts", () => {
     const f = (id: string, status: Finding["status"], updatedAt: string): Finding => ({ id, projectId: "p", runId: "r", fingerprint: id, target: "skill", title: id, evidence: "", proposal: "x", benefit: "", confidence: "low", cards: [], status, createdAt: updatedAt, updatedAt });
     const state: WorkflowState = {
       version: 1,
-      reviewNudges: {},
       revision: 0,
       runs: Array.from({ length: 25 }, (_, i) => run(i)),
       findings: [f("old-open", "open", "2025-01-01T00:00:00.000Z"), f("old-dismissed", "dismissed", "2025-01-01T00:00:00.000Z"), f("new-accepted", "accepted", "2026-10-01T00:00:00.000Z")],

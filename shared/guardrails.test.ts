@@ -1,7 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   caughtIds,
+  caughtInWindow,
+  catchUpPrompt,
   correctionOf,
+  guardrailsLedger,
+  mergeInto,
+  mergePair,
+  parseCatchUp,
+  recallGuidelines,
   countMisfire,
   emptyCounts,
   guardrailContext,
@@ -287,5 +294,104 @@ describe("migration (§3.6)", () => {
     ]);
     expect(out.entries[0].timeoutSec).toBe(300);
     for (const e of out.entries) guardrailEntrySchema.parse(e);
+  });
+});
+
+describe("weekly run pieces (§7.3)", () => {
+  const g = (id: string, extra: Partial<GuardrailEntry> = {}): GuardrailEntry =>
+    guardrailEntrySchema.parse({ id, projectId: "p", kind: "guideline", text: `Rule ${id}`, scope: { types: "all", sizes: "all" }, state: "active", stateAt: ago(1), counts: emptyCounts(), sources: [], by: "learned", revision: 1, createdAt: ago(1), updatedAt: ago(1), ...extra });
+
+  test("merges need two distinct active entries of the project of one kind; ids are #prefixes", () => {
+    const entries = [g("aaaaaaaa-1"), g("bbbbbbbb-2"), g("cccccccc-3", { state: "paused" }), g("dddddddd-4", { kind: "note", noteKind: "pitfall", scope: undefined }), g("eeeeeeee-5", { projectId: "q" })];
+    expect(mergePair(entries, "p", { keep: "#aaaaaaaa", drop: "#bbbbbbbb" })?.drop.id).toBe("bbbbbbbb-2");
+    expect(mergePair(entries, "p", { keep: "#aaaaaaaa", drop: "#cccccccc" })).toBeNull();
+    expect(mergePair(entries, "p", { keep: "#aaaaaaaa", drop: "#dddddddd" })).toBeNull();
+    expect(mergePair(entries, "p", { keep: "#aaaaaaaa", drop: "#eeeeeeee" })).toBeNull();
+    expect(mergePair(entries, "p", { keep: "#aaaaaaaa", drop: "#aaaaaaaa" })).toBeNull();
+    expect(mergePair(entries, "p", { keep: "#aaa", drop: "#bbbbbbbb" })).toBeNull();
+  });
+
+  test("a merge sums counts, keeps both sources, widens the scope and archives the dropped one as merged", () => {
+    const keep = g("k", { scope: { types: ["feature"], sizes: ["s"] }, counts: { ...emptyCounts(), reviews: 3, caught: 1, lastCaughtAt: ago(5) }, sources: [{ taskId: "t1", at: ago(9) }] });
+    const drop = g("d", { scope: { types: ["bugfix"], sizes: "all" }, counts: { ...emptyCounts(), reviews: 2, caught: 2, missed: 1, lastCaughtAt: ago(2), misfire: 1, misfireAt: [ago(3)] }, sources: [{ taskId: "t1", at: ago(9) }, { taskId: "t2", at: ago(4) }] });
+    mergeInto(keep, drop, ago(0));
+    expect(keep.counts).toMatchObject({ reviews: 5, caught: 3, missed: 1, misfire: 1, lastCaughtAt: ago(2), misfireAt: [ago(3)] });
+    expect(keep.scope).toEqual({ types: ["feature", "bugfix"], sizes: "all" });
+    expect(keep.sources.map((x) => x.taskId)).toEqual(["t1", "t2"]);
+    expect(drop).toMatchObject({ state: "archived", stateReason: "merged", supersededBy: "k" });
+    // A merged entry stands for its successor when a correction matches it later (§4.3).
+    expect(liveEntry([keep, drop], drop).id).toBe("k");
+  });
+
+  test("catch-up: one prompt over the numbered words; answers by number, malformed ones read as none", () => {
+    const prompt = catchUpPrompt([{ taskId: "aaaaaaaa-1", text: "新文案\n也要进所有语言" }], ["#12345678 guideline: x"]);
+    expect(prompt).toContain("1. (card aaaaaaaa) 新文案 也要进所有语言");
+    expect(prompt).toContain("#12345678 guideline: x");
+    expect(parseCatchUp('```json\n{"corrections":[{"n":2,"kind":"new","text":"Add every catalog"},{"n":9,"kind":"new","text":"out of range"},{"n":1,"kind":"same","matches":"#12345678"},{"n":3,"kind":"bogus"}]}\n```', 3)).toEqual([
+      { kind: "same", matches: "12345678" },
+      { kind: "new", text: "Add every catalog" },
+      { kind: "none" },
+    ]);
+    expect(() => parseCatchUp("no json", 1)).toThrow(/not JSON/);
+  });
+
+  test("caught in the window: failed in one review of a card, passed in its next", () => {
+    const r = (taskId: string, at: string, state: string) => ({ taskId, at, action: "review_finished", results: [{ id: "g", state }] });
+    const flow = [r("a", ago(40), "failed"), r("a", ago(35), "passed"), r("a", ago(10), "failed"), r("a", ago(9), "passed"), r("b", ago(8), "failed"), r("b", ago(7), "na"), r("c", ago(6), "failed"), r("c", ago(5), "passed")];
+    expect(caughtInWindow(flow, NOW - 30 * DAY)).toEqual(new Map([["g", 2]]));
+  });
+
+  test("flowly_recall finds active guidelines by their words and the user's; a note kind leaves them out", () => {
+    const entries = [
+      g("1", { text: "Every new UI string is in all catalogs", sources: [{ taskId: "t", at: ago(1), quote: "新文案也要进所有语言" }], counts: { ...emptyCounts(), caught: 4 } }),
+      g("2", { text: "Run the migration test", state: "paused" }),
+      g("3", { text: "Keep the scroll position", projectId: "q" }),
+    ];
+    expect(recallGuidelines(entries, "p", { query: "catalogs string" })).toEqual([{ id: "1", text: "Every new UI string is in all catalogs", scope: { types: "all", sizes: "all" }, quote: "新文案也要进所有语言", caught: 4 }]);
+    expect(recallGuidelines(entries, "p", { query: "" }).map((x) => x.id)).toEqual(["1"]);
+    expect(recallGuidelines(entries, "p", { query: "catalogs", kind: "pitfall" })).toEqual([]);
+  });
+});
+
+describe("the Insights ledger (§7.2, §7.5)", () => {
+  const at = (hoursAgo: number) => new Date(NOW - hoursAgo * 3_600_000).toISOString();
+  const delivered = (taskId: string, h: number) => ({ taskId, at: at(h), action: "status_changed", actor: "agent", to: "in_review" });
+  const finished = (taskId: string, h: number, results: { id: string; state: string; kind?: string; gating?: false }[]) => ({ taskId, at: at(h), action: "review_finished", actor: "system", results });
+  const event = (action: string, h: number, change: string) => ({ taskId: "a", at: at(h), action, actor: "system", guardrail: { change, kind: "guideline", id: "x" } });
+
+  test("deliveries in 14 days, reviewed, first-review passes (an observing failure passes), judged failures in 30 days, this week's changes", () => {
+    const flow = [
+      delivered("a", 100),
+      finished("a", 99, [{ id: "tests", state: "passed", kind: "command" }, { id: "e2e", state: "failed", kind: "command", gating: false }, { id: "goal", state: "passed", kind: "goal" }]),
+      delivered("b", 80),
+      finished("b", 79, [{ id: "tests", state: "passed", kind: "command" }, { id: "goal", state: "failed", kind: "goal" }, { id: "g", state: "failed", kind: "guideline" }]),
+      // The rerun after a pass does not count again for the same delivery.
+      finished("b", 78, [{ id: "goal", state: "passed", kind: "goal" }]),
+      delivered("c", 60),
+      // Cancelled: no results, not reviewed.
+      { taskId: "c", at: at(59), action: "review_finished", actor: "system" },
+      delivered("d", 20 * 24),
+      finished("d", 20 * 24 - 1, [{ id: "i", state: "failed", kind: "item" }]),
+      delivered("e", 40 * 24),
+      finished("e", 40 * 24 - 1, [{ id: "g", state: "failed", kind: "guideline" }]),
+      event("guardrail_learned", 30, "guideline"),
+      event("guardrail_learned", 30, "item"),
+      event("guardrail_learned", 20, "widened"),
+      event("guardrail_learned", 10, "revived"),
+      event("guardrail_retired", 5, "paused"),
+      event("guardrail_retired", 10 * 24, "archived"),
+    ];
+    const entries = [
+      guardrailEntrySchema.parse({ id: "m", projectId: "p", kind: "guideline", text: "M", state: "active", stateAt: ago(1), counts: { ...emptyCounts(), misfire: 2, misfireAt: [ago(40), ago(3)] }, sources: [], by: "learned", revision: 1, createdAt: ago(1), updatedAt: ago(1) }),
+      guardrailEntrySchema.parse({ id: "o", projectId: "p", kind: "command", text: "E2E", argv: ["npm", "run", "e2e"], state: "observing", stateAt: ago(1), counts: emptyCounts(), sources: [], by: "detect", revision: 1, createdAt: ago(1), updatedAt: ago(1) }),
+    ];
+    expect(guardrailsLedger({ flow, entries, projectId: "p", now: NOW, tz: "UTC" })).toEqual({
+      deliveries: 3,
+      reviewed: 2,
+      firstPass: 1,
+      judged: 3,
+      misfires: 1,
+      changes: { learned: 1, widened: 1, revived: 1, retired: 1, observing: 1 },
+    });
   });
 });

@@ -34,7 +34,7 @@ import {
   type MemoryView,
   type TurnItem,
 } from "../shared/memory";
-import { emptyCounts, guardrailContext, memoryStateOf, setState, toMemoryEntry, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
+import { emptyCounts, guardrailContext, memoryStateOf, recallGuidelines, setState, toMemoryEntry, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import type { SummaryStore } from "./summaries";
 import { runSummaryModels } from "./summary-models";
@@ -194,17 +194,19 @@ export class MemoryService {
     if (!memoryOn(project)) throw new MemoryError("MEMORY_DISABLED", "Project memory is turned off for this project.");
     const state = await this.store.read();
     const found = recallMemory(notesOf(state, project.id).map(toMemoryEntry), input);
-    void this.recordRecall(project.id, taskId, found.entries.map((e) => e.id)).catch(() => undefined);
-    return { entries: found.entries.map(agentEntry), total: found.total };
+    // Guidelines too (GUARDRAILS-SPEC §5.3); only notes count as used.
+    const guidelines = recallGuidelines(state.entries, project.id, input);
+    void this.recordRecall(project.id, taskId, found.entries.map((e) => e.id), guidelines.length > 0).catch(() => undefined);
+    return { entries: found.entries.map(agentEntry), total: found.total, ...(guidelines.length ? { guidelines } : {}) };
   }
-  private recordRecall(projectId: string, taskId: string, ids: string[]) {
+  private recordRecall(projectId: string, taskId: string, ids: string[], other = false) {
     const at = this.iso();
     const day = at.slice(0, 10);
     return this.store.update((state) => {
       const stats = (state.recallStats[projectId] ||= { days: {} });
       const today = (stats.days[day] ||= { queries: 0, empty: 0 });
       today.queries++;
-      if (!ids.length) today.empty++;
+      if (!ids.length && !other) today.empty++;
       for (const d of Object.keys(stats.days)) if (Date.parse(at) - Date.parse(`${d}T00:00:00Z`) > 31 * DAY_MS) delete stats.days[d];
       for (const e of state.entries) if (ids.includes(e.id)) noteUse(e.counts, taskId, at);
       return { value: undefined, changed: true };
@@ -564,15 +566,14 @@ export class MemoryService {
     const versions = [...history].reverse(); // oldest first
     const latest = versions[versions.length - 1];
     const recapLines = [...new Set(versions.flatMap((v) => v.recap.split("\n").map((l) => l.replace(/^\s*[-*•]\s*/, "").trim()).filter(Boolean)))];
-    const pad = board.workpads.find((w) => w.taskId === taskId);
     const clues = state.clues.filter((c) => c.taskId === taskId);
     const reports = board.events
       .filter((e) => e.taskId === taskId && e.actor === "agent" && (e.reportKind === "question" || e.reportKind === "blocker" || e.reportKind === "result") && e.note)
       .slice(-10)
       .map((e) => `${e.reportKind}: ${e.note}`);
-    const confusions = (pad?.confusions || []).map((c) => c.text);
-    const failedChecks = (pad?.validation || []).filter((v) => v.state === "fail").map((v) => `${v.text}${v.evidence ? ` (${v.evidence})` : ""}`);
-    if (!latest && !clues.length && !confusions.length && !reports.length) return null;
+    // What the card's latest auto review found (GUARDRAILS-SPEC §6.4).
+    const failedChecks = (task.review?.items || []).filter((i) => i.state === "failed").map((i) => `${i.name}${i.detail ? ` (${i.detail})` : ""}`);
+    if (!latest && !clues.length && !reports.length) return null;
     const instructions = await instructionFiles(project.primaryPath);
     const notes = notesOf(state, project.id);
     return {
@@ -587,7 +588,6 @@ export class MemoryService {
         summary: latest ? { target: latest.target, recap: latest.recap, next: latest.next } : undefined,
         recapLines,
         states: versions.slice(-6, -1).map((v) => v.state),
-        confusions,
         failedChecks,
         reports,
         existing: notes.filter((e) => e.state === "active").slice(-100).map((e) => ({ id: e.id, kind: e.noteKind || "convention", title: e.text })),

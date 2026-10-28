@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { changeSizes, taskTypeSchema, type ChangeSize, type Project, type TaskType } from "./model";
-import { autoReviewOf } from "./auto-review";
 import { firstObject } from "./summary";
+import { addDays, dayKey, dayStart } from "./insights";
 import {
   containsSecret,
   memoryClueSchema,
@@ -12,6 +12,7 @@ import {
   memoryLimits,
   memoryRetroSchema,
   memoryTagsSchema,
+  recallMemory,
   type MemoryEntry,
   type MemoryKind,
   type MemoryState,
@@ -176,6 +177,8 @@ export const guardrailsStateSchema = z.object({
   retros: z.array(memoryRetroSchema),
   errors: z.array(guardrailErrorSchema),
   recallStats: z.record(z.string(), z.object({ days: z.record(z.string(), z.object({ queries: z.number(), empty: z.number() })) })),
+  /** Weekly catch-up learning (§7.3): the newest `feedback` clue already learned from, per project. */
+  learnedUntil: z.record(z.string(), z.string()).optional(),
 });
 export type GuardrailsState = z.infer<typeof guardrailsStateSchema>;
 export const emptyGuardrailsState = (): GuardrailsState => ({ version: 1, revision: 0, entries: [], items: [], clues: [], retros: [], errors: [], recallStats: {} });
@@ -481,6 +484,285 @@ export function guardrailContext(
   return { lines: [...guidelineContextLines(guidelines), ...memoryContextLines(selection, titleOf)], noteIds: selection.entries.map((e) => e.id) };
 }
 
+/**
+ * flowly_recall over guidelines (§5.3): the project's active guidelines ranked like notes against the query (their
+ * sentence, note and the user's words); an empty query lists the newest. A note-kind filter leaves guidelines out.
+ */
+export function recallGuidelines(entries: readonly GuardrailEntry[], projectId: string, input: { query: string; kind?: MemoryKind; limit?: number }) {
+  if (input.kind) return [];
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const asNotes: MemoryEntry[] = entries
+    .filter((e) => e.projectId === projectId && e.kind === "guideline" && e.state === "active")
+    .map((e) => ({
+      id: e.id,
+      projectId: e.projectId,
+      kind: "convention",
+      title: e.text,
+      body: [e.body, ...e.sources.map((s) => s.quote)].filter(Boolean).join("\n"),
+      tags: [],
+      keywords: [],
+      pinned: false,
+      status: "active",
+      source: { by: "agent" },
+      revision: e.revision,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+      confirmedAt: e.stateAt,
+    }));
+  return recallMemory(asNotes, input).entries.map((m) => {
+    const e = byId.get(m.id)!;
+    const quote = [...e.sources].reverse().find((s) => s.quote)?.quote;
+    return { id: e.id, text: e.text, scope: e.scope || { types: "all" as const, sizes: "all" as const }, ...(quote ? { quote } : {}), caught: e.counts.caught };
+  });
+}
+
+// ---- Weekly run (§7.3) ------------------------------------------------------------------
+
+/** §7.3: the weekly catch-up learns from at most 30 `feedback` clues of the last 7 days. */
+export const catchUpLimits = { clues: 30, days: 7, clue: 600 } as const;
+
+/** One Summary-model call over the week's rework words when card summaries are off (§7.3 step 1). Agent-facing English. */
+export function catchUpPrompt(clues: readonly { taskId: string; text: string }[], section: readonly string[]): string {
+  return [
+    "Each numbered message below is what the owner of a software project wrote to a coding agent while a card was waiting in review. For each one decide whether the owner is correcting work the agent delivered (not a new request, not a follow-up, not chat such as \"commit and push\" or \"thanks\").",
+    'If it is a correction, summarize it as one checkable sentence (kind "new", at most 120 characters, in the message\'s language); if it is the same thing as an entry of the list, give that entry\'s #id (kind "same"). Otherwise kind "none".',
+    "",
+    "## Guardrails",
+    ...(section.length ? section : ["(none yet)"]),
+    "",
+    "## Messages",
+    ...clues.map((c, i) => `${i + 1}. (card ${shortId(c.taskId)}) ${clip(c.text.replace(/\s+/g, " ").trim(), catchUpLimits.clue)}`),
+    "",
+    'Do not use any tools. Answer with only one JSON object: {"corrections":[{"n":1,"kind":"none|new|same","text":"…","matches":"#id"}]}, one entry per message.',
+  ].join("\n");
+}
+export const catchUpJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["corrections"],
+  properties: {
+    corrections: {
+      type: "array",
+      items: { type: "object", additionalProperties: false, required: ["n", "kind"], properties: { n: { type: "integer" }, kind: { type: "string", enum: ["none", "new", "same"] }, text: { type: "string" }, matches: { type: "string" } } },
+    },
+  },
+} as const;
+/** The catch-up's answer by message number (1-based); missing or malformed entries read as none. */
+export function parseCatchUp(output: string | null | undefined, count: number): Correction[] {
+  const out: Correction[] = Array.from({ length: count }, () => ({ kind: "none" }));
+  const json = output ? firstObject(output) : null;
+  if (!json) throw new Error("The catch-up output is not JSON.");
+  let list: unknown;
+  try {
+    list = (JSON.parse(json) as { corrections?: unknown }).corrections;
+  } catch {
+    throw new Error("The catch-up output is not valid JSON.");
+  }
+  if (!Array.isArray(list)) throw new Error("The catch-up output has no corrections list.");
+  for (const raw of list) {
+    const n = raw && typeof raw === "object" ? (raw as { n?: unknown }).n : undefined;
+    if (typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= count) out[n - 1] = parseCorrection(raw);
+  }
+  return out;
+}
+
+/**
+ * A merge the model proposed (§7.3), checked against the project: both ids resolve to distinct active entries of the
+ * project of the same kind (two guidelines or two notes). Returns the pair, or null to drop it.
+ */
+export function mergePair(entries: readonly GuardrailEntry[], projectId: string, merge: { keep: string; drop: string }): { keep: GuardrailEntry; drop: GuardrailEntry } | null {
+  const active = entries.filter((e) => e.projectId === projectId && e.state === "active" && (e.kind === "guideline" || e.kind === "note"));
+  const keep = resolveShortId(merge.keep, active);
+  const drop = resolveShortId(merge.drop, active);
+  if (!keep || !drop || keep.id === drop.id || keep.kind !== drop.kind) return null;
+  return { keep, drop };
+}
+const later = (a: string | undefined, b: string | undefined) => (!a ? b : !b ? a : a > b ? a : b);
+/**
+ * Applies a merge (§7.3): `drop` is archived as merged and points at `keep`; `keep` gets the sum of both counts, both
+ * sources and the union of both scopes. Pure; the caller bumps revisions.
+ */
+export function mergeInto(keep: GuardrailEntry, drop: GuardrailEntry, at: string) {
+  const a = keep.counts,
+    b = drop.counts;
+  const usedBy = [...a.usedBy, ...b.usedBy.filter((u) => !a.usedBy.some((x) => x.taskId === u.taskId))].sort((x, y) => x.at.localeCompare(y.at)).slice(-guardrailLimits.usedBy);
+  keep.counts = {
+    reviews: a.reviews + b.reviews,
+    passes: a.passes + b.passes,
+    caught: a.caught + b.caught,
+    missed: a.missed + b.missed,
+    misfire: a.misfire + b.misfire,
+    ...(later(a.lastCaughtAt, b.lastCaughtAt) ? { lastCaughtAt: later(a.lastCaughtAt, b.lastCaughtAt) } : {}),
+    ...(later(a.lastMissedAt, b.lastMissedAt) ? { lastMissedAt: later(a.lastMissedAt, b.lastMissedAt) } : {}),
+    ...(a.misfireAt || b.misfireAt ? { misfireAt: [...(a.misfireAt || []), ...(b.misfireAt || [])].sort().slice(-guardrailLimits.misfiresKept) } : {}),
+    usedBy,
+    ...(later(a.usedAt, b.usedAt) ? { usedAt: later(a.usedAt, b.usedAt) } : {}),
+  };
+  keep.sources = [...keep.sources, ...drop.sources.filter((s) => !keep.sources.some((k) => k.taskId === s.taskId))].slice(-guardrailLimits.sources);
+  if (keep.kind === "guideline") {
+    const other = drop.scope || { types: "all", sizes: "all" };
+    const mine = keep.scope || { types: "all", sizes: "all" };
+    keep.scope = {
+      types: mine.types === "all" || other.types === "all" ? "all" : [...new Set([...mine.types, ...other.types])],
+      sizes: mine.sizes === "all" || other.sizes === "all" ? "all" : [...new Set([...mine.sizes, ...other.sizes])],
+    };
+  }
+  setState(drop, "archived", "merged", at);
+  drop.supersededBy = keep.id;
+}
+
+/** How many times each item was caught in the window (§7.3): failed in one review of a card and passed in its next one. */
+export function caughtInWindow(entries: readonly { at: string; taskId: string; action: string; results?: readonly { id: string; state: string }[] }[], from: number): Map<string, number> {
+  const out = new Map<string, number>();
+  const last = new Map<string, readonly { id: string; state: string }[]>();
+  for (const e of [...entries].sort((a, b) => a.at.localeCompare(b.at))) {
+    if (e.action !== "review_finished" || !e.results?.length) continue;
+    const before = last.get(e.taskId);
+    last.set(e.taskId, e.results);
+    if (Date.parse(e.at) < from) continue;
+    for (const id of caughtIds(before, e.results)) out.set(id, (out.get(id) || 0) + 1);
+  }
+  return out;
+}
+
+/**
+ * The `# Guardrails` section of the weekly material (§7.3 step 2): each active guideline with its scope, counts and
+ * source cards (and "caught 5+ in 30 days" when it applies), each active note's title, the last 30 days' review
+ * results per card and the open card items. Ids are 8-character `#` prefixes, as merges cite them.
+ */
+export function guardrailsMaterial(input: {
+  entries: readonly GuardrailEntry[];
+  items: readonly CardItem[];
+  projectId: string;
+  reviews: readonly { taskId: string; at: string; results: readonly { id: string; state: string; kind?: string }[] }[];
+  caught30: ReadonlyMap<string, number>;
+  cardTitle: (taskId: string) => string | undefined;
+}): string {
+  const own = input.entries.filter((e) => e.projectId === input.projectId && e.state === "active");
+  const guidelines = own.filter((e) => e.kind === "guideline");
+  const notes = own.filter((e) => e.kind === "note").slice(0, 60);
+  const scopeText = (s: GuardrailScope | undefined) => (!s ? "all" : `${s.types === "all" ? "all types" : s.types.join("/")}, ${s.sizes === "all" ? "all sizes" : s.sizes.join("/")}`);
+  const lines = ["# Guardrails", "", "## Guidelines (checked on deliveries in their scope)"];
+  if (!guidelines.length) lines.push("(none)");
+  for (const g of guidelines) {
+    const hot = (input.caught30.get(g.id) || 0) >= 5 ? " · caught 5+ in 30 days" : "";
+    lines.push(
+      `- #${shortId(g.id)} ${clip(g.text, 200)} [${scopeText(g.scope)}] caught ${g.counts.caught} · missed ${g.counts.missed} · misfire ${g.counts.misfire} · reviews ${g.counts.reviews}${hot}; cards ${g.sources.map((x) => shortId(x.taskId)).join(", ") || "-"}`,
+    );
+  }
+  lines.push("", "## Notes");
+  if (!notes.length) lines.push("(none)");
+  for (const n of notes) lines.push(`- #${shortId(n.id)} [${n.noteKind || "note"}] ${clip(n.text, 120)}`);
+  const items = input.items.filter((i) => i.projectId === input.projectId && i.state === "open");
+  lines.push("", "## Open card items (sent back once, not yet a guideline)");
+  if (!items.length) lines.push("(none)");
+  for (const i of items.slice(0, 40)) lines.push(`- card ${shortId(i.taskId)}: ${clip(i.text, 160)} (×${i.count})`);
+  lines.push("", "## Reviews in the last 30 days");
+  if (!input.reviews.length) lines.push("(none)");
+  for (const r of input.reviews.slice(-40)) {
+    const failed = r.results.filter((x) => x.state === "failed").map((x) => (x.kind === "goal" ? "goal" : `#${shortId(x.id)}`));
+    lines.push(`- card ${shortId(r.taskId)} ${clip(input.cardTitle(r.taskId) || "", 60)}: ${failed.length ? `failed ${failed.join(", ")}` : "passed"}`);
+  }
+  return lines.join("\n");
+}
+
+// ---- The project's ledger in Insights (§7.2, §7.5) --------------------------------------
+
+export const guardrailsLedgerSchema = z.object({
+  /** Agent deliveries to In review in the last 14 days. */
+  deliveries: z.number().int().nonnegative(),
+  /** Of those, the ones a review finished for (not cancelled). */
+  reviewed: z.number().int().nonnegative(),
+  /** Of those, the ones whose first review passed. */
+  firstPass: z.number().int().nonnegative(),
+  /** Failed judgement items (the built-in check, guidelines, card items) in the last 30 days. */
+  judged: z.number().int().nonnegative(),
+  /** Misfires counted on the project's entries in the last 30 days. */
+  misfires: z.number().int().nonnegative(),
+  /** This week (the last 7 days): what was learned and retired, and the commands observing now. */
+  changes: z.object({
+    learned: z.number().int().nonnegative(),
+    widened: z.number().int().nonnegative(),
+    revived: z.number().int().nonnegative(),
+    retired: z.number().int().nonnegative(),
+    observing: z.number().int().nonnegative(),
+  }),
+});
+export type GuardrailsLedger = z.infer<typeof guardrailsLedgerSchema>;
+
+type LedgerEntry = {
+  at: string;
+  taskId: string;
+  action: string;
+  actor: string;
+  to?: string;
+  results?: readonly { id: string; state: string; kind?: string; gating?: false }[];
+  guardrail?: { change: string; kind: string; id: string };
+};
+/** A finished review's verdict from its results (gating items only); null for one that judged nothing (cancelled). */
+function resultsVerdict(results: LedgerEntry["results"]): "passed" | "failed" | "unavailable" | null {
+  if (!results?.length) return null;
+  const gating = results.filter((r) => r.gating !== false);
+  if (gating.some((r) => r.state === "failed")) return "failed";
+  if (gating.some((r) => r.state === "unavailable" || r.state === "queued" || r.state === "running")) return "unavailable";
+  return "passed";
+}
+
+/**
+ * The closed loop's numbers for Insights (§7.2): from the project's flow log (never the board's truncated events), the
+ * `review_finished` results and the `guardrail_*` entries, plus the entries' misfire times and observing commands.
+ * Days are the viewer's (`tz`): the 14 days and the week end today.
+ */
+export function guardrailsLedger(input: { flow: readonly LedgerEntry[]; entries: readonly GuardrailEntry[]; projectId: string; now: number; tz?: string }): GuardrailsLedger {
+  const today = dayKey(input.now, input.tz);
+  const from14 = dayStart(addDays(today, -13), input.tz);
+  const from7 = dayStart(addDays(today, -6), input.tz);
+  const from30 = input.now - 30 * DAY;
+  const sorted = [...input.flow].sort((a, b) => a.at.localeCompare(b.at));
+  const at = (e: LedgerEntry) => Date.parse(e.at);
+  let deliveries = 0,
+    reviewed = 0,
+    firstPass = 0,
+    judged = 0;
+  sorted.forEach((e, i) => {
+    if (e.action === "status_changed" && e.actor === "agent" && e.to === "in_review" && at(e) >= from14) {
+      deliveries++;
+      // The first review that finished for this delivery, before the card's next delivery.
+      for (let j = i + 1; j < sorted.length; j++) {
+        const n = sorted[j]!;
+        if (n.taskId !== e.taskId) continue;
+        if (n.action === "status_changed" && n.actor === "agent" && n.to === "in_review") break;
+        if (n.action !== "review_finished") continue;
+        const verdict = resultsVerdict(n.results);
+        if (!verdict) continue;
+        reviewed++;
+        if (verdict === "passed") firstPass++;
+        break;
+      }
+    }
+    if (e.action === "review_finished" && at(e) >= from30)
+      judged += (e.results || []).filter((r) => r.state === "failed" && (r.kind === "goal" || r.kind === "guideline" || r.kind === "item")).length;
+  });
+  const own = input.entries.filter((e) => e.projectId === input.projectId);
+  const misfires = own.reduce((n, e) => n + (e.counts.misfireAt || []).filter((m) => Date.parse(m) >= from30).length, 0);
+  const week = sorted.filter((e) => at(e) >= from7 && e.guardrail);
+  const learned = (change: string) => week.filter((e) => e.action === "guardrail_learned" && e.guardrail!.change === change).length;
+  return {
+    deliveries,
+    reviewed,
+    firstPass,
+    judged,
+    misfires,
+    changes: {
+      learned: learned("guideline"),
+      widened: learned("widened"),
+      revived: learned("revived"),
+      retired: week.filter((e) => e.action === "guardrail_retired").length,
+      observing: own.filter((e) => e.kind === "command" && e.state === "observing").length,
+    },
+  };
+}
+
 // ---- Notes as the former project memory (compatibility for memory.* until the Guardrails page) ----
 
 const archivedReasons = ["retired", "promoted", "superseded"] as const;
@@ -563,13 +845,34 @@ export function noteFromMemory(m: MemoryEntry): GuardrailEntry {
   };
 }
 
+/** The review rules projects stored before guardrails (AUTO-REVIEW-SPEC §12.1), read only by the migration. */
+const legacyCommand = z.object({
+  name: z.string().trim().min(1),
+  argv: z.array(z.string().min(1).max(guardrailLimits.arg)).min(1).max(guardrailLimits.args),
+  timeoutSec: z.number().int().min(guardrailLimits.minTimeout).max(guardrailLimits.maxTimeout).optional(),
+});
+const legacyRule = z.union([
+  legacyCommand.extend({ kind: z.literal("command"), off: z.literal(true).optional() }),
+  z.object({ kind: z.literal("llm"), name: z.string(), prompt: z.string().trim().min(1), types: z.array(taskTypeSchema).optional(), off: z.literal(true).optional() }),
+]);
+type LegacyRule = z.infer<typeof legacyRule>;
+/** A project's stored rules, or its first-version `checks` as command rules; anything unreadable is skipped. */
+export function legacyRules(autoReview: unknown): LegacyRule[] {
+  if (!autoReview || typeof autoReview !== "object") return [];
+  const stored = autoReview as { rules?: unknown; checks?: unknown };
+  const list = Array.isArray(stored.rules) ? stored.rules : Array.isArray(stored.checks) ? stored.checks.map((c) => ({ ...(c as object), kind: "command" })) : [];
+  return list.flatMap((raw) => {
+    const parsed = legacyRule.safeParse(raw);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
 /**
  * A project's auto review rules as entries: command rules become active commands (the user already chose them),
  * LLM rules active guidelines scoped by their types; paused rules are paused. Goal, guidance and drafts are dropped.
  */
 export function entriesFromRules(project: Pick<Project, "id" | "autoReview">, at: string, newId: () => string): GuardrailEntry[] {
-  if (!project.autoReview) return [];
-  return autoReviewOf(project).rules.map((rule): GuardrailEntry => {
+  return legacyRules(project.autoReview).map((rule): GuardrailEntry => {
     const base = {
       id: newId(),
       projectId: project.id,

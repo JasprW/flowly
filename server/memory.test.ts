@@ -339,7 +339,7 @@ test("a failed review records the error and still hard-deletes the session", asy
   x.replies.push("I cannot do that.");
   await x.store.mutate((board) => {
     board.tasks[0].status = "done";
-    board.workpads[0].confusions.push({ id: "c", text: "Unclear which window to test", at: new Date().toISOString() } as never);
+    board.events.push({ id: "q1", taskId: "t", actor: "agent", action: "progress_reported", reportKind: "question", note: "Unclear which window to test", at: new Date().toISOString() });
   });
   await x.memory.manual("t", x.model);
   await new Promise((r) => setTimeout(r, 50));
@@ -380,7 +380,7 @@ test("finished-card review tries the ordered summary list and cleans both childr
   x.memory.attach(x.model);
   await x.store.mutate((board) => {
     board.tasks[0].status = "done";
-    board.workpads[0].confusions.push({ id: "c", text: "Unclear model selection", at: new Date().toISOString() } as never);
+    board.events.push({ id: "q1", taskId: "t", actor: "agent", action: "progress_reported", reportKind: "question", note: "Unclear model selection", at: new Date().toISOString() });
   });
   x.replies.push("quota limit", '{"candidates": []}');
   await x.memory.manual("t", x.model);
