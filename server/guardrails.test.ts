@@ -150,6 +150,26 @@ test("learning: a matched active guideline counts a miss and widens its scope; a
   expect(changes).toEqual(["widened", "revived"]);
 });
 
+test("card A is Done before card B is sent back for the same problem: A's item still promotes (§3.3)", async () => {
+  const x = await setup();
+  await x.learn("t", { kind: "new", text: "Every new UI string is in all language catalogs" });
+  await x.store.mutate((board) => {
+    board.tasks[0].status = "done";
+  });
+  await x.guardrails.finishTask("t");
+  const item = (await x.state()).items[0];
+  expect(item.state).toBe("open");
+  // The rework summary of card U still lists A's item, and its correction matches it.
+  expect(await x.guardrails.section("u")).toContain(`#${item.id.slice(0, 8)} other card: Every new UI string is in all language catalogs`);
+  await x.learn("u", { kind: "same", matches: item.id.slice(0, 8) });
+  const s = await x.state();
+  expect(s.entries).toEqual([expect.objectContaining({ kind: "guideline", state: "active", text: "Every new UI string is in all language catalogs" })]);
+  expect(s.items.map((i) => [i.taskId, i.state])).toEqual([
+    ["t", "promoted"],
+    ["u", "promoted"],
+  ]);
+});
+
 test("a disputed finding the user sends the card back for counts as caught, not missed, and the dispute ends (§6.6)", async () => {
   const x = await setup();
   await seed(x, [entry("cccccccc-1")]);
@@ -161,7 +181,7 @@ test("a disputed finding the user sends the card back for counts as caught, not 
   expect((await x.store.read()).tasks[0].disputes).toBeUndefined();
 });
 
-test("finishing a card closes its open items and counts each remaining dispute as a misfire", async () => {
+test("finishing a card keeps its open items and counts each remaining dispute as a misfire", async () => {
   const x = await setup();
   await seed(x, [entry("dddddddd-1")]);
   await x.learn("t", { kind: "new", text: "Rerun button is missing" });
@@ -170,7 +190,7 @@ test("finishing a card closes its open items and counts each remaining dispute a
   });
   await x.guardrails.finishTask("t");
   const s = await x.state();
-  expect(s.items[0].state).toBe("closed");
+  expect(s.items[0].state).toBe("open");
   expect(s.entries[0].counts).toMatchObject({ misfire: 1, misfireAt: [expect.any(String)] });
   expect((await x.store.read()).tasks[0].disputes).toBeUndefined();
 });

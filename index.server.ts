@@ -447,7 +447,7 @@ export default function contribute(host: PluginServerContext) {
     }
     // Entering Done: the finished-card review for project memory (PROJECT-MEMORY-SPEC §4.2), in the background.
     if (task.status === "done" && previous !== "done") memory.afterDone(task.id, paseo);
-    // Entering Done or Cancelled: the card's open items close and its remaining disputes count as misfires (GUARDRAILS-SPEC §3.3, §6.6).
+    // Entering Done or Cancelled: the card's remaining disputes count as misfires (GUARDRAILS-SPEC §6.6); its items stay open (§3.3).
     if (finished(task.status) && !finished(previous))
       void guardrails.finishTask(task.id).catch((e) => logFailure("Flowly guardrails not updated on finish:", e, task.id));
     if (!finished(task.status) || finished(previous)) return;

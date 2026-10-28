@@ -607,22 +607,16 @@ export class GuardrailsService {
   }
 
   /**
-   * The card entered Done or Cancelled (§3.3, §6.6): its open items close; each finding still disputed counts as a
-   * misfire on its entry, and the disputes are cleared.
+   * The card entered Done or Cancelled (§6.6): each finding still disputed counts as a misfire on its entry, and the
+   * disputes are cleared. Its open items stay open (§3.3): a later card with the same problem promotes them.
    */
   async finishTask(taskId: string): Promise<void> {
     const task = (await this.board.read()).tasks.find((t) => t.id === taskId);
-    if (!task) return;
-    const disputes = task.disputes || [];
+    if (!task?.disputes?.length) return;
+    const disputes = task.disputes;
     await this.store.update((state) => {
       const at = this.iso();
       let changed = false;
-      for (const item of state.items)
-        if (item.taskId === taskId && item.state === "open") {
-          item.state = "closed";
-          item.updatedAt = at;
-          changed = true;
-        }
       for (const d of disputes) {
         const entry = state.entries.find((e) => e.id === d.id);
         if (!entry) continue;
@@ -632,11 +626,10 @@ export class GuardrailsService {
       }
       return { value: undefined, changed };
     });
-    if (disputes.length)
-      await this.board.mutate((board) => {
-        const t = board.tasks.find((x) => x.id === taskId);
-        if (t?.disputes) delete t.disputes;
-      });
+    await this.board.mutate((board) => {
+      const t = board.tasks.find((x) => x.id === taskId);
+      if (t?.disputes) delete t.disputes;
+    });
   }
 
   removeTask(taskId: string) {
