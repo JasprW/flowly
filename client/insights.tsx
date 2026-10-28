@@ -16,7 +16,6 @@ import { Collapse, Disclosure, ShowMore } from "./disclosure";
 import { Enter } from "./motion";
 import { localZone, useDayQuery, useDigestQuery, useInsightsQuery, useTokensQuery, useWorkflowInsightsQuery } from "./queries";
 import { lineDiff, skillFile, usageIn, type Finding, type FindingTarget, type WorkflowView } from "../shared/workflow-insights";
-import { readGuardrailLedger } from "./guardrails-ledger";
 import { AiMark, Button, IconButton, Label, Notice, TurnChevron, font, message, noFocusRing, pageBarHeight, radius, relativeTime, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { formatLocale, msg, t, tn } from "../shared/i18n";
 import { AgentHabits, habitsSummary } from "./agent-habits";
@@ -722,7 +721,7 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
  */
 function GuardrailLedger({ projectId, active, onOpen }: { projectId: string; active: boolean; onOpen?(): void }) {
   const { colors } = useTheme();
-  const read = useRpc(readGuardrailLedger);
+  const read = useRpc(rpc.guardrailsInsights);
   const ledger = useQuery({
     queryKey: ["flowly", "insights-guardrails", projectId],
     queryFn: () => read({ projectId, tz: localZone() }),

@@ -33,8 +33,6 @@ export function reviewIcon(review: Review): string {
 }
 
 /** phase B: `Review.tokens` (§6.4) is not on this branch's model yet. */
-type ReviewTokens = { in: number; out: number; costUsd?: number };
-const tokensOf = (review: Review) => (review as Review & { tokens?: ReviewTokens }).tokens;
 
 const seconds = (ms: number) => t("{n} s", { n: Math.max(1, Math.round(ms / 1000)) });
 const compactCount = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
@@ -146,7 +144,7 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
 
 /** Whether a person can rerun the card's review now (AUTO-REVIEW-SPEC §9.2). */
 export const canRerun = (task: Task, project: Project, disabled: boolean) =>
-  !!task.review && !disabled && task.status === "in_review" && task.review.state !== "running" && autoReviewRuns(project, task);
+  !!task.review && !disabled && task.status === "in_review" && task.review.state !== "running" && autoReviewRuns(project);
 
 /** Rerun the card's review; failures toast. */
 export function useRerun(taskId: string) {
@@ -174,16 +172,14 @@ export function RerunButton({ taskId }: { taskId: string }) {
 }
 
 /**
- * The Workpad's Review group (GUARDRAILS-SPEC §7.1): the latest review's state, round, model and tokens, then every
+ * The Workpad's Review group (GUARDRAILS-SPEC §7.1): the latest review's state, round and model, then every
  * checked item, failures first.
  */
 export function ReviewBlock({ review }: { review: Review }) {
-  const tokens = tokensOf(review);
   const meta = [
     reviewLabel(review),
     t("Round {round}", { round: review.round }),
     review.model ?? "",
-    tokens ? t("{n} tokens", { n: compactCount(tokens.in + tokens.out) }) : "",
   ].filter(Boolean);
   return (
     <View style={{ gap: space[1.5] }}>

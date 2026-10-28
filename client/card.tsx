@@ -18,7 +18,7 @@ import { BrandIcon } from "./brand-icons";
 import { reviewing, visibleReview } from "../shared/auto-review";
 import { Collapse } from "./disclosure";
 import { reviewIcon, reviewLabel } from "./task-review";
-import { reviewProgress } from "./review-progress";
+import { reviewProgress } from "../shared/auto-review";
 import type { ConnectorFamily } from "../shared/connectors";
 
 export type CardDrag = {

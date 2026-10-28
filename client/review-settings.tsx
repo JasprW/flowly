@@ -8,7 +8,7 @@ import { t } from "../shared/i18n";
 export type ReviewEdit = { on: boolean; rounds: string };
 
 /** phase B: `projects.update` takes `autoReview: { enabled, maxRounds }` only; this branch's input still lists `rules`. */
-export const autoReviewPatch = (edit: ReviewEdit) => ({ enabled: edit.on, maxRounds: Number(edit.rounds) }) as AutoReviewInput;
+export const autoReviewPatch = (edit: ReviewEdit): AutoReviewInput => ({ enabled: edit.on, maxRounds: Number(edit.rounds) });
 
 /**
  * New project / Edit project → Auto review (GUARDRAILS-SPEC §8): the switch with its cost, one line of the project's
