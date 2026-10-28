@@ -1,5 +1,15 @@
 # Implementation progress
 
+## Guardrails phase A: foundation (card 2458cff4) — 2026-10-28
+
+- [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §3: `guardrails.json` (`shared/guardrails.ts` schemas, limits and pure logic; `server/guardrails.ts` store with serial writes, `.bak`, atomic replace, invalid file kept). One-time migration at daemon start from `memory.json` and every project's `autoReview.rules` (§3.6), queued ahead of all reads; `memory.json` becomes `memory.json.migrated`; a failed migration leaves both files and runs empty. The board's `autoReview.rules` are left in place for phase B to drop.
+- Learning (§4.1–§4.3, §4.6): rework turn = the turn opened by the user's own words while the card was In review (`MemoryService.reworkQuote`, the feedback-clue fact). The card summary of such a turn gets the `Guardrails` section and the `correction` field (`shared/summary.ts`, `server/summaries.ts`); `GuardrailsService.learn` keeps card items, promotes the second card into a guideline, counts misses with scope widening, revives paused/archived guidelines, ends a dispute as caught; secrets are recorded as an error, not kept. Events `guardrail_learned` / `guardrail_retired` carry `guardrail: {change, kind, id}` into the flow log.
+- Notes (§4.4): `flowly_remember` and the Done retro write active notes at once, `supersedes` archives at once; the `memory.*` RPCs are aliases over the notes until the Guardrails page.
+- Commands (§4.5 first bullet): `projects.create` / `create-linked` and switching Auto review on add the detected commands as `observing`; new projects get `autoReview: { enabled: true, maxRounds: 2 }`.
+- Prevention (§5.1, §5.2): session instructions carry the guidelines block (in scope by type) before the notes block; `flowly_get_task.guardrails`; `memory.candidates` removed. RPCs `guardrails.read|counts|create|update|delete|detect|retro`; finishing a card closes its items and turns open disputes into misfires.
+- Additive model fields for phases B/C: `Task.disputes`, `Review.shape`, `Review.items`, event `guardrail` and `results[].kind`.
+- Not in phase A: the review itself (shape, items, evidence filter, disputes input, counters on review end, retirement runs), weekly re-detection and consolidation, `flowly_recall` over guidelines (§5.3), client, i18n, docs other than this entry.
+
 ## Auto review P3 (card "Auto Review") — 2026-10-28
 
 - Built-in check "Does what you asked" (AUTO-REVIEW-SPEC §4.2): `autoReview.goal` (absent = on), result id `goal` reserved; the review session reads the card and the user's messages from the card's sessions (`readConversation`, rework messages and injections dropped, 30 messages / 12 000 chars), the workpad and delivery note marked as the agent's own report. `flowly_propose_review_rules` and CLI `review-rules` take `goal`; get_task `reviewRules.goal`. Setup instructions no longer propose "Workpad acceptance met".
