@@ -337,7 +337,7 @@ function BoardContent(
     // `idea`: Start session prefilled from an idea on the Ideas page (IDEAS-SPEC §6.3).
     [startRequest, setStartRequest] = useState<{ taskId: string; key: string; idea?: Idea } | null>(null),
     [mobileStatus, setMobileStatus] = useState<Status>("todo"),
-    [reveal, setReveal] = useState<{ status: Status; n: number; at: number; center?: boolean }>({ status: "todo", n: 0, at: 0 }),
+    [reveal, setReveal] = useState<{ status: Status; n: number; at: number; center?: boolean; taskId?: string }>({ status: "todo", n: 0, at: 0 }),
     [actionTask, setActionTask] = useState<Task | null>(null),
     [projectForm, setProjectForm] = useState<"new" | "edit" | null>(null),
     [removing, setRemoving] = useState<Project | null>(null),
@@ -569,7 +569,7 @@ function BoardContent(
     const sameCard = key === revealedCard.current;
     revealedCard.current = key;
     if (compact || page || !task) return;
-    setReveal((r) => (sameCard && !r.center && Date.now() - r.at < 300 ? r : { status: task.status, n: r.n + 1, at: Date.now(), center: true }));
+    setReveal((r) => (sameCard && !r.center && Date.now() - r.at < 300 ? r : { status: task.status, n: r.n + 1, at: Date.now(), center: true, taskId: task.id }));
   }, [compact, page, task?.id, task?.status]);
   const tasks = (board?.tasks || []).filter(
     (t) => t.projectId === project?.id && (archived || !t.archivedAt),
