@@ -147,7 +147,7 @@ test("a decision confirmed on card A is in the first instructions of a card B cr
   expect((await new BoardService(x.store).context("b", x.paseo)).context).not.toContain("Do not pin a Paseo upper bound");
   await x.memory.confirm({ id: candidate.id, revision: candidate.revision, edits: { body: "No real upper limit exists (user, 2026-10-19)." } });
   const ctx = await new BoardService(x.store).context("b", x.paseo);
-  expect(ctx.context).toContain("Project memory (confirmed by the user; all 1 entries):");
+  expect(ctx.context).toContain("Project memory (all 1 entries):");
   expect(ctx.context).toContain(`- [Decision] Do not pin a Paseo upper bound: No real upper limit exists (user, 2026-10-19). (memory ${candidate.id.slice(0, 8)}, from "Card")`);
   expect(ctx.context.indexOf("Project memory")).toBeLessThan(ctx.context.indexOf("Project: Project"));
   expect(ctx.memoryIds).toEqual([candidate.id]);

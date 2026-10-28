@@ -229,8 +229,8 @@ export function memoryContextLines(selection: MemorySelection, titleOf: (taskId:
   if (!selection.entries.length) return [];
   const shown = selection.entries.length;
   const header = selection.all
-    ? `Project memory (confirmed by the user; all ${shown} entries):`
-    : `Project memory (confirmed by the user; ${shown} of ${selection.total} shown, flowly_recall finds the others):`;
+    ? `Project memory (all ${shown} entries):`
+    : `Project memory (${shown} of ${selection.total} shown, flowly_recall finds the others):`;
   return [header, ...selection.entries.map((e) => memoryLine(e, titleOf(e.source.taskId)))];
 }
 
@@ -274,7 +274,7 @@ export function leastUsed(entries: readonly MemoryEntry[], projectId: string, n 
     .slice(0, n);
 }
 /** Records that a card used these entries; at most 20 distinct cards, the latest kept. */
-export function noteUse(entry: MemoryEntry, taskId: string, at: string) {
+export function noteUse(entry: { usedAt?: string; usedBy?: { taskId: string; at: string }[] }, taskId: string, at: string) {
   entry.usedAt = at;
   const list = (entry.usedBy || []).filter((u) => u.taskId !== taskId);
   list.push({ taskId, at });

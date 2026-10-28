@@ -224,6 +224,53 @@ export const ruleResultSchema = z.object({
   reason: z.string().max(autoReviewLimits.reason).optional(),
 });
 export type RuleResult = z.infer<typeof ruleResultSchema>;
+/** The size band of a delivery's changes (GUARDRAILS-SPEC §6.2). */
+export const changeSizes = ["s", "m", "l"] as const;
+export type ChangeSize = (typeof changeSizes)[number];
+/** What a delivery changed, measured when its review starts (GUARDRAILS-SPEC §6.2). */
+export const changeShapeSchema = z.object({
+  files: z.number().int().nonnegative(),
+  lines: z.number().int().nonnegative(),
+  size: z.enum(changeSizes),
+});
+export type ChangeShape = z.infer<typeof changeShapeSchema>;
+export const reviewItemKinds = ["command", "goal", "guideline", "item"] as const;
+export const reviewItemStates = ["queued", "running", "passed", "failed", "na", "disputed", "skipped", "unavailable"] as const;
+export type ReviewItemState = (typeof reviewItemStates)[number];
+/** One checked item of a review (GUARDRAILS-SPEC §6.4); replaces `rules`. */
+export const reviewItemSchema = z.object({
+  id: z.string().max(40),
+  kind: z.enum(reviewItemKinds),
+  /** The command's name, the guideline's text or the card item's text. */
+  name: z.string().max(200),
+  /** false for an observing command: run and shown, not part of the verdict. */
+  gating: z.boolean(),
+  state: z.enum(reviewItemStates),
+  ms: z.number().int().nonnegative().optional(),
+  argv: z.array(z.string()).max(autoReviewLimits.args).optional(),
+  exitCode: z.number().int().nullable().optional(),
+  timedOut: z.boolean().optional(),
+  tail: z.string().max(autoReviewLimits.tail).optional(),
+  detail: z.string().max(autoReviewLimits.detail).optional(),
+  file: z.string().max(300).optional(),
+  line: z.number().int().nonnegative().optional(),
+  /** Evidence quoted from the card or the user's words (§6.3). */
+  quote: z.string().max(300).optional(),
+  reason: z.string().max(autoReviewLimits.reason).optional(),
+  disputeReason: z.string().max(300).optional(),
+});
+export type ReviewItem = z.infer<typeof reviewItemSchema>;
+/** A failed finding the agent disputed on delivery; kept until the card is Done or Cancelled (GUARDRAILS-SPEC §6.1, B7). */
+export const disputeLimits = { perTask: 10, reason: 300 } as const;
+export const disputeSchema = z.object({
+  id: z.string().max(40),
+  kind: z.enum(reviewItemKinds),
+  name: z.string().max(200),
+  reason: z.string().max(disputeLimits.reason),
+  round: z.number().int().min(1),
+  at: timestamp,
+});
+export type Dispute = z.infer<typeof disputeSchema>;
 /** The card's latest automatic review; a new one replaces it (AUTO-REVIEW-SPEC §6, §12.5). */
 export const reviewSchema = z.object({
   /** The delivery that started it, or a person's Rerun (`eventId` empty). `from` is the status before In review. */
@@ -242,6 +289,10 @@ export const reviewSchema = z.object({
   shared: z.boolean(),
   /** The rules in effect when it started, in list order, with their results. */
   rules: z.array(ruleResultSchema).max(autoReviewLimits.commandRules + autoReviewLimits.llmRules).default([]),
+  /** What the delivery changed (GUARDRAILS-SPEC §6.2); absent on reviews written before guardrails. */
+  shape: changeShapeSchema.optional(),
+  /** Every checked item with its result (GUARDRAILS-SPEC §6.4); takes over from `rules`. */
+  items: z.array(reviewItemSchema).max(40).optional(),
   /** The LLM review's model, when one ran. */
   model: z.string().max(200).optional(),
   startedAt: timestamp,
@@ -308,6 +359,8 @@ export const taskSchema = z.object({
   review: reviewSchema.optional(),
   /** The project's Auto review setup card (AUTO-REVIEW-SPEC §12.2): its deliveries are not reviewed. */
   reviewSetup: z.literal(true).optional(),
+  /** Review findings the agent disputed (GUARDRAILS-SPEC §6.1); written without a task revision, cleared at Done/Cancelled. */
+  disputes: z.array(disputeSchema).max(disputeLimits.perTask).optional(),
 });
 /** A follow-up an agent proposed on its card; the user may turn it into a card (IDEAS-SPEC). */
 export const ideaStatuses = ["open", "accepted", "dismissed"] as const;
@@ -530,6 +583,17 @@ export const nextMoveSchema = z.object({
   moveTo: z.enum(nextMoveTargets).optional(),
 });
 export type NextMove = z.infer<typeof nextMoveSchema>;
+/** Project guardrail events (GUARDRAILS-SPEC §7.6): in the flow log for Insights, never in the card's activity timeline. */
+export const guardrailLearnedAction = "guardrail_learned";
+export const guardrailRetiredAction = "guardrail_retired";
+export const guardrailChanges = ["item", "guideline", "revived", "widened", "paused", "archived", "displaced", "merged"] as const;
+export const guardrailChangeSchema = z.object({
+  change: z.enum(guardrailChanges),
+  kind: z.enum(["command", "guideline", "note", "item"]),
+  /** The entry or card item it concerns. */
+  id: z.string().max(40),
+});
+export type GuardrailChange = z.infer<typeof guardrailChangeSchema>;
 export const eventSchema = z.object({
   id: z.string(),
   taskId: z.string(),
@@ -561,7 +625,9 @@ export const eventSchema = z.object({
   /** status_changed into In review by an agent that acknowledged missing card setup (CARD-SETUP-SPEC §3.4). */
   setup: z.object({ missing: z.array(z.enum(["type", "tags", "workpad"])) }).optional(),
   /** review_finished: each check's result, for the Insights counts (AUTO-REVIEW-SPEC §8.3). */
-  results: z.array(z.object({ id: z.string().max(40), state: z.string().max(20) })).max(30).optional(),
+  results: z.array(z.object({ id: z.string().max(40), state: z.string().max(20), kind: z.enum(reviewItemKinds).optional() })).max(40).optional(),
+  /** guardrail_learned / guardrail_retired: what changed (GUARDRAILS-SPEC §7.6). */
+  guardrail: guardrailChangeSchema.optional(),
   at: timestamp,
 });
 export const boardSchema = z.object({
