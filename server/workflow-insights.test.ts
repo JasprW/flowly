@@ -446,3 +446,132 @@ for (const secondLookupFails of [false, true]) {
     expect(x.archived()).toBe(0);
   });
 }
+
+// ---- Auto review in Insights (AUTO-REVIEW-SPEC §7) ----------------------------------------
+let eventN = 0;
+const ev = (taskId: string, hoursAgo: number, extra: Record<string, unknown>) => ({ id: `ev${eventN++}`, taskId, at: new Date(NOW - hoursAgo * 3_600_000).toISOString(), ...extra });
+const delivered = (taskId: string, h: number) => ev(taskId, h, { actor: "agent", action: "status_changed", from: "development", to: "in_review" });
+const sentBack = (taskId: string, h: number) => [
+  ev(taskId, h, { actor: "system", action: "status_changed", rule: "A1", from: "in_review", to: "development" }),
+  ev(taskId, h - 0.5, { actor: "system", action: "agent.turn_ended" }),
+];
+const cards = ["aaaaaaaa-1", "bbbbbbbb-2", "cccccccc-3"];
+
+test("rework nudge: Auto review off and 3 cards sent back in 14 days; Not now hides it for 30 days; on, it never shows", async () => {
+  const x = await setup();
+  const events = cards.flatMap((id, i) => [delivered(id, 48 + i), ...sentBack(id, 47 + i)]);
+  await x.board.flow!.append(events as never, await x.board.read());
+  expect((await x.service.view("p")).reviewNudge).toMatchObject({ delivered: 3, reworked: 3, cards: [{ id: "aaaaaaaa-1" }, { id: "bbbbbbbb-2" }, { id: "cccccccc-3" }] });
+  await x.service.dismissReviewNudge("p");
+  expect((await x.service.view("p")).reviewNudge).toBeNull();
+  x.setNow(NOW + 31 * 86_400_000);
+  await x.board.flow!.append(cards.flatMap((id, i) => [delivered(id, -31 * 24 + 5 + i), ...sentBack(id, -31 * 24 + 4 + i)]) as never, await x.board.read());
+  expect((await x.service.view("p")).reviewNudge).toMatchObject({ reworked: 3 });
+  await x.board.mutate((b) => {
+    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: [] };
+  });
+  expect((await x.service.view("p")).reviewNudge).toBeNull();
+});
+
+test("two cards sent back are not enough, and a restored commit-and-push turn does not count", async () => {
+  const x = await setup();
+  const restored = (id: string, h: number) => [
+    ev(id, h, { actor: "system", action: "status_changed", rule: "A1", from: "in_review", to: "development" }),
+    ev(id, h - 0.2, { actor: "system", action: "agent.turn_ended" }),
+    ev(id, h - 0.2, { actor: "system", action: "status_changed", rule: "A1r", from: "development", to: "in_review" }),
+  ];
+  const events = [delivered(cards[0]!, 50), ...sentBack(cards[0]!, 49), delivered(cards[1]!, 40), ...sentBack(cards[1]!, 39), delivered(cards[2]!, 30), ...restored(cards[2]!, 29)];
+  await x.board.flow!.append(events as never, await x.board.read());
+  expect((await x.service.view("p")).reviewNudge).toBeNull();
+});
+
+test("review_rule suggestions join the run when Auto review is on; a repeat of a rule is dropped; Add check adds it", async () => {
+  const x = await setup();
+  await x.board.mutate((b) => {
+    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: [{ id: "tests", name: "Tests", kind: "command", argv: ["npm", "test"] }] };
+  });
+  await x.log.append("p", records(6, 3));
+  x.replies.push(
+    JSON.stringify({
+      findings: [
+        { target: "review_rule", title: "Catalog check", evidence: "2 cards", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "copy", name: "Strings in all catalogs", kind: "llm", prompt: "Every new UI string is in all catalogs." } },
+        { target: "review_rule", title: "Run tests", evidence: "2 cards", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "tests", name: "Tests", kind: "command", argv: ["npm", "test"] } },
+      ],
+      noise: "",
+      verdict: "ok",
+    }),
+  );
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  expect(x.created[0]!.prompt).toContain("# Auto review");
+  expect(x.created[0]!.prompt).toContain('"review_rule"');
+  const view = await x.service.view("p");
+  const found = view.findings.filter((f) => f.target === "review_rule");
+  expect(found.map((f) => f.rule?.id)).toEqual(["copy"]);
+  expect(found[0]!.proposal).toBe("Every new UI string is in all catalogs.");
+  const before = (await x.board.read()).projects[0]!.revision;
+  expect(await x.service.addReviewCheck(found[0]!.id)).toEqual({ revision: before + 1 });
+  const project = (await x.board.read()).projects[0]!;
+  expect(project.autoReview!.rules!.map((r) => r.id)).toEqual(["tests", "copy"]);
+  expect((await x.service.view("p")).findings.find((f) => f.id === found[0]!.id)!.status).toBe("accepted");
+  await expect(x.service.addReviewCheck(found[0]!.id)).rejects.toThrow("FINDING_NOT_OPEN");
+});
+
+test("review_rule suggestions are dropped when Auto review is off; the prompt has no Auto review section", async () => {
+  const x = await setup();
+  await x.log.append("p", records(6, 3));
+  x.replies.push(JSON.stringify({ findings: [{ target: "review_rule", title: "Catalog", evidence: "", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "copy", name: "C", kind: "llm", prompt: "p" } }], noise: "", verdict: "" }));
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  expect(x.created[0]!.prompt).not.toContain("# Auto review");
+  expect((await x.service.view("p")).findings.filter((f) => f.target === "review_rule")).toEqual([]);
+});
+
+test("a pause suggestion for an LLM check judged 20 times without a failure, never the built-in check; Pause turns it off", async () => {
+  const x = await setup();
+  await x.board.mutate((b) => {
+    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: [{ id: "copy", name: "Copy", kind: "llm", prompt: "p" }, { id: "flaky", name: "Flaky", kind: "llm", prompt: "q" }] };
+  });
+  const finished = Array.from({ length: 20 }, (_, i) =>
+    ev(cards[i % 3]!, 10 + i, { actor: "system", action: "review_finished", results: [{ id: "goal", state: "passed" }, { id: "copy", state: i % 2 ? "passed" : "na" }, { id: "flaky", state: i === 3 ? "failed" : "passed" }] }),
+  );
+  await x.board.flow!.append(finished as never, await x.board.read());
+  await x.log.append("p", records(6, 3));
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  const pauses = (await x.service.view("p")).findings.filter((f) => f.target === "review_pause");
+  expect(pauses.map((f) => f.ruleId)).toEqual(["copy"]);
+  expect(pauses[0]).toMatchObject({ title: "Copy", reviews: 20 });
+  // A second run does not suggest it twice.
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  expect((await x.service.view("p")).findings.filter((f) => f.target === "review_pause")).toHaveLength(1);
+  const before = (await x.board.read()).projects[0]!.revision;
+  await x.service.pauseReviewCheck(pauses[0]!.id);
+  const project = (await x.board.read()).projects[0]!;
+  expect(project.revision).toBe(before + 1);
+  expect(project.autoReview!.rules!.find((r) => r.id === "copy")).toMatchObject({ off: true });
+});
+
+test("Add check on a kind that already has 10 checks: a readable refusal, the suggestion stays open", async () => {
+  const x = await setup();
+  const prompts = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet"];
+  await x.board.mutate((b) => {
+    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: prompts.map((w) => ({ id: w, name: `${w} check`, kind: "llm" as const, prompt: `Every ${w} quux is zorbed.` })) };
+  });
+  await x.log.append("p", records(6, 3));
+  x.replies.push(
+    JSON.stringify({
+      findings: [{ target: "review_rule", title: "Catalog check", evidence: "", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "copy", name: "Strings in all catalogs", kind: "llm", prompt: "New UI strings appear in every language catalog." } }],
+      noise: "",
+      verdict: "",
+    }),
+  );
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  const f = (await x.service.view("p")).findings.find((y) => y.target === "review_rule")!;
+  const before = (await x.board.read()).projects[0]!.revision;
+  await expect(x.service.addReviewCheck(f.id)).rejects.toThrow("This project already has 10 LLM checks. Remove one first.");
+  expect((await x.board.read()).projects[0]!.revision).toBe(before);
+  expect((await x.service.view("p")).findings.find((y) => y.id === f.id)!.status).toBe("open");
+});

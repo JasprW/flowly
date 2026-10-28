@@ -69,6 +69,8 @@ import { TaskMemorySection } from "./memory";
 import { LinkOrigin, TaskLinks } from "./task-links";
 import { TaskArtifacts } from "./task-artifacts";
 import { TaskWorkpad } from "./task-workpad";
+import { TaskReview } from "./task-review";
+import { autoReviewEnabled } from "../shared/auto-review";
 import { TaskTags } from "./task-tags";
 import { drawerSectionOrder, drawerSectionsOpen, type AnyDrawerSection, type DrawerSection } from "../shared/drawer-sections";
 import { ideaInstruction } from "../shared/ideas";
@@ -196,7 +198,12 @@ function TaskDrawerView({
   const order = useMemo(() => drawerSectionOrder(sectionOrder ? sectionOrder.split(",") : []), [sectionOrder]);
   // Which sections are open: the user's defaults each time the sidebar opens, then their own toggles.
   // Activity and Usage are history, not status: closed by default (USAGE-STATS-SPEC §5).
-  const openDefaults = useMemo(() => drawerSectionsOpen(sectionOpen ? (JSON.parse(sectionOpen) as Record<string, boolean>) : {}), [sectionOpen]);
+  // With Auto review on the review result leads and the agent's workpad starts closed (AUTO-REVIEW-SPEC §9.2, D17).
+  const reviewFirst = autoReviewEnabled(project);
+  const openDefaults = useMemo(() => {
+    const defaults = drawerSectionsOpen(sectionOpen ? (JSON.parse(sectionOpen) as Record<string, boolean>) : {});
+    return reviewFirst ? { ...defaults, workpad: false } : defaults;
+  }, [sectionOpen, reviewFirst]);
   const [opened, setOpened] = useState(openDefaults);
   useEffect(() => {
     if (active) setOpened(openDefaults);
@@ -734,9 +741,13 @@ function TaskDrawerView({
         );
       case "workpad":
         return (
-          workpadEnabled(project) && (
-            <TaskWorkpad task={task} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
-          )
+          <>
+            {reviewFirst && <TaskReview task={task} project={project} disabled={!active || !!task.archivedAt || !!project.archivedAt} />}
+            {workpadEnabled(project) && (
+              <TaskWorkpad task={task} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
+            )}
+            {!reviewFirst && <TaskReview task={task} project={project} disabled={!active || !!task.archivedAt || !!project.archivedAt} />}
+          </>
         );
       case "artifacts":
         return (
@@ -1319,6 +1330,8 @@ const activityText: Record<string, string> = localizedLabels({
   progress_reported: msg("Reported progress"),
   idea_edited: msg("Edited the idea"),
   idea_removed: msg("Removed the idea"),
+  review_started: msg("Started the auto review"),
+  review_finished: msg("Finished the auto review"),
   "agent.turn_started": msg("Started a turn"),
   "agent.turn_ended": msg("Finished a turn"),
 });
@@ -1365,7 +1378,7 @@ function ActivityItem({
         </Label>
         {!!event.rule && (
           <View style={{ flexDirection: "row" }}>
-            <Badge>{t("Auto")}</Badge>
+            <Badge>{event.rule === "R1" || event.rule === "R2" ? t("Auto review") : t("Auto")}</Badge>
           </View>
         )}
         {!!event.note && !isNoMoves(event) && (

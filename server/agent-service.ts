@@ -25,6 +25,8 @@ import { mergeWorkpad, openItemLines, openItems, plansOf, validationFreshness, w
 import { defaultGit, readHead, resolveCommit, type Git } from "./workpad";
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
+import { autoReviewEnabled, autoReviewOf, autoReviewRuns, checkProposedRules, draftDiff, draftTaskId, effectiveRules, nextDraftAt, failingItemLines, reviewConfigHash, reviewContext, workpadFailingMessage } from "../shared/auto-review";
+import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
   agentStatuses,
@@ -39,6 +41,7 @@ import {
   tagsInputSchema,
   typeInputSchema,
   nextMovesInputSchema,
+  reviewRulesInputSchema,
   workpadInputSchema,
   progressInputSchema,
   statusInputSchema,
@@ -58,6 +61,7 @@ import {
   type TagsToolInput,
   type TypeToolInput,
   type NextMovesInput,
+  type ReviewRulesInput,
   type WorkpadInput,
   type ExternalContext,
   type ReadExternalInput,
@@ -66,7 +70,7 @@ import { BoardStore } from "./store";
 import { BoardService } from "./service";
 import { ToolSecrets, digest } from "./tool-context";
 import { ToolError } from "./tool-error";
-import { ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Receipt, type Status } from "../shared/model";
+import { ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Project, type Receipt, type Status, type Task } from "../shared/model";
 import { isLegacyScope } from "../shared/scope";
 import { MemoryError, type MemoryService } from "./memory";
 import type { SearchService } from "./search";
@@ -105,6 +109,8 @@ export class AgentService {
   connectors?: ConnectorService;
   /** Project memory (PROJECT-MEMORY-SPEC); set by the plugin entry. */
   memory?: MemoryService;
+  /** Starts the automatic review of an agent delivery (AUTO-REVIEW-SPEC §3.1); set by the plugin entry. Never awaited. */
+  onDelivered?: (delivery: DeliveredReview, paseo: PaseoApi) => void;
   /** flowly_recall (PROJECT-MEMORY-SPEC §6.4): read-only. */
   async recall(identity: ToolIdentity, raw: RecallInput) {
     const input = recallInputSchema.parse(raw);
@@ -318,7 +324,11 @@ export class AgentService {
     const built: ToolContext = {
       identity,
       turnChecklist: [...turnChecklist],
-      task: r.task,
+      task: (({ review: _review, ...task }) => task)(r.task),
+      // The card's latest automatic review (AUTO-REVIEW-SPEC §5); state "rework" means its findings come first.
+      ...(r.task.review ? { review: reviewContext(r.task.review) } : {}),
+      // What a delivery is checked against, before the agent delivers (AUTO-REVIEW-SPEC §12.3).
+      ...(autoReviewEnabled(r.project) || r.task.reviewSetup || draftTaskId(r.project.reviewDraft) === r.task.id ? { reviewRules: reviewRulesContext(r.project, r.task) } : {}),
       project: r.project,
       revision,
       request: this.secrets.request(identity, revision),
@@ -436,10 +446,10 @@ export class AgentService {
   }
   async write(
     identity: ToolIdentity,
-    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
+    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad" | "review_rules",
     raw: unknown,
   ): Promise<ToolResult> {
-    const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
+    const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput | ReviewRulesInput =
       action === "status"
         ? statusInputSchema.parse(raw)
         : action === "remember"
@@ -462,7 +472,13 @@ export class AgentService {
                     ? nextMovesInputSchema.parse(raw)
                     : action === "workpad"
                       ? workpadInputSchema.parse(raw)
-                      : progressInputSchema.parse(raw);
+                      : action === "review_rules"
+                        ? reviewRulesInputSchema.parse(raw)
+                        : progressInputSchema.parse(raw);
+    // A proposed rule set is checked in full before anything is written (AUTO-REVIEW-SPEC §12.3).
+    const proposed = action === "review_rules" ? checkProposedRules((input as ReviewRulesInput).rules) : undefined;
+    if (proposed && "problems" in proposed)
+      throw new ToolError("REVIEW_RULES_INVALID", `The rule set was not saved:\n${proposed.problems.map((p) => `- ${p}`).join("\n")}\nFix every problem and send the complete list again.`);
     const signed = this.secrets.validateRequest(
       identity,
       input.request,
@@ -583,6 +599,8 @@ export class AgentService {
       if (missing.length) out.push(setupReminder(missing));
       return out;
     };
+    let review: DeliveredReview | undefined;
+    let draftChanges: ReturnType<typeof draftDiff> | undefined;
     const result = await this.store.transaction((board) => {
       const existing = board.agentReceipts.find((r) => r.key === key);
       if (existing) {
@@ -681,6 +699,9 @@ export class AgentService {
         setupGap,
         head: head ? { sha: head.sha, branch: head.branch, dirty: head.dirty } : null,
       }));
+      // Auto review's hard gate (AUTO-REVIEW-SPEC §4.1): failed or out-of-date checks refuse the delivery outright.
+      const failing = deliveryPad && autoReviewEnabled(project) ? failingItemLines(deliveryPad) : [];
+      if (failing.length) throw new ToolError("WORKPAD_FAILING", workpadFailingMessage(failing));
       const acknowledged = hasOpen && this.deliveryGate.acknowledge(binding, fingerprint, !!(input as StatusInput).acknowledgeOpen, this.clock());
       if (deliveryPad && delivered!.total > 0 && !acknowledged)
         throw new ToolError(
@@ -843,6 +864,35 @@ export class AgentService {
               });
             })()
           : undefined;
+      // A draft for the user's Apply; the project's rules and revision stay as they are (AUTO-REVIEW-SPEC §12.3, D8).
+      const reviewRulesEvent =
+        action === "review_rules" && proposed && "rules" in proposed
+          ? (() => {
+              const r = input as ReviewRulesInput;
+              const current = autoReviewOf(project);
+              // `at` identifies the draft for Apply/Discard (§12.3), so a replacement never reuses the old one's.
+              const at = nextDraftAt(project.reviewDraft, this.clock());
+              project.reviewDraft = {
+                rules: proposed.rules,
+                ...(r.guidance !== undefined ? { guidance: r.guidance } : {}),
+                ...(r.maxRounds !== undefined ? { maxRounds: r.maxRounds } : {}),
+                ...(r.goal !== undefined ? { goal: r.goal } : {}),
+                note: r.note,
+                by: { taskId: task.id, agentId: identity.agentId },
+                at,
+                baseRevision: project.revision,
+                baseHash: reviewConfigHash(current),
+              };
+              draftChanges = draftDiff(current.rules, proposed.rules);
+              return this.store.event(board, {
+                taskId: task.id,
+                agentId: identity.agentId,
+                actor: "agent",
+                action: "review_rules_proposed",
+                note: `Proposed ${proposed.rules.length} review rule${proposed.rules.length === 1 ? "" : "s"}: ${r.note}`.slice(0, 2000),
+              });
+            })()
+          : undefined;
       // A session's candidate next messages; the latest of a turn wins (NEXT-MOVES-SPEC §2-3). An empty list is
       // recorded too: the agent's explicit "nothing for the user this turn" (§8.3).
       const recordMoves = (moves: readonly NextMove[]) =>
@@ -868,6 +918,7 @@ export class AgentService {
         tagsEvent ??
         typeEvent ??
         movesEvent ??
+        reviewRulesEvent ??
         workpadEvent ??
         (action === "idea" || action === "remember"
           ? this.store.event(board, {
@@ -890,6 +941,9 @@ export class AgentService {
               ...(setupGap.length ? { setup: { missing: setupGap } } : {}),
             }));
       if (deliveryPad) deliveryPad.delivery = { ...delivered!, revision: deliveryPad.revision, eventId: event.id, at: event.at };
+      // An agent delivery starts the project's automatic review once this write commits (AUTO-REVIEW-SPEC §3.1).
+      if (next === "in_review" && next !== previous && autoReviewRuns(project, task))
+        review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous };
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).
       if (carried) recordMoves(carried);
       let ideaId = action === "idea_update" || action === "idea_remove" ? (input as IdeaUpdateInput).id : undefined;
@@ -938,6 +992,7 @@ export class AgentService {
       return { value: { receipt, replayed: false, ideaId, artifactId, reminders: reminders(board) }, changed: true };
     });
     if (delivering && !result.replayed) this.deliveryGate.clear(`${identity.agentId}:${identity.taskId}:${identity.workspaceId}`);
+    if (review && !result.replayed) this.onDelivered?.(review, resources.paseo);
     const {
       key: _key,
       payloadHash: _hash,
@@ -963,7 +1018,7 @@ export class AgentService {
         at: new Date(this.clock()).toISOString(),
         action,
       });
-      return { receipt, replayed: result.replayed, ...remindersField(result.reminders), ...ideaField(result.ideaId), ...memoryField, ...(result.artifactId ? { artifactId: result.artifactId } : {}), ...(notice ? { notice } : {}), current };
+      return { receipt, replayed: result.replayed, ...(draftChanges ? { reviewDraft: draftChanges } : {}), ...remindersField(result.reminders), ...ideaField(result.ideaId), ...memoryField, ...(result.artifactId ? { artifactId: result.artifactId } : {}), ...(notice ? { notice } : {}), current };
     } catch (e) {
       return {
         receipt,
@@ -1091,3 +1146,40 @@ export function pruneIdeas(board: Board, taskId: string) {
 
 /** "GitLab", for agent-facing messages. */
 const serviceName = (provider: Parameters<typeof familyOf>[0]) => ({ jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps" })[familyOf(provider)];
+
+/**
+ * get_task.reviewRules (§5): an ordinary card gets only the checks that run on it (and whether the built-in one is on),
+ * and the guidance only when one of them is a judgement check, so every turn does not pay for the whole set. The setup
+ * card and the card that proposed the current draft get every rule, the guidance and the draft itself.
+ */
+function reviewRulesContext(project: Project, task: Task) {
+  const config = autoReviewOf(project);
+  const draft = project.reviewDraft;
+  const proposer = draftTaskId(draft);
+  const full = !!task.reviewSetup || (!!proposer && proposer === task.id);
+  const rules = full ? config.rules : effectiveRules(project, task);
+  const judged = config.goal || rules.some((r) => r.kind === "llm");
+  return {
+    goal: config.goal,
+    rules,
+    ...(config.guidance && (full || judged) ? { guidance: config.guidance } : {}),
+    maxRounds: config.maxRounds,
+    ...(draft
+      ? {
+          draft: {
+            ...(proposer ? { taskId: proposer } : { analysis: true as const }),
+            at: draft.at,
+            ...(full
+              ? {
+                  rules: draft.rules,
+                  note: draft.note,
+                  ...(draft.guidance !== undefined ? { guidance: draft.guidance } : {}),
+                  ...(draft.maxRounds !== undefined ? { maxRounds: draft.maxRounds } : {}),
+                  ...(draft.goal !== undefined ? { goal: draft.goal } : {}),
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}

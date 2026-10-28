@@ -15,6 +15,9 @@ import { t, tn } from "../shared/i18n";
 import type { WorkpadSignal } from "../shared/workpad";
 import { activityLines, defaultCardDisplay, type CardDisplay } from "../shared/card-display";
 import { BrandIcon } from "./brand-icons";
+import { reviewing, visibleReview } from "../shared/auto-review";
+import { Collapse } from "./disclosure";
+import { reviewIcon, reviewLabel } from "./task-review";
 import type { ConnectorFamily } from "../shared/connectors";
 
 export type CardDrag = {
@@ -267,6 +270,7 @@ export function TaskCard({
           waiting ? tn(waiting, "Waiting on {n} card: {waitingTitles}", "Waiting on {n} cards: {waitingTitles}", { waitingTitles }) : "",
           progress ? t("Progress: {state}", { state: progress.state }) : "",
           workpad ? workpadText(workpad) : "",
+          task.review && visibleReview(task) ? reviewLabel(task.review) : "",
           attentionDismissed ? t("Dismissed from Attention") : "",
           [t("{priority} priority", { priority: priorityLabels[task.priority] }), task.type ? taskTypeLabels[task.type] : "", task.archivedAt ? t("archived") : "", legacy ? t("legacy scope") : ""].filter(Boolean).join(", "),
           summaryState === "ready" && summary
@@ -321,6 +325,7 @@ export function TaskCard({
           display={display}
         />
       </Pressable>
+      <ReviewStrip taskId={task.id} open={reviewing(task)} label={task.review ? reviewLabel(task.review) : ""} />
       {accent && (
         // Urgent/High: a stripe down the left edge, readable from across the board.
         <View
@@ -432,6 +437,40 @@ function Signal({ color, icon, text, pulse = false }: { color?: string; icon?: s
   );
 }
 
+/**
+ * While an automatic review runs, a strip opens under the card with the dot sweep (AUTO-REVIEW-SPEC §7). `Collapse`
+ * expands it when the review starts and folds it when it ends; a card mounted mid-review shows it at once.
+ */
+function ReviewStrip({ taskId, open, label }: { taskId: string; open: boolean; label: string }) {
+  const { colors } = useTheme();
+  return (
+    <Collapse open={open} id={`${taskId}:review`}>
+      <View
+        pointerEvents="none"
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 5,
+          paddingHorizontal: space[3],
+          paddingVertical: space[1.5],
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          borderBottomLeftRadius: radius.lg - 1,
+          borderBottomRightRadius: radius.lg - 1,
+          backgroundColor: tint(colors.accent, 0.06),
+          overflow: "hidden",
+        }}
+      >
+        <RunningDots color={colors.accent} seed={`${taskId}:review`} />
+        <Icon name="Loader" size={13} color={colors.accent} />
+        <Label size={font.sm} color={colors.accent} selectable={false}>
+          {label}
+        </Label>
+      </View>
+    </Collapse>
+  );
+}
+
 function CardSignals({
   task,
   legacy,
@@ -504,6 +543,17 @@ function CardSignals({
     }
   } else if (sessions && display.sessions)
     items.push(<Signal key="fallback" icon="MessageSquare" text={running ? t("{running}/{sessions} running", { running, sessions }) : `${sessions}`} />);
+  const review = visibleReview(task);
+  // A running review has its own strip under the card.
+  if (review && review.state !== "running")
+    items.push(
+      <Signal
+        key="review"
+        icon={reviewIcon(review)}
+        color={review.state === "failed" || review.state === "rework" ? colors.statusDanger : review.state === "passed" ? colors.statusSuccess : review.state === "unavailable" || review.state === "cancelled" ? colors.statusWarning : undefined}
+        text={reviewLabel(review)}
+      />,
+    );
   if (attentionDismissed) items.push(<Signal key="dismissed" icon="BellOff" text={t("Dismissed")} />);
   if (workpad && display.workpad)
     items.push(

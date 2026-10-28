@@ -24,7 +24,7 @@ const snapshot: TelemetrySnapshot = {
   language: "auto",
   deviceLocale: "zh-CN",
   aiLanguage: "interface",
-  features: { memory: true, insights: true, ideas: true, artifacts: true, outsideSessions: false, autoStatus: true, autoWrapup: false, archiveOnDelete: false, workflowInsights: false, summary: true },
+  features: { memory: true, insights: true, ideas: true, artifacts: true, outsideSessions: false, autoStatus: true, autoWrapup: false, archiveOnDelete: false, workflowInsights: false, summary: true, autoReview: false, autoReviewLlm: false },
   projects: 3,
   cardsOpen: 12,
 };
@@ -34,7 +34,7 @@ const event = (action: string, at: string, extra: Partial<FlowEntry> = {}): Flow
 /** The exact §4 whitelist (window_days only after a gap of more than 7 days). */
 const expectedKeys = [
   "$process_person_profile", "$geoip_disable", "flowly_version", "node_major", "os", "arch", "ui_language", "ui_locale", "ai_language",
-  "f_memory", "f_insights", "f_ideas", "f_artifacts", "f_outside_sessions", "f_auto_status", "f_auto_wrapup", "f_archive_on_delete", "f_workflow_insights", "f_summary",
+  "f_memory", "f_insights", "f_ideas", "f_artifacts", "f_outside_sessions", "f_auto_status", "f_auto_wrapup", "f_archive_on_delete", "f_workflow_insights", "f_summary", "f_auto_review", "f_auto_review_llm",
   "projects", "cards_open",
   "c_cards_created", "c_turns", "c_deliveries", "c_next_moves", "c_next_moves_picked", "c_ideas_proposed", "c_ideas_accepted", "c_ideas_dismissed", "c_memory_proposed", "c_memory_confirmed", "c_wrapups", "models",
 ].sort();

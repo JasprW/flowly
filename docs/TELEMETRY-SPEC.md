@@ -105,6 +105,8 @@ Content-Type: application/json
 | `f_auto_wrapup` / `f_archive_on_delete` | `wrap-up` 设置 | 布尔值 |
 | `f_workflow_insights` | `workflow-insights.enabled`，且 Insights 开着（Workflow insights 是 host 级开关，不是按项目） | 布尔值 |
 | `f_summary` | `task-summary.summaryEnabled` | 布尔值 |
+| `f_auto_review` | 是否有未归档项目开启了 Auto review（`project.autoReview.enabled`，AUTO-REVIEW-SPEC） | 布尔值 |
+| `f_auto_review_llm` | 是否有未归档项目开启了 Auto review 且有判断类检查在用：内置检查 “Does what you asked” 未暂停，或有未暂停的 LLM 检查（AUTO-REVIEW-SPEC §9.6） | 布尔值 |
 | `projects` | 未归档项目数，按 §4.5 分桶 | |
 | `cards_open` | 所有项目中未归档、且不在 Done/Cancelled 的卡片数，按 §4.5 分桶 | |
 

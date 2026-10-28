@@ -76,6 +76,8 @@ export const summarySettings = defineSettings({
     digestEnabled: z.boolean().default(true),
     /** Review cards moved into Done for project memory candidates (PROJECT-MEMORY-SPEC §4.2, §9). */
     retroEnabled: z.boolean().default(true),
+    /** `provider/model` of the auto review session (AUTO-REVIEW-SPEC §12.4); empty: the project's default model, then the summary models. */
+    reviewModel: z.string().max(200).optional(),
   }),
 });
 export type SummarySettings = z.infer<typeof summarySettings.schema>;

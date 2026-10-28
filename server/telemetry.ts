@@ -152,6 +152,10 @@ export type TelemetrySnapshot = {
     archiveOnDelete: boolean;
     workflowInsights: boolean;
     summary: boolean;
+    /** Some active project has Auto review on (AUTO-REVIEW-SPEC). */
+    autoReview: boolean;
+    /** Some active project has Auto review on with an LLM rule in use (AUTO-REVIEW-SPEC §12.7). */
+    autoReviewLlm: boolean;
   };
   projects: number;
   cardsOpen: number;
@@ -179,6 +183,8 @@ export function heartbeatProperties(s: TelemetrySnapshot, counts: WindowCounts, 
     f_archive_on_delete: s.features.archiveOnDelete,
     f_workflow_insights: s.features.workflowInsights,
     f_summary: s.features.summary,
+    f_auto_review: s.features.autoReview,
+    f_auto_review_llm: s.features.autoReviewLlm,
     projects: bucket(s.projects),
     cards_open: bucket(s.cardsOpen),
     ...counts,

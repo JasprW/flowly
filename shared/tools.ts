@@ -30,6 +30,10 @@ import {
   confusionItemSchema,
   gitHeadSchema,
   planStatuses,
+  reviewStates,
+  ruleStates,
+  reviewRuleSchema,
+  autoReviewLimits,
 } from "./model";
 
 export const agentStatuses = ["design", "development", "test", "blocked", "in_review"] as const;
@@ -257,6 +261,24 @@ export const typeInputSchema = z.strictObject({
     "feature: new behavior; bugfix: wrong behavior fixed; research: investigation or analysis without a shipped change; refactor: restructuring without behavior change; docs: documentation only; chore: build, tooling, dependencies, maintenance.",
   ),
 });
+/**
+ * flowly_propose_review_rules (AUTO-REVIEW-SPEC §12.3): a complete rule set as a draft for the user's Apply. `rules` is
+ * checked by the daemon so every problem comes back at once as REVIEW_RULES_INVALID.
+ */
+export const reviewRulesInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  request: requestSchema,
+  rules: z
+    .array(z.unknown())
+    .max(autoReviewLimits.commandRules + autoReviewLimits.llmRules + 10)
+    .describe(
+      "The complete rule list. Each rule: {id: lowercase-slug, name, kind: \"command\", argv: [\"npm\",\"test\"], timeoutSec?: 10-3600} or {id, name, kind: \"llm\", prompt: one concrete requirement judged from the diff and the card}; optional types: [feature|bugfix|research|refactor|docs|chore] limits it to those card types, off: true pauses it. At most 10 of each kind.",
+    ),
+  guidance: z.string().max(autoReviewLimits.guidance).optional().describe("Project background every LLM rule shares (stack, constraints); only the review session sees it."),
+  maxRounds: z.number().int().min(0).max(autoReviewLimits.maxRounds).optional().describe("Automatic rework rounds before the card goes to Blocked."),
+  goal: z.boolean().optional().describe('The built-in check "Does what you asked" (judges each delivery against the card and what the user said in its sessions); false pauses it. Omit to keep it as it is.'),
+  note: z.string().min(1).max(autoReviewLimits.note).describe("For the user: why each rule is set this way and how each command ran when you tried it."),
+});
 /** flowly_suggest_next_moves (NEXT-MOVES-SPEC §2): the session's candidate next messages for the user. */
 export const nextMovesInputSchema = z.strictObject({
   expectedRevision: revisionSchema,
@@ -467,6 +489,59 @@ export const toolContextSchema = z.object({
   ),
   /** false: the user turned the workpad off for this project (WORKPAD-SPEC §9); flowly_update_workpad returns WORKPAD_DISABLED. */
   workpadEnabled: z.boolean().optional(),
+  /** The card's latest automatic review (AUTO-REVIEW-SPEC §5, §12.5); absent when it never had one. */
+  review: z
+    .object({
+      state: z.enum(reviewStates),
+      round: z.number(),
+      maxRounds: z.number(),
+      reason: z.string().optional(),
+      rules: z.array(
+        z.object({
+          id: z.string(),
+          kind: z.enum(["command", "llm"]),
+          name: z.string(),
+          state: z.enum(ruleStates),
+          command: z.string().optional(),
+          exitCode: z.number().nullable().optional(),
+          timedOut: z.boolean().optional(),
+          tail: z.string().optional(),
+          detail: z.string().optional(),
+          file: z.string().optional(),
+          line: z.number().optional(),
+          reason: z.string().optional(),
+        }),
+      ),
+      startedAt: z.string(),
+      finishedAt: z.string().optional(),
+    })
+    .optional(),
+  /**
+   * The project's review rules while Auto review is on (AUTO-REVIEW-SPEC §12.3): what a delivery is checked against.
+   * `draft` names a proposal waiting for the user's Apply; its content only for the card that proposed it or the setup card.
+   */
+  reviewRules: z
+    .object({
+      /** The built-in check "Does what you asked" is on (§4.2). */
+      goal: z.boolean(),
+      rules: z.array(reviewRuleSchema),
+      guidance: z.string().optional(),
+      maxRounds: z.number(),
+      draft: z
+        .object({
+          /** The proposing card; absent for the history analysis's draft. */
+          taskId: z.string().optional(),
+          analysis: z.literal(true).optional(),
+          at: z.string(),
+          rules: z.array(reviewRuleSchema).optional(),
+          guidance: z.string().optional(),
+          maxRounds: z.number().optional(),
+          goal: z.boolean().optional(),
+          note: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
   /** The card's workpad (WORKPAD-SPEC §4.1); `fresh` is null for unrun checks. */
   workpad: z
     .object({
@@ -524,6 +599,8 @@ export const toolResultSchema = z.object({
   notice: z.string().optional(),
   /** The added, updated or removed artifact, for the artifact tools. */
   artifactId: z.string().optional(),
+  /** flowly_propose_review_rules: what the draft changes against the current rules, by rule id. */
+  reviewDraft: z.object({ added: z.array(z.string()), changed: z.array(z.string()), removed: z.array(z.string()) }).optional(),
   current: toolContextSchema.nullable(),
   contextError: z.string().optional(),
 });
@@ -560,6 +637,7 @@ export type AgentSearchInput = z.input<typeof agentSearchInputSchema>;
 export type TagsToolInput = z.infer<typeof tagsInputSchema>;
 export type TypeToolInput = z.infer<typeof typeInputSchema>;
 export type NextMovesInput = z.infer<typeof nextMovesInputSchema>;
+export type ReviewRulesInput = z.infer<typeof reviewRulesInputSchema>;
 export type ArtifactToolInput = z.infer<typeof artifactInputSchema>;
 export type ArtifactRemovalInput = z.infer<typeof artifactRemovalSchema>;
 export type WorkpadInput = z.infer<typeof workpadInputSchema>;

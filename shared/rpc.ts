@@ -363,6 +363,55 @@ export const refreshWorkpad = defineRpc({
   input: z.strictObject({ taskId: z.string().min(1) }),
   output: z.object({ head: gitHeadSchema.nullable() }),
 });
+/** A person's Rerun of a card's automatic review (AUTO-REVIEW-SPEC §7). */
+export const rerunReview = defineRpc({
+  name: "reviews.rerun",
+  input: z.strictObject({ taskId: z.string().min(1) }),
+  output: z.object({ ok: z.literal(true) }),
+});
+/** Apply the project's proposed review rules (AUTO-REVIEW-SPEC §12.3); "confirm" when the rules changed since. */
+export const applyReviewDraft = defineRpc({
+  name: "reviews.apply-draft",
+  // at: the draft shown to the person (§12.3); a different current draft returns "stale".
+  input: z.strictObject({
+    projectId: z.string().min(1),
+    at: z.string().min(1),
+    confirm: z.boolean().default(false),
+    exclude: z.array(z.string().max(40)).max(20).optional(),
+    /** Commands found in the repository and ticked in the same list (§6.1, §6.2): added as command checks. */
+    add: z.array(z.object({ name: z.string().trim().min(1).max(80), argv: z.array(z.string().min(1).max(500)).min(1).max(30) })).max(6).optional(),
+  }),
+  output: z.union([z.object({ status: z.literal("stale") }), z.object({ status: z.literal("confirm") }), z.object({ status: z.literal("applied"), revision: z.number() })]),
+});
+export const discardReviewDraft = defineRpc({
+  name: "reviews.discard-draft",
+  input: z.strictObject({ projectId: z.string().min(1), at: z.string().min(1) }),
+  output: z.object({ status: z.enum(["stale", "discarded"]) }),
+});
+/** Check commands found in the project root, without running anything (AUTO-REVIEW-SPEC §6.1). */
+export const detectReviewCommands = defineRpc({
+  name: "reviews.detect-commands",
+  input: z.strictObject({ projectId: z.string().min(1) }),
+  output: z.object({ commands: z.array(z.object({ name: z.string(), argv: z.array(z.string()), checked: z.boolean() })) }),
+});
+/** Starts the history analysis (§6.2); "insufficient" without calling a model when there are too few deliveries. */
+export const analyzeReviewHistory = defineRpc({
+  name: "reviews.analyze-history",
+  input: z.strictObject({ projectId: z.string().min(1) }),
+  output: z.object({ status: z.enum(["started", "running", "insufficient"]) }),
+});
+/** The analysis state, in memory only; `eligible`: enough past deliveries to offer it (§6.1, §9.3). */
+export const reviewAnalysisStatus = defineRpc({
+  name: "reviews.analysis-status",
+  input: z.strictObject({ projectId: z.string().min(1) }),
+  output: z.object({ state: z.enum(["idle", "running", "failed"]), error: z.string().optional(), startedAt: z.string().optional(), eligible: z.boolean() }),
+});
+/** Adjust with AI (§6.3): the project's setup card, created with its session the first time. */
+export const reviewSetupCard = defineRpc({
+  name: "reviews.setup-card",
+  input: z.strictObject({ projectId: z.string().min(1) }),
+  output: z.object({ taskId: z.string(), created: z.boolean(), sessionError: z.string().optional() }),
+});
 /** Ids of a card's file artifacts that no longer exist (CARD-ARTIFACTS-SPEC §9). */
 export const artifactStatus = defineRpc({
   name: "artifacts.status",
@@ -736,6 +785,24 @@ export const installSkill = defineRpc({
   name: "workflow-insights.install-skill",
   input: z.strictObject({ projectId: z.string().min(1).max(200), findingId: z.string().min(1).max(100), expectedRevision: z.number().int().min(0) }),
   output: z.object({ revision: z.number(), path: z.string(), linked: z.boolean(), notice: z.string().optional() }),
+});
+/** Add check on an auto review suggestion: the rule joins the project, revision +1 (AUTO-REVIEW-SPEC §7.2). */
+export const addReviewCheck = defineRpc({
+  name: "insights.add-review-check",
+  input: z.strictObject({ findingId: z.string().min(1) }),
+  output: z.object({ revision: z.number() }),
+});
+/** Pause on a pause suggestion: the LLM check is paused, revision +1 (§7.2). */
+export const pauseReviewCheck = defineRpc({
+  name: "insights.pause-review-check",
+  input: z.strictObject({ findingId: z.string().min(1) }),
+  output: z.object({ revision: z.number() }),
+});
+/** Not now on the rework nudge: hidden for 30 days (§7.1). */
+export const dismissReviewNudge = defineRpc({
+  name: "insights.dismiss-review-nudge",
+  input: z.strictObject({ projectId: z.string().min(1) }),
+  output: z.object({ ok: z.literal(true) }),
 });
 export const workflowInsightsOverview = defineRpc({
   name: "workflow-insights.overview",

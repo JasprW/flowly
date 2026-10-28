@@ -137,6 +137,8 @@ import { PROJECT_UNAVAILABLE, gone } from "../shared/card-detail";
 import { workpadEnabled } from "../shared/workpad";
 import { cardDisplay } from "../shared/card-display";
 import { parentOf } from "../shared/subagents";
+import { reviewLabel } from "./task-review";
+import { visibleReview } from "../shared/auto-review";
 
 /** One-time tip texts (ONBOARDING-SPEC §5). */
 const tipText: Record<TipId, () => string> = {
@@ -165,6 +167,8 @@ const tipText: Record<TipId, () => string> = {
   "sidebar-order": () => t("Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar."),
   "session-history": () => t("A session's output now starts at the beginning of its current turn. Press Load earlier at the top to read further back."),
   "settings-entry": () => t("Turn features on or off and change settings here."),
+  "auto-review": () => t("Auto review checked this card after the agent delivered; open it to see each check's result."),
+  "review-suggest": () => t("Several cards went back to the agent after delivery. Open Insights to see them and set up auto review."),
   "first-workpad": () => t("This card has a workpad: the agent's acceptance criteria and checks. The card shows how many checks passed; open it to see which ran on which commit, and tick items yourself."),
 };
 
@@ -323,6 +327,8 @@ function BoardContent(
     [tourClosed, setTourClosed] = useState(false),
     // What's new after an update (WHATS-NEW-SPEC): opened by itself once per release, or from Settings.
     [whatsNewOpen, setWhatsNewOpen] = useState(false),
+    // Edit project opened to suggest auto review checks from past cards (AUTO-REVIEW-SPEC §6.2).
+    [reviewAnalysis, setReviewAnalysis] = useState(false),
     // The user just moved a card into Done/Cancelled (drives the wrap-up tip).
     [movedToFinished, setMovedToFinished] = useState(false),
     [escapeRequest, setEscapeRequest] = useState<{ taskId: string; key: string } | null>(null),
@@ -1039,6 +1045,8 @@ function BoardContent(
     ignoredLink.current = linkKey;
     // Opening Insights is acting on the skill-draft tip (INSIGHTS-REDESIGN-SPEC §5).
     if (next === "insights" && onboarding.values && !onboarding.values.tipsSeen.includes("first-skill-draft")) void onboarding.markTipSeen("first-skill-draft");
+    // ... and on the rework nudge tip (AUTO-REVIEW-SPEC §7.1).
+    if (next === "insights" && onboarding.values && !onboarding.values.tipsSeen.includes("review-suggest")) void onboarding.markTipSeen("review-suggest");
     setPage((current) => (current === next ? null : next));
   };
   const closePage = useStableCallback(() => setPage(null));
@@ -1113,7 +1121,9 @@ function BoardContent(
   const workflowPrefs = useSettings(workflowInsightsSettings);
   const workflowOn = workflowPrefs.status === "ready" && workflowSettingsValues(workflowPrefs.values).enabled;
   const workflowTipDue = !!project && workflowOn && !!onboarding.values && !(onboarding.values.tipsSeen.includes("first-workflow-insight") && onboarding.values.tipsSeen.includes("first-skill-draft"));
-  const workflowView = useWorkflowInsightsQuery(project?.id || "", boardActive && workflowTipDue, false);
+  // Tip "review-suggest": the rework nudge is counted by the daemon whether or not Skills are on (AUTO-REVIEW-SPEC §7.1).
+  const reviewTipDue = !!project && features.insights && !!onboarding.values && !onboarding.values.tipsSeen.includes("review-suggest");
+  const workflowView = useWorkflowInsightsQuery(project?.id || "", boardActive && (workflowTipDue || reviewTipDue), false);
   const inPanel = !!props.workspaceId;
   const dialogOpen = !!menu || !!projectForm || !!taskForm || !!removing || !!deleting || !!wrapPrompt || !!linking;
   const welcome = welcomeDecision({
@@ -1175,10 +1185,16 @@ function BoardContent(
     setWhatsNewOpen(false);
     void onboarding.markWhatsNewSeen();
   };
+  // What's new and the Insights nudge: the current project's Edit project, Auto review first, analysis started.
+  const suggestChecks = () => {
+    if (!project) return;
+    setReviewAnalysis(true);
+    setProjectForm("edit");
+  };
   const whatsNewAction = (action: NonNullable<WhatsNewItem["action"]>) => {
     closeWhatsNew();
     // Settings and the tour are modals too: open them once this one has gone.
-    afterWhatsNew(() => (action.to === "settings" ? openSettingsAt(action.section) : setWelcomeOpen(true)));
+    afterWhatsNew(() => (action.to === "settings" ? openSettingsAt(action.section) : action.to === "review-analysis" ? suggestChecks() : setWelcomeOpen(true)));
   };
   const seeSettingsHint = () => {
     if (settingsHint) void onboarding.markTipSeen("settings-entry");
@@ -1212,6 +1228,8 @@ function BoardContent(
           skillDraft: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open" && f.target === "skill" && !!f.skill),
           memoryCandidate: !task && !!memoryCandidates,
           searchable: !task && projectTasks.filter((x) => !x.archivedAt).length >= 10,
+          reviewShown: !task && projectTasks.some((x) => !!visibleReview(x)),
+          reviewNudge: reviewTipDue && !!workflowView.data?.reviewNudge,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
       });
@@ -1450,6 +1468,7 @@ function BoardContent(
   }, [props.params?.intent, props.params?.at, boardPending]);
   const attentionDetail = (item: AttentionItem) =>
     `${item.project.title} · ${laneName(item.project, item.task.status)} · ${[
+      item.review && item.task.review && reviewLabel(item.task.review),
       item.questions && tn(item.questions, "{n} question", "{n} questions"),
       item.permissions && tn(item.permissions, "{n} approval", "{n} approvals"),
       item.errors && tn(item.errors, "{n} error", "{n} errors"),
@@ -1476,8 +1495,10 @@ function BoardContent(
               color={
                 item.dismissed
                   ? colors.foregroundMuted
-                  : item.permissions || item.questions
+                  : item.permissions || item.questions || item.review === "unavailable"
                     ? colors.statusWarning
+                    : item.review === "failed"
+                      ? colors.statusDanger
                     : item.errors
                       ? colors.statusDanger
                       : colors.statusSuccess
@@ -1882,6 +1903,7 @@ function BoardContent(
                     onBack={closePage}
                     onCreateFromFinding={createFromFinding}
                     onOpenSettings={openAiSettings}
+                    onSuggestChecks={suggestChecks}
                   />
                 ) : page === "ideas" && ideasOn && board ? (
                   <IdeasPage
@@ -2413,17 +2435,28 @@ function BoardContent(
         )}
         {projectForm && (
           <ProjectForm
-            key={projectForm}
+            key={`${projectForm}${reviewAnalysis ? ":review" : ""}`}
             project={projectForm === "edit" ? project : undefined}
+            analyzeReview={projectForm === "edit" && reviewAnalysis}
             laneCounts={Object.fromEntries(
               shownStatuses.map((s) => [s, tasks.filter((t) => t.status === s && !t.archivedAt).length]),
             )}
             showArchived={archived}
             onShowArchived={setArchived}
-            onClose={() => setProjectForm(null)}
+            onClose={() => {
+              setProjectForm(null);
+              setReviewAnalysis(false);
+            }}
+            onOpenTask={(id) => {
+              setProjectForm(null);
+              setReviewAnalysis(false);
+              setTask(id);
+              refresh();
+            }}
             onSaved={(id, restored) => {
               chooseProject(id);
               setProjectForm(null);
+              setReviewAnalysis(false);
               refresh();
               if (restored) toast.show(tn(restored.restored, "Restored {title} with {n} card.", "Restored {title} with {n} cards.", { title: restored.title }), { variant: "success" });
             }}

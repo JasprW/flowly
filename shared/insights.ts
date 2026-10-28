@@ -28,6 +28,8 @@ export const flowEntrySchema = z.object({
   byUser: z.boolean().optional(),
   /** agent.permission_requested: the tool's name (§7.2). */
   tool: z.string().max(80).optional(),
+  /** review_finished: each check's result (AUTO-REVIEW-SPEC §8.3). */
+  results: z.array(z.object({ id: z.string(), state: z.string() })).optional(),
 });
 export type FlowEntry = z.infer<typeof flowEntrySchema>;
 
@@ -36,6 +38,7 @@ export function flowEntry(event: FlowEntry & { note?: string; moves?: readonly {
   for (const key of ["from", "to", "reportKind", "outcome", "rule", "agentId", "model", "tool"] as const) if (event[key]) entry[key] = event[key];
   if (typeof event.pick === "number") entry.pick = event.pick;
   if (typeof event.byUser === "boolean") entry.byUser = event.byUser;
+  if (event.results?.length) entry.results = event.results.map((r) => ({ id: r.id, state: r.state }));
   // An empty list is the session's explicit "no next steps" and stays distinguishable: offered 0.
   const offered = event.moves ? event.moves.length : event.offered;
   if (offered !== undefined) entry.offered = offered;

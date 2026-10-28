@@ -199,7 +199,57 @@ export function ModelsPage({ active }: { active: boolean }) {
         onChange={(next: AgentModel | null) => models.save({ defaultProvider: next?.provider ?? "", defaultModel: next?.model ?? "", defaultThinking: next?.thinking ?? "", defaultMode: next?.mode ?? "" })}
       />
       <SummaryModelGroup active={active} />
+      <ReviewModelGroup active={active} />
     </SettingsPage>
+  );
+}
+
+/** The auto review session's model (AUTO-REVIEW-SPEC §12.4); Default: the project's default model, then the summary models. */
+function ReviewModelGroup({ active }: { active: boolean }) {
+  const paseo = usePaseo();
+  const summary = useStored(useSettings(summarySettings), summarySettingsValues);
+  const stored = summary.values?.reviewModel || AUTO;
+  const storedProvider = stored ? stored.slice(0, stored.indexOf("/")) : AUTO;
+  const [provider, setProvider] = useState(storedProvider);
+  useEffect(() => setProvider(storedProvider), [storedProvider]);
+  const providers = useQuery({ queryKey: ["flowly", "providers"], queryFn: () => paseo.providers.listAvailable(), enabled: active });
+  const providerInfo = useQuery({ queryKey: ["flowly", "providerSnapshot"], queryFn: () => paseo.providers.snapshot(), enabled: active, staleTime: 60000 });
+  const models = useQuery({
+    queryKey: ["flowly", "review-models", provider],
+    queryFn: async () => {
+      const result = await paseo.providers.listModels(provider);
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
+    enabled: active && provider !== AUTO,
+  });
+  const defaultLabel = t("Project default model");
+  return (
+    <SettingsGroup title={t("Review model")}>
+      <SettingSelect
+        title={t("Provider")}
+        value={provider}
+        placeholder={defaultLabel}
+        disabled={summary.busy}
+        loading={providers.isPending}
+        options={[{ value: AUTO, label: defaultLabel }, ...providerOptions(providers.data?.providers || [], providerInfo.data?.entries || [])]}
+        onChange={(next) => {
+          setProvider(next);
+          if (next === AUTO) summary.save({ reviewModel: "" });
+        }}
+      />
+      {provider !== AUTO && (
+        <SettingSelect
+          title={t("Model")}
+          value={stored.startsWith(`${provider}/`) ? stored.slice(provider.length + 1) : ""}
+          placeholder={t("Choose a model")}
+          disabled={summary.busy}
+          loading={models.isPending}
+          options={modelOptions(models.data?.models || [])}
+          onChange={(model) => summary.save({ reviewModel: `${provider}/${model}` })}
+        />
+      )}
+    </SettingsGroup>
   );
 }
 

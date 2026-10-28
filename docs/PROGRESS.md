@@ -1,5 +1,32 @@
 # Implementation progress
 
+## Auto review P3 (card "Auto Review") — 2026-10-28
+
+- Built-in check "Does what you asked" (AUTO-REVIEW-SPEC §4.2): `autoReview.goal` (absent = on), result id `goal` reserved; the review session reads the card and the user's messages from the card's sessions (`readConversation`, rework messages and injections dropped, 30 messages / 12 000 chars), the workpad and delivery note marked as the agent's own report. `flowly_propose_review_rules` and CLI `review-rules` take `goal`; get_task `reviewRules.goal`. Setup instructions no longer propose "Workpad acceptance met".
+- Command detection `reviews.detect-commands` (`server/review-detect.ts`, reads files only) with Use these; settings section rebuilt per §9.3 (`client/review-settings.tsx`): checks list with the built-in row (Pause/Resume), Add check, Suggest checks from past cards, Adjust with AI (renamed from Set up with AI), cost line when a judgement check is on.
+- Drawer: with Auto review on, the review block comes before the Workpad and the Workpad starts closed.
+- History analysis (§6.2): `deliveryStats` counts deliveries and rework after delivery from the flow log (A1 from in_review not restored by A1r); `ReviewHistory` runs one temporary session in the background workspace (hard-deleted) and writes an `{ analysis: true }` draft with `added` and `summary`; Apply takes `exclude`. RPCs `reviews.analyze-history`, `reviews.analysis-status` (with `eligible`). What's new 1.8.0 item rewritten with a Suggest checks from past cards button.
+- Insights (§7): rework nudge on the workflow view (daemon-counted, Not now for 30 days, Set up auto review opens the analysis); `review_rule` suggestions in the same Insights run when Auto review is on, Add check; deterministic pause suggestions; `review_finished` events and flow entries carry `results`. RPCs `insights.add-review-check`, `insights.pause-review-check`, `insights.dismiss-review-nudge`.
+- Onboarding: tour line is a passive sentence, `auto-review` tip text shortened, new tip `review-suggest` (before first-skill-draft); AGENTS.md exception lists include the analysis session; TELEMETRY-SPEC `f_auto_review_llm` counts the built-in check. 32 strings added to all catalogs, 14 removed.
+- Review fixes (session f30823c6): the user's words of a rework turn are matched from its A1 to the card's next turn start (memory writes clues after turn_ended, so they never matched); the review conversation drops `<paseo-system` messages; in a shared workspace the built-in check is told other cards' changes may be in the diff; Add check over 10 of a kind is refused with a readable message and the analysis leaves out what does not fit (`summary.dropped`); with the switch off the found commands join the analysis list behind one Use these and turn on (`apply-draft` `add`).
+
+## Auto review P2 (card "Auto Review") — 2026-10-28
+
+- [AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md) §12: project rules (command + LLM, type filter, pause; P1 `checks` read as command rules) in `shared/model.ts` / `shared/auto-review.ts`; every command rule runs, LLM rules skipped when one failed (D9), otherwise one temporary review session judges them (`server/review-session.ts`, summarizer path, hard-deleted); per-rule results on `task.review.rules`, written as each ends.
+- `flowly_propose_review_rules` (MCP, CLI `review-rules`, HTTP `review_rules`): validated draft on `project.reviewDraft` without a project revision; Apply/Discard RPCs; Set up with AI creates the setup card (`task.reviewSetup`) and its session; get_task `reviewRules`.
+- UI: rule list editor, Review guidance, draft block (project settings and the proposing card's drawer), Set up with AI; drawer groups Commands / LLM review; strip "Reviewing n/N"; Settings → Models Review model.
+- Onboarding copy (tip, tour line, What's new 1.8.0) points to Set up with AI; 39 new strings in all catalogs, 6 removed; telemetry `f_auto_review_llm`. Deviations from §12 are listed in §12.8.
+- Review fixes (session f30823c6): Apply/Discard carry the shown draft's `at` and are refused as `stale` when the agent replaced it (UI shows the new draft with a notice); get_task `reviewRules` holds only the card's rules in effect (guidance only with an LLM rule among them; setup and proposing cards get all); Set up with AI shows with the switch off.
+
+## Auto review P1 (card "Auto Review") — 2026-10-28
+
+- [AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md) P1: project setting `autoReview` (switch, check commands, max rework rounds) in Edit project; L1 `WORKPAD_FAILING` in `flowly_update_status(in_review)` (`shared/auto-review.ts`, `server/agent-service.ts`); L2 in `server/auto-review.ts` (argv `spawn` in the card workspace, one review per project at a time, fingerprint check, R1 back to the delivered-from stage then the marked rework message through the composer queue, R2 to Blocked, Unavailable/Cancelled). Review record on `task.review`; `get_task.review`; RPC `reviews.rerun`.
+- UI: card signal (Reviewing / Review passed / Reworking n/N / Review failed / Review unavailable), drawer Auto review block under Workpad with Rerun, Attention review signals and unread held back while a review runs, activity labels.
+- Onboarding: tip `auto-review`, tour More features line, What's new 1.8.0 item, README paragraph; 21 new strings in all catalogs. Telemetry: `f_auto_review`.
+- Review fixes (session 26f52520): the review starts when the delivering session's turn ends; a pass is no Attention signal of its own (it releases the held unread); a cancelled review shows on the card with Rerun; Unavailable after R1 records finishedAt; a check without an exit code reads "Stopped".
+- Running review: a strip opens under the card (dot sweep, `Collapse` expand/fold) instead of the "Reviewing" signal (user request 2026-10-28).
+- Not in P1: L3 LLM review and its model setting (P2). Spec updated where the implementation differs (storage on the task, round reset rule, first-failure stop, settings parsing).
+
 ## Search (card "搜索功能") — 2026-10-27
 
 - Focus from search: a hit row opens the card at its section and item (Progress, Activity, Workpad, Ideas, Artifacts), widening Activity's last-12 window, Workpad/Artifacts pages and Ideas → Closed to reach it, then a short accent ring; the stored section choices are untouched ([DRAWER-SPEC](DRAWER-SPEC.md#focus-from-search), `client/drawer-focus.tsx`).

@@ -90,6 +90,165 @@ export const lanesSchema = z
   .refine((lanes) => lanes.some((l) => l.enabled), "Keep at least one lane enabled.");
 export type Lane = z.infer<typeof laneSchema>;
 
+/** A project's automatic review of agent deliveries (AUTO-REVIEW-SPEC §6, §12). */
+export const autoReviewLimits = {
+  checks: 10, commandRules: 10, llmRules: 10, name: 80, args: 30, arg: 500, tail: 4096, reason: 500,
+  minTimeout: 10, maxTimeout: 3600, maxRounds: 5, prompt: 2000, guidance: 4000, note: 1000, detail: 600,
+} as const;
+/** P1 shape, still read from stored projects and turned into command rules (§12.1 migration). */
+export const reviewCheckSchema = z.strictObject({
+  name: z.string().trim().min(1).max(autoReviewLimits.name),
+  /** Run as an argument array, never through a shell. */
+  argv: z.array(z.string().min(1).max(autoReviewLimits.arg)).min(1).max(autoReviewLimits.args),
+  /** Absent: 600 seconds. */
+  timeoutSec: z.number().int().min(autoReviewLimits.minTimeout).max(autoReviewLimits.maxTimeout).optional(),
+});
+export const reviewRuleId = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z0-9][a-z0-9-]*$/, "Use lowercase letters, digits and dashes.")
+  // The built-in check's result id (AUTO-REVIEW-SPEC §4.2).
+  .refine((id) => id !== "goal", '"goal" is the built-in check\'s id.');
+const ruleBase = {
+  id: reviewRuleId,
+  name: z.string().trim().min(1).max(autoReviewLimits.name),
+  /** Only cards of these types; absent or empty: every card (D10). */
+  types: z.array(taskTypeSchema).max(taskTypes.length).optional(),
+  /** Paused: kept, not run. */
+  off: z.literal(true).optional(),
+};
+export const commandRuleSchema = z.strictObject({
+  ...ruleBase,
+  kind: z.literal("command"),
+  argv: reviewCheckSchema.shape.argv,
+  timeoutSec: reviewCheckSchema.shape.timeoutSec,
+});
+export const llmRuleSchema = z.strictObject({
+  ...ruleBase,
+  kind: z.literal("llm"),
+  prompt: z.string().trim().min(1).max(autoReviewLimits.prompt),
+});
+export const reviewRuleSchema = z.discriminatedUnion("kind", [commandRuleSchema, llmRuleSchema]);
+export type ReviewRule = z.infer<typeof reviewRuleSchema>;
+/** The project's rules: unique ids, at most 10 of each kind (§12.1). */
+export const reviewRulesSchema = z
+  .array(reviewRuleSchema)
+  .max(autoReviewLimits.commandRules + autoReviewLimits.llmRules)
+  .superRefine((rules, ctx) => {
+    const seen = new Set<string>();
+    rules.forEach((rule, index) => {
+      if (seen.has(rule.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: `Duplicate rule id "${rule.id}".` });
+      seen.add(rule.id);
+    });
+    if (rules.filter((r) => r.kind === "command").length > autoReviewLimits.commandRules)
+      ctx.addIssue({ code: "custom", path: [], message: `At most ${autoReviewLimits.commandRules} command rules.` });
+    if (rules.filter((r) => r.kind === "llm").length > autoReviewLimits.llmRules)
+      ctx.addIssue({ code: "custom", path: [], message: `At most ${autoReviewLimits.llmRules} LLM rules.` });
+  });
+const reviewGuidance = z.string().max(autoReviewLimits.guidance);
+const reviewMaxRounds = z.number().int().min(0).max(autoReviewLimits.maxRounds);
+/** What a project-settings save sends (§12.1). */
+export const autoReviewInput = z.strictObject({
+  enabled: z.boolean(),
+  /** Automatic rework rounds before the card goes to Blocked. */
+  maxRounds: reviewMaxRounds,
+  rules: reviewRulesSchema,
+  /** The built-in check "Does what you asked" (§4.2); absent: on. */
+  goal: z.boolean().optional(),
+  /** Shared background for the LLM rules, shown only to the review session. */
+  guidance: reviewGuidance.optional(),
+});
+/** As stored: P1 projects may still carry `checks` instead of `rules` until their next save. */
+export const autoReviewSchema = z.strictObject({
+  enabled: z.boolean(),
+  maxRounds: reviewMaxRounds,
+  rules: reviewRulesSchema.optional(),
+  goal: z.boolean().optional(),
+  guidance: reviewGuidance.optional(),
+  checks: z.array(reviewCheckSchema).max(autoReviewLimits.checks).optional(),
+});
+export type AutoReview = z.infer<typeof autoReviewSchema>;
+export type AutoReviewInput = z.infer<typeof autoReviewInput>;
+export type ReviewCheck = z.infer<typeof reviewCheckSchema>;
+/** A rule set an agent proposed; one per project, the newest replaces it, applied only by a person (§12.3, D8). */
+export const draftReasonSchema = z.object({ title: z.string().max(200), cards: z.array(z.string()).max(50), quote: z.string().max(400).optional() });
+export const reviewDraftSchema = z.object({
+  rules: reviewRulesSchema,
+  guidance: reviewGuidance.optional(),
+  maxRounds: reviewMaxRounds.optional(),
+  goal: z.boolean().optional(),
+  note: z.string().max(autoReviewLimits.note),
+  /** An agent's proposal, or the history analysis (§6.2). */
+  by: z.union([z.object({ taskId: z.string(), agentId: z.string() }), z.object({ analysis: z.literal(true) })]),
+  /** The analysis's new checks, each with the cards it rests on (§6.2); Apply may leave some out. */
+  added: z.array(z.object({ id: z.string().max(40), cards: z.array(z.string()).max(50), why: z.string().max(300) })).max(autoReviewLimits.commandRules + autoReviewLimits.llmRules).optional(),
+  /** The analysis's gate summary: numbers counted by the daemon, reasons from the model (§6.2). */
+  summary: z
+    .object({
+      delivered: z.number().int().nonnegative(),
+      reworked: z.number().int().nonnegative(),
+      reasons: z.array(draftReasonSchema).max(6),
+      /** Suggested checks left out because the project already holds 10 of their kind. */
+      dropped: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
+  at: timestamp,
+  /** Project revision when proposed. */
+  baseRevision: z.number().int().nonnegative(),
+  /** The project's rules, guidance and rounds when proposed, to tell whether they changed since (§12.3 Apply). */
+  baseHash: z.string().max(100),
+});
+export type ReviewDraft = z.infer<typeof reviewDraftSchema>;
+export const reviewStates = ["running", "passed", "rework", "failed", "unavailable", "cancelled"] as const;
+export type ReviewState = (typeof reviewStates)[number];
+export const ruleStates = ["queued", "running", "passed", "failed", "na", "skipped", "unavailable"] as const;
+export type RuleState = (typeof ruleStates)[number];
+/** One rule's result in a review (§12.5). */
+export const ruleResultSchema = z.object({
+  id: z.string().max(40),
+  kind: z.enum(["command", "llm"]),
+  name: z.string().max(autoReviewLimits.name),
+  state: z.enum(ruleStates),
+  ms: z.number().int().nonnegative().optional(),
+  argv: z.array(z.string()).max(autoReviewLimits.args).optional(),
+  exitCode: z.number().int().nullable().optional(),
+  timedOut: z.boolean().optional(),
+  /** The end of its output; kept only for a command that failed or could not finish. */
+  tail: z.string().max(autoReviewLimits.tail).optional(),
+  /** The LLM's reasoning, kept for passes too. */
+  detail: z.string().max(autoReviewLimits.detail).optional(),
+  file: z.string().max(300).optional(),
+  line: z.number().int().nonnegative().optional(),
+  /** Why it was skipped or unavailable. */
+  reason: z.string().max(autoReviewLimits.reason).optional(),
+});
+export type RuleResult = z.infer<typeof ruleResultSchema>;
+/** The card's latest automatic review; a new one replaces it (AUTO-REVIEW-SPEC §6, §12.5). */
+export const reviewSchema = z.object({
+  /** The delivery that started it, or a person's Rerun (`eventId` empty). `from` is the status before In review. */
+  trigger: z.object({ eventId: z.string(), agentId: z.string(), from: historyStatusSchema }),
+  round: z.number().int().min(1),
+  maxRounds: reviewMaxRounds,
+  state: z.enum(reviewStates),
+  reason: z.string().max(autoReviewLimits.reason).optional(),
+  fingerprint: z.object({
+    taskRevision: z.number().int().nonnegative(),
+    workpadRevision: z.number().int().nonnegative(),
+    sha: z.string().max(40).optional(),
+    dirty: z.boolean(),
+  }),
+  /** The workspace is not a worktree: other cards' uncommitted changes are in it too. */
+  shared: z.boolean(),
+  /** The rules in effect when it started, in list order, with their results. */
+  rules: z.array(ruleResultSchema).max(autoReviewLimits.commandRules + autoReviewLimits.llmRules).default([]),
+  /** The LLM review's model, when one ran. */
+  model: z.string().max(200).optional(),
+  startedAt: timestamp,
+  finishedAt: timestamp.optional(),
+});
+export type Review = z.infer<typeof reviewSchema>;
+
 export const projectSchema = z.object({
   id: z.string(),
   title: z.string().trim().min(1).max(120),
@@ -116,6 +275,10 @@ export const projectSchema = z.object({
   agentModel: agentModelSchema.optional(),
   /** Linked multi-repo project: symlinks the plugin created inside its own root (PROJECT-PICKER-SPEC). */
   links: z.array(z.object({ name: z.string(), target: z.string() })).optional(),
+  /** Automatic review of agent deliveries (AUTO-REVIEW-SPEC). Absent means off. */
+  autoReview: autoReviewSchema.optional(),
+  /** A proposed rule set waiting for the user's Apply (AUTO-REVIEW-SPEC §12.3); written without a project revision. */
+  reviewDraft: reviewDraftSchema.optional(),
 });
 export const taskSchema = z.object({
   id: z.string(),
@@ -141,6 +304,10 @@ export const taskSchema = z.object({
   ownsWorkspace: z.boolean().optional(),
   /** Created from an idea proposed on another card (IDEAS-SPEC §2.2). */
   origin: z.object({ taskId: z.string(), ideaId: z.string() }).optional(),
+  /** The latest automatic review (AUTO-REVIEW-SPEC §6); written without a task revision. */
+  review: reviewSchema.optional(),
+  /** The project's Auto review setup card (AUTO-REVIEW-SPEC §12.2): its deliveries are not reviewed. */
+  reviewSetup: z.literal(true).optional(),
 });
 /** A follow-up an agent proposed on its card; the user may turn it into a card (IDEAS-SPEC). */
 export const ideaStatuses = ["open", "accepted", "dismissed"] as const;
@@ -393,6 +560,8 @@ export const eventSchema = z.object({
   workpad: deliverySchema.optional(),
   /** status_changed into In review by an agent that acknowledged missing card setup (CARD-SETUP-SPEC §3.4). */
   setup: z.object({ missing: z.array(z.enum(["type", "tags", "workpad"])) }).optional(),
+  /** review_finished: each check's result, for the Insights counts (AUTO-REVIEW-SPEC §8.3). */
+  results: z.array(z.object({ id: z.string().max(40), state: z.string().max(20) })).max(30).optional(),
   at: timestamp,
 });
 export const boardSchema = z.object({
@@ -429,7 +598,7 @@ export const receiptSchema = z.object({
   agentId: z.string(),
   taskId: z.string(),
   payloadHash: z.string(),
-  action: z.enum(["status", "progress", "idea", "idea_update", "idea_remove", "remember", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad"]),
+  action: z.enum(["status", "progress", "idea", "idea_update", "idea_remove", "remember", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "review_rules"]),
   /** Empty when an artifact write changed nothing (same target already recorded). */
   eventId: z.string(),
   /** Stable result identity for idea writes, even after the idea is removed or pruned. */
@@ -524,6 +693,7 @@ export const projectEdit = z.strictObject({
   lanes: lanesSchema.optional(),
   /** A model sets the project default; null removes it (the global default applies again). */
   agentModel: agentModelSchema.nullable().optional(),
+  autoReview: autoReviewInput.optional(),
 });
 export const taskInput = z.strictObject({
   projectId: z.string(),

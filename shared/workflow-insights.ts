@@ -4,6 +4,8 @@ import { firstObject } from "./summary";
 import { dayKey } from "./insights";
 import { outputLanguageRule } from "./ai-language";
 import type { LocaleCode } from "./i18n";
+import { reviewRuleSchema, type ReviewRule } from "./model";
+import { ruleSummary } from "./auto-review";
 
 /**
  * Workflow insights (WORKFLOW-INSIGHTS-SPEC): a log of the shell commands agents
@@ -536,12 +538,16 @@ export function buildMaterial(input: {
 
 // ---- Model call ---------------------------------------------------------------
 
-export const findingTargets = ["paseo_script", "worktree_setup", "repo_tool", "agents_md", "skill"] as const;
+export const findingTargets = ["paseo_script", "worktree_setup", "repo_tool", "agents_md", "skill", "review_rule", "review_pause"] as const;
+/** Auto review suggestions (AUTO-REVIEW-SPEC §7.2): a check to add (from the model), a check to pause (counted). */
+export const MAX_REVIEW_RULES = 3;
+export const PAUSE_MIN_REVIEWS = 20;
+export const PAUSE_DAYS = 30;
 export type FindingTarget = (typeof findingTargets)[number];
 export const confidences = ["high", "medium", "low"] as const;
 export const findingLimits = { title: 120, evidence: 1000, proposal: 4000, benefit: 500 } as const;
 
-export function workflowPrompt(days: number, material: string, language: LocaleCode): string {
+export function workflowPrompt(days: number, material: string, language: LocaleCode, review = false): string {
   return `You analyse how coding agents worked on one software project over the last ${days} days, from the shell commands they ran, so the project owner can turn repeated work into reusable project settings and tools.
 
 Targets you may recommend:
@@ -549,7 +555,11 @@ Targets you may recommend:
 - "worktree_setup": commands for paseo.json "worktree.setup" (run once when a new git worktree is created) or "worktree.teardown".
 - "repo_tool": a new script or CLI in the repository (e.g. scripts/x.mjs plus an npm script) for work agents currently redo by hand with inline code.
 - "agents_md": a rule or command to add to AGENTS.md so agents stop rediscovering it.
-- "skill": an agent skill written into the project (.agents/skills/<name>/SKILL.md) that later agents load and follow. Two kinds:
+${
+    review
+      ? `- "review_rule": a check Flowly's auto review runs on every delivery (see "# Auto review" in the material), given as "rule": {"id": "lowercase-slug", "name": "short name", "kind": "command", "argv": ["npm", "run", "x"]} for what an exit code decides (argv is an argument array, never a shell string), or {"id", "name", "kind": "llm", "prompt": "one sentence a reviewer can judge from the diff and the card"}; optional "types": ["feature","bugfix","refactor","chore","docs","research"]. Only for a cause no current rule covers that made the owner send work back, or made reviews fail, on at least 2 cards; prefer what the owner already said (AGENTS.md, memory, skills) and agents still got wrong. Never one repeating a current rule or the built-in check "Does what you asked". At most ${MAX_REVIEW_RULES}.\n`
+      : ""
+  }- "skill": an agent skill written into the project (.agents/skills/<name>/SKILL.md) that later agents load and follow. Two kinds:
   - a procedure: a multi-step routine that recurs on 2+ cards and needs judgement (for example shipping a change through a pull request);
   - domain know-how: what 3+ cards of one kind of work taught (how to measure, usual causes, pitfalls, standards; a tag shared by several cards is a hint).
 
@@ -566,8 +576,8 @@ Rules:
 - Suggestions the owner already accepted or dismissed are listed. Do not propose them again, even reworded or narrowed. This run's findings replace the open suggestions of earlier runs, so list everything still worth doing, not only what is new.
 - ${outputLanguageRule(language)}
 - Do not use any tools. Answer with only one JSON object and nothing else:
-{"findings":[{"target":"paseo_script|worktree_setup|repo_tool|agents_md|skill","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"],"skill":{"name":"…","description":"…","body":"…","updates":false,"change":"…"}}],"noise":"what in the material was noise","verdict":"one or two sentences"}
-"skill" only for target "skill".
+{"findings":[{"target":"paseo_script|worktree_setup|repo_tool|agents_md|skill${review ? "|review_rule" : ""}","title":"short title","evidence":"counts and card short ids","proposal":"concrete snippet or interface","benefit":"what it saves","confidence":"high|medium|low","cards":["8-char ids"],"skill":{"name":"…","description":"…","body":"…","updates":false,"change":"…"}${review ? ',"rule":{…}' : ""}}],"noise":"what in the material was noise","verdict":"one or two sentences"}
+"skill" only for target "skill".${review ? ' "rule" only for target "review_rule".' : ""}
 
 ${material}`;
 }
@@ -588,6 +598,7 @@ const finding = {
       type: "object",
       properties: { name: { type: "string" }, description: { type: "string" }, body: { type: "string" }, updates: { type: "boolean" }, change: { type: "string" } },
     },
+    rule: { type: "object" },
   },
 };
 /** Passed as outputSchema, but Claude does not enforce it: parsing stays lenient. */
@@ -600,7 +611,7 @@ export const workflowJsonSchema = {
 export const RETRY_PROMPT = "Reply again with only the JSON object described above, and nothing else.";
 
 export type RawSkill = { name: string; description: string; body: string; updates: boolean; change: string };
-export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[]; skill?: RawSkill };
+export type RawFinding = { target: string; title: string; evidence: string; proposal: string; benefit: string; confidence: string; cards: string[]; skill?: RawSkill; rule?: unknown };
 
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : Array.isArray(v) ? v.filter((x) => typeof x === "string").join("\n").trim() : "");
 
@@ -636,6 +647,7 @@ export function parseWorkflowOutput(reply: string | null | undefined): { finding
               return { skill: { name: text(k.name).toLowerCase(), description: text(k.description), body: typeof k.body === "string" ? k.body.trim() : "", updates: k.updates === true, change: text(k.change) } };
             })()
           : {}),
+        ...(f.rule && typeof f.rule === "object" ? { rule: f.rule } : {}),
       })),
   };
 }
@@ -679,6 +691,12 @@ export const findingSchema = z.object({
     .optional(),
   /** The skill name this draft wrote into the project. */
   acceptedSkill: z.string().optional(),
+  /** review_rule: the check Add check puts into the project (AUTO-REVIEW-SPEC §7.2). */
+  rule: reviewRuleSchema.optional(),
+  /** review_pause: the LLM check Pause turns off. */
+  ruleId: z.string().max(40).optional(),
+  /** review_pause: how many reviews judged it, none failed. */
+  reviews: z.number().int().nonnegative().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -728,6 +746,8 @@ export function validateFindings(
     /** Skill names already in the project, and the bodies of those Flowly added (INSIGHTS-REDESIGN-SPEC §3.4). */
     skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> };
     redact?: RedactContext;
+    /** The project's current review rules; review_rule suggestions are dropped without them (Auto review off). */
+    reviewRules?: readonly ReviewRule[];
   },
 ): FindingDraft[] {
   const byShort = new Map<string, string>();
@@ -742,9 +762,17 @@ export function validateFindings(
   const closed = ctx.existing.filter((f) => f.status === "accepted" || (f.status === "dismissed" && ctx.now - Date.parse(f.updatedAt) < DISMISS_COOLDOWN_DAYS * DAY_MS));
   const prints = new Set(closed.map((f) => f.fingerprint));
   const out: FindingDraft[] = [];
-  for (const f of raw) {
+  for (const given of raw) {
+    let f = given;
     if (out.length >= MAX_FINDINGS) break;
-    if (!(findingTargets as readonly string[]).includes(f.target)) continue;
+    if (!(findingTargets as readonly string[]).includes(f.target) || f.target === "review_pause") continue;
+    let rule: ReviewRule | undefined;
+    if (f.target === "review_rule") {
+      if (!ctx.reviewRules || out.filter((d) => d.rule).length >= MAX_REVIEW_RULES) continue;
+      rule = checkReviewRule(f.rule, ctx.reviewRules, out);
+      if (!rule) continue;
+      if (!f.proposal) f = { ...f, proposal: ruleSummary(rule) };
+    }
     let skill: FindingDraft["skill"];
     if (f.target === "skill" && f.skill) {
       if (out.filter((d) => d.skill).length >= MAX_SKILLS) continue;
@@ -772,6 +800,7 @@ export function validateFindings(
       confidence: (confidences as readonly string[]).includes(f.confidence) ? (f.confidence as Finding["confidence"]) : "medium",
       cards: cards.slice(0, 20),
       ...(skill ? { skill } : {}),
+      ...(rule ? { rule } : {}),
     };
     // Updates revise a known skill: only the same name's closed draft blocks them, not similar titles.
     const repeat = skill?.updates
@@ -782,6 +811,28 @@ export function validateFindings(
     out.push(draft);
   }
   return out;
+}
+
+/**
+ * A suggested review rule (AUTO-REVIEW-SPEC §7.2): valid as a whole, its id renumbered on a clash, and dropped when it
+ * repeats a current rule or one already suggested in this run (same id or name, same command, or a similar prompt).
+ */
+function checkReviewRule(raw: unknown, current: readonly ReviewRule[], sameRun: readonly FindingDraft[]): ReviewRule | undefined {
+  if (!raw || typeof raw !== "object") return;
+  const parsed = reviewRuleSchema.safeParse(raw);
+  if (!parsed.success) return;
+  const rule = parsed.data;
+  const others = [...current, ...sameRun.flatMap((d) => (d.rule ? [d.rule] : []))];
+  const repeats = (o: ReviewRule) =>
+    o.name.trim().toLowerCase() === rule.name.trim().toLowerCase() ||
+    (o.kind === "command" && rule.kind === "command" && o.argv.join(" ") === rule.argv.join(" ")) ||
+    (o.kind === "llm" && rule.kind === "llm" && titleSimilarity(o.prompt, rule.prompt) >= SIMILAR_SAME_TARGET) ||
+    titleSimilarity(o.name, rule.name) >= SIMILAR_ANY_TARGET;
+  if (others.some(repeats)) return;
+  const taken = new Set(["goal", ...others.map((o) => o.id)]);
+  let id = rule.id;
+  for (let n = 2; taken.has(id); n++) id = `${rule.id}-${n}`.slice(0, 40);
+  return { ...rule, id };
 }
 
 export const SKILL_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -871,13 +922,13 @@ export function lineDiff(before: string, after: string): DiffLine[] {
  * ones (INSIGHTS-REDESIGN-SPEC §3.1). Returns how many were removed (§5.3).
  */
 export function replaceOpen(findings: Finding[], projectId: string, added: readonly Finding[]): number {
-  const isSkill = (f: Finding) => f.target === "skill";
-  const skills = added.some(isSkill),
-    others = added.some((f) => !isSkill(f));
+  // Three kinds replace separately: skill drafts, auto review suggestions, the rest.
+  const kind = (f: Finding) => (f.target === "skill" ? "skill" : f.target === "review_rule" || f.target === "review_pause" ? "review" : "other");
+  const kinds = new Set(added.map(kind));
   let removed = 0;
   for (let i = findings.length - 1; i >= 0; i--) {
     const f = findings[i];
-    if (f.projectId === projectId && f.status === "open" && (isSkill(f) ? skills : others)) {
+    if (f.projectId === projectId && f.status === "open" && kinds.has(kind(f))) {
       findings.splice(i, 1);
       removed++;
     }
@@ -927,9 +978,11 @@ export const workflowStateSchema = z.object({
   installed: z.array(installedSkillSchema).default([]),
   /** When collecting started per project; the first scheduled run waits one interval after it (§3.1). */
   collectingSince: z.record(z.string(), z.string()).default({}),
+  /** Auto review rework nudge: when the user said Not now, per project (AUTO-REVIEW-SPEC §7.1, §8.4). */
+  reviewNudges: z.record(z.string(), z.object({ dismissedAt: z.string() })).default({}),
 });
 export type WorkflowState = z.infer<typeof workflowStateSchema>;
-export const emptyWorkflowState = (): WorkflowState => ({ version: 1, revision: 0, runs: [], findings: [], installed: [], collectingSince: {} });
+export const emptyWorkflowState = (): WorkflowState => ({ version: 1, revision: 0, runs: [], findings: [], installed: [], collectingSince: {}, reviewNudges: {} });
 
 /** Keep the newest runs per project, open findings always, closed ones for CLOSED_KEPT_DAYS. */
 export function trimState(state: WorkflowState, now: number) {
@@ -954,6 +1007,11 @@ export const workflowViewSchema = z.object({
   installed: z.array(z.object({ name: z.string(), path: z.string(), content: z.string() })),
   /** Current body of each skill an open update draft would change, by name. */
   current: z.record(z.string(), z.string()),
+  /** The auto review rework nudge, counted by the daemon when it applies (AUTO-REVIEW-SPEC §7.1). */
+  reviewNudge: z
+    .object({ delivered: z.number(), reworked: z.number(), cards: z.array(z.object({ id: z.string(), title: z.string(), quote: z.string().optional() })) })
+    .nullable()
+    .optional(),
   revision: z.number(),
 });
 export type WorkflowView = z.infer<typeof workflowViewSchema>;
@@ -994,6 +1052,8 @@ export function findingDescription(f: Pick<Finding, "target" | "proposal" | "evi
     repo_tool: "Add the tool, mention it in AGENTS.md Commands, and replace one real use to prove it works.",
     agents_md: "Write it into AGENTS.md, then check it against the cited cards.",
     skill: "Write the skill or checklist, then check it against the cited cards.",
+    review_rule: "Add the check in the project settings (Auto review) and watch the next deliveries.",
+    review_pause: "Pause the check in the project settings (Auto review).",
   };
   return [
     f.proposal,

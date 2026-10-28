@@ -12,12 +12,14 @@ import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-wo
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { validZone } from "../shared/insights";
 import { SUMMARIZER_LABELS, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
-import type { Board, Project } from "../shared/model";
+import type { Board, Project, ReviewRule } from "../shared/model";
 import { readSkillBody, scanSkills, skillPath, writeSkill, type InstallResult } from "./project-skills";
 import {
   BACKFILL_DAYS,
   CARD_DAYS,
   DISMISS_COOLDOWN_DAYS,
+  PAUSE_DAYS,
+  PAUSE_MIN_REVIEWS,
   RETRY_PROMPT,
   RUN_TIMEOUT_MS,
   WORKFLOW_AUTO_MODELS,
@@ -51,6 +53,17 @@ import {
   type WorkflowView,
 } from "../shared/workflow-insights";
 import { logFailure } from "./error-report";
+import { autoReviewOf, ruleFits, ruleId, ruleLimitMessage } from "../shared/auto-review";
+import {
+  NUDGE_DAYS,
+  NUDGE_MIN_REWORKED,
+  NUDGE_SNOOZE_DAYS,
+  checkCounts,
+  deliveryStats,
+  pauseCandidates,
+  reviewInsightsMaterial,
+  reworkQuotes,
+} from "../shared/review-history";
 
 const DAY_MS = 86_400_000;
 const TICK_MS = 15 * 60_000;
@@ -105,7 +118,7 @@ export class WorkflowStore {
   }
 }
 
-async function readText(path: string): Promise<string | null> {
+export async function readText(path: string): Promise<string | null> {
   try {
     return await readFile(path, "utf8");
   } catch {
@@ -114,7 +127,7 @@ async function readText(path: string): Promise<string | null> {
 }
 
 /** The Commands section of AGENTS.md or CLAUDE.md at the project root (§4.2). */
-function commandsSection(text: string): string {
+export function commandsSection(text: string): string {
   const match = /^#{1,3}\s*(?:commands|常用命令|命令)\b.*$/im.exec(text);
   if (!match) return "";
   const rest = text.slice(match.index + match[0].length);
@@ -398,6 +411,11 @@ export class WorkflowInsightsService {
     return { paseoScripts: scripts, paseoWorktree: worktree, packageScripts: pkg, commands: commandsSection(agentsMd || "") || commandsSection(claudeMd || "") };
   }
 
+  /** The model Insights runs with; the auto review history analysis uses the same one (AUTO-REVIEW-SPEC §6.2). */
+  async pickModel(paseo: PaseoApi) {
+    return this.model(paseo, await this.settings());
+  }
+
   private async model(paseo: PaseoApi, settings: WorkflowSettings) {
     const providers = await availableModels(paseo, settings.model);
     const offered = (id: string) => {
@@ -424,12 +442,25 @@ export class WorkflowInsightsService {
    */
   private async record(
     run: Omit<WorkflowRun, "id" | "findings" | "replaced">,
-    result?: { findings: RawFinding[]; cardIds: readonly string[]; skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> }; redact?: { repo: string; home: string } },
+    result?: {
+      findings: RawFinding[];
+      cardIds: readonly string[];
+      skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> };
+      redact?: { repo: string; home: string };
+      reviewRules?: readonly ReviewRule[];
+    },
   ) {
     const id = randomUUID();
     return this.state.update((state) => {
       const drafts = result
-        ? validateFindings(result.findings, { cardIds: result.cardIds, existing: state.findings.filter((f) => f.projectId === run.projectId), now: Date.parse(run.at), skills: result.skills, redact: result.redact })
+        ? validateFindings(result.findings, {
+            cardIds: result.cardIds,
+            existing: state.findings.filter((f) => f.projectId === run.projectId),
+            now: Date.parse(run.at),
+            skills: result.skills,
+            redact: result.redact,
+            reviewRules: result.reviewRules,
+          })
         : [];
       // A run without valid suggestions keeps the previous ones rather than emptying the list.
       const replaced = drafts.length
@@ -476,6 +507,8 @@ export class WorkflowInsightsService {
       const state = await this.state.read();
       const existing = state.findings.filter((f) => f.projectId === projectId);
       const skills = await this.skillContext(project, board, state, recent, now);
+      // Auto review suggestions join this run when the project has Auto review on (AUTO-REVIEW-SPEC §7.2).
+      const review = project.autoReview?.enabled ? await this.reviewMaterial(project, board, entries, now, days) : "";
       // Card ids the model may cite: the command window's and the last 30 days' (INSIGHTS-REDESIGN-SPEC §3.1).
       const cardIds = [...new Set([...records.map((r) => r.taskId), ...recent])];
       const cards: CardInfo[] = [...new Set(records.map((r) => r.taskId))]
@@ -491,13 +524,13 @@ export class WorkflowInsightsService {
           .filter((f) => f.status === "accepted" || (f.status === "dismissed" && now - Date.parse(f.updatedAt) < 30 * DAY_MS))
           .map((f) => ({ target: f.target, title: f.title, status: f.status, proposal: f.proposal })),
         skills: skills.material,
-      });
+      }) + review;
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
         const agent = await paseo.workspaces.ref(workspaceId).agents.create({
           config: { provider: model },
           title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
-          prompt: workflowPrompt(days, material, await this.language()),
+          prompt: workflowPrompt(days, material, await this.language(), !!review),
           outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
         });
         this.summarizer.set(agent.id, true);
@@ -526,7 +559,11 @@ export class WorkflowInsightsService {
         return { usage, parsed };
       });
       if (!parsed) throw new Error("The workflow insights model returned no JSON.");
-      await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, cardIds, skills: skills.check, redact: { repo: project.primaryPath, home: this.home } });
+      await this.record(
+        { ...base, model, status: "ok", usage },
+        { findings: parsed.findings, cardIds, skills: skills.check, redact: { repo: project.primaryPath, home: this.home }, ...(review ? { reviewRules: autoReviewOf(project).rules } : {}) },
+      );
+      if (project.autoReview?.enabled) await this.addPauses(project, entries, now);
     } catch (e) {
       await this.record({ ...base, model, status: "error", reason: (e instanceof Error ? e.message : String(e)).slice(0, 500) });
     }
@@ -553,8 +590,140 @@ export class WorkflowInsightsService {
       lastRun: last,
       findings,
       ...(await this.installedView(project, state, findings)),
+      reviewNudge: await this.reviewNudge(project, state),
       revision: state.revision,
     };
+  }
+
+  /** The "# Auto review" material: the rules with their counts, and the cards sent back after delivery with the user's words. */
+  private async reviewMaterial(project: Project, board: Board, entries: Awaited<ReturnType<FlowLog["read"]>>, now: number, days: number) {
+    const from = now - days * DAY_MS;
+    const stats = deliveryStats(entries, from, now);
+    const clues = this.skillSources && this.skillSources.memoryOn(project) ? (await this.skillSources.memory().catch(() => null))?.clues ?? [] : [];
+    const reworked = [...stats.reworked].flatMap(([id, turns]) => {
+      const t = board.tasks.find((x) => x.id === id);
+      if (!t) return [];
+      const quotes = reworkQuotes(clues, id, turns).slice(0, 3).map((t) => t.slice(0, 300));
+      return [{ id, title: t.title, quotes }];
+    });
+    return reviewInsightsMaterial({ rules: autoReviewOf(project).rules, counts: checkCounts(entries, from), reworked });
+  }
+
+  /** Pause suggestions (§7.2): counted, no model; not again for a rule already suggested open, accepted, or dismissed lately. */
+  private async addPauses(project: Project, entries: Awaited<ReturnType<FlowLog["read"]>>, now: number) {
+    const candidates = pauseCandidates(autoReviewOf(project).rules, checkCounts(entries, now - PAUSE_DAYS * DAY_MS), PAUSE_MIN_REVIEWS);
+    if (!candidates.length) return;
+    const at = new Date(now).toISOString();
+    await this.state.update((state) => {
+      const known = state.findings.filter(
+        (f) => f.projectId === project.id && f.target === "review_pause" && (f.status !== "dismissed" || now - Date.parse(f.updatedAt) < DISMISS_COOLDOWN_DAYS * DAY_MS),
+      );
+      const fresh = candidates.filter((c) => !known.some((f) => f.ruleId === c.rule.id));
+      for (const c of fresh)
+        state.findings.push({
+          id: randomUUID(),
+          projectId: project.id,
+          runId: "review-pause",
+          fingerprint: `review_pause:${c.rule.id}`,
+          target: "review_pause",
+          title: c.rule.name.slice(0, 120),
+          evidence: "",
+          proposal: "",
+          benefit: "",
+          confidence: "high",
+          cards: [],
+          ruleId: c.rule.id,
+          reviews: c.judged,
+          status: "open",
+          createdAt: at,
+          updatedAt: at,
+        });
+      return { value: undefined, changed: fresh.length > 0 };
+    });
+  }
+
+  /** The rework nudge (§7.1): Auto review off, at least 3 cards sent back after delivery in 14 days, no Not now in 30 days. */
+  private async reviewNudge(project: Project, state: WorkflowState): Promise<WorkflowView["reviewNudge"]> {
+    if (project.autoReview?.enabled) return null;
+    const now = this.now();
+    const dismissed = state.reviewNudges[project.id]?.dismissedAt;
+    if (dismissed && now - Date.parse(dismissed) < NUDGE_SNOOZE_DAYS * DAY_MS) return null;
+    const entries = await this.flow.read(project.id).catch(() => []);
+    const stats = deliveryStats(entries, now - NUDGE_DAYS * DAY_MS, now);
+    const reworked = stats.delivered.filter((id) => stats.reworked.has(id));
+    if (reworked.length < NUDGE_MIN_REWORKED) return null;
+    const board = await this.board.read();
+    const clues = this.skillSources && this.skillSources.memoryOn(project) ? (await this.skillSources.memory().catch(() => null))?.clues ?? [] : [];
+    const cards = reworked.slice(0, 3).flatMap((id) => {
+      const t = board.tasks.find((x) => x.id === id);
+      if (!t) return [];
+      const turns = stats.reworked.get(id)!;
+      const quote = reworkQuotes(clues, id, turns)[0];
+      return [{ id, title: t.title, ...(quote ? { quote: quote.length > 60 ? `${quote.slice(0, 60)}…` : quote } : {}) }];
+    });
+    return { delivered: stats.delivered.length, reworked: reworked.length, cards };
+  }
+
+  /** Not now on the rework nudge: hidden for 30 days (§7.1). */
+  dismissReviewNudge(projectId: string) {
+    const at = new Date(this.now()).toISOString();
+    return this.state.update((state) => {
+      state.reviewNudges[projectId] = { dismissedAt: at };
+      return { value: { ok: true as const }, changed: true };
+    });
+  }
+
+  /** Add check (§7.2): the suggested rule joins the project's rules (id renumbered on a clash), revision +1, accepted. */
+  async addReviewCheck(findingId: string) {
+    const f = (await this.state.read()).findings.find((x) => x.id === findingId);
+    if (!f || f.status !== "open" || f.target !== "review_rule" || !f.rule) throw new Error("FINDING_NOT_OPEN: this suggestion is no longer open.");
+    const suggested = f.rule;
+    const revision = await this.board.transaction((b) => {
+      const p = b.projects.find((x) => x.id === f.projectId && !x.archivedAt);
+      if (!p) throw new Error("Project not found.");
+      const config = autoReviewOf(p);
+      // A full kind is refused with a readable message; the suggestion stays open (§7.2).
+      if (!ruleFits(config.rules, suggested.kind)) throw new Error(ruleLimitMessage(suggested.kind));
+      const id = ruleId(suggested.id, new Set(["goal", ...config.rules.map((r) => r.id)]));
+      const { checks: _checks, ...stored } = p.autoReview ?? { enabled: false, maxRounds: config.maxRounds };
+      p.autoReview = { ...stored, rules: [...config.rules, { ...suggested, id }] };
+      p.revision++;
+      p.updatedAt = new Date(this.now()).toISOString();
+      return { value: p.revision, changed: true };
+    });
+    await this.close(findingId);
+    return { revision };
+  }
+
+  /** Pause (§7.2): the counted LLM check is paused, revision +1, the suggestion accepted. */
+  async pauseReviewCheck(findingId: string) {
+    const f = (await this.state.read()).findings.find((x) => x.id === findingId);
+    if (!f || f.status !== "open" || f.target !== "review_pause" || !f.ruleId) throw new Error("FINDING_NOT_OPEN: this suggestion is no longer open.");
+    const target = f.ruleId;
+    const revision = await this.board.transaction((b) => {
+      const p = b.projects.find((x) => x.id === f.projectId && !x.archivedAt);
+      if (!p) throw new Error("Project not found.");
+      const config = autoReviewOf(p);
+      if (!config.rules.some((r) => r.id === target)) throw new Error("This check is no longer in the project.");
+      const { checks: _checks, ...stored } = p.autoReview ?? { enabled: false, maxRounds: config.maxRounds };
+      p.autoReview = { ...stored, rules: config.rules.map((r) => (r.id === target ? { ...r, off: true as const } : r)) };
+      p.revision++;
+      p.updatedAt = new Date(this.now()).toISOString();
+      return { value: p.revision, changed: true };
+    });
+    await this.close(findingId);
+    return { revision };
+  }
+
+  private close(findingId: string) {
+    const at = new Date(this.now()).toISOString();
+    return this.state.update((state) => {
+      const f = state.findings.find((x) => x.id === findingId);
+      if (!f || f.status === "accepted") return { value: undefined, changed: false };
+      f.status = "accepted";
+      f.updatedAt = at;
+      return { value: undefined, changed: true };
+    });
   }
 
   /** Flowly's skills in the project with their current text, and the bodies open updates would change (§4.6). */

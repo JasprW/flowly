@@ -92,6 +92,7 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
     "flowly_set_tags",
     "flowly_set_type",
     "flowly_suggest_next_moves",
+    "flowly_propose_review_rules",
     "flowly_update_workpad",
   ]);
   // The soft delivery gate and the workpad's own revision are part of the tool schemas (WORKPAD-SPEC §3, §5.3).

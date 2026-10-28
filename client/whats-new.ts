@@ -6,7 +6,8 @@ export interface WhatsNewItem {
   icon: string;
   /** One sentence, msg()-marked; translated at render. */
   text: string;
-  action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" };
+  /** `review-analysis`: the current project's Edit project with the auto review history analysis started (AUTO-REVIEW-SPEC §6.2). */
+  action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" } | { label: string; to: "review-analysis" };
 }
 
 export interface WhatsNewRelease {
@@ -24,7 +25,15 @@ export const whatsNew: WhatsNewRelease[] = [
   {
     // SEARCH-SPEC §8.
     version: "1.8.0",
-    items: [{ icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") }],
+    items: [
+      { icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") },
+      // AUTO-REVIEW-SPEC §9.6 (D15): a new project setting, off by default; the button suggests checks from past cards.
+      {
+        icon: "ShieldCheck",
+        text: msg("Auto review: deliveries are checked before they reach you, and go back to the agent when they fall short. Flowly can suggest the checks from your past cards."),
+        action: { label: msg("Suggest checks from past cards"), to: "review-analysis" },
+      },
+    ],
   },
   {
     // INSIGHTS-REDESIGN-SPEC §5: Skills turn on for everyone who never touched the switch.
