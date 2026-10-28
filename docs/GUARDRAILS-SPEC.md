@@ -43,7 +43,7 @@
 - 大小未知视为在范围内（同类型未知）；升级时范围取已知类型与大小之并，都未知为 `all`。
 - 迁移的 LLM 规则：`text` 取 prompt 前 200 字，更长的全文进 `body`；`off` 的命令规则也迁为 paused。
 - `guardrails.detect` 返回 `{ found, added }`，只加识别时默认勾选的脚本（build、e2e 不加）；`guardrails.counts` 返回 `{ observing, added }`，`added` 为近 7 天学到的准则数。
-- 没有 memory.json 也没有任何 autoReview 时不写迁移文件，第一次写入时才出现；迁移失败后库按空运行，第一次写入会创建文件，迁移不再重试，原 memory.json 留在磁盘上。
+- 没有 memory.json 也没有任何 autoReview 时不写迁移文件，第一次写入时才出现。迁移失败（memory.json 读不出或不合 schema、看板读失败）时库只读：读返回空，写入抛错并记日志，不创建 guardrails.json，下次 daemon 启动再试；原 memory.json 留在磁盘上（2026-10-29 按 PR #75 的 CodeRabbit 意见改，之前是“按空运行、第一次写入创建文件、不再重试”，那样一次失败就把旧数据永久丢在一边）。
 
 ### 0.3 实现中记下的偏差（阶段 B、C 与合并，2026-10-28，已接受）
 
@@ -314,9 +314,9 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
 评审开始时 daemon 算一次并写进评审记录：
 
 - 取本卡自己的改动（2026-10-29 实机验证后改，之前是“`git diff HEAD` 加最近 5 个提交”，在 worktree 卡上会把基线分支的历史算进来，每张卡都成了 `m`）：
-  - worktree 卡（`task.baseRef` 非空且能解析）：`git merge-base <baseRef> HEAD` 为基点，`git diff <基点> --numstat` 覆盖分支以来已提交与未提交的改动；
+  - worktree 卡（`task.baseRef` 非空且能解析；该字段从 a1ec736 起在建卡时保存 `resolveWorktreeBaseRef` 的结果，之前建的卡没有，走下面的旧取法）：`git merge-base <baseRef> HEAD` 为基点，`git diff <基点> --numstat` 覆盖分支以来已提交与未提交的改动；
   - 目录卡或基点解析失败：`git diff HEAD --numstat` 加最近 5 个提交（旧取法，共享目录里别的卡的改动会算进来，见 D6）；
-  - 两种都加上未跟踪的新文件（`git ls-files --others --exclude-standard`）：文本文件按行数计，二进制计 0，不改索引（不做 `git add -N`）。
+  - 两种都加上未跟踪的新文件（`git ls-files --others --exclude-standard`）：文本文件按行数计，二进制（前 8 KiB 有 NUL）或超过 1 MiB 的计 0 行、不进评审 diff，不改索引（不做 `git add -N`）。
 - `files`、`lines`：上述增删行之和；`size`：`s` ≤50 行，`m` ≤400 行，`l` >400 行。
 - 评审 session 读的 diff 用同一基点（第 1 轮 `git diff <基点>`，目录卡为 `git diff HEAD` 加最近 5 个提交），未跟踪的新文件以 `git diff --no-index /dev/null <file>` 附在后面；第 2 轮起 `git diff <上一轮 sha>` 加当时仍未跟踪的新文件；总长仍截在 64 KiB。
 - 本卡最近一次交付的形状也写进 `task.review.shape`，供 §4.3 新项使用。
