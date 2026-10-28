@@ -35,28 +35,25 @@ function Frame({ props, title, children }: { props: PluginButtonContentProps; ti
 // The host's popover surface scrolls on its own (PluginPopoverSurface: at most 440 tall and 16 short of the window;
 // its menu page pads 4 and the plugin content 12, above and below). Kept just inside that, the outer layer never
 // overflows, so only the list under the header scrolls and the mouse wheel has a single target. The phone sheet
-// scrolls as a whole.
+// scrolls as a whole and already shows the button's title in its header. The host draws the surface and its
+// padding, so the body adds neither.
 const hostPopoverMax = 440;
 const hostPopoverPadding = 32;
 function Body({ title, sheet, children }: { title: string; sheet: boolean; children: React.ReactNode }) {
-  const { colors } = useTheme();
   const windowHeight = useWindowDimensions().height;
-  const content = <View style={{ paddingHorizontal: space[3], paddingBottom: space[3], gap: space[2] }}>{children}</View>;
+  const content = <View style={{ gap: space[2] }}>{children}</View>;
+  if (sheet) return content;
   return (
-    <View style={{ width: "100%", maxWidth: 420, maxHeight: sheet ? undefined : Math.min(hostPopoverMax, windowHeight - 16) - hostPopoverPadding, backgroundColor: colors.surface0 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1.5], paddingHorizontal: space[3], paddingTop: space[3], paddingBottom: space[2] }}>
+    <View style={{ width: "100%", maxWidth: 420, maxHeight: Math.min(hostPopoverMax, windowHeight - 16) - hostPopoverPadding, gap: space[2] }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1.5] }}>
         <AiMark />
         <Label medium size={font.md} selectable={false}>
           {title}
         </Label>
       </View>
-      {sheet ? (
-        content
-      ) : (
-        <ScrollView {...verticalScroll} style={{ flexGrow: 0, flexShrink: 1 }} keyboardShouldPersistTaps="handled">
-          {content}
-        </ScrollView>
-      )}
+      <ScrollView {...verticalScroll} style={{ flexGrow: 0, flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+        {content}
+      </ScrollView>
     </View>
   );
 }

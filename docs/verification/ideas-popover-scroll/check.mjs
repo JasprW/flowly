@@ -1,5 +1,7 @@
 // Ideas chip popover in a native session (wide layout): the title row stays put, only the ideas list scrolls, and the
 // host's own scroll layer never overflows, so the mouse wheel has one target. Runs at a normal and a short window.
+// On a phone-width window (the host's bottom sheet) the title shows once, in the sheet's header, and only the sheet
+// scrolls. That case is measured, not photographed: shot-lib crops the left 320 px and the sheet spans the width.
 // Uses the permanent Tinylink fixture's "Add rate limiting to POST /shorten" card (2 open ideas); changes nothing.
 //   node docs/verification/ideas-popover-scroll/check.mjs
 import { writeFile } from 'node:fs/promises';
@@ -73,11 +75,41 @@ async function run(browser, h, name) {
   };
 }
 
+// The host's bottom sheet below its md breakpoint (720 wide).
+async function sheet(browser) {
+  const s = await open(browser, { w: 1500, h: 800 });
+  const { page } = s;
+  const base = page.url().match(/^https:\/\/[^/]+\/h\/[^/]+/)?.[0];
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(`${base}/workspace/${workspaceId}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  const chip = page.getByRole('button', { name: 'Ideas for this card' });
+  await chip.first().waitFor({ timeout: 30000 });
+  await chip.first().click();
+  await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: ideas[1], exact: true }).last().click();
+  await page.waitForTimeout(800);
+  const r = await page.evaluate((idea) => {
+    const leaves = (text) => [...document.querySelectorAll('div')].filter((el) => el.textContent === text && !el.children.length && el.getBoundingClientRect().height > 0);
+    const row = leaves(idea).at(-1);
+    const scrolls = (el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY);
+    const layers = [];
+    for (let el = row; el && el !== document.body; el = el.parentElement) if (scrolls(el)) layers.push(el);
+    return {
+      titleShown: leaves('Ideas for this card').length,
+      scrollLayers: layers.length,
+      sheet: layers.map((el) => ({ clientHeight: el.clientHeight, scrollHeight: el.scrollHeight })),
+    };
+  }, ideas[1]);
+  await s.context.close();
+  return { ...r, titleOnce: r.titleShown === 1, oneScrollingLayer: r.scrollLayers === 1, pageErrors: s.errors };
+}
+
 const browser = await launch();
 const result = {};
 try {
   result.normal = await run(browser, 760, 'popover');
   result.short = await run(browser, 420, 'popover-short');
+  result.sheet = await sheet(browser);
 } finally {
   await browser.close();
 }

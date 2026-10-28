@@ -163,6 +163,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
   - **Dismiss**：`ideas.update` 置为 dismissed（可在 Flowly 内 Restore）。
 - 卡片在 Done/Cancelled 或已归档时，与 IDEAS-INBOX-SPEC 一致只提供 New card 与 Dismiss。
 - 弹层任何时候只有一层在滚（2026-10-26）：宽屏锚定弹层里标题行固定在顶部，只有下面的 ideas 列表滚动；Flowly 内容的总高度不超过 host 弹层的可滚高度（`min(440, 窗口高 − 16)` 减去 host 上下共 32 的内边距：menu page 各 4、插件内容各 12），所以 host 外层从不溢出。手机底部 sheet（`layout.compact`）由 sheet 整体滚动，Flowly 不再嵌套 `ScrollView`。两层同时可滚会抢鼠标滚轮：内层到底后外层才动，看起来像滚不动或乱跳。
+- 弹层只有 host 一层（2026-10-28）：底色、外框和内边距都由 host 画，Flowly 的内容不再自带底色和内边距（否则宽屏看得出“外框里再套一个框”）。标题行（`AiMark` + 标题）只在宽屏弹层出现；手机 sheet 的头部已经显示按钮标题，Flowly 不再重复。
 
 ## 8. 注册、数据与性能
 
