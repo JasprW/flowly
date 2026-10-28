@@ -52,7 +52,7 @@ import { summaryEntrySchema, summaryOverviewSchema } from "./summary";
 import { taskUsageSchema } from "./usage";
 import { TURN_MAX_ENTRIES, tailPageSchema, timelineCursorSchema } from "./session-tail";
 import { digestViewSchema } from "./digest";
-import { memoryEntrySchema, memoryInputFields, memoryKeywordsSchema, memoryKinds, memoryTagsSchema, memoryViewSchema } from "./memory";
+import { memoryInputFields, memoryKeywordsSchema, memoryKinds, memoryTagsSchema } from "./memory";
 import { guardrailEntrySchema, guardrailLimits, guardrailScopeSchema, guardrailStates, guardrailsLedgerSchema, guardrailsViewSchema } from "./guardrails";
 import { perfReportSchema } from "./perf";
 import { localeCodes } from "./i18n";
@@ -752,58 +752,6 @@ export const purgeWorkflowCommands = defineRpc({
 // ---- Search (SEARCH-SPEC §4) ----
 export const searchQuery = defineRpc({ name: "search.query", input: searchInputSchema, output: searchResultSchema });
 
-// ---- Project memory (PROJECT-MEMORY-SPEC §5.1) ----
-const memoryRef = { id: z.string().min(1).max(200), revision: z.number().int().positive() };
-const memoryEdits = z.strictObject({
-  kind: memoryInputFields.kind.optional(),
-  title: memoryInputFields.title.optional(),
-  body: memoryInputFields.body.optional(),
-  tags: memoryTagsSchema.optional(),
-  keywords: memoryKeywordsSchema.optional(),
-});
-export const readMemory = defineRpc({
-  name: "memory.read",
-  input: z.strictObject({ projectId: z.string().min(1).max(200), etag: z.string().max(200).optional() }),
-  output: z.object({ etag: z.string(), value: memoryViewSchema.optional() }),
-});
-export const memoryCounts = defineRpc({
-  name: "memory.counts",
-  input: etagInput,
-  output: z.object({ etag: z.string(), value: z.record(z.string(), z.number()).optional() }),
-});
-export const createMemory = defineRpc({
-  name: "memory.create",
-  input: z.strictObject({ projectId: z.string().min(1).max(200), ...memoryInputFields, pinned: z.boolean().default(false) }),
-  output: memoryEntrySchema,
-});
-export const updateMemory = defineRpc({
-  name: "memory.update",
-  input: memoryEdits.extend({ ...memoryRef, pinned: z.boolean().optional() }),
-  output: memoryEntrySchema,
-});
-export const confirmMemory = defineRpc({
-  name: "memory.confirm",
-  input: z.strictObject({ ...memoryRef, edits: memoryEdits.optional() }),
-  output: memoryEntrySchema,
-});
-export const dismissMemory = defineRpc({ name: "memory.dismiss", input: z.strictObject(memoryRef), output: memoryEntrySchema });
-export const restoreMemory = defineRpc({ name: "memory.restore", input: z.strictObject(memoryRef), output: memoryEntrySchema });
-export const archiveMemory = defineRpc({
-  name: "memory.archive",
-  input: z.strictObject({ ...memoryRef, reason: z.enum(["retired", "promoted"]) }),
-  output: memoryEntrySchema,
-});
-export const archiveStaleMemory = defineRpc({
-  name: "memory.archive-many",
-  input: z.strictObject({ projectId: z.string().min(1).max(200), ids: z.array(z.strictObject(memoryRef)).max(200) }),
-  output: z.object({ archived: z.number() }),
-});
-export const deleteMemory = defineRpc({ name: "memory.delete", input: z.strictObject(memoryRef), output: z.object({ id: z.string() }) });
-export const reviewForMemory = defineRpc({
-  name: "memory.retro",
-  input: z.strictObject({ taskId: z.string().min(1).max(200) }),
-  output: z.object({ queued: z.boolean() }),
-});
 // ---- Project guardrails (GUARDRAILS-SPEC §7.5) ----
 const guardrailRef = { id: z.string().min(1).max(200), revision: z.number().int().positive() };
 const commandName = z.string().trim().min(1).max(guardrailLimits.commandName);

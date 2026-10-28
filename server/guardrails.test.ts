@@ -396,7 +396,7 @@ test("an invalid guardrails.json is preserved and reported, never reset", async 
   expect(await readFile(join(x.store.directory, "guardrails.json"), "utf8")).toBe("[]");
 });
 
-test("phase B surface: the removed RPCs are gone, insights.guardrails exists; project settings take only enabled and maxRounds (§7.5, §8)", async () => {
+test("phase B surface: the removed RPCs (memory.* included) are gone, insights.guardrails exists; project settings take only enabled and maxRounds (§7.5, §8)", async () => {
   const rpc = await import("../shared/rpc");
   const { projectEdit } = await import("../shared/model");
   const names = Object.values(rpc).flatMap((v) => (v && typeof v === "object" && typeof (v as { name?: unknown }).name === "string" ? [(v as { name: string }).name] : []));
@@ -414,7 +414,9 @@ test("phase B surface: the removed RPCs are gone, insights.guardrails exists; pr
     "workpads.refresh",
   ])
     expect(names).not.toContain(gone);
-  for (const kept of ["insights.guardrails", "reviews.rerun", "workpads.check", "guardrails.detect"]) expect(names).toContain(kept);
+  // The Guardrails page replaced the Memory page: no memory.* RPC is left (the retro is guardrails.retro).
+  expect(names.filter((n) => n.startsWith("memory."))).toEqual([]);
+  for (const kept of ["insights.guardrails", "reviews.rerun", "workpads.check", "guardrails.detect", "guardrails.retro"]) expect(names).toContain(kept);
   expect(projectEdit.safeParse({ id: "p", revision: 1, autoReview: { enabled: true, maxRounds: 2 } }).success).toBe(true);
   for (const extra of [{ rules: [] }, { goal: false }, { guidance: "g" }, { checks: [] }])
     expect(projectEdit.safeParse({ id: "p", revision: 1, autoReview: { enabled: true, maxRounds: 2, ...extra } }).success).toBe(false);

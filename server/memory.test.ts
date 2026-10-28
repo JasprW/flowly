@@ -9,6 +9,7 @@ import { MemoryError, MemoryService, memoryContext, memoryOn, memoryStore, setMe
 import type { SummarySettings } from "../shared/summary";
 import { emptyCounts, type GuardrailEntry } from "../shared/guardrails";
 import { BackgroundWorkspaces } from "./background-workspace";
+import { GuardrailsService } from "./guardrails";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -27,6 +28,8 @@ async function setup() {
     removed.push(agent.id);
   }, new BackgroundWorkspaces(f.store.directory, async () => "live"));
   f.service.memory = memory;
+  // People edit notes on the Guardrails page (guardrails.* RPCs, GUARDRAILS-SPEC §7.5).
+  const guardrails = new GuardrailsService(f.store);
   const created: Created[] = [];
   const replies: (string | Error)[] = [];
   let archived = 0;
@@ -77,7 +80,7 @@ async function setup() {
     });
   };
   const entries = async () => (await memory.memoryState()).entries;
-  return { ...f, memory, summaries, settings, model, created, replies, archived: () => archived, wsArchived: () => wsArchived, removed, remember, entries };
+  return { ...f, memory, guardrails, summaries, settings, model, created, replies, archived: () => archived, wsArchived: () => wsArchived, removed, remember, entries };
 }
 type Fixture = Awaited<ReturnType<typeof setup>>;
 const one = async (x: Fixture) => (await x.entries())[0];
@@ -143,8 +146,6 @@ test("a decision remembered on card A is in the first instructions of a card B c
   await x.remember();
   const candidate = await one(x);
   await addCardB(x);
-  // Nothing waits for review: confirming is refused.
-  await expect(x.memory.confirm({ id: candidate.id, revision: candidate.revision })).rejects.toThrow("waiting for review");
   const ctx = await new BoardService(x.store).context("b", x.paseo);
   expect(ctx.context).toContain("Project memory (all 1 entries):");
   expect(ctx.context).toContain(`- [Decision] Do not pin a Paseo upper bound: The user confirmed there is no real upper limit. (memory ${candidate.id.slice(0, 8)}, from "Card")`);
@@ -160,32 +161,33 @@ test("a decision remembered on card A is in the first instructions of a card B c
   expect((await new BoardService(x.store).context("b", x.paseo)).context).not.toContain("Project memory");
 });
 
-test("an edit in the UI reaches later sessions; a delete removes it and keeps a backup", async () => {
+test("a note edited on the Guardrails page reaches later sessions; a delete removes it and keeps a backup; a duplicate title is refused", async () => {
   const x = await setup();
-  const e = await x.memory.create({ projectId: "p", kind: "convention", title: "MR descriptions follow the template", body: "", tags: [], keywords: [], pinned: false });
-  const edited = await x.memory.update({ id: e.id, revision: e.revision, title: "MR descriptions use the team template" });
+  const e = await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "convention", text: "MR descriptions follow the template" });
+  await expect(x.guardrails.create({ projectId: "p", kind: "note", noteKind: "decision", text: "  mr descriptions FOLLOW the template " })).rejects.toMatchObject({ code: "MEMORY_DUPLICATE" });
+  const edited = await x.guardrails.update({ id: e.id, revision: e.revision, text: "MR descriptions use the team template" });
   expect(edited.revision).toBe(2);
   const board = await x.store.read();
   const lines = await memoryContext(x.store.directory, board.tasks[0], board.projects[0], board);
   expect(lines.lines.join("\n")).toContain("MR descriptions use the team template");
-  await x.memory.remove({ id: edited.id, revision: edited.revision });
+  await x.guardrails.remove({ id: edited.id, revision: edited.revision });
   expect(await x.entries()).toEqual([]);
   expect((await memoryContext(x.store.directory, board.tasks[0], board.projects[0], board)).lines).toEqual([]);
-  expect((await readdir(join(x.store.directory, "removed"))).some((n) => n.startsWith(`memory-${e.id}`))).toBe(true);
+  expect((await readdir(join(x.store.directory, "removed"))).some((n) => n.startsWith(`guardrail-${e.id}`))).toBe(true);
 });
 
 test("a stale revision is refused and changes nothing", async () => {
   const x = await setup();
-  const e = await x.memory.create({ projectId: "p", kind: "pitfall", title: "Hermes loop binding", body: "", tags: [], keywords: [], pinned: false });
-  await x.memory.update({ id: e.id, revision: 1, body: "first" });
-  await expect(x.memory.update({ id: e.id, revision: 1, body: "second" })).rejects.toMatchObject({ code: "MEMORY_CONFLICT" });
-  await expect(x.memory.remove({ id: e.id, revision: 1 })).rejects.toMatchObject({ code: "MEMORY_CONFLICT" });
+  const e = await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "pitfall", text: "Hermes loop binding" });
+  await x.guardrails.update({ id: e.id, revision: 1, body: "first" });
+  await expect(x.guardrails.update({ id: e.id, revision: 1, body: "second" })).rejects.toMatchObject({ code: "GUARDRAIL_CONFLICT" });
+  await expect(x.guardrails.remove({ id: e.id, revision: 1 })).rejects.toMatchObject({ code: "GUARDRAIL_CONFLICT" });
   expect((await one(x)).body).toBe("first");
 });
 
 test("a replacement archives the old entry at once, in the same write", async () => {
   const x = await setup();
-  const old = await x.memory.create({ projectId: "p", kind: "decision", title: "Summaries every turn", body: "", tags: [], keywords: [], pinned: false });
+  const old = await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "decision", text: "Summaries every turn" });
   const result = await x.remember({ title: "Summaries every completed turn", supersedes: old.id });
   const next = (await x.entries()).find((e) => e.id === result.memoryId)!;
   const all = await x.entries();
@@ -209,7 +211,7 @@ test("a full project gives up its longest-unused, unpinned note for a new one; p
   expect(all.find((e) => e.id === "a5")!.status).toBe("archived");
   expect((await x.memory.store.read()).entries.find((e) => e.id === "a5")!.stateReason).toBe("displaced");
   const unpinned = all.find((e) => e.id === "a10")!;
-  await expect(x.memory.update({ id: unpinned.id, revision: 1, pinned: true })).rejects.toThrow("at most 5");
+  await expect(x.guardrails.update({ id: unpinned.id, revision: 1, pinned: true })).rejects.toThrow("at most 5");
 });
 
 test("deleting a card drops its clues but keeps its memories; removing a project drops all", async () => {

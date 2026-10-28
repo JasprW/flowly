@@ -105,17 +105,6 @@ export const memoryStateSchema = z.object({
 export type MemoryState = z.infer<typeof memoryStateSchema>;
 export const emptyMemoryState = (): MemoryState => ({ version: 1, revision: 0, entries: [], errors: [], retros: [], recallStats: {}, clues: [] });
 
-/** What the Memory page and the drawer read (memory.read). */
-export const memoryViewSchema = z.object({
-  entries: z.array(memoryEntrySchema),
-  errors: z.array(memoryErrorSchema),
-  running: z.array(z.string()),
-  recall: z.object({ queries: z.number(), empty: z.number() }),
-  enabled: z.boolean(),
-  retroEnabled: z.boolean(),
-});
-export type MemoryView = z.infer<typeof memoryViewSchema>;
-
 export const memoryInputFields = {
   kind: z.enum(memoryKinds),
   title: z.string().trim().min(1).max(memoryLimits.title),
@@ -540,16 +529,4 @@ export function fitCandidate(c: RetroCandidate) {
     evidence: clip(c.evidence.trim(), memoryLimits.evidence),
     ...(c.supersedes ? { supersedes: c.supersedes } : {}),
   };
-}
-
-/** Recall counts of the last 30 days (§6.4). */
-export function recallTotals(stats: MemoryState["recallStats"][string] | undefined, now: number) {
-  let queries = 0,
-    empty = 0;
-  for (const [day, v] of Object.entries(stats?.days || {}))
-    if (now - Date.parse(`${day}T00:00:00Z`) <= 31 * DAY) {
-      queries += v.queries;
-      empty += v.empty;
-    }
-  return { queries, empty };
 }

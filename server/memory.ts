@@ -21,7 +21,6 @@ import {
   parseRetroOutput,
   questionAnswers,
   recallMemory,
-  recallTotals,
   retroJsonSchema,
   retroMaterial,
   retroPrompt,
@@ -31,7 +30,6 @@ import {
   type MemoryEntry,
   type MemoryKind,
   type MemoryState,
-  type MemoryView,
   type TurnItem,
 } from "../shared/memory";
 import { emptyCounts, guardrailContext, memoryStateOf, recallGuidelines, setState, toMemoryEntry, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
@@ -41,7 +39,7 @@ import { runSummaryModels } from "./summary-models";
 import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { logFailure } from "./error-report";
-import { displaceNotes, guardrailsStore, memoryOn, pruneArchived, removeProjectGuardrails, removeTaskGuardrails, writeBackup, type GuardrailsStore } from "./guardrails";
+import { displaceNotes, guardrailsStore, memoryOn, pruneArchived, removeProjectGuardrails, removeTaskGuardrails, type GuardrailsStore } from "./guardrails";
 
 export { memoryOn, setMemoryEverywhere } from "./guardrails";
 
@@ -107,8 +105,6 @@ export function checkProposal(state: GuardrailsState, p: Omit<Proposal, "by" | "
     throw new MemoryError("MEMORY_LIMIT", `This card already added ${memoryLimits.openPerTask} memories. Mention anything else worth remembering in your reply instead.`);
 }
 
-type HumanInput = { kind: MemoryKind; title: string; body: string; tags: string[]; keywords: string[] };
-
 /** AGENTS.md and CLAUDE.md at the project root (a CLAUDE.md that repeats AGENTS.md counts once); missing files are skipped. */
 async function instructionFiles(root: string) {
   const seen = new Set<string>();
@@ -163,24 +159,6 @@ export class MemoryService {
 
   // ---- Reads ----------------------------------------------------------------------
 
-  async view(projectId: string): Promise<MemoryView> {
-    const [state, board, settings] = await Promise.all([this.store.read(), this.board.read(), this.summarySettings()]);
-    const project = board.projects.find((p) => p.id === projectId);
-    if (!project) throw new Error("Project not found.");
-    const memory = memoryStateOf(state);
-    return {
-      entries: memory.entries.filter((e) => e.projectId === projectId),
-      errors: memory.errors.filter((e) => e.projectId === projectId),
-      running: [...this.running].filter((id) => board.tasks.some((t) => t.id === id && t.projectId === projectId)),
-      recall: recallTotals(state.recallStats[projectId], this.now()),
-      enabled: memoryOn(project),
-      retroEnabled: settings.retroEnabled,
-    };
-  }
-  /** Memories waiting for review per project: none since notes take effect at once (GUARDRAILS-SPEC D2). */
-  async counts(): Promise<Record<string, number>> {
-    return {};
-  }
   /** flowly_get_task `memory` (§6.3): the notes chosen for this card. */
   async taskContext(task: Task, project: Project) {
     if (!memoryOn(project)) return { enabled: false, total: 0, entries: [] };
@@ -276,145 +254,6 @@ export class MemoryService {
       displaceNotes(state, p.projectId, entry.id, at);
       await pruneArchived(this.store.directory, state, p.projectId, at);
       return { value: toMemoryEntry(entry), changed: true };
-    });
-  }
-
-  // ---- Human edits (memory.* RPCs, kept until the Guardrails page) ----------------
-
-  private async project(projectId: string) {
-    const project = (await this.board.read()).projects.find((p) => p.id === projectId);
-    if (!project) throw new Error("Project not found.");
-    if (project.archivedAt) throw new Error("This project is archived; its memory is read-only.");
-    return project;
-  }
-  /** Runs `edit` on one note after the revision check; `edit` returns false for "no change". */
-  private async edit(id: string, revision: number, edit: (entry: GuardrailEntry, state: GuardrailsState, at: string) => boolean | void | Promise<boolean | void>): Promise<MemoryEntry> {
-    const before = (await this.store.read()).entries.find((e) => e.id === id && e.kind === "note");
-    if (!before) throw new MemoryError("NOT_FOUND", "This memory no longer exists. Reload to see the latest.");
-    await this.project(before.projectId);
-    return this.store.update(async (state) => {
-      const entry = state.entries.find((e) => e.id === id && e.kind === "note");
-      if (!entry) throw new MemoryError("NOT_FOUND", "This memory no longer exists. Reload to see the latest.");
-      if (entry.revision !== revision) throw new MemoryError("MEMORY_CONFLICT", "This memory changed elsewhere. Reload to see the latest.");
-      const at = this.iso();
-      if ((await edit(entry, state, at)) === false) return { value: toMemoryEntry(entry), changed: false };
-      entry.revision++;
-      entry.updatedAt = at;
-      await pruneArchived(this.store.directory, state, entry.projectId, at);
-      return { value: toMemoryEntry(entry), changed: true };
-    });
-  }
-  async create(input: HumanInput & { projectId: string; pinned: boolean }): Promise<MemoryEntry> {
-    await this.project(input.projectId);
-    return this.store.update(async (state) => {
-      const own = notesOf(state, input.projectId);
-      checkHumanText(input);
-      if (own.some((e) => e.state === "active" && titleKey(e.text) === titleKey(input.title))) throw new MemoryError("MEMORY_DUPLICATE", "This project already has a memory with that title.");
-      if (input.pinned) checkPin(own);
-      const at = this.iso();
-      const entry: GuardrailEntry = {
-        id: randomUUID(),
-        projectId: input.projectId,
-        kind: "note",
-        noteKind: input.kind,
-        text: input.title.trim(),
-        ...(input.body.trim() ? { body: input.body.trim() } : {}),
-        tags: input.tags,
-        keywords: input.keywords,
-        ...(input.pinned ? { pinned: true } : {}),
-        state: "active",
-        stateAt: at,
-        counts: emptyCounts(),
-        sources: [],
-        by: "user",
-        revision: 1,
-        createdAt: at,
-        updatedAt: at,
-      };
-      state.entries.push(entry);
-      displaceNotes(state, input.projectId, entry.id, at);
-      await pruneArchived(this.store.directory, state, input.projectId, at);
-      return { value: toMemoryEntry(entry), changed: true };
-    });
-  }
-  update(input: { id: string; revision: number } & Partial<HumanInput & { pinned: boolean }>) {
-    return this.edit(input.id, input.revision, (entry, state) => {
-      const current = toMemoryEntry(entry);
-      const next = { ...current, ...stripUndefined(input) };
-      checkHumanText(next);
-      if (titleKey(next.title) !== titleKey(current.title) && notesOf(state, entry.projectId).some((e) => e.id !== entry.id && e.state === "active" && titleKey(e.text) === titleKey(next.title)))
-        throw new MemoryError("MEMORY_DUPLICATE", "This project already has a memory with that title.");
-      if (next.pinned && !current.pinned) {
-        if (entry.state !== "active") throw new Error("Only active memories can be pinned.");
-        checkPin(notesOf(state, entry.projectId));
-      }
-      const changed = (["kind", "title", "body", "pinned"] as const).some((k) => next[k] !== current[k]) || next.tags.join("\n") !== current.tags.join("\n") || next.keywords.join("\n") !== current.keywords.join("\n");
-      if (!changed) return false;
-      entry.noteKind = next.kind;
-      entry.text = next.title.trim();
-      if (next.body.trim()) entry.body = next.body.trim();
-      else delete entry.body;
-      entry.tags = next.tags;
-      entry.keywords = next.keywords;
-      if (next.pinned) entry.pinned = true;
-      else delete entry.pinned;
-    });
-  }
-  /** Nothing waits for review any more (GUARDRAILS-SPEC D2). */
-  confirm(input: { id: string; revision: number; edits?: Partial<HumanInput> }) {
-    return this.edit(input.id, input.revision, () => {
-      throw new Error("Only memories waiting for review can be confirmed.");
-    });
-  }
-  dismiss(input: { id: string; revision: number }) {
-    return this.edit(input.id, input.revision, () => {
-      throw new Error("Only memories waiting for review can be dismissed.");
-    });
-  }
-  /** An archived (or formerly dismissed) note becomes active again. */
-  restore(input: { id: string; revision: number }) {
-    return this.edit(input.id, input.revision, (entry, state, at) => {
-      if (entry.state === "active") return false;
-      if (notesOf(state, entry.projectId).some((e) => e.id !== entry.id && e.state === "active" && titleKey(e.text) === titleKey(entry.text)))
-        throw new MemoryError("MEMORY_DUPLICATE", "This project already has a memory with that title.");
-      setState(entry, "active", undefined, at);
-      displaceNotes(state, entry.projectId, entry.id, at);
-    });
-  }
-  archive(input: { id: string; revision: number; reason: "retired" | "promoted" }) {
-    return this.edit(input.id, input.revision, (entry, _state, at) => {
-      if (entry.state !== "active") throw new Error("Only active memories can be archived.");
-      setState(entry, "archived", input.reason, at);
-    });
-  }
-  async remove(input: { id: string; revision: number }) {
-    const before = (await this.store.read()).entries.find((e) => e.id === input.id && e.kind === "note");
-    if (!before) throw new MemoryError("NOT_FOUND", "This memory no longer exists. Reload to see the latest.");
-    await this.project(before.projectId);
-    return this.store.update(async (state) => {
-      const entry = state.entries.find((e) => e.id === input.id && e.kind === "note");
-      if (!entry) throw new MemoryError("NOT_FOUND", "This memory no longer exists. Reload to see the latest.");
-      if (entry.revision !== input.revision) throw new MemoryError("MEMORY_CONFLICT", "This memory changed elsewhere. Reload to see the latest.");
-      await writeBackup(this.store.directory, `memory-${entry.id}`, { entries: [entry] }, this.iso());
-      state.entries = state.entries.filter((e) => e !== entry);
-      return { value: { id: entry.id }, changed: true };
-    });
-  }
-  /** Archive all stale (§6.5): one write; notes edited meanwhile are skipped. */
-  archiveMany(input: { projectId: string; ids: { id: string; revision: number }[] }) {
-    return this.store.update(async (state) => {
-      const at = this.iso();
-      let n = 0;
-      for (const { id, revision } of input.ids) {
-        const e = state.entries.find((x) => x.id === id && x.projectId === input.projectId && x.kind === "note");
-        if (!e || e.revision !== revision || e.state !== "active") continue;
-        setState(e, "archived", "retired", at);
-        e.revision++;
-        e.updatedAt = at;
-        n++;
-      }
-      if (n) await pruneArchived(this.store.directory, state, input.projectId, at);
-      return { value: { archived: n }, changed: n > 0 };
     });
   }
 
@@ -675,17 +514,5 @@ function agentEntry(e: MemoryEntry) {
   };
 }
 
-function checkHumanText(input: { title: string; body: string; keywords: string[] }) {
-  if (!input.title.trim()) throw new Error("A memory needs a title.");
-  if (containsSecret(`${input.title}\n${input.body}\n${input.keywords.join(" ")}`))
-    throw new MemoryError("MEMORY_SECRET", "This looks like it contains a secret (token, key or password). Memory never stores credentials; write where it is kept instead.");
-}
-function checkPin(own: readonly GuardrailEntry[]) {
-  if (own.filter((e) => e.state === "active" && e.pinned).length >= memoryLimits.pinnedPerProject)
-    throw new Error(`A project can pin at most ${memoryLimits.pinnedPerProject} memories. Unpin one first.`);
-}
-function stripUndefined<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
-}
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref?.());
 const logError = (what: string) => (e: unknown) => logFailure(`Flowly project memory ${what} failed:`, e);

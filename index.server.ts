@@ -283,17 +283,6 @@ export default function contribute(host: PluginServerContext) {
     memoryOn: (project) => memoryOn(project),
   };
   tools.agents.memory = memory;
-  server.handle(rpc.readMemory, async ({ projectId, etag }) => ifChanged(await memory.view(projectId), etag));
-  server.handle(rpc.memoryCounts, async ({ etag }) => ifChanged(await memory.counts(), etag));
-  server.handle(rpc.createMemory, (input) => memory.create(input));
-  server.handle(rpc.updateMemory, (input) => memory.update(input));
-  server.handle(rpc.confirmMemory, (input) => memory.confirm(input));
-  server.handle(rpc.dismissMemory, (input) => memory.dismiss(input));
-  server.handle(rpc.restoreMemory, (input) => memory.restore(input));
-  server.handle(rpc.archiveMemory, (input) => memory.archive(input));
-  server.handle(rpc.archiveStaleMemory, (input) => memory.archiveMany(input));
-  server.handle(rpc.deleteMemory, (input) => memory.remove(input));
-  server.handle(rpc.reviewForMemory, (input, { paseo }) => memory.manual(input.taskId, paseo));
   tools.agents.guardrails = guardrails;
   server.handle(rpc.readGuardrails, async ({ projectId, etag }) => ifChanged(await guardrails.view(projectId), etag));
   server.handle(rpc.guardrailCounts, async ({ etag }) => ifChanged(await guardrails.counts(), etag));
