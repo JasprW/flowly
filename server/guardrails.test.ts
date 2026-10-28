@@ -135,6 +135,11 @@ test("learning (§4.3): new opens an item; the same on this card counts; the sam
 test("learning: a matched active guideline counts a miss and widens its scope; a paused or archived one is revived", async () => {
   const x = await setup();
   await seed(x, [entry("aaaaaaaa-1"), entry("bbbbbbbb-1", { state: "paused", stateReason: "misfired twice in 30 days", scope: { types: ["feature"], sizes: "all" } })]);
+  // Both cards' latest reviews let the guideline through (passed / not applicable).
+  await x.store.mutate((board) => {
+    board.tasks[0].review!.items = [{ id: "bbbbbbbb-1", kind: "guideline", name: "Guideline", gating: true, state: "na" }];
+    board.tasks[1].review!.items = [{ id: "aaaaaaaa-1", kind: "guideline", name: "Guideline", gating: true, state: "passed" }];
+  });
   // Card U (bugfix, s) is out of scope for aaaaaaaa: it widens to hold it.
   await x.learn("u", { kind: "same", matches: "aaaaaaaa" });
   let s = await x.state();
@@ -184,6 +189,21 @@ test("a correction that matches a merged guideline counts on the live one, which
   expect(s.entries[1].sources.map((src) => src.taskId)).toEqual(["t"]);
   expect(s.entries[1].revision).toBe(3);
   expect(s.items).toEqual([]);
+});
+
+test("no miss without a review that let the guideline through: the source is added and the scope widened all the same", async () => {
+  const x = await setup();
+  await seed(x, [entry("aaaaaaaa-1"), entry("bbbbbbbb-1", { state: "archived", stateReason: "never caught anything" })]);
+  // Card U's latest review failed the guideline (it did not let it through) and never judged bbbbbbbb.
+  await x.store.mutate((board) => {
+    board.tasks[1].review!.items = [{ id: "aaaaaaaa-1", kind: "guideline", name: "Guideline", gating: true, state: "failed" }];
+  });
+  await x.learn("u", { kind: "same", matches: "aaaaaaaa" });
+  await x.learn("u", { kind: "same", matches: "bbbbbbbb" });
+  const s = await x.state();
+  expect(s.entries[0]).toMatchObject({ counts: { missed: 0 }, scope: { types: ["feature", "bugfix"], sizes: ["m", "s"] } });
+  expect(s.entries[0].sources.map((src) => src.taskId)).toEqual(["u"]);
+  expect(s.entries[1]).toMatchObject({ state: "active", stateReason: "revived", counts: { missed: 0 } });
 });
 
 test("a disputed finding the user sends the card back for counts as caught, not missed, and the dispute ends (§6.6)", async () => {

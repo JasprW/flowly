@@ -503,6 +503,8 @@ export class GuardrailsService {
     }
     const shape: CardShape = { type: task.type, size: task.review?.shape?.size };
     const disputed = new Set((task.disputes || []).map((d) => d.id));
+    // A miss needs the card's latest review to have let it through (§4.3, §6.6); never reviewed is no miss.
+    const reviewLetThrough = new Set((task.review?.items || []).filter((i) => i.state === "passed" || i.state === "na").map((i) => i.id));
     const outcome = await this.store.update(async (state) => {
       const at = this.iso();
       const events: CardEvent[] = [];
@@ -572,7 +574,7 @@ export class GuardrailsService {
         // The dispute failed: the user sent the card back for exactly this (§6.6).
         endedDisputes.push(guideline.id);
         countCaught(guideline.counts, at);
-      } else countMissed(guideline.counts, at);
+      } else if (reviewLetThrough.has(guideline.id)) countMissed(guideline.counts, at);
       addSource(guideline, { taskId: task.id, at, ...(quote ? { quote } : {}) });
       const widened = widenScope(guideline.scope, shape);
       if (widened.changed) guideline.scope = widened.scope;
