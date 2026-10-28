@@ -45,6 +45,16 @@
 - `guardrails.detect` 返回 `{ found, added }`，只加识别时默认勾选的脚本（build、e2e 不加）；`guardrails.counts` 返回 `{ observing, added }`，`added` 为近 7 天学到的准则数。
 - 没有 memory.json 也没有任何 autoReview 时不写迁移文件，第一次写入时才出现；迁移失败后库按空运行，第一次写入会创建文件，迁移不再重试，原 memory.json 留在磁盘上。
 
+### 0.3 实现中记下的偏差（阶段 B、C 与合并，2026-10-28，已接受）
+
+- 评审记录里没有 `tokens`：SDK 的评审结果不带用量，Workpad 的 Review 组只显示状态、轮次、模型（§6.4、§7.1 中的“tokens”不实现）。
+- 被质疑的内置目标项与卡片专属项没有条目可记 misfire，`insights.guardrails.misfires` 只统计准则与命令的误判；§3.4 “发现新命令但已到上限”的 Insights 提示没有通道，不做。
+- 旧 skill 的会话向 `flowly_update_workpad` 发 `validation`/`confusions` 时返回 `WORKPAD_INVALID` 并说明只收 `acceptance`；旧版 workpad 记录读取时丢掉这些字段，不迁移。
+- `autoReviewRuns(project)` 只看项目开关；旧的 `reviewSetup` 卡片、`reviewDraft`、`memory.*` RPC、`reviews.detect-commands|analyze-history|analysis-status|apply-draft|discard-draft|setup-card`、`insights.add-review-check|pause-review-check|dismiss-review-nudge`、`workpads.resolve-confusion|refresh` 全部删除；存过的 `review_rule`/`review_pause` 建议读取时丢弃。
+- 评审在第 2 轮起用 `git diff <上一轮 sha>` 做增量；上一轮通过且这一轮没给结论的项沿用通过。
+- 新项目与“编辑项目”的 Auto review 只有开关、成本一句和 Max rework rounds；客户端不调用 `guardrails.detect`，由 daemon 在创建项目和保存开关时识别命令（取消表单不留副作用）。
+- What's new 1.8.0 带“Turn on for this project”按钮，打开当前项目的 Auto review 设置；已有项目的 Auto review 保持关闭，新项目默认开、2 轮。
+
 ## 1. 目的
 
 ### 1.1 本机数据（Flowly 项目流转日志，2026-10-14 至 10-28）
