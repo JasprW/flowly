@@ -8,6 +8,7 @@
 - Commands (§4.5 first bullet): `projects.create` / `create-linked` and switching Auto review on add the detected commands as `observing`; new projects get `autoReview: { enabled: true, maxRounds: 2 }`.
 - Prevention (§5.1, §5.2): session instructions carry the guidelines block (in scope by type) before the notes block; `flowly_get_task.guardrails`; `memory.candidates` removed. RPCs `guardrails.read|counts|create|update|delete|detect|retro`; finishing a card closes its items and turns open disputes into misfires.
 - Additive model fields for phases B/C: `Task.disputes`, `Review.shape`, `Review.items`, event `guardrail` and `results[].kind`.
+- Review rework (orchestrator review of bffa7e5, spec 7964f06): card items stay open after Done/Cancelled; the rework quote has no 15-character minimum; `missed` only when the card's latest `review.items` passed or n/a'd the guideline; a match on a merged or superseded guideline resolves along `supersededBy` (`liveEntry`).
 - Not in phase A: the review itself (shape, items, evidence filter, disputes input, counters on review end, retirement runs), weekly re-detection and consolidation, `flowly_recall` over guidelines (§5.3), client, i18n, docs other than this entry.
 
 ## Auto review P3 (card "Auto Review") — 2026-10-28
