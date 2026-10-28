@@ -11,6 +11,9 @@ import { BoardService } from "./service";
 import type { SummarySettings } from "../shared/summary";
 import type { CommandRecord, WorkflowSettings } from "../shared/workflow-insights";
 import { BackgroundWorkspaces } from "./background-workspace";
+import { GuardrailsService } from "./guardrails";
+import { emptyCounts, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
+import type { RepoFiles } from "./review-detect";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -102,6 +105,7 @@ async function setup() {
     removed,
     setSettings: (s: Partial<WorkflowSettings>) => (settings = { ...settings, ...s }),
     setNow: (t: number) => (now = t),
+    now: () => now,
   };
 }
 
@@ -447,131 +451,176 @@ for (const secondLookupFails of [false, true]) {
   });
 }
 
-// ---- Auto review in Insights (AUTO-REVIEW-SPEC §7) ----------------------------------------
-let eventN = 0;
-const ev = (taskId: string, hoursAgo: number, extra: Record<string, unknown>) => ({ id: `ev${eventN++}`, taskId, at: new Date(NOW - hoursAgo * 3_600_000).toISOString(), ...extra });
-const delivered = (taskId: string, h: number) => ev(taskId, h, { actor: "agent", action: "status_changed", from: "development", to: "in_review" });
-const sentBack = (taskId: string, h: number) => [
-  ev(taskId, h, { actor: "system", action: "status_changed", rule: "A1", from: "in_review", to: "development" }),
-  ev(taskId, h - 0.5, { actor: "system", action: "agent.turn_ended" }),
-];
-const cards = ["aaaaaaaa-1", "bbbbbbbb-2", "cccccccc-3"];
-
-test("rework nudge: Auto review off and 3 cards sent back in 14 days; Not now hides it for 30 days; on, it never shows", async () => {
-  const x = await setup();
-  const events = cards.flatMap((id, i) => [delivered(id, 48 + i), ...sentBack(id, 47 + i)]);
-  await x.board.flow!.append(events as never, await x.board.read());
-  expect((await x.service.view("p")).reviewNudge).toMatchObject({ delivered: 3, reworked: 3, cards: [{ id: "aaaaaaaa-1" }, { id: "bbbbbbbb-2" }, { id: "cccccccc-3" }] });
-  await x.service.dismissReviewNudge("p");
-  expect((await x.service.view("p")).reviewNudge).toBeNull();
-  x.setNow(NOW + 31 * 86_400_000);
-  await x.board.flow!.append(cards.flatMap((id, i) => [delivered(id, -31 * 24 + 5 + i), ...sentBack(id, -31 * 24 + 4 + i)]) as never, await x.board.read());
-  expect((await x.service.view("p")).reviewNudge).toMatchObject({ reworked: 3 });
-  await x.board.mutate((b) => {
-    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: [] };
-  });
-  expect((await x.service.view("p")).reviewNudge).toBeNull();
+// ---- Guardrails in the weekly run (GUARDRAILS-SPEC §7.3) ---------------------------------
+const day = 86_400_000;
+const g = (id: string, extra: Partial<GuardrailEntry> = {}): GuardrailEntry => ({
+  id,
+  projectId: "p",
+  kind: "guideline",
+  text: `Guideline ${id}`,
+  scope: { types: ["feature"], sizes: ["s"] },
+  state: "active",
+  stateAt: new Date(NOW - day).toISOString(),
+  counts: emptyCounts(),
+  sources: [{ taskId: "aaaaaaaa-1", at: new Date(NOW - day).toISOString(), quote: `words ${id}` }],
+  by: "learned",
+  revision: 1,
+  createdAt: new Date(NOW - day).toISOString(),
+  updatedAt: new Date(NOW - day).toISOString(),
+  ...extra,
 });
+const note = (id: string, extra: Partial<GuardrailEntry> = {}): GuardrailEntry => ({ ...g(id), kind: "note", noteKind: "pitfall", scope: undefined, by: "agent", text: `Note ${id}`, counts: { ...emptyCounts(), usedAt: new Date(NOW - day).toISOString() }, ...extra });
 
-test("two cards sent back are not enough, and a restored commit-and-push turn does not count", async () => {
+async function withGuardrails(files: Partial<RepoFiles> = {}) {
   const x = await setup();
-  const restored = (id: string, h: number) => [
-    ev(id, h, { actor: "system", action: "status_changed", rule: "A1", from: "in_review", to: "development" }),
-    ev(id, h - 0.2, { actor: "system", action: "agent.turn_ended" }),
-    ev(id, h - 0.2, { actor: "system", action: "status_changed", rule: "A1r", from: "development", to: "in_review" }),
-  ];
-  const events = [delivered(cards[0]!, 50), ...sentBack(cards[0]!, 49), delivered(cards[1]!, 40), ...sentBack(cards[1]!, 39), delivered(cards[2]!, 30), ...restored(cards[2]!, 29)];
-  await x.board.flow!.append(events as never, await x.board.read());
-  expect((await x.service.view("p")).reviewNudge).toBeNull();
-});
+  const guardrails = new GuardrailsService(x.board, () => x.now(), async () => [], () => [], async () => ({ lockfiles: [], cargo: false, goMod: false, packageJson: null, makefile: null, ...files }));
+  x.service.guardrails = guardrails;
+  const seed = (entries: GuardrailEntry[], clues: GuardrailsState["clues"] = []) =>
+    guardrails.store.update((state) => {
+      state.entries.push(...entries);
+      state.clues.push(...clues);
+      return { value: undefined, changed: true };
+    });
+  const entry = async (id: string) => (await guardrails.store.read()).entries.find((e) => e.id === id)!;
+  return { ...x, guardrails, seed, entry };
+}
 
-test("review_rule suggestions join the run when Auto review is on; a repeat of a rule is dropped; Add check adds it", async () => {
-  const x = await setup();
-  await x.board.mutate((b) => {
-    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: [{ id: "tests", name: "Tests", kind: "command", argv: ["npm", "test"] }] };
-  });
+test("the weekly run reads the Guardrails section, applies valid merges and drops what the model makes up (§7.3)", async () => {
+  const x = await withGuardrails();
+  const caught = new Date(NOW - 2 * day).toISOString();
+  await x.seed([
+    g("11111111-keep", { counts: { ...emptyCounts(), reviews: 4, passes: 3, caught: 1, lastCaughtAt: caught } }),
+    g("22222222-drop", { scope: { types: ["bugfix"], sizes: ["m"] }, counts: { ...emptyCounts(), reviews: 2, caught: 2, misfire: 1, misfireAt: [caught] }, sources: [{ taskId: "bbbbbbbb-2", at: caught, quote: "same thing" }] }),
+    g("33333333-paused", { state: "paused", stateReason: "misfired twice in 30 days" }),
+    note("44444444-note"),
+    note("55555555-note"),
+  ]);
   await x.log.append("p", records(6, 3));
   x.replies.push(
     JSON.stringify({
       findings: [
-        { target: "review_rule", title: "Catalog check", evidence: "2 cards", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "copy", name: "Strings in all catalogs", kind: "llm", prompt: "Every new UI string is in all catalogs." } },
-        { target: "review_rule", title: "Run tests", evidence: "2 cards", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "tests", name: "Tests", kind: "command", argv: ["npm", "test"] } },
+        { target: "guideline", title: "Always run e2e", evidence: "", proposal: "x", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"] },
+        { target: "review_rule", title: "Catalog check", evidence: "", proposal: "x", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "c", name: "C", kind: "llm", prompt: "p" } },
+        { target: "agents_md", title: "Put strings in every catalog", evidence: "#11111111 caught 5+", proposal: "- Every new UI string goes into every catalog.", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"] },
       ],
+      merges: [
+        { keep: "#11111111", drop: "#22222222", why: "Same rule." },
+        { keep: "#44444444", drop: "#11111111", why: "Kinds differ." },
+        { keep: "#11111111", drop: "#33333333", why: "Paused." },
+        { keep: "#44444444", drop: "#99999999", why: "Unknown." },
+        { keep: "#44444444", drop: "#44444444", why: "Itself." },
+      ],
+      guidelines: [{ text: "A guideline the model invented" }],
       noise: "",
       verdict: "ok",
     }),
   );
   x.service.run("p", x.paseo, true);
   await settle(x.service);
-  expect(x.created[0]!.prompt).toContain("# Auto review");
-  expect(x.created[0]!.prompt).toContain('"review_rule"');
-  const view = await x.service.view("p");
-  const found = view.findings.filter((f) => f.target === "review_rule");
-  expect(found.map((f) => f.rule?.id)).toEqual(["copy"]);
-  expect(found[0]!.proposal).toBe("Every new UI string is in all catalogs.");
-  const before = (await x.board.read()).projects[0]!.revision;
-  expect(await x.service.addReviewCheck(found[0]!.id)).toEqual({ revision: before + 1 });
-  const project = (await x.board.read()).projects[0]!;
-  expect(project.autoReview!.rules!.map((r) => r.id)).toEqual(["tests", "copy"]);
-  expect((await x.service.view("p")).findings.find((f) => f.id === found[0]!.id)!.status).toBe("accepted");
-  await expect(x.service.addReviewCheck(found[0]!.id)).rejects.toThrow("FINDING_NOT_OPEN");
-});
-
-test("review_rule suggestions are dropped when Auto review is off; the prompt has no Auto review section", async () => {
-  const x = await setup();
-  await x.log.append("p", records(6, 3));
-  x.replies.push(JSON.stringify({ findings: [{ target: "review_rule", title: "Catalog", evidence: "", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "copy", name: "C", kind: "llm", prompt: "p" } }], noise: "", verdict: "" }));
-  x.service.run("p", x.paseo, true);
-  await settle(x.service);
-  expect(x.created[0]!.prompt).not.toContain("# Auto review");
-  expect((await x.service.view("p")).findings.filter((f) => f.target === "review_rule")).toEqual([]);
-});
-
-test("a pause suggestion for an LLM check judged 20 times without a failure, never the built-in check; Pause turns it off", async () => {
-  const x = await setup();
+  const prompt = x.created[0]!.prompt;
+  expect(prompt).toContain("# Guardrails");
+  expect(prompt).toContain("#11111111 Guideline 11111111-keep [feature, s] caught 1");
+  expect(prompt).toContain("#44444444 [pitfall] Note 44444444-note");
+  expect(prompt).toContain('"merges"');
+  expect(prompt).toContain("You never add guidelines or commands.");
+  // Only the AGENTS.md suggestion stays; a guideline or rule the model made up is dropped.
+  expect((await x.service.view("p")).findings.map((f) => f.target)).toEqual(["agents_md"]);
+  const kept = await x.entry("11111111-keep");
+  expect(kept).toMatchObject({ state: "active", counts: { reviews: 6, passes: 3, caught: 3, misfire: 1, lastCaughtAt: caught }, scope: { types: ["feature", "bugfix"], sizes: ["s", "m"] } });
+  expect(kept.sources.map((s) => s.taskId)).toEqual(["aaaaaaaa-1", "bbbbbbbb-2"]);
+  expect(await x.entry("22222222-drop")).toMatchObject({ state: "archived", stateReason: "merged", supersededBy: "11111111-keep" });
+  expect(await x.entry("33333333-paused")).toMatchObject({ state: "paused" });
+  expect(await x.entry("44444444-note")).toMatchObject({ state: "active" });
+  const state = await x.guardrails.store.read();
+  expect(state.entries.filter((e) => e.kind === "guideline")).toHaveLength(3);
+  const events = (await x.board.read()).events.filter((e) => e.action === "guardrail_retired");
+  expect(events.map((e) => e.guardrail)).toEqual([{ change: "merged", kind: "guideline", id: "22222222-drop" }]);
+  // Guardrails off for the project: no section, no merges.
   await x.board.mutate((b) => {
-    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: [{ id: "copy", name: "Copy", kind: "llm", prompt: "p" }, { id: "flaky", name: "Flaky", kind: "llm", prompt: "q" }] };
+    b.projects[0]!.memory = false;
   });
-  const finished = Array.from({ length: 20 }, (_, i) =>
-    ev(cards[i % 3]!, 10 + i, { actor: "system", action: "review_finished", results: [{ id: "goal", state: "passed" }, { id: "copy", state: i % 2 ? "passed" : "na" }, { id: "flaky", state: i === 3 ? "failed" : "passed" }] }),
-  );
-  await x.board.flow!.append(finished as never, await x.board.read());
-  await x.log.append("p", records(6, 3));
   x.service.run("p", x.paseo, true);
   await settle(x.service);
-  const pauses = (await x.service.view("p")).findings.filter((f) => f.target === "review_pause");
-  expect(pauses.map((f) => f.ruleId)).toEqual(["copy"]);
-  expect(pauses[0]).toMatchObject({ title: "Copy", reviews: 20 });
-  // A second run does not suggest it twice.
-  x.service.run("p", x.paseo, true);
-  await settle(x.service);
-  expect((await x.service.view("p")).findings.filter((f) => f.target === "review_pause")).toHaveLength(1);
-  const before = (await x.board.read()).projects[0]!.revision;
-  await x.service.pauseReviewCheck(pauses[0]!.id);
-  const project = (await x.board.read()).projects[0]!;
-  expect(project.revision).toBe(before + 1);
-  expect(project.autoReview!.rules!.find((r) => r.id === "copy")).toMatchObject({ off: true });
+  expect(x.created.at(-1)!.prompt).not.toContain("# Guardrails");
 });
 
-test("Add check on a kind that already has 10 checks: a readable refusal, the suggestion stays open", async () => {
-  const x = await setup();
-  const prompts = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet"];
-  await x.board.mutate((b) => {
-    b.projects[0]!.autoReview = { enabled: true, maxRounds: 2, rules: prompts.map((w) => ({ id: w, name: `${w} check`, kind: "llm" as const, prompt: `Every ${w} quux is zorbed.` })) };
-  });
+test("weekly step 1: retirement over every entry, and a guideline caught 5+ times in 30 days is marked for an AGENTS.md rule", async () => {
+  const x = await withGuardrails();
+  const old = new Date(NOW - 100 * day).toISOString();
+  await x.seed([g("66666666-hot"), note("77777777-stale", { createdAt: old, counts: emptyCounts() }), note("88888888-pinned", { createdAt: old, counts: emptyCounts(), pinned: true }), g("99999999-idle", { counts: { ...emptyCounts(), reviews: 20 } })]);
+  const review = (taskId: string, hoursAgo: number, state: string) => ({ id: `rv${taskId}${hoursAgo}`, taskId, at: new Date(NOW - hoursAgo * 3_600_000).toISOString(), actor: "system", action: "review_finished", results: [{ id: "66666666-hot", state, kind: "guideline" }] });
+  const flow = ["aaaaaaaa-1", "bbbbbbbb-2", "cccccccc-3"].flatMap((id, i) => [review(id, 100 + i, "failed"), review(id, 90 + i, "passed"), review(id, 80 + i, "failed"), review(id, 70 + i, "passed")]);
+  await x.board.flow!.append(flow as never, await x.board.read());
   await x.log.append("p", records(6, 3));
-  x.replies.push(
-    JSON.stringify({
-      findings: [{ target: "review_rule", title: "Catalog check", evidence: "", proposal: "", benefit: "", confidence: "high", cards: ["aaaaaaaa", "bbbbbbbb"], rule: { id: "copy", name: "Strings in all catalogs", kind: "llm", prompt: "New UI strings appear in every language catalog." } }],
-      noise: "",
-      verdict: "",
-    }),
-  );
   x.service.run("p", x.paseo, true);
   await settle(x.service);
-  const f = (await x.service.view("p")).findings.find((y) => y.target === "review_rule")!;
-  const before = (await x.board.read()).projects[0]!.revision;
-  await expect(x.service.addReviewCheck(f.id)).rejects.toThrow("This project already has 10 LLM checks. Remove one first.");
-  expect((await x.board.read()).projects[0]!.revision).toBe(before);
-  expect((await x.service.view("p")).findings.find((y) => y.id === f.id)!.status).toBe("open");
+  expect(x.created[0]!.prompt).toContain("#66666666 Guideline 66666666-hot [feature, s] caught 0 · missed 0 · misfire 0 · reviews 0 · caught 5+ in 30 days");
+  expect(await x.entry("77777777-stale")).toMatchObject({ state: "archived", stateReason: "unused for 90 days" });
+  expect(await x.entry("88888888-pinned")).toMatchObject({ state: "active" });
+  expect(await x.entry("99999999-idle")).toMatchObject({ state: "archived", stateReason: "never caught anything" });
+  const events = (await x.board.read()).events.filter((e) => e.action === "guardrail_retired");
+  expect(events.map((e) => e.guardrail?.id).sort()).toEqual(["77777777-stale", "99999999-idle"]);
+});
+
+test("weekly re-detect: a whitelisted script agents ran on 3 cards in 30 days joins as observing; 2 cards or Auto review off adds none; a missing script pauses (§4.5)", async () => {
+  const packageJson = JSON.stringify({ scripts: { test: "vitest", "test:e2e": "playwright", "lint:css": "stylelint", "dev:watch": "x", build: "tsc" } });
+  const x = await withGuardrails({ packageJson });
+  await x.seed([
+    { ...g("aaaaaaaa-tests"), kind: "command", text: "Tests", argv: ["npm", "run", "test"], scope: undefined, by: "detect" },
+    { ...g("bbbbbbbb-gone"), kind: "command", text: "Typecheck", argv: ["npm", "run", "typecheck"], scope: undefined, by: "detect" },
+  ]);
+  const ran = (n: number, cards: number, action: string, daysAgo = 1): CommandRecord[] =>
+    Array.from({ length: n }, (_, i) => ({ ...records(1, 1)[0]!, id: `${action}:${i}`, at: new Date(NOW - daysAgo * day).toISOString(), taskId: ["aaaaaaaa-1", "bbbbbbbb-2", "cccccccc-3"][i % cards]!, actions: [action] }));
+  const off = await x.guardrails.weekly("p", { records: ran(3, 3, "npm run test:e2e"), commands: false });
+  expect(off.added).toEqual([]);
+  const result = await x.guardrails.weekly("p", { records: [...ran(3, 3, "npm run test:e2e"), ...ran(2, 2, "pnpm run lint:css"), ...ran(3, 3, "npm test")], commands: true });
+  expect(result.added.map((e) => [e.text, e.argv, e.state, e.by, e.observe])).toEqual([["test:e2e", ["npm", "run", "test:e2e"], "observing", "detect", { reviews: 0, passed: 0 }]]);
+  expect(await x.entry("bbbbbbbb-gone")).toMatchObject({ state: "paused", stateReason: "script missing" });
+  expect(await x.entry("aaaaaaaa-tests")).toMatchObject({ state: "active" });
+  // Older than 30 days is no evidence; the same command is never added twice.
+  const again = await x.guardrails.weekly("p", { records: [...ran(3, 3, "npm run test:e2e"), ...ran(3, 3, "yarn lint:css", 40)], commands: true });
+  expect(again.added).toEqual([]);
+});
+
+test("catch-up learning: with card summaries off, one Summary-model call over the week's rework words learns through the same bookkeeping (§7.3)", async () => {
+  const x = await withGuardrails();
+  x.summary.summaryEnabled = false;
+  const at = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
+  const clue = (id: string, taskId: string, h: number, text: string, kind: "feedback" | "message" = "feedback") => ({ id, taskId, projectId: "p", at: at(h), kind, text });
+  await x.seed(
+    [g("12121212-known", { scope: { types: "all", sizes: "all" } })],
+    [
+      clue("c1", "aaaaaaaa-1", 30, "新文案也要进所有语言，zh-TW 又漏了"),
+      clue("c2", "bbbbbbbb-2", 20, "谢谢，提交并推送吧"),
+      clue("c3", "cccccccc-3", 10, "the same i18n problem as before, add the entries"),
+      clue("c4", "cccccccc-3", 5, "A plain follow-up message", "message"),
+      clue("c5", "aaaaaaaa-1", 24 * 9, "an old correction from last month"),
+    ],
+  );
+  await x.log.append("p", records(6, 3));
+  x.replies.push(JSON.stringify({ corrections: [{ n: 1, kind: "new", text: "Every new UI string is in all catalogs" }, { n: 2, kind: "none" }, { n: 3, kind: "same", matches: "#12121212" }] }));
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  expect(x.created).toHaveLength(2);
+  const catchUp = x.created[0]!;
+  expect(catchUp.workspaceId).toBe("bg-ws");
+  expect(catchUp.prompt).toContain("1. (card aaaaaaaa) 新文案也要进所有语言");
+  expect(catchUp.prompt).toContain("#12121212 guideline: Guideline 12121212-known");
+  expect(catchUp.prompt).not.toContain("A plain follow-up message");
+  expect(catchUp.prompt).not.toContain("an old correction");
+  expect(x.removed[0]).toBe("run-1");
+  const state = await x.guardrails.store.read();
+  expect(state.items.map((i) => [i.taskId, i.text, i.quote])).toEqual([["aaaaaaaa-1", "Every new UI string is in all catalogs", "新文案也要进所有语言，zh-TW 又漏了"]]);
+  expect(state.entries.find((e) => e.id === "12121212-known")!.sources.map((s) => s.taskId)).toEqual(["aaaaaaaa-1", "cccccccc-3"]);
+  expect(state.learnedUntil).toEqual({ p: at(10) });
+  // The next run does not learn from the same words again.
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  expect(x.created).toHaveLength(3);
+  // With card summaries on there is no catch-up call.
+  x.summary.summaryEnabled = true;
+  await x.seed([], [clue("c6", "bbbbbbbb-2", 1, "another correction worth learning")]);
+  x.service.run("p", x.paseo, true);
+  await settle(x.service);
+  expect(x.created).toHaveLength(4);
 });

@@ -53,6 +53,43 @@ export function detectCommands(files: RepoFiles): DetectedCommand[] {
   return out.slice(0, MAX);
 }
 
+/** §4.5 weekly: a package script name on the whitelist (`test*`, `lint*`, `typecheck`, `type-check`, `tsc`, `check`, `vet`), never a watcher. */
+export const whitelisted = (name: string) => !/watch/i.test(name) && (/^(test|lint)/i.test(name) || ["typecheck", "type-check", "tsc", "check", "vet"].includes(name));
+
+/**
+ * Every whitelisted check in the repository for the weekly re-detection (GUARDRAILS-SPEC §4.5): each matching package
+ * script (`test:e2e` included) and the build-file checks of `detectCommands`, unlimited. Whether one joins is decided
+ * by the usage evidence, not here.
+ */
+export function whitelistCommands(files: RepoFiles): DetectedCommand[] {
+  let scripts: Record<string, unknown> = {};
+  try {
+    const parsed = files.packageJson ? (JSON.parse(files.packageJson) as { scripts?: unknown }) : null;
+    if (parsed?.scripts && typeof parsed.scripts === "object") scripts = parsed.scripts as Record<string, unknown>;
+  } catch {
+    scripts = {};
+  }
+  const pm = packageManager(files.lockfiles);
+  const out: DetectedCommand[] = Object.keys(scripts)
+    .filter((n) => typeof scripts[n] === "string" && whitelisted(n))
+    .map((n) => ({ name: scriptNames[n] ?? n, argv: [pm, "run", n], checked: true }));
+  for (const c of detectCommands({ ...files, packageJson: null })) if (c.checked && !out.some((o) => o.argv.join(" ") === c.argv.join(" "))) out.push(c);
+  return out;
+}
+
+/** Package script names and Makefile targets, to tell when a command's script is gone (§4.5); null when unreadable. */
+export function scriptNamesOf(files: Pick<RepoFiles, "packageJson" | "makefile">): { scripts: Set<string> | null; targets: Set<string> | null } {
+  let scripts: Set<string> | null = null;
+  try {
+    const parsed = files.packageJson ? (JSON.parse(files.packageJson) as { scripts?: unknown }) : null;
+    if (parsed) scripts = new Set(parsed.scripts && typeof parsed.scripts === "object" ? Object.keys(parsed.scripts as object) : []);
+  } catch {
+    scripts = null;
+  }
+  const targets = files.makefile ? new Set([...files.makefile.matchAll(/^([A-Za-z0-9_.-]+)\s*:(?!=)/gm)].map((m) => m[1])) : null;
+  return { scripts, targets };
+}
+
 const text = (path: string) => readFile(path, "utf8").catch(() => null);
 const exists = (path: string) => access(path).then(
   () => true,
@@ -61,6 +98,11 @@ const exists = (path: string) => access(path).then(
 
 /** Reads the project root's build files and detects (§6.1). */
 export async function detectProjectCommands(root: string): Promise<DetectedCommand[]> {
+  return detectCommands(await readRepoFiles(root));
+}
+
+/** The build files detection reads in the project root; never runs anything. */
+export async function readRepoFiles(root: string): Promise<RepoFiles> {
   const locks = ["pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock"];
   const [packageJson, present, cargo, goMod, pyproject, pytestIni, setupCfg, makefile] = await Promise.all([
     text(join(root, "package.json")),
@@ -72,12 +114,12 @@ export async function detectProjectCommands(root: string): Promise<DetectedComma
     text(join(root, "setup.cfg")),
     text(join(root, "Makefile")),
   ]);
-  return detectCommands({
+  return {
     packageJson,
     lockfiles: locks.filter((_, i) => present[i]),
     cargo,
     goMod,
     pythonConfig: [pyproject, setupCfg, pytestIni ? "pytest" : ""].filter(Boolean).join("\n"),
     makefile,
-  });
+  };
 }

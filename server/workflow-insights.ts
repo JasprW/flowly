@@ -12,14 +12,14 @@ import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-wo
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { validZone } from "../shared/insights";
 import { SUMMARIZER_LABELS, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
-import type { Board, Project, ReviewRule } from "../shared/model";
+import type { Board, Project } from "../shared/model";
+import { catchUpJsonSchema, catchUpPrompt, parseCatchUp, type Correction } from "../shared/guardrails";
+import { runSummaryModels } from "./summary-models";
 import { readSkillBody, scanSkills, skillPath, writeSkill, type InstallResult } from "./project-skills";
 import {
   BACKFILL_DAYS,
   CARD_DAYS,
   DISMISS_COOLDOWN_DAYS,
-  PAUSE_DAYS,
-  PAUSE_MIN_REVIEWS,
   RETRY_PROMPT,
   RUN_TIMEOUT_MS,
   WORKFLOW_AUTO_MODELS,
@@ -45,6 +45,7 @@ import {
   type CommandRecord,
   type ExistingConfig,
   type RawFinding,
+  type RawMerge,
   type RunUsage,
   type SkillMaterial,
   type WorkflowRun,
@@ -53,18 +54,6 @@ import {
   type WorkflowView,
 } from "../shared/workflow-insights";
 import { logFailure } from "./error-report";
-import { autoReviewOf, ruleFits, ruleId, ruleLimitMessage } from "../shared/auto-review";
-import {
-  NUDGE_DAYS,
-  NUDGE_MIN_REWORKED,
-  NUDGE_SNOOZE_DAYS,
-  checkCounts,
-  deliveryStats,
-  pauseCandidates,
-  reviewInsightsMaterial,
-  reworkQuotes,
-} from "../shared/review-history";
-
 const DAY_MS = 86_400_000;
 const TICK_MS = 15 * 60_000;
 const COMMANDS_LIMIT = 4000;
@@ -185,6 +174,19 @@ export class WorkflowInsightsService {
     /** Hard-deletes the run's session when done; archives it if that fails (AGENTS.md exception). */
     private removeAgent: RemoveAgent = daemonRemoveAgent(),
   ) {}
+
+  /**
+   * The project's guardrails in the weekly run (GUARDRAILS-SPEC §7.3); set by the daemon. Step 1 runs before the
+   * model call: commands re-detected with usage evidence, retirement, and the catch-up learning when card summaries are
+   * off. The material gets a `# Guardrails` section; the model's merges are applied after it.
+   */
+  guardrails: {
+    weekly(projectId: string, input: { records: readonly CommandRecord[]; commands: boolean }): Promise<unknown>;
+    catchUpInput(projectId: string): Promise<{ clues: { taskId: string; text: string; at: string }[]; section: string[] } | null>;
+    catchUp(projectId: string, clues: readonly { taskId: string; text: string; at: string }[], corrections: readonly Correction[]): Promise<void>;
+    material(projectId: string, flow: Awaited<ReturnType<FlowLog["read"]>>): Promise<string>;
+    merge(projectId: string, merges: readonly RawMerge[]): Promise<unknown>;
+  } | null = null;
 
   /** Card summaries and project memory for the skill material (INSIGHTS-REDESIGN-SPEC §3.2); set by the daemon. */
   skillSources: {
@@ -411,11 +413,6 @@ export class WorkflowInsightsService {
     return { paseoScripts: scripts, paseoWorktree: worktree, packageScripts: pkg, commands: commandsSection(agentsMd || "") || commandsSection(claudeMd || "") };
   }
 
-  /** The model Insights runs with; the auto review history analysis uses the same one (AUTO-REVIEW-SPEC §6.2). */
-  async pickModel(paseo: PaseoApi) {
-    return this.model(paseo, await this.settings());
-  }
-
   private async model(paseo: PaseoApi, settings: WorkflowSettings) {
     const providers = await availableModels(paseo, settings.model);
     const offered = (id: string) => {
@@ -447,7 +444,6 @@ export class WorkflowInsightsService {
       cardIds: readonly string[];
       skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> };
       redact?: { repo: string; home: string };
-      reviewRules?: readonly ReviewRule[];
     },
   ) {
     const id = randomUUID();
@@ -459,7 +455,6 @@ export class WorkflowInsightsService {
             now: Date.parse(run.at),
             skills: result.skills,
             redact: result.redact,
-            reviewRules: result.reviewRules,
           })
         : [];
       // A run without valid suggestions keeps the previous ones rather than emptying the list.
@@ -481,6 +476,8 @@ export class WorkflowInsightsService {
     if (!project || project.archivedAt) return;
     const days = windowDays(settings.intervalDays);
     const now = this.now();
+    // Guardrails step 1 (GUARDRAILS-SPEC §7.3): deterministic upkeep and the catch-up; never stops the run.
+    await this.guardrailUpkeep(project, paseo, now).catch(log("guardrails"));
     const from = new Date(now - days * DAY_MS).toISOString(),
       to = new Date(now).toISOString();
     let records = await this.log.read(projectId, now - days * DAY_MS);
@@ -507,8 +504,8 @@ export class WorkflowInsightsService {
       const state = await this.state.read();
       const existing = state.findings.filter((f) => f.projectId === projectId);
       const skills = await this.skillContext(project, board, state, recent, now);
-      // Auto review suggestions join this run when the project has Auto review on (AUTO-REVIEW-SPEC §7.2).
-      const review = project.autoReview?.enabled ? await this.reviewMaterial(project, board, entries, now, days) : "";
+      // The project's guardrails (GUARDRAILS-SPEC §7.3 step 2); empty while Guardrails is off for it.
+      const guardrails = this.guardrails ? await this.guardrails.material(project.id, entries).catch(() => "") : "";
       // Card ids the model may cite: the command window's and the last 30 days' (INSIGHTS-REDESIGN-SPEC §3.1).
       const cardIds = [...new Set([...records.map((r) => r.taskId), ...recent])];
       const cards: CardInfo[] = [...new Set(records.map((r) => r.taskId))]
@@ -524,13 +521,13 @@ export class WorkflowInsightsService {
           .filter((f) => f.status === "accepted" || (f.status === "dismissed" && now - Date.parse(f.updatedAt) < 30 * DAY_MS))
           .map((f) => ({ target: f.target, title: f.title, status: f.status, proposal: f.proposal })),
         skills: skills.material,
-      }) + review;
+      }) + (guardrails ? `\n\n${guardrails}` : "");
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
         const agent = await paseo.workspaces.ref(workspaceId).agents.create({
           config: { provider: model },
           title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
-          prompt: workflowPrompt(days, material, await this.language(), !!review),
+          prompt: workflowPrompt(days, material, await this.language(), !!guardrails),
           outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
         });
         this.summarizer.set(agent.id, true);
@@ -559,11 +556,9 @@ export class WorkflowInsightsService {
         return { usage, parsed };
       });
       if (!parsed) throw new Error("The workflow insights model returned no JSON.");
-      await this.record(
-        { ...base, model, status: "ok", usage },
-        { findings: parsed.findings, cardIds, skills: skills.check, redact: { repo: project.primaryPath, home: this.home }, ...(review ? { reviewRules: autoReviewOf(project).rules } : {}) },
-      );
-      if (project.autoReview?.enabled) await this.addPauses(project, entries, now);
+      await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, cardIds, skills: skills.check, redact: { repo: project.primaryPath, home: this.home } });
+      // Merges of two guidelines or two notes (§7.3); the run never creates a guideline or a command.
+      if (guardrails && parsed.merges.length) await this.guardrails!.merge(project.id, parsed.merges).catch(log("merge"));
     } catch (e) {
       await this.record({ ...base, model, status: "error", reason: (e instanceof Error ? e.message : String(e)).slice(0, 500) });
     }
@@ -590,140 +585,44 @@ export class WorkflowInsightsService {
       lastRun: last,
       findings,
       ...(await this.installedView(project, state, findings)),
-      reviewNudge: await this.reviewNudge(project, state),
       revision: state.revision,
     };
   }
 
-  /** The "# Auto review" material: the rules with their counts, and the cards sent back after delivery with the user's words. */
-  private async reviewMaterial(project: Project, board: Board, entries: Awaited<ReturnType<FlowLog["read"]>>, now: number, days: number) {
-    const from = now - days * DAY_MS;
-    const stats = deliveryStats(entries, from, now);
-    const clues = this.skillSources && this.skillSources.memoryOn(project) ? (await this.skillSources.memory().catch(() => null))?.clues ?? [] : [];
-    const reworked = [...stats.reworked].flatMap(([id, turns]) => {
-      const t = board.tasks.find((x) => x.id === id);
-      if (!t) return [];
-      const quotes = reworkQuotes(clues, id, turns).slice(0, 3).map((t) => t.slice(0, 300));
-      return [{ id, title: t.title, quotes }];
+  /**
+   * Guardrails step 1 (GUARDRAILS-SPEC §7.3): commands re-detected against the last 30 days of the command log (with
+   * Auto review on), retirement, and, when card summaries are off, one Summary-model call over the week's rework words
+   * in the project's background workspace, its session hard-deleted after.
+   */
+  private async guardrailUpkeep(project: Project, paseo: PaseoApi, now: number) {
+    const guardrails = this.guardrails;
+    if (!guardrails) return;
+    const records = await this.log.read(project.id, now - 30 * DAY_MS).catch(() => []);
+    await guardrails.weekly(project.id, { records, commands: !!project.autoReview?.enabled });
+    const summary = await this.summarySettings();
+    if (summary.summaryEnabled) return;
+    const input = await guardrails.catchUpInput(project.id);
+    if (!input) return;
+    const corrections = await this.background.use(project, paseo, async (workspaceId) => {
+      const { output } = await runSummaryModels(paseo, summaryModelsOf(summary), {
+        create: async (model) => {
+          const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+            config: { provider: model },
+            title: `Flowly guardrails · ${project.title}`.slice(0, 120),
+            labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
+            prompt: catchUpPrompt(input.clues, input.section),
+            outputSchema: catchUpJsonSchema as unknown as Record<string, unknown>,
+          });
+          this.summarizer.set(agent.id, true);
+          return agent;
+        },
+        parse: (text) => parseCatchUp(text, input.clues.length),
+        remove: this.removeAgent,
+        timeoutMs: this.timeoutMs,
+      });
+      return output;
     });
-    return reviewInsightsMaterial({ rules: autoReviewOf(project).rules, counts: checkCounts(entries, from), reworked });
-  }
-
-  /** Pause suggestions (§7.2): counted, no model; not again for a rule already suggested open, accepted, or dismissed lately. */
-  private async addPauses(project: Project, entries: Awaited<ReturnType<FlowLog["read"]>>, now: number) {
-    const candidates = pauseCandidates(autoReviewOf(project).rules, checkCounts(entries, now - PAUSE_DAYS * DAY_MS), PAUSE_MIN_REVIEWS);
-    if (!candidates.length) return;
-    const at = new Date(now).toISOString();
-    await this.state.update((state) => {
-      const known = state.findings.filter(
-        (f) => f.projectId === project.id && f.target === "review_pause" && (f.status !== "dismissed" || now - Date.parse(f.updatedAt) < DISMISS_COOLDOWN_DAYS * DAY_MS),
-      );
-      const fresh = candidates.filter((c) => !known.some((f) => f.ruleId === c.rule.id));
-      for (const c of fresh)
-        state.findings.push({
-          id: randomUUID(),
-          projectId: project.id,
-          runId: "review-pause",
-          fingerprint: `review_pause:${c.rule.id}`,
-          target: "review_pause",
-          title: c.rule.name.slice(0, 120),
-          evidence: "",
-          proposal: "",
-          benefit: "",
-          confidence: "high",
-          cards: [],
-          ruleId: c.rule.id,
-          reviews: c.judged,
-          status: "open",
-          createdAt: at,
-          updatedAt: at,
-        });
-      return { value: undefined, changed: fresh.length > 0 };
-    });
-  }
-
-  /** The rework nudge (§7.1): Auto review off, at least 3 cards sent back after delivery in 14 days, no Not now in 30 days. */
-  private async reviewNudge(project: Project, state: WorkflowState): Promise<WorkflowView["reviewNudge"]> {
-    if (project.autoReview?.enabled) return null;
-    const now = this.now();
-    const dismissed = state.reviewNudges[project.id]?.dismissedAt;
-    if (dismissed && now - Date.parse(dismissed) < NUDGE_SNOOZE_DAYS * DAY_MS) return null;
-    const entries = await this.flow.read(project.id).catch(() => []);
-    const stats = deliveryStats(entries, now - NUDGE_DAYS * DAY_MS, now);
-    const reworked = stats.delivered.filter((id) => stats.reworked.has(id));
-    if (reworked.length < NUDGE_MIN_REWORKED) return null;
-    const board = await this.board.read();
-    const clues = this.skillSources && this.skillSources.memoryOn(project) ? (await this.skillSources.memory().catch(() => null))?.clues ?? [] : [];
-    const cards = reworked.slice(0, 3).flatMap((id) => {
-      const t = board.tasks.find((x) => x.id === id);
-      if (!t) return [];
-      const turns = stats.reworked.get(id)!;
-      const quote = reworkQuotes(clues, id, turns)[0];
-      return [{ id, title: t.title, ...(quote ? { quote: quote.length > 60 ? `${quote.slice(0, 60)}…` : quote } : {}) }];
-    });
-    return { delivered: stats.delivered.length, reworked: reworked.length, cards };
-  }
-
-  /** Not now on the rework nudge: hidden for 30 days (§7.1). */
-  dismissReviewNudge(projectId: string) {
-    const at = new Date(this.now()).toISOString();
-    return this.state.update((state) => {
-      state.reviewNudges[projectId] = { dismissedAt: at };
-      return { value: { ok: true as const }, changed: true };
-    });
-  }
-
-  /** Add check (§7.2): the suggested rule joins the project's rules (id renumbered on a clash), revision +1, accepted. */
-  async addReviewCheck(findingId: string) {
-    const f = (await this.state.read()).findings.find((x) => x.id === findingId);
-    if (!f || f.status !== "open" || f.target !== "review_rule" || !f.rule) throw new Error("FINDING_NOT_OPEN: this suggestion is no longer open.");
-    const suggested = f.rule;
-    const revision = await this.board.transaction((b) => {
-      const p = b.projects.find((x) => x.id === f.projectId && !x.archivedAt);
-      if (!p) throw new Error("Project not found.");
-      const config = autoReviewOf(p);
-      // A full kind is refused with a readable message; the suggestion stays open (§7.2).
-      if (!ruleFits(config.rules, suggested.kind)) throw new Error(ruleLimitMessage(suggested.kind));
-      const id = ruleId(suggested.id, new Set(["goal", ...config.rules.map((r) => r.id)]));
-      const { checks: _checks, ...stored } = p.autoReview ?? { enabled: false, maxRounds: config.maxRounds };
-      p.autoReview = { ...stored, rules: [...config.rules, { ...suggested, id }] };
-      p.revision++;
-      p.updatedAt = new Date(this.now()).toISOString();
-      return { value: p.revision, changed: true };
-    });
-    await this.close(findingId);
-    return { revision };
-  }
-
-  /** Pause (§7.2): the counted LLM check is paused, revision +1, the suggestion accepted. */
-  async pauseReviewCheck(findingId: string) {
-    const f = (await this.state.read()).findings.find((x) => x.id === findingId);
-    if (!f || f.status !== "open" || f.target !== "review_pause" || !f.ruleId) throw new Error("FINDING_NOT_OPEN: this suggestion is no longer open.");
-    const target = f.ruleId;
-    const revision = await this.board.transaction((b) => {
-      const p = b.projects.find((x) => x.id === f.projectId && !x.archivedAt);
-      if (!p) throw new Error("Project not found.");
-      const config = autoReviewOf(p);
-      if (!config.rules.some((r) => r.id === target)) throw new Error("This check is no longer in the project.");
-      const { checks: _checks, ...stored } = p.autoReview ?? { enabled: false, maxRounds: config.maxRounds };
-      p.autoReview = { ...stored, rules: config.rules.map((r) => (r.id === target ? { ...r, off: true as const } : r)) };
-      p.revision++;
-      p.updatedAt = new Date(this.now()).toISOString();
-      return { value: p.revision, changed: true };
-    });
-    await this.close(findingId);
-    return { revision };
-  }
-
-  private close(findingId: string) {
-    const at = new Date(this.now()).toISOString();
-    return this.state.update((state) => {
-      const f = state.findings.find((x) => x.id === findingId);
-      if (!f || f.status === "accepted") return { value: undefined, changed: false };
-      f.status = "accepted";
-      f.updatedAt = at;
-      return { value: undefined, changed: true };
-    });
+    await guardrails.catchUp(project.id, input.clues, corrections);
   }
 
   /** Flowly's skills in the project with their current text, and the bodies open updates would change (§4.6). */

@@ -1,12 +1,16 @@
 import { mkdir, readFile, writeFile, rename, copyFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { guardrailLearnedAction, guardrailRetiredAction, type GuardrailChange, type Project, type Task } from "../shared/model";
+import { guardrailLearnedAction, guardrailRetiredAction, type ChangeSize, type GuardrailChange, type Project, type ReviewItem, type Task } from "../shared/model";
 import { memoryStateSchema, titleKey } from "../shared/memory";
 import {
   archivedOverflow,
+  catchUpLimits,
+  caughtIds,
+  caughtInWindow,
   commandRoom,
   countCaught,
+  countReview,
   countMisfire,
   countMissed,
   emptyCounts,
@@ -14,15 +18,19 @@ import {
   guardrailLimits,
   guardrailsSection,
   guardrailsStateSchema,
+  guardrailsMaterial,
   guidelineToDisplace,
   hasSecret,
   inScope,
   liveEntry,
+  mergeInto,
+  mergePair,
   migrateToGuardrails,
   noteToDisplace,
   openItemOverflow,
   promotedGuideline,
   resolveShortId,
+  retirement,
   setState,
   textKey,
   widenScope,
@@ -37,7 +45,8 @@ import {
 } from "../shared/guardrails";
 import type { MemoryKind } from "../shared/memory";
 import type { BoardStore } from "./store";
-import { detectProjectCommands, type DetectedCommand } from "./review-detect";
+import { detectProjectCommands, readRepoFiles, scriptNamesOf, whitelistCommands, type DetectedCommand, type RepoFiles } from "./review-detect";
+import { classify, type CommandRecord } from "../shared/workflow-insights";
 import { logFailure } from "./error-report";
 
 /** Settings → AI features → Guardrails (`features.memory`, GUARDRAILS-SPEC §8); kept current by the plugin's settings subscription. */
@@ -259,6 +268,7 @@ export class GuardrailsService {
     private detectCommands: (root: string) => Promise<DetectedCommand[]> = detectProjectCommands,
     /** Cards whose finished-card review is running (owned by the memory service). */
     private running: () => readonly string[] = () => [],
+    private readFiles: (root: string) => Promise<RepoFiles> = readRepoFiles,
   ) {
     this.store = guardrailsStore(board.directory);
   }
@@ -311,6 +321,235 @@ export class GuardrailsService {
       items: on ? state.items.filter((i) => i.taskId === task.id && i.state === "open").map((i) => ({ id: i.id, text: i.text, count: i.count })) : [],
       ...(task.review ? { lastReview: task.review } : {}),
     };
+  }
+
+  // ---- The delivery review (§6) ----------------------------------------------------
+
+  /**
+   * What a delivery of this card is checked against (§6.3): the project's active and observing commands; while
+   * Guardrails is on (B4) the active guidelines in scope for the card's type and this delivery's size, and the card's
+   * open items. `words`: the user's own words for each guideline and item, for the review session and the rework message.
+   */
+  async reviewInput(task: Task, project: Project, size: ChangeSize | undefined) {
+    const state = await this.store.read();
+    const own = state.entries.filter((e) => e.projectId === project.id);
+    const on = memoryOn(project);
+    const commands = own.filter((e) => e.kind === "command" && (e.state === "active" || e.state === "observing"));
+    const guidelines = on ? own.filter((e) => e.kind === "guideline" && e.state === "active" && inScope(e, { type: task.type, size })) : [];
+    const items = on ? state.items.filter((i) => i.taskId === task.id && i.state === "open") : [];
+    const words = new Map<string, string>();
+    for (const g of guidelines) {
+      const quote = [...g.sources].reverse().find((s) => s.quote)?.quote;
+      if (quote) words.set(g.id, quote);
+    }
+    for (const i of items) if (i.quote) words.set(i.id, i.quote);
+    return { commands, guidelines, items, words };
+  }
+
+  /**
+   * The end of a review that judged something (§6.6, §6.7): each command and guideline it checked counts a review
+   * (passed and na as passes); a command that could not run counts toward pausing it, an observing one toward its
+   * promotion; what failed in the card's previous review and passed now counts as caught (not when disputed). Then
+   * every entry of the project is checked for automatic retirement. Counts do not change an entry's revision; a state
+   * change does, with a `guardrail_retired` event for pauses and archives.
+   */
+  async reviewed(input: { projectId: string; taskId: string; items: readonly ReviewItem[]; previous?: readonly ReviewItem[]; disputed: readonly string[] }): Promise<void> {
+    const events = await this.store.update(async (state) => {
+      const at = this.iso();
+      const own = state.entries.filter((e) => e.projectId === input.projectId);
+      const byId = new Map(own.map((e) => [e.id, e]));
+      let changed = false;
+      for (const item of input.items) {
+        const entry = byId.get(item.id);
+        if (!entry) continue;
+        if (entry.kind === "command") {
+          if (item.state === "unavailable") entry.counts.unavailableRun = (entry.counts.unavailableRun || 0) + 1;
+          else if (item.state === "passed" || item.state === "failed") {
+            entry.counts.unavailableRun = 0;
+            countReview(entry.counts, item.state);
+            if (entry.state === "observing") {
+              const observe = entry.observe || { reviews: 0, passed: 0 };
+              entry.observe = { reviews: observe.reviews + 1, passed: observe.passed + (item.state === "passed" ? 1 : 0) };
+            }
+          } else continue;
+        } else if (entry.kind === "guideline") {
+          if (item.state !== "passed" && item.state !== "failed" && item.state !== "na") continue;
+          countReview(entry.counts, item.state);
+        } else continue;
+        changed = true;
+      }
+      for (const id of caughtIds(input.previous, input.items, input.disputed)) {
+        const entry = byId.get(id);
+        if (!entry) continue;
+        countCaught(entry.counts, at);
+        changed = true;
+      }
+      const retired = applyRetirement(state, input.projectId, this.now(), at);
+      if (retired.length) await pruneArchived(this.store.directory, state, input.projectId, at);
+      return { value: retired, changed: changed || retired.length > 0 };
+    });
+    await this.recordRetired(events, () => input.taskId);
+  }
+
+  // ---- The weekly run (§7.3) ----------------------------------------------------------
+
+  /**
+   * Step 1 of the weekly run, no model (§4.5, §6.7): with `commands` (Auto review on) a command whose script left the
+   * repository pauses ("script missing"), and a whitelisted check agents ran on at least 3 cards in the last 30 days
+   * (`records`, the project's command log) joins as observing; then every entry is checked for retirement.
+   */
+  async weekly(projectId: string, input: { records: readonly CommandRecord[]; commands: boolean }): Promise<{ added: GuardrailEntry[]; retired: GuardrailEntry[] }> {
+    const project = (await this.board.read()).projects.find((p) => p.id === projectId);
+    if (!project || project.archivedAt) return { added: [], retired: [] };
+    const files = input.commands ? await this.readFiles(project.primaryPath).catch(() => null) : null;
+    const result = await this.store.update(async (state) => {
+      const at = this.iso();
+      const added: GuardrailEntry[] = [];
+      const retired: GuardrailEntry[] = [];
+      if (files) {
+        const names = scriptNamesOf(files);
+        const since = this.now() - 30 * 86_400_000;
+        const recent = input.records.filter((r) => Date.parse(r.at) >= since);
+        for (const e of state.entries)
+          if (e.projectId === projectId && e.kind === "command" && (e.state === "active" || e.state === "observing") && scriptMissing(e.argv || [], names)) {
+            setState(e, "paused", "script missing", at);
+            bump(e, at);
+            retired.push(e);
+          }
+        for (const c of whitelistCommands(files)) {
+          const own = state.entries.filter((e) => e.projectId === projectId && e.kind === "command");
+          if (own.some((e) => textKey(e.text) === textKey(c.name) || (e.argv || []).join("\u0000") === c.argv.join("\u0000"))) continue;
+          if (usageCards(c.argv, recent) < 3) continue;
+          if (commandRoom(state.entries, projectId) <= 0) break;
+          const entry: GuardrailEntry = {
+            id: randomUUID(),
+            projectId,
+            kind: "command",
+            text: clip(c.name, guardrailLimits.commandName),
+            argv: [...c.argv],
+            observe: { reviews: 0, passed: 0 },
+            state: "observing",
+            stateAt: at,
+            counts: emptyCounts(),
+            sources: [],
+            by: "detect",
+            revision: 1,
+            createdAt: at,
+            updatedAt: at,
+          };
+          state.entries.push(entry);
+          added.push(entry);
+        }
+      }
+      retired.push(...applyRetirement(state, projectId, this.now(), at));
+      if (retired.length) await pruneArchived(this.store.directory, state, projectId, at);
+      return { value: { added, retired }, changed: added.length > 0 || retired.length > 0 };
+    });
+    await this.recordRetired(result.retired, () => undefined);
+    return result;
+  }
+
+  /**
+   * The weekly catch-up's input (§7.3): for a project with Guardrails on, the `feedback` clues of the last 7 days not
+   * learned from yet (at most 30, oldest first) and the project's guardrails as the summarizer sees them.
+   */
+  async catchUpInput(projectId: string): Promise<{ clues: { taskId: string; text: string; at: string }[]; section: string[] } | null> {
+    const [board, state] = await Promise.all([this.board.read(), this.store.read()]);
+    const project = board.projects.find((p) => p.id === projectId);
+    if (!project || project.archivedAt || !memoryOn(project)) return null;
+    const since = Math.max(this.now() - catchUpLimits.days * 86_400_000, Date.parse(state.learnedUntil?.[projectId] || "") || 0);
+    const clues = state.clues
+      .filter((c) => c.projectId === projectId && c.kind === "feedback" && Date.parse(c.at) > since && board.tasks.some((t) => t.id === c.taskId))
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .slice(-catchUpLimits.clues)
+      .map((c) => ({ taskId: c.taskId, text: c.text, at: c.at }));
+    if (!clues.length) return null;
+    const section = guardrailsSection({ entries: state.entries, items: state.items, projectId, taskId: "", shape: {}, now: this.now() });
+    return { clues, section };
+  }
+  /** Learns from the catch-up's answers, one clue at a time through the same bookkeeping as a rework turn, and marks them learned. */
+  async catchUp(projectId: string, clues: readonly { taskId: string; text: string; at: string }[], corrections: readonly Correction[]) {
+    for (const [i, clue] of clues.entries()) {
+      const correction = corrections[i];
+      if (correction && correction.kind !== "none")
+        await this.learn({ taskId: clue.taskId, correction, quote: clue.text }).catch((e) => logFailure("Flowly guardrail not learned:", e, clue.taskId));
+    }
+    const until = clues.reduce((max, c) => (c.at > max ? c.at : max), "");
+    if (!until) return;
+    await this.store.update((state) => {
+      state.learnedUntil = { ...(state.learnedUntil || {}), [projectId]: until };
+      return { value: undefined, changed: true };
+    });
+  }
+
+  /** The `# Guardrails` material of the weekly run (§7.3 step 2); "" while Guardrails is off for the project. */
+  async material(projectId: string, flow: readonly { at: string; taskId: string; action: string; results?: readonly { id: string; state: string; kind?: string }[] }[]): Promise<string> {
+    const [board, state] = await Promise.all([this.board.read(), this.store.read()]);
+    const project = board.projects.find((p) => p.id === projectId);
+    if (!project || !memoryOn(project)) return "";
+    const from = this.now() - 30 * 86_400_000;
+    const reviews = flow
+      .filter((e) => e.action === "review_finished" && e.results?.length && Date.parse(e.at) >= from)
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .map((e) => ({ taskId: e.taskId, at: e.at, results: e.results! }));
+    return guardrailsMaterial({
+      entries: state.entries,
+      items: state.items,
+      projectId,
+      reviews,
+      caught30: caughtInWindow(flow, from),
+      cardTitle: (id) => board.tasks.find((t) => t.id === id)?.title,
+    });
+  }
+
+  /**
+   * Merges the weekly run proposed (§7.3): at most 5; each needs two distinct active entries of the project of the
+   * same kind, else it is dropped. `drop` is archived as merged into `keep`; a `guardrail_retired` event records it.
+   */
+  async merge(projectId: string, merges: readonly { keep: string; drop: string; why: string }[]): Promise<GuardrailEntry[]> {
+    const project = (await this.board.read()).projects.find((p) => p.id === projectId);
+    if (!project || project.archivedAt || !memoryOn(project) || !merges.length) return [];
+    const dropped = await this.store.update(async (state) => {
+      const at = this.iso();
+      const out: GuardrailEntry[] = [];
+      for (const m of merges.slice(0, 5)) {
+        const pair = mergePair(state.entries, projectId, m);
+        if (!pair) continue;
+        mergeInto(pair.keep, pair.drop, at);
+        bump(pair.keep, at);
+        bump(pair.drop, at);
+        out.push(pair.drop);
+      }
+      if (out.length) await pruneArchived(this.store.directory, state, projectId, at);
+      return { value: out, changed: out.length > 0 };
+    });
+    await this.recordRetired(dropped, () => undefined);
+    return dropped;
+  }
+
+  /** `guardrail_retired` events on a card of the project (the flow log is per card); none when it has no card. */
+  private async recordRetired(retired: readonly GuardrailEntry[], taskFor: (entry: GuardrailEntry) => string | undefined) {
+    if (!retired.length) return;
+    await this.board
+      .mutate((board) => {
+        for (const entry of retired) {
+          const wanted = taskFor(entry);
+          const taskId =
+            (wanted && board.tasks.some((t) => t.id === wanted) ? wanted : undefined) ??
+            [...entry.sources].reverse().find((s) => board.tasks.some((t) => t.id === s.taskId))?.taskId ??
+            board.tasks.filter((t) => t.projectId === entry.projectId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.id;
+          if (!taskId) continue;
+          const change = entry.stateReason === "merged" ? "merged" : entry.state === "paused" ? "paused" : "archived";
+          this.board.event(board, {
+            taskId,
+            actor: "system",
+            action: guardrailRetiredAction,
+            note: clip(`${entry.text} (${entry.stateReason || change})`, 1000),
+            guardrail: { change, kind: entry.kind, id: entry.id },
+          });
+        }
+      })
+      .catch((e) => logFailure("Flowly guardrail event not recorded:", e));
   }
 
   // ---- Edits (§7.5) ---------------------------------------------------------------
@@ -642,6 +881,54 @@ export class GuardrailsService {
   removeProject(projectId: string, taskIds: ReadonlySet<string>) {
     return removeProjectGuardrails(this.store, projectId, taskIds, this.iso());
   }
+}
+
+/**
+ * Automatic retirement (§6.7, §4.5) over a project's entries: returns the entries that left use (paused or
+ * archived); an observing command that earned it becomes active without an event.
+ */
+export function applyRetirement(state: GuardrailsState, projectId: string, now: number, at: string): GuardrailEntry[] {
+  const out: GuardrailEntry[] = [];
+  for (const entry of state.entries) {
+    if (entry.projectId !== projectId) continue;
+    const next = retirement(entry, now);
+    if (!next) continue;
+    setState(entry, next.state, next.reason, at);
+    if (next.state === "active") delete entry.observe;
+    if (entry.kind === "command" && next.state === "paused") entry.counts.unavailableRun = 0;
+    bump(entry, at);
+    if (next.state !== "active") out.push(entry);
+  }
+  return out;
+}
+
+/** A command whose package script or Makefile target is no longer in the repository (§4.5); unknown counts as present. */
+export function scriptMissing(argv: readonly string[], names: { scripts: Set<string> | null; targets: Set<string> | null }): boolean {
+  const [base, sub, name] = argv;
+  if (["npm", "pnpm", "yarn", "bun"].includes(base)) {
+    const script = sub === "run" || sub === "run-script" ? name : sub === "test" ? "test" : undefined;
+    return !!script && !!names.scripts && !names.scripts.has(script);
+  }
+  if (base === "make" && sub && !sub.startsWith("-")) return !!names.targets && !names.targets.has(sub);
+  return false;
+}
+
+/**
+ * The command-log keys (WORKFLOW-INSIGHTS-SPEC §3.2) agents' runs of this command show up as: a package script in any
+ * package manager's spellings (`npm run test` and `npm test` alike), else the command's own normalized key.
+ */
+export function commandKeys(argv: readonly string[]): string[] {
+  const [base, sub, name] = argv;
+  const managers = ["npm", "pnpm", "yarn", "bun"];
+  const script = managers.includes(base) ? (sub === "run" || sub === "run-script" ? name : sub === "test" ? "test" : undefined) : undefined;
+  if (script) return managers.flatMap((pm) => [`${pm} run ${script}`, ...(script === "test" ? [`${pm} test`] : [])]).concat(`yarn ${script}`);
+  const segment = classify(argv.join(" "), { repo: "", home: "" });
+  return segment.kind === "action" ? [segment.key] : [];
+}
+/** Distinct cards whose agents ran this command in these records (§4.5 usage evidence). */
+export function usageCards(argv: readonly string[], records: readonly CommandRecord[]): number {
+  const keys = new Set(commandKeys(argv));
+  return new Set(records.filter((r) => r.actions.some((a) => keys.has(a))).map((r) => r.taskId)).size;
 }
 
 /** Notes past 100 active give up the longest unused (§3.4). */

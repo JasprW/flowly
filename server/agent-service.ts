@@ -18,14 +18,12 @@ import { ExternalError } from "./connectors/http";
 import { ExternalReadStore, refKey, type ConnectorService } from "./connectors/service";
 import { familyOf, itemTypeOf } from "../shared/connectors";
 import { join } from "node:path";
-import { hostname } from "node:os";
-import type { Artifact, GitHead, NextMove, Workpad } from "../shared/model";
+import type { Artifact, Dispute, NextMove, Workpad } from "../shared/model";
 import { projectScripts } from "./workflow-insights";
-import { mergeWorkpad, openItemLines, openItems, plansOf, validationFreshness, workpadEnabled, workpadNote, workpadOf, workpadUpdatedAction } from "../shared/workpad";
-import { defaultGit, readHead, resolveCommit, type Git } from "./workpad";
+import { mergeWorkpad, plansOf, workpadEnabled, workpadNote, workpadOf, workpadUpdatedAction } from "../shared/workpad";
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
-import { autoReviewEnabled, autoReviewOf, autoReviewRuns, checkProposedRules, draftDiff, draftTaskId, effectiveRules, nextDraftAt, failingItemLines, reviewConfigHash, reviewContext, workpadFailingMessage } from "../shared/auto-review";
+import { autoReviewOf, autoReviewRuns, reviewContext } from "../shared/auto-review";
 import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
@@ -41,7 +39,7 @@ import {
   tagsInputSchema,
   typeInputSchema,
   nextMovesInputSchema,
-  reviewRulesInputSchema,
+  workpadInputKeys,
   workpadInputSchema,
   progressInputSchema,
   statusInputSchema,
@@ -61,7 +59,6 @@ import {
   type TagsToolInput,
   type TypeToolInput,
   type NextMovesInput,
-  type ReviewRulesInput,
   type WorkpadInput,
   type ExternalContext,
   type ReadExternalInput,
@@ -70,7 +67,7 @@ import { BoardStore } from "./store";
 import { BoardService } from "./service";
 import { ToolSecrets, digest } from "./tool-context";
 import { ToolError } from "./tool-error";
-import { ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Project, type Receipt, type Status, type Task } from "../shared/model";
+import { disputeLimits, ideaLimits, isWorkStatus, legacyStatus, type Board, type Idea, type Receipt, type Status, type Task } from "../shared/model";
 import { isLegacyScope } from "../shared/scope";
 import { MemoryError, type MemoryService } from "./memory";
 import type { GuardrailsService } from "./guardrails";
@@ -96,8 +93,6 @@ export class AgentService {
   artifactsOn: () => Promise<boolean> = async () => true;
   /** The AI output language (AI-LANGUAGE-SPEC §5), returned by get_task as outputLanguage. */
   aiLanguage: () => Promise<LocaleCode> = async () => "en";
-  /** Reads the workspace HEAD and verifies commits for the workpad (WORKPAD-SPEC §4.2, §5.1). */
-  git: Git = defaultGit;
   constructor(
     readonly store: BoardStore,
     readonly secrets: ToolSecrets,
@@ -330,8 +325,6 @@ export class AgentService {
       task: (({ review: _review, ...task }) => task)(r.task),
       // The card's latest automatic review (AUTO-REVIEW-SPEC §5); state "rework" means its findings come first.
       ...(r.task.review ? { review: reviewContext(r.task.review) } : {}),
-      // What a delivery is checked against, before the agent delivers (AUTO-REVIEW-SPEC §12.3).
-      ...(autoReviewEnabled(r.project) || r.task.reviewSetup || draftTaskId(r.project.reviewDraft) === r.task.id ? { reviewRules: reviewRulesContext(r.project, r.task) } : {}),
       project: r.project,
       revision,
       request: this.secrets.request(identity, revision),
@@ -436,25 +429,12 @@ export class AgentService {
       );
     return value;
   }
-  /** Each commit the agent named, verified in the workspace repository (WORKPAD-SPEC §5.1). */
-  private async commits(input: WorkpadInput, dir: string, head: GitHead | null) {
-    const given = [...new Set(input.validation.flatMap((v) => (v.sha && v.state !== "unrun" ? [v.sha] : [])))];
-    const resolved = new Map<string, string>();
-    if (given.length && !head)
-      throw new ToolError("WORKPAD_INVALID", "This workspace is not a git repository (or git is unavailable); omit sha.");
-    for (const sha of given) {
-      const value = await resolveCommit(dir, sha, this.git);
-      if (!value) throw new ToolError("WORKPAD_INVALID", `"${sha}" is not a commit in this workspace's repository.`);
-      resolved.set(sha, value);
-    }
-    return resolved;
-  }
   async write(
     identity: ToolIdentity,
-    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad" | "review_rules",
+    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
     raw: unknown,
   ): Promise<ToolResult> {
-    const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput | ReviewRulesInput =
+    const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
       action === "status"
         ? statusInputSchema.parse(raw)
         : action === "remember"
@@ -476,14 +456,9 @@ export class AgentService {
                   : action === "next_moves"
                     ? nextMovesInputSchema.parse(raw)
                     : action === "workpad"
-                      ? workpadInputSchema.parse(raw)
-                      : action === "review_rules"
-                        ? reviewRulesInputSchema.parse(raw)
-                        : progressInputSchema.parse(raw);
-    // A proposed rule set is checked in full before anything is written (AUTO-REVIEW-SPEC §12.3).
-    const proposed = action === "review_rules" ? checkProposedRules((input as ReviewRulesInput).rules) : undefined;
-    if (proposed && "problems" in proposed)
-      throw new ToolError("REVIEW_RULES_INVALID", `The rule set was not saved:\n${proposed.problems.map((p) => `- ${p}`).join("\n")}\nFix every problem and send the complete list again.`);
+                      ? parseWorkpadInput(raw)
+                      : progressInputSchema.parse(raw);
+    const disputes = action === "status" ? (input as StatusInput).disputes : undefined;
     const signed = this.secrets.validateRequest(
       identity,
       input.request,
@@ -550,14 +525,7 @@ export class AgentService {
               throw new ToolError("ARTIFACT_INVALID", e instanceof Error ? e.message : String(e));
             })
         : undefined;
-    // Git runs outside the transaction: the workpad's HEAD stamp and commits (WORKPAD-SPEC §4.2, §5.1),
-    // and the HEAD the delivery check compares checks against (§5.3).
     const delivering = action === "status" && (input as StatusInput).status === "in_review";
-    const head: GitHead | null | undefined =
-      action === "workpad" || delivering
-        ? await readHead(resources.workspace.workspaceDirectory, this.git, new Date(this.clock()).toISOString())
-        : undefined;
-    const commits = action === "workpad" ? await this.commits(input as WorkpadInput, resources.workspace.workspaceDirectory, head ?? null) : undefined;
     // Tags are normalized before the write; one invalid value refuses the whole call (CARD-TAGS-SPEC §4.1).
     const tagEdit =
       action === "tags" || action === "idea" || (action === "idea_update" && (input as IdeaUpdateInput).tags)
@@ -605,7 +573,6 @@ export class AgentService {
       return out;
     };
     let review: DeliveredReview | undefined;
-    let draftChanges: ReturnType<typeof draftDiff> | undefined;
     const result = await this.store.transaction((board) => {
       const existing = board.agentReceipts.find((r) => r.key === key);
       if (existing) {
@@ -686,33 +653,18 @@ export class AgentService {
           "INVALID_INPUT",
           "A moveTo=\"done\" move is only offered together with a delivery to In review (status in_review). Leave it out, or deliver first.",
         );
-      // Soft delivery gate (WORKPAD-SPEC §5.3): open items need an explicit acknowledgement.
-      // Off for the project (WORKPAD-SPEC §9): no gate, and the stored workpad stays as it is.
-      const deliveryPad =
-        next === "in_review" && next !== previous && workpadEnabled(project) ? board.workpads.find((w) => w.taskId === task.id) : undefined;
-      if (deliveryPad && head !== undefined) deliveryPad.head = head;
-      const delivered = deliveryPad ? openItems(deliveryPad) : undefined;
-      // Missing card setup is part of the same soft gate (CARD-SETUP-SPEC §3.4): one refusal lists everything.
+      // Disputed findings ride on a delivery (GUARDRAILS-SPEC §6.1, B7): checked before anything is written.
+      if (disputes?.length) {
+        if (next !== "in_review" || next === previous)
+          throw new ToolError("INVALID_INPUT", "disputes is only valid when you deliver the card to In review (status in_review).");
+        task.disputes = disputedFindings(task, disputes, new Date(this.clock()).toISOString());
+      }
+      // Missing card setup (CARD-SETUP-SPEC §3.4): the first delivery is refused; acknowledgeOpen lets a later one through.
       const setupGap: SetupItem[] =
         next === "in_review" && next !== previous ? setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project)) : [];
       const binding = `${identity.agentId}:${identity.taskId}:${identity.workspaceId}`;
-      const hasOpen = !!delivered?.total || setupGap.length > 0;
-      const fingerprint = digest(JSON.stringify({
-        revision: input.expectedRevision,
-        pad: deliveryPad?.revision,
-        open: delivered,
-        setupGap,
-        head: head ? { sha: head.sha, branch: head.branch, dirty: head.dirty } : null,
-      }));
-      // Auto review's hard gate (AUTO-REVIEW-SPEC §4.1): failed or out-of-date checks refuse the delivery outright.
-      const failing = deliveryPad && autoReviewEnabled(project) ? failingItemLines(deliveryPad) : [];
-      if (failing.length) throw new ToolError("WORKPAD_FAILING", workpadFailingMessage(failing));
-      const acknowledged = hasOpen && this.deliveryGate.acknowledge(binding, fingerprint, !!(input as StatusInput).acknowledgeOpen, this.clock());
-      if (deliveryPad && delivered!.total > 0 && !acknowledged)
-        throw new ToolError(
-          "WORKPAD_OPEN",
-          `${setupGap.length ? `${setupIncompleteMessage(setupGap)}\n` : ""}${delivered!.total} workpad item${delivered!.total === 1 ? " is" : "s are"} still open:\n${openItemLines(deliveryPad).join("\n")}\nThe first attempt is always refused, even with acknowledgeOpen=true. Review this list, rerun out-of-date checks and finish what you can. Then retry with acknowledgeOpen=true and a note explaining every remaining item. A changed card/workpad/HEAD or a new turn requires a new refusal.`,
-        );
+      const fingerprint = digest(JSON.stringify({ revision: input.expectedRevision, pad: board.workpads.find((w) => w.taskId === task.id)?.revision, setupGap }));
+      const acknowledged = setupGap.length > 0 && this.deliveryGate.acknowledge(binding, fingerprint, !!(input as StatusInput).acknowledgeOpen, this.clock());
       if (setupGap.length && !acknowledged) throw new ToolError("SETUP_INCOMPLETE", setupIncompleteMessage(setupGap));
       if (next !== previous) {
         task.status = next;
@@ -829,30 +781,26 @@ export class AgentService {
               if (!workpadEnabled(project))
                 throw new ToolError(
                   "WORKPAD_DISABLED",
-                  "The workpad is turned off for this project. List acceptance criteria and checks (passed, failed, not run) in your progress and delivery notes instead; do not retry.",
+                  "The workpad is turned off for this project. List your acceptance criteria in your progress and delivery notes instead; do not retry.",
                 );
               const current = board.workpads.find((x) => x.taskId === task.id);
               if ((current?.revision ?? 0) !== w.workpadRevision)
                 throw new ToolError(
                   "WORKPAD_CONFLICT",
-                  `Workpad changed (current revision=${current?.revision ?? 0}), possibly by the user. Re-read get_task, keep their checks, then retry.`,
+                  `Workpad changed (current revision=${current?.revision ?? 0}), possibly by the user. Re-read get_task, keep their ticks, then retry.`,
                 );
               const now = new Date(this.clock()).toISOString();
               let merged;
               try {
-                merged = mergeWorkpad(current, w, { now, head: head ?? null, resolved: commits! });
+                merged = mergeWorkpad(current, w, { now });
               } catch (e) {
                 throw new ToolError("WORKPAD_INVALID", e instanceof Error ? e.message : String(e));
               }
-              const env = { host: hostname(), path: resources.workspace.workspaceDirectory, head: head ?? null };
               const value: Workpad = {
-                ...(current ?? {}),
                 taskId: task.id,
                 projectId: project.id,
                 revision: (current?.revision ?? 0) + 1,
                 ...merged,
-                env,
-                head: head ?? null,
                 updatedAt: now,
                 updatedBy: "agent",
                 agentId: identity.agentId,
@@ -866,35 +814,6 @@ export class AgentService {
                 actor: "agent",
                 action: workpadUpdatedAction,
                 note: workpadNote(value),
-              });
-            })()
-          : undefined;
-      // A draft for the user's Apply; the project's rules and revision stay as they are (AUTO-REVIEW-SPEC §12.3, D8).
-      const reviewRulesEvent =
-        action === "review_rules" && proposed && "rules" in proposed
-          ? (() => {
-              const r = input as ReviewRulesInput;
-              const current = autoReviewOf(project);
-              // `at` identifies the draft for Apply/Discard (§12.3), so a replacement never reuses the old one's.
-              const at = nextDraftAt(project.reviewDraft, this.clock());
-              project.reviewDraft = {
-                rules: proposed.rules,
-                ...(r.guidance !== undefined ? { guidance: r.guidance } : {}),
-                ...(r.maxRounds !== undefined ? { maxRounds: r.maxRounds } : {}),
-                ...(r.goal !== undefined ? { goal: r.goal } : {}),
-                note: r.note,
-                by: { taskId: task.id, agentId: identity.agentId },
-                at,
-                baseRevision: project.revision,
-                baseHash: reviewConfigHash(current),
-              };
-              draftChanges = draftDiff(current.rules, proposed.rules);
-              return this.store.event(board, {
-                taskId: task.id,
-                agentId: identity.agentId,
-                actor: "agent",
-                action: "review_rules_proposed",
-                note: `Proposed ${proposed.rules.length} review rule${proposed.rules.length === 1 ? "" : "s"}: ${r.note}`.slice(0, 2000),
               });
             })()
           : undefined;
@@ -923,7 +842,6 @@ export class AgentService {
         tagsEvent ??
         typeEvent ??
         movesEvent ??
-        reviewRulesEvent ??
         workpadEvent ??
         (action === "idea" || action === "remember"
           ? this.store.event(board, {
@@ -942,12 +860,10 @@ export class AgentService {
               reportKind:
                 action === "progress" ? (input as ProgressInput).kind : "progress",
               ...(next !== previous ? { from: previous, to: next } : {}),
-              ...(deliveryPad ? { workpad: { ...delivered!, revision: deliveryPad.revision } } : {}),
               ...(setupGap.length ? { setup: { missing: setupGap } } : {}),
             }));
-      if (deliveryPad) deliveryPad.delivery = { ...delivered!, revision: deliveryPad.revision, eventId: event.id, at: event.at };
       // An agent delivery starts the project's automatic review once this write commits (AUTO-REVIEW-SPEC §3.1).
-      if (next === "in_review" && next !== previous && autoReviewRuns(project, task))
+      if (next === "in_review" && next !== previous && autoReviewRuns(project))
         review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous };
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).
       if (carried) recordMoves(carried);
@@ -1023,7 +939,7 @@ export class AgentService {
         at: new Date(this.clock()).toISOString(),
         action,
       });
-      return { receipt, replayed: result.replayed, ...(draftChanges ? { reviewDraft: draftChanges } : {}), ...remindersField(result.reminders), ...ideaField(result.ideaId), ...memoryField, ...(result.artifactId ? { artifactId: result.artifactId } : {}), ...(notice ? { notice } : {}), current };
+      return { receipt, replayed: result.replayed, ...remindersField(result.reminders), ...ideaField(result.ideaId), ...memoryField, ...(result.artifactId ? { artifactId: result.artifactId } : {}), ...(notice ? { notice } : {}), current };
     } catch (e) {
       return {
         receipt,
@@ -1038,24 +954,55 @@ export class AgentService {
   }
 }
 
-/** get_task's workpad and plans (WORKPAD-SPEC §4.1). */
+/** get_task's acceptance list and plans (WORKPAD-SPEC §4.1, GUARDRAILS-SPEC §7.1). */
 function workpadContext(workpads: readonly Workpad[], plans: Board["plans"], taskId: string, agentId: string) {
   const w = workpadOf(workpads, taskId);
   const own = plansOf(plans, taskId).map((p) => ({ agentId: p.agentId, own: p.agentId === agentId, items: p.items, at: p.at }));
   return {
-    workpad: w
-      ? {
-          revision: w.revision,
-          acceptance: w.acceptance,
-          validation: w.validation.map((v) => ({ ...v, fresh: validationFreshness(v, w.head) })),
-          confusions: w.confusions,
-          env: w.env,
-          head: w.head,
-          open: openItems(w),
-        }
-      : null,
+    workpad: w ? { revision: w.revision, acceptance: w.acceptance } : null,
     plan: [...own.filter((p) => p.own), ...own.filter((p) => !p.own)],
   };
+}
+
+/**
+ * flowly_update_workpad takes only the acceptance list (GUARDRAILS-SPEC §7.1): a session started with the older skill
+ * that still sends validation, confusions or anything else gets WORKPAD_INVALID with what to drop.
+ */
+function parseWorkpadInput(raw: unknown): WorkpadInput {
+  const extra = raw && typeof raw === "object" && !Array.isArray(raw) ? Object.keys(raw).filter((k) => !(workpadInputKeys as readonly string[]).includes(k)) : [];
+  if (extra.length)
+    throw new ToolError(
+      "WORKPAD_INVALID",
+      `flowly_update_workpad takes only the acceptance list; remove ${extra.join(", ")}. Flowly's auto review runs the project's checks when you deliver.`,
+    );
+  return workpadInputSchema.parse(raw) as WorkpadInput;
+}
+
+/**
+ * The card's disputes after this delivery (GUARDRAILS-SPEC §6.1, B7): each id must be an item that failed in the
+ * card's latest review or one already disputed (sending it again is idempotent; the reason is updated). At most 10.
+ */
+export function disputedFindings(task: Pick<Task, "review" | "disputes">, given: readonly { id: string; reason: string }[], at: string): Dispute[] {
+  const out = [...(task.disputes || [])];
+  const failed = (task.review?.items || []).filter((i) => i.state === "failed");
+  const unknown = given.filter((d) => !out.some((x) => x.id === d.id) && !failed.some((i) => i.id === d.id)).map((d) => d.id);
+  if (unknown.length)
+    throw new ToolError(
+      "INVALID_INPUT",
+      `disputes can only name findings that failed in this card's latest auto review${failed.length ? ` (${failed.map((i) => i.id).join(", ")})` : " (it has none)"}; unknown: ${unknown.join(", ")}.`,
+    );
+  for (const d of given) {
+    const reason = d.reason.trim().slice(0, disputeLimits.reason);
+    const known = out.find((x) => x.id === d.id);
+    if (known) {
+      known.reason = reason;
+      continue;
+    }
+    const item = failed.find((i) => i.id === d.id)!;
+    out.push({ id: item.id, kind: item.kind, name: item.name, reason, round: task.review!.round, at });
+  }
+  if (out.length > disputeLimits.perTask) throw new ToolError("INVALID_INPUT", `A card keeps at most ${disputeLimits.perTask} disputed findings.`);
+  return out;
 }
 
 /** Maps the retired in_progress alias onto a work stage (WORKFLOW-STAGES-SPEC §4). */
@@ -1151,40 +1098,3 @@ export function pruneIdeas(board: Board, taskId: string) {
 
 /** "GitLab", for agent-facing messages. */
 const serviceName = (provider: Parameters<typeof familyOf>[0]) => ({ jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps" })[familyOf(provider)];
-
-/**
- * get_task.reviewRules (§5): an ordinary card gets only the checks that run on it (and whether the built-in one is on),
- * and the guidance only when one of them is a judgement check, so every turn does not pay for the whole set. The setup
- * card and the card that proposed the current draft get every rule, the guidance and the draft itself.
- */
-function reviewRulesContext(project: Project, task: Task) {
-  const config = autoReviewOf(project);
-  const draft = project.reviewDraft;
-  const proposer = draftTaskId(draft);
-  const full = !!task.reviewSetup || (!!proposer && proposer === task.id);
-  const rules = full ? config.rules : effectiveRules(project, task);
-  const judged = config.goal || rules.some((r) => r.kind === "llm");
-  return {
-    goal: config.goal,
-    rules,
-    ...(config.guidance && (full || judged) ? { guidance: config.guidance } : {}),
-    maxRounds: config.maxRounds,
-    ...(draft
-      ? {
-          draft: {
-            ...(proposer ? { taskId: proposer } : { analysis: true as const }),
-            at: draft.at,
-            ...(full
-              ? {
-                  rules: draft.rules,
-                  note: draft.note,
-                  ...(draft.guidance !== undefined ? { guidance: draft.guidance } : {}),
-                  ...(draft.maxRounds !== undefined ? { maxRounds: draft.maxRounds } : {}),
-                  ...(draft.goal !== undefined ? { goal: draft.goal } : {}),
-                }
-              : {}),
-          },
-        }
-      : {}),
-  };
-}

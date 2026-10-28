@@ -16,7 +16,6 @@ import { Collapse, Disclosure, ShowMore } from "./disclosure";
 import { Enter } from "./motion";
 import { localZone, useDayQuery, useDigestQuery, useInsightsQuery, useTokensQuery, useWorkflowInsightsQuery } from "./queries";
 import { lineDiff, skillFile, usageIn, type Finding, type FindingTarget, type WorkflowView } from "../shared/workflow-insights";
-import { ruleSummary } from "../shared/auto-review";
 import { invalidateCardViews } from "./card-detail-query";
 import { AiMark, Button, IconButton, Label, Notice, TurnChevron, font, message, noFocusRing, pageBarHeight, radius, relativeTime, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { formatLocale, msg, t, tn } from "../shared/i18n";
@@ -78,13 +77,11 @@ export const InsightsPage = memo(function InsightsPage({
             <Label muted>{t("Loading insights…")}</Label>
           ) : (
             <>
-              <ReviewNudge projectId={project.id} view={workflow.data} titleOf={titleOf} onOpenTask={onOpenTask} onSetUp={onSuggestChecks} />
               <Section title={t("Activity")}>
                 <Heatmap activity={data.activity} today={data.today} selected={day} compact={compact} onSelect={select} />
                 <DayPanel projectId={project.id} day={day} today={data.today} activity={data.activity} active={active} titleOf={titleOf} onOpenTask={onOpenTask} onSelect={select} />
               </Section>
               <Skills projectId={project.id} view={workflow.data} error={workflow.error} titleOf={titleOf} onOpenTask={onOpenTask} onOpenSettings={onOpenSettings} />
-              <ReviewSuggestions view={workflow.data} projectId={project.id} titleOf={titleOf} onOpenTask={onOpenTask} />
               <OtherSuggestions projectId={project.id} view={workflow.data} titleOf={titleOf} onOpenTask={onOpenTask} onCreate={onCreateFromFinding} />
               <WorkflowNumbers projectId={project.id} flow={data.workflow} active={active} />
               {!!data.habits && (
@@ -408,7 +405,6 @@ const DayCardRow = memo(function DayCardRow({ first, card, share, title, onOpenT
 // ---- Skills (§2.3) --------------------------------------------------------------------
 
 const isDraft = (f: Finding) => f.target === "skill" && !!f.skill;
-const isReview = (f: Finding) => f.target === "review_rule" || f.target === "review_pause";
 const draftRank = (f: Finding) => (f.skill?.updates ? 0 : 1);
 const confidenceOrder = { high: 0, medium: 1, low: 2 } as const;
 
@@ -676,7 +672,7 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
   const [failed, setFailed] = useState("");
   if (!view) return null;
   const findings = view.findings
-    .filter((f) => !isDraft(f) && !isReview(f))
+    .filter((f) => !isDraft(f))
     .sort((a, b) => confidenceOrder[a.confidence] - confidenceOrder[b.confidence] || b.createdAt.localeCompare(a.createdAt));
   const active = findings.filter((f) => f.status !== "dismissed");
   const dismissed = findings.filter((f) => f.status === "dismissed");
@@ -713,120 +709,6 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
         )}
       </View>
     </Disclosure>
-  );
-}
-
-// ---- Auto review (AUTO-REVIEW-SPEC §7) ---------------------------------------------------
-
-/** The rework nudge at the top (§7.1): counted by the daemon; Set up auto review starts the history analysis. */
-function ReviewNudge({ projectId, view, titleOf, onOpenTask, onSetUp }: { projectId: string; view: WorkflowView | undefined; titleOf(id: string): string; onOpenTask(id: string): void; onSetUp(): void }) {
-  const { colors } = useTheme();
-  const dismiss = useRpc(rpc.dismissReviewNudge);
-  const client = useQueryClient();
-  const nudge = view?.reviewNudge;
-  if (!nudge) return null;
-  const notNow = async () => {
-    await dismiss({ projectId }).catch(() => undefined);
-    await client.invalidateQueries({ queryKey: ["flowly", "workflow-insights", projectId] });
-  };
-  return (
-    <View style={{ gap: space[2], padding: space[3], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border }}>
-      <Label medium size={font.md}>
-        {t("Of the {delivered} cards delivered in the last 14 days, you sent {reworked} back to the agent after delivery.", { delivered: nudge.delivered, reworked: nudge.reworked })}
-      </Label>
-      <View style={{ gap: space[1] }}>
-        {nudge.cards.map((c) => (
-          <View key={c.id} style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
-            <TaskChip title={titleOf(c.id) || c.title} onPress={() => onOpenTask(c.id)} />
-            {!!c.quote && (
-              <Label muted size={font.sm} lines={1}>
-                {`「${c.quote}」`}
-              </Label>
-            )}
-          </View>
-        ))}
-      </View>
-      <Label muted size={font.sm}>
-        {t("Auto review can catch these before they reach you and send them back to the agent.")}
-      </Label>
-      <View style={{ flexDirection: "row", gap: space[2], flexWrap: "wrap" }}>
-        <Button small primary onPress={onSetUp}>
-          {t("Set up auto review")}
-        </Button>
-        <Button small quiet onPress={() => void notNow()}>
-          {t("Not now")}
-        </Button>
-      </View>
-    </View>
-  );
-}
-
-/** Checks to add and checks to pause (§7.2), after Skills; nothing when there are none. */
-function ReviewSuggestions({ projectId, view, titleOf, onOpenTask }: { projectId: string; view: WorkflowView | undefined; titleOf(id: string): string; onOpenTask(id: string): void }) {
-  const { colors } = useTheme();
-  const add = useRpc(rpc.addReviewCheck);
-  const pause = useRpc(rpc.pauseReviewCheck);
-  const setStatus = useRpc(rpc.setWorkflowFinding);
-  const client = useQueryClient();
-  const toast = useToast();
-  const [busy, setBusy] = useState("");
-  const open = (view?.findings || []).filter((f) => isReview(f) && f.status === "open");
-  if (!view || !open.length) return null;
-  const act = async (f: Finding, action: () => Promise<unknown>) => {
-    setBusy(f.id);
-    try {
-      await action();
-    } catch (e) {
-      toast.show(message(e), { variant: "error" });
-    } finally {
-      setBusy("");
-      await client.invalidateQueries({ queryKey: ["flowly", "workflow-insights", projectId] });
-      await invalidateCardViews(client);
-    }
-  };
-  return (
-    <Section title={t("Auto review")} ai>
-      <Panel>
-        {open.map((f, i) => (
-          <View key={f.id} style={{ gap: space[1.5], padding: space[3], borderTopWidth: i ? 1 : 0, borderColor: colors.border }}>
-            <Label medium size={font.md}>
-              {f.target === "review_pause" ? t("{name} passed all {n} reviews. Pause it to save tokens?", { name: f.title, n: f.reviews ?? 0 }) : f.title}
-            </Label>
-            {f.cards.length > 0 && (
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
-                {f.cards.slice(0, 6).map((id) => (
-                  <TaskChip key={id} title={titleOf(id)} onPress={() => onOpenTask(id)} />
-                ))}
-              </View>
-            )}
-            {!!f.evidence && (
-              <Label muted size={font.sm}>
-                {f.evidence}
-              </Label>
-            )}
-            {f.rule && (
-              <Label size={font.sm} mono={f.rule.kind === "command"}>
-                {ruleSummary(f.rule)}
-              </Label>
-            )}
-            <View style={{ flexDirection: "row", gap: space[2], flexWrap: "wrap" }}>
-              {f.target === "review_rule" ? (
-                <Button small primary icon="Plus" disabled={busy === f.id} onPress={() => void act(f, () => add({ findingId: f.id }))}>
-                  {t("Add check")}
-                </Button>
-              ) : (
-                <Button small primary disabled={busy === f.id} onPress={() => void act(f, () => pause({ findingId: f.id }))}>
-                  {t("Pause")}
-                </Button>
-              )}
-              <Button small quiet disabled={busy === f.id} onPress={() => void act(f, () => setStatus({ projectId, findingId: f.id, status: "dismissed", expectedRevision: view.revision }))}>
-                {t("Dismiss")}
-              </Button>
-            </View>
-          </View>
-        ))}
-      </Panel>
-    </Section>
   );
 }
 
@@ -1020,8 +902,6 @@ const targetLabels: Record<FindingTarget, string> = {
   repo_tool: msg("Repo tool"),
   agents_md: msg("AGENTS.md"),
   skill: msg("Skill"),
-  review_rule: msg("Auto review"),
-  review_pause: msg("Auto review"),
 };
 const confidenceLabels: Record<Finding["confidence"], string> = { high: msg("High confidence"), medium: msg("Medium confidence"), low: msg("Low confidence") };
 

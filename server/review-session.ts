@@ -7,16 +7,17 @@ import { runSummaryModels } from "./summary-models";
 import type { LlmReview, LlmReviewInput, LlmVerdict } from "./auto-review";
 
 /**
- * The L3 review session (AUTO-REVIEW-SPEC §12.4): a temporary session in the card's workspace that judges every LLM
- * rule at once, then is hard-deleted like the summarizer (AGENTS.md exception). Agent-facing English.
+ * The review session (GUARDRAILS-SPEC §6.3, AUTO-REVIEW-SPEC §4.4): a temporary session in the card's workspace that
+ * judges the built-in check, the guidelines in scope and the card's own items at once, then is hard-deleted like the
+ * summarizer (AGENTS.md exception). Agent-facing English.
  */
 
 export const reviewOutputSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["rules"],
+  required: ["items"],
   properties: {
-    rules: {
+    items: {
       type: "array",
       items: {
         type: "object",
@@ -28,6 +29,7 @@ export const reviewOutputSchema = {
           detail: { type: "string" },
           file: { type: "string" },
           line: { type: "integer" },
+          quote: { type: "string" },
         },
       },
     },
@@ -35,30 +37,30 @@ export const reviewOutputSchema = {
 } as const;
 
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+const kindLabel = { goal: "built-in check", guideline: "project guideline", item: "this card's own item" } as const;
 
 export function reviewPrompt(input: LlmReviewInput): string {
-  const pad = input.workpad;
-  const workpad = pad
-    ? [
-        "Acceptance criteria:",
-        ...pad.acceptance.map((a) => `- [${a.done ? "x" : " "}] ${a.text}`),
-        "Checks:",
-        ...pad.validation.map((v) => `- ${v.state}: ${v.text}${v.command ? ` (${v.command})` : ""}${v.evidence ? ` — ${v.evidence}` : ""}`),
-        ...(pad.confusions.length ? ["Confusions:", ...pad.confusions.map((c) => `- ${c.text}`)] : []),
-      ].join("\n")
-    : "(no workpad)";
+  const acceptance = input.acceptance.length ? input.acceptance.map((a) => `- [${a.done ? "x" : " "}] ${a.text}`).join("\n") : "(none)";
   return [
-    "You are Flowly's automatic reviewer for one delivered Kanban card. Judge each review rule below against this delivery.",
+    "You are Flowly's automatic reviewer for one delivered Kanban card. Judge each check below against this delivery.",
     "Read-only: do not edit, create or delete files and do not run commands that change anything. You may read files in the working directory to check details.",
-    "Judge every rule on its own; one failing rule must not make others fail. Verdicts: pass (the rule is met), fail (it is not met; say exactly what is missing), na (the rule does not apply to this change, for example it is about UI text and the change has none).",
-    "detail: one or two sentences a developer can act on. Add file and line when a specific place is at fault.",
+    "Judge every check on its own; one failing check must not make others fail. Verdicts: pass (it is met), fail (it is not met; say exactly what is missing or wrong), na (it does not apply to this change, for example it is about UI text and the change has none).",
+    "Project guidelines and the card's own items come from what the user sent earlier work back for; their user's words show what they meant.",
+    "Every fail needs evidence, one of: file (a file in the diff that is wrong, or an existing repository file that misses something, with line when you can), or quote (the words of the card or of the user that the delivery does not meet). A fail without file or quote is discarded.",
+    "detail: one or two sentences a developer can act on.",
     // §4.2: in a shared directory the diff can hold other cards' work.
-    ...(input.shared && input.rules.some((r) => r.id === GOAL_ID)
+    ...(input.shared && input.checks.some((c) => c.id === GOAL_ID)
       ? [
           'This workspace is shared with other cards (not a worktree): changes in the diff that have nothing to do with this card may belong to another card. Do not fail "goal" for them; fail it only when something the user asked for is missing or wrong.',
         ]
       : []),
-    `Reply only with JSON: {"rules":[{"id","verdict","detail","file"?,"line"?}]}, one entry per rule id.`,
+    // §6.3: from round 2 only the changes since the previous delivery are shown.
+    ...(input.incremental
+      ? [
+          "This is a rework round: the diff holds only what changed since the previous delivery, and each check shows its previous result. Re-check the checks that did not pass last time and look for new problems in these changes. A check that passed before and is not touched by these changes needs no verdict; leave it out.",
+        ]
+      : []),
+    `Reply only with JSON: {"items":[{"id","verdict","detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,
     "",
     `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}`,
     // The built-in check's yardstick (§4.2): the user's own words, oldest first; a later one replaces an earlier one.
@@ -69,12 +71,21 @@ export function reviewPrompt(input: LlmReviewInput): string {
           }`,
         ]
       : []),
-    `## Workpad (the agent's own report, context only)\n${cut(workpad, 6000)}`,
+    `## Acceptance list (the agent's own claim, context only)\n${cut(acceptance, 6000)}`,
     `## Delivery note (the agent's own report, context only)\n${cut(input.deliveryNote || "(none)", 3000)}`,
     `## Deliverables\n${input.outputs.length ? input.outputs.map((o) => `- ${o}`).join("\n") : "(none)"}`,
-    `## Command rules\n${input.commands.length ? input.commands.map((c) => `- ${c}`).join("\n") : "(none)"}`,
-    ...(input.guidance ? [`## Project guidance\n${input.guidance}`] : []),
-    `## Review rules\n${input.rules.map((r) => `- id: ${r.id}\n  name: ${r.name}\n  rule: ${r.prompt}`).join("\n")}`,
+    `## Commands\n${input.commands.length ? input.commands.map((c) => `- ${c}`).join("\n") : "(none)"}`,
+    `## Checks\n${input.checks
+      .map((c) =>
+        [
+          `- id: ${c.id}`,
+          `  kind: ${kindLabel[c.kind]}`,
+          `  check: ${c.text.replace(/\n/g, " ")}`,
+          ...(c.quote ? [`  user's words: ${c.quote.replace(/\s+/g, " ")}`] : []),
+          ...(c.previous ? [`  previous result: ${c.previous.state}${c.previous.detail ? ` — ${c.previous.detail.replace(/\s+/g, " ")}` : ""}`] : []),
+        ].join("\n"),
+      )
+      .join("\n")}`,
     `## Diff\n${input.diff}`,
   ].join("\n\n");
 }
@@ -91,8 +102,8 @@ export function parseReviewOutput(text: string | null | undefined, ids: readonly
   } catch {
     throw new Error("The review session's output is not valid JSON.");
   }
-  const list = (raw as { rules?: unknown })?.rules;
-  if (!Array.isArray(list)) throw new Error("The review session's output has no rules list.");
+  const list = (raw as { items?: unknown; rules?: unknown })?.items ?? (raw as { rules?: unknown })?.rules;
+  if (!Array.isArray(list)) throw new Error("The review session's output has no items list.");
   const out: LlmVerdict[] = [];
   for (const item of list as Record<string, unknown>[]) {
     const id = typeof item?.id === "string" ? item.id : "";
@@ -104,12 +115,13 @@ export function parseReviewOutput(text: string | null | undefined, ids: readonly
       detail: typeof item.detail === "string" ? item.detail.slice(0, autoReviewLimits.detail) : "",
       ...(typeof item.file === "string" && item.file ? { file: item.file } : {}),
       ...(typeof item.line === "number" && Number.isInteger(item.line) && item.line > 0 ? { line: item.line } : {}),
+      ...(typeof item.quote === "string" && item.quote.trim() ? { quote: item.quote.trim().slice(0, 300) } : {}),
     });
   }
   return out;
 }
 
-/** The review runner: the Review model (Settings → Models), else the project's default model, else the summary models. */
+/** The review runner: the Review model (Settings → Models), else the summary models; never the project's agent model (§6.3). */
 export function llmReviewer(options: {
   reviewModel: () => Promise<string>;
   summaryModels: () => Promise<string[]>;
@@ -119,8 +131,8 @@ export function llmReviewer(options: {
   const remove = options.remove ?? daemonRemoveAgent();
   return async (input: LlmReviewInput, paseo: PaseoApi) => {
     const chosen = await options.reviewModel();
-    const models = chosen ? [chosen] : input.projectModel ? [input.projectModel] : await options.summaryModels();
-    const ids = input.rules.map((r) => r.id);
+    const models = chosen ? [chosen] : await options.summaryModels();
+    const ids = input.checks.map((c) => c.id);
     const { model, output } = await runSummaryModels(paseo, models, {
       create: (model) =>
         paseo.workspaces.ref(input.task.workspaceId).agents.create({

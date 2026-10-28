@@ -426,7 +426,6 @@ export type RetroMaterial = {
   /** Recap lines of every summary version, deduplicated, oldest first. */
   recapLines: readonly string[];
   states: readonly string[];
-  confusions: readonly string[];
   failedChecks: readonly string[];
   reports: readonly string[];
   existing: readonly { id: string; kind: MemoryKind; title: string }[];
@@ -455,8 +454,7 @@ export function retroMaterial(m: RetroMaterial): string {
     `# Latest progress summary\n${m.summary ? `Target: ${m.summary.target}\nRecap:\n${m.summary.recap}\nNext: ${m.summary.next}` : "(none)"}`,
     `# Every recap line the summary ever had\n${m.recapLines.map((l) => `- ${l}`).join("\n") || "(none)"}`,
     `# Earlier states\n${m.states.map((s) => `- ${s}`).join("\n") || "(none)"}`,
-    `# Workpad confusions\n${m.confusions.map((s) => `- ${s}`).join("\n") || "(none)"}`,
-    `# Checks that failed at some point\n${m.failedChecks.map((s) => `- ${s}`).join("\n") || "(none)"}`,
+    `# Checks that failed in the latest auto review\n${m.failedChecks.map((s) => `- ${s}`).join("\n") || "(none)"}`,
     `# Agent questions, blockers and results\n${m.reports.map((s) => `- ${clip(s, 500)}`).join("\n") || "(none)"}`,
     `# Existing project memory (do not repeat; use supersedes to replace one)\n${m.existing.map((e) => `- ${e.id} [${e.kind}] ${e.title}`).join("\n") || "(none)"}`,
     `# Suggestions already waiting for the user (do not repeat)\n${(m.waiting || []).map((e) => `- [${e.kind}] ${e.title}`).join("\n") || "(none)"}`,

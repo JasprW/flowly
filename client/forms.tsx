@@ -4,7 +4,6 @@ import { useBoardView } from "./board-view";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { View } from "react-native";
-import { useToast } from "@getpaseo/plugin/client/react-native";
 import { useSettled } from "./motion";
 import { perfLap } from "./perf";
 import { Modal } from "./modal";
@@ -21,7 +20,6 @@ import {
   type Project,
   type Task,
   type Status,
-  autoReviewLimits,
 } from "../shared/model";
 import { Theme, useTheme, Button, IconButton, Field, Choices, Notice, Label, Row, Actions, Toggle, message, basename, font, radius, space, relativeTime } from "./ui";
 import { priorityLabels } from "./status";
@@ -37,7 +35,6 @@ import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
 import { tagValues } from "../shared/tags";
 import { autoReviewOf } from "../shared/auto-review";
-import { fromEditRules, toEditRules } from "./review-rules";
 import { AutoReviewSection, type ReviewEdit } from "./review-settings";
 import { TagEditor } from "./tag-input";
 import { useStableCallback } from "./stable";
@@ -94,9 +91,8 @@ export function ProjectForm({
     [memory, setMemory] = useState(project?.memory !== false),
     [review, setReview] = useState<ReviewEdit>(() => {
       const config = autoReviewOf(project);
-      return { on: config.enabled, goal: config.goal, rules: toEditRules(config.rules), guidance: config.guidance ?? "", rounds: String(config.maxRounds) };
+      return { on: config.enabled, rounds: String(config.maxRounds) };
     }),
-    [settingUp, setSettingUp] = useState(false),
     [agentModel, setAgentModel] = useState<AgentModel | null>(project?.agentModel ?? null),
     [archivedShown, setArchivedShown] = useState(!!showArchived),
     [lanes, setLanes] = useState<Lane[]>(() => projectLanes(project)),
@@ -120,49 +116,14 @@ export function ProjectForm({
     staleTime: 0,
   });
   const restoring = !!found && !found.conflict && !startEmpty;
-  const setupCard = useRpc(rpc.reviewSetupCard);
-  const toast = useToast();
-  // Adjust with AI (AUTO-REVIEW-SPEC §6.3): open the project's setup card, creating it and its session the first time.
-  async function setUpWithAi() {
-    if (!project) return;
-    setSettingUp(true);
-    try {
-      const result = await setupCard({ projectId: project.id });
-      if (result.sessionError) toast.error(t("Task created, but the agent did not start: {error}. Start it from the task.", { error: result.sessionError }));
-      onOpenTask?.(result.taskId);
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      setSettingUp(false);
-    }
-  }
-  const reviewSection = project ? (
-    <AutoReviewSection
-      project={initialProject ?? project}
-      value={review}
-      onChange={setReview}
-      analyze={analyzeReview}
-      onAdjust={() => void setUpWithAi()}
-      adjusting={settingUp || !onOpenTask}
-      onApplied={() => onSaved(project.id)}
-      onOpenTask={onOpenTask}
-    />
-  ) : null;
+  const reviewSection = project ? <AutoReviewSection value={review} onChange={setReview} /> : null;
   async function save() {
     setPending(true);
     setError("");
     try {
       if (project) {
-        // The checks as edited (AUTO-REVIEW-SPEC §9.3); P1 checks are saved back as rules here (§8.1 migration).
-        const edited = fromEditRules(review.rules);
-        if ("problem" in edited) {
-          setError(edited.problem);
-          return;
-        }
-        const guidance = review.guidance.trim().slice(0, autoReviewLimits.guidance);
         // Same key order as autoReviewOf, so an unchanged section is not sent.
-        const shown = { enabled: review.on, maxRounds: Number(review.rounds), goal: review.goal, rules: edited.rules, ...(guidance ? { guidance } : {}) };
-        const autoReview = { enabled: review.on, maxRounds: Number(review.rounds), rules: edited.rules, ...(review.goal ? {} : { goal: false }), ...(guidance ? { guidance } : {}) };
+        const autoReview = { enabled: review.on, maxRounds: Number(review.rounds) };
         let saved = await update({
           id: project.id,
           revision: project.revision,
@@ -172,7 +133,7 @@ export function ProjectForm({
           ...(workpad !== (project.workpad !== false) ? { workpad } : {}),
           ...(workflowInsights !== (project.workflowInsights !== false) ? { workflowInsights } : {}),
           ...(memory !== (project.memory !== false) ? { memory } : {}),
-          ...(JSON.stringify(shown) !== JSON.stringify(autoReviewOf(project)) ? { autoReview } : {}),
+          ...(JSON.stringify(autoReview) !== JSON.stringify(autoReviewOf(project)) ? { autoReview } : {}),
           ...(JSON.stringify(lanes) !== JSON.stringify(projectLanes(project)) ? { lanes } : {}),
           ...(JSON.stringify(agentModel) !== JSON.stringify(project.agentModel ?? null) ? { agentModel } : {}),
         });

@@ -1229,7 +1229,8 @@ function BoardContent(
           memoryCandidate: !task && !!memoryCandidates,
           searchable: !task && projectTasks.filter((x) => !x.archivedAt).length >= 10,
           reviewShown: !task && projectTasks.some((x) => !!visibleReview(x)),
-          reviewNudge: reviewTipDue && !!workflowView.data?.reviewNudge,
+          // The rework nudge left with phase B (GUARDRAILS-SPEC §7.2); phase C replaces this tip.
+          reviewNudge: false,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
       });
