@@ -2,12 +2,12 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "reac
 import { Pressable, View } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { useRpc } from "@getpaseo/plugin/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import type { Project, Status, Task } from "../shared/model";
 import { addDays } from "../shared/insights";
 import { ACTIVITY_WEEKS, activityLevel, type Activity } from "../shared/activity";
-import { MIN_CARDS, WINDOW_DAYS, type CardTokens, type WorkflowStats } from "../shared/workflow-stats";
+import { type CardTokens, type WorkflowStats } from "../shared/workflow-stats";
 import type { DigestItem } from "../shared/digest";
 import { compactDuration, compactNumber, percent } from "../shared/usage";
 import { complexityLevel, complexityShare, type DayCard } from "../shared/day-detail";
@@ -16,8 +16,7 @@ import { Collapse, Disclosure, ShowMore } from "./disclosure";
 import { Enter } from "./motion";
 import { localZone, useDayQuery, useDigestQuery, useInsightsQuery, useTokensQuery, useWorkflowInsightsQuery } from "./queries";
 import { lineDiff, skillFile, usageIn, type Finding, type FindingTarget, type WorkflowView } from "../shared/workflow-insights";
-import { ruleSummary } from "../shared/auto-review";
-import { invalidateCardViews } from "./card-detail-query";
+import { readGuardrailLedger } from "./guardrails-ledger";
 import { AiMark, Button, IconButton, Label, Notice, TurnChevron, font, message, noFocusRing, pageBarHeight, radius, relativeTime, space, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { formatLocale, msg, t, tn } from "../shared/i18n";
 import { AgentHabits, habitsSummary } from "./agent-habits";
@@ -34,7 +33,7 @@ export const InsightsPage = memo(function InsightsPage({
   onBack,
   onCreateFromFinding,
   onOpenSettings,
-  onSuggestChecks,
+  onOpenGuardrails,
 }: {
   project: Project;
   tasks: readonly Task[];
@@ -48,8 +47,8 @@ export const InsightsPage = memo(function InsightsPage({
   onCreateFromFinding(finding: Finding): void;
   /** Settings → AI features, where Skills (workflow insights) are configured. */
   onOpenSettings(): void;
-  /** Set up auto review on the rework nudge: Edit project with the history analysis started (AUTO-REVIEW-SPEC §7.1). */
-  onSuggestChecks(): void;
+  /** The Guardrails page, when guardrails are on for the project (GUARDRAILS-SPEC §7.2). */
+  onOpenGuardrails?(): void;
 }) {
   const { colors } = useTheme();
   const insights = useInsightsQuery(project.id, revision, active);
@@ -78,13 +77,12 @@ export const InsightsPage = memo(function InsightsPage({
             <Label muted>{t("Loading insights…")}</Label>
           ) : (
             <>
-              <ReviewNudge projectId={project.id} view={workflow.data} titleOf={titleOf} onOpenTask={onOpenTask} onSetUp={onSuggestChecks} />
+              <GuardrailLedger projectId={project.id} active={active} onOpen={onOpenGuardrails} />
               <Section title={t("Activity")}>
                 <Heatmap activity={data.activity} today={data.today} selected={day} compact={compact} onSelect={select} />
                 <DayPanel projectId={project.id} day={day} today={data.today} activity={data.activity} active={active} titleOf={titleOf} onOpenTask={onOpenTask} onSelect={select} />
               </Section>
               <Skills projectId={project.id} view={workflow.data} error={workflow.error} titleOf={titleOf} onOpenTask={onOpenTask} onOpenSettings={onOpenSettings} />
-              <ReviewSuggestions view={workflow.data} projectId={project.id} titleOf={titleOf} onOpenTask={onOpenTask} />
               <OtherSuggestions projectId={project.id} view={workflow.data} titleOf={titleOf} onOpenTask={onOpenTask} onCreate={onCreateFromFinding} />
               <WorkflowNumbers projectId={project.id} flow={data.workflow} active={active} />
               {!!data.habits && (
@@ -408,7 +406,6 @@ const DayCardRow = memo(function DayCardRow({ first, card, share, title, onOpenT
 // ---- Skills (§2.3) --------------------------------------------------------------------
 
 const isDraft = (f: Finding) => f.target === "skill" && !!f.skill;
-const isReview = (f: Finding) => f.target === "review_rule" || f.target === "review_pause";
 const draftRank = (f: Finding) => (f.skill?.updates ? 0 : 1);
 const confidenceOrder = { high: 0, medium: 1, low: 2 } as const;
 
@@ -676,7 +673,7 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
   const [failed, setFailed] = useState("");
   if (!view) return null;
   const findings = view.findings
-    .filter((f) => !isDraft(f) && !isReview(f))
+    .filter((f) => !isDraft(f) && f.target in targetLabels)
     .sort((a, b) => confidenceOrder[a.confidence] - confidenceOrder[b.confidence] || b.createdAt.localeCompare(a.createdAt));
   const active = findings.filter((f) => f.status !== "dismissed");
   const dismissed = findings.filter((f) => f.status === "dismissed");
@@ -716,138 +713,62 @@ function OtherSuggestions({ projectId, view, titleOf, onOpenTask, onCreate }: { 
   );
 }
 
-// ---- Auto review (AUTO-REVIEW-SPEC §7) ---------------------------------------------------
+// ---- The closed loop (GUARDRAILS-SPEC §7.2) ------------------------------------------------
 
-/** The rework nudge at the top (§7.1): counted by the daemon; Set up auto review starts the history analysis. */
-function ReviewNudge({ projectId, view, titleOf, onOpenTask, onSetUp }: { projectId: string; view: WorkflowView | undefined; titleOf(id: string): string; onOpenTask(id: string): void; onSetUp(): void }) {
+/**
+ * The project's account at the top: deliveries in the last 14 days, the share that passed their first review and the
+ * misfire share (hidden while nothing was failed by judgement), then this week's guardrail changes, each opening the
+ * Guardrails page. Read once per opening; hidden when the daemon cannot answer.
+ */
+function GuardrailLedger({ projectId, active, onOpen }: { projectId: string; active: boolean; onOpen?(): void }) {
   const { colors } = useTheme();
-  const dismiss = useRpc(rpc.dismissReviewNudge);
-  const client = useQueryClient();
-  const nudge = view?.reviewNudge;
-  if (!nudge) return null;
-  const notNow = async () => {
-    await dismiss({ projectId }).catch(() => undefined);
-    await client.invalidateQueries({ queryKey: ["flowly", "workflow-insights", projectId] });
-  };
+  const read = useRpc(readGuardrailLedger);
+  const ledger = useQuery({
+    queryKey: ["flowly", "insights-guardrails", projectId],
+    queryFn: () => read({ projectId, tz: localZone() }),
+    enabled: active,
+    staleTime: 5 * 60_000,
+    retry: false,
+  }).data;
+  if (!ledger || !ledger.deliveries) return null;
+  const numbers = [
+    tn(ledger.deliveries, "{n} delivery", "{n} deliveries"),
+    ledger.reviewed ? t("{share} passed the first review", { share: percent(ledger.firstPass / ledger.reviewed) }) : "",
+    ledger.judged ? t("{share} misfires", { share: percent(ledger.misfires / ledger.judged) }) : "",
+  ].filter(Boolean);
+  const c = ledger.changes;
+  const changes = [
+    c.learned ? tn(c.learned, "{n} guideline learned", "{n} guidelines learned") : "",
+    c.widened ? tn(c.widened, "{n} widened", "{n} widened") : "",
+    c.revived ? tn(c.revived, "{n} revived", "{n} revived") : "",
+    c.retired ? tn(c.retired, "{n} retired", "{n} retired") : "",
+    c.observing ? tn(c.observing, "{n} command observing", "{n} commands observing") : "",
+  ].filter(Boolean);
   return (
-    <View style={{ gap: space[2], padding: space[3], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border }}>
-      <Label medium size={font.md}>
-        {t("Of the {delivered} cards delivered in the last 14 days, you sent {reworked} back to the agent after delivery.", { delivered: nudge.delivered, reworked: nudge.reworked })}
-      </Label>
-      <View style={{ gap: space[1] }}>
-        {nudge.cards.map((c) => (
-          <View key={c.id} style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
-            <TaskChip title={titleOf(c.id) || c.title} onPress={() => onOpenTask(c.id)} />
-            {!!c.quote && (
-              <Label muted size={font.sm} lines={1}>
-                {`「${c.quote}」`}
+    <Section title={t("Last 14 days")}>
+      <Label size={font.md}>{numbers.join(" · ")}</Label>
+      {!!changes.length && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: space[1.5], rowGap: space[1] }}>
+          <Label muted size={font.sm} selectable={false}>{t("This week:")}</Label>
+          {changes.map((text, i) => (
+            <Pressable key={text} accessibilityRole={onOpen ? "link" : undefined} disabled={!onOpen} onPress={onOpen} style={noFocusRing}>
+              <Label size={font.sm} color={onOpen ? colors.accent : undefined} muted={!onOpen} selectable={false}>
+                {i < changes.length - 1 ? `${text} ·` : text}
               </Label>
-            )}
-          </View>
-        ))}
-      </View>
-      <Label muted size={font.sm}>
-        {t("Auto review can catch these before they reach you and send them back to the agent.")}
-      </Label>
-      <View style={{ flexDirection: "row", gap: space[2], flexWrap: "wrap" }}>
-        <Button small primary onPress={onSetUp}>
-          {t("Set up auto review")}
-        </Button>
-        <Button small quiet onPress={() => void notNow()}>
-          {t("Not now")}
-        </Button>
-      </View>
-    </View>
-  );
-}
-
-/** Checks to add and checks to pause (§7.2), after Skills; nothing when there are none. */
-function ReviewSuggestions({ projectId, view, titleOf, onOpenTask }: { projectId: string; view: WorkflowView | undefined; titleOf(id: string): string; onOpenTask(id: string): void }) {
-  const { colors } = useTheme();
-  const add = useRpc(rpc.addReviewCheck);
-  const pause = useRpc(rpc.pauseReviewCheck);
-  const setStatus = useRpc(rpc.setWorkflowFinding);
-  const client = useQueryClient();
-  const toast = useToast();
-  const [busy, setBusy] = useState("");
-  const open = (view?.findings || []).filter((f) => isReview(f) && f.status === "open");
-  if (!view || !open.length) return null;
-  const act = async (f: Finding, action: () => Promise<unknown>) => {
-    setBusy(f.id);
-    try {
-      await action();
-    } catch (e) {
-      toast.show(message(e), { variant: "error" });
-    } finally {
-      setBusy("");
-      await client.invalidateQueries({ queryKey: ["flowly", "workflow-insights", projectId] });
-      await invalidateCardViews(client);
-    }
-  };
-  return (
-    <Section title={t("Auto review")} ai>
-      <Panel>
-        {open.map((f, i) => (
-          <View key={f.id} style={{ gap: space[1.5], padding: space[3], borderTopWidth: i ? 1 : 0, borderColor: colors.border }}>
-            <Label medium size={font.md}>
-              {f.target === "review_pause" ? t("{name} passed all {n} reviews. Pause it to save tokens?", { name: f.title, n: f.reviews ?? 0 }) : f.title}
-            </Label>
-            {f.cards.length > 0 && (
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
-                {f.cards.slice(0, 6).map((id) => (
-                  <TaskChip key={id} title={titleOf(id)} onPress={() => onOpenTask(id)} />
-                ))}
-              </View>
-            )}
-            {!!f.evidence && (
-              <Label muted size={font.sm}>
-                {f.evidence}
-              </Label>
-            )}
-            {f.rule && (
-              <Label size={font.sm} mono={f.rule.kind === "command"}>
-                {ruleSummary(f.rule)}
-              </Label>
-            )}
-            <View style={{ flexDirection: "row", gap: space[2], flexWrap: "wrap" }}>
-              {f.target === "review_rule" ? (
-                <Button small primary icon="Plus" disabled={busy === f.id} onPress={() => void act(f, () => add({ findingId: f.id }))}>
-                  {t("Add check")}
-                </Button>
-              ) : (
-                <Button small primary disabled={busy === f.id} onPress={() => void act(f, () => pause({ findingId: f.id }))}>
-                  {t("Pause")}
-                </Button>
-              )}
-              <Button small quiet disabled={busy === f.id} onPress={() => void act(f, () => setStatus({ projectId, findingId: f.id, status: "dismissed", expectedRevision: view.revision }))}>
-                {t("Dismiss")}
-              </Button>
-            </View>
-          </View>
-        ))}
-      </Panel>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </Section>
   );
 }
 
-/** Review rounds, one-pass share and tokens per card of the last 7 days, folded (§2.5). */
+/** Rounds and tokens per model of the last 7 days, folded; the summary line gave way to the closed loop (GUARDRAILS-SPEC §7.2). */
 function WorkflowNumbers({ projectId, flow, active }: { projectId: string; flow: WorkflowStats; active: boolean }) {
-  const [open, setOpen] = useState(true);
-  const tokens = useTokensQuery(projectId, active);
-  const perCard = tokens.data?.perCard;
-  const summary =
-    flow.finished < MIN_CARDS
-      ? tn(WINDOW_DAYS, "Too few cards finished in the last {n} day", "Too few cards finished in the last {n} days")
-      : [
-          tn(flow.finished, "Last 7 days: {n} card finished", "Last 7 days: {n} cards finished"),
-          tn(flow.rounds ?? 0, "median {n} review round", "median {n} review rounds", { n: fmt(flow.rounds) }),
-          t("{share} in one pass", { share: flow.onePassShare === null ? "—" : percent(flow.onePassShare) }),
-          tokens.error ? "" : t("{n} tokens per card", { n: tokens.data ? (perCard == null ? "—" : compactNumber(perCard)) : "…" }),
-        ]
-          .filter(Boolean)
-          .join(" · ");
+  const [open, setOpen] = useState(false);
+  const tokens = useTokensQuery(projectId, active && open);
   return (
-    <Disclosure title={t("Workflow")} flush titleMinWidth={FOLDED_TITLE_WIDTH} summary={summary} open={open} onChange={setOpen}>
+    <Disclosure title={t("Workflow")} flush titleMinWidth={FOLDED_TITLE_WIDTH} open={open} onChange={setOpen}>
       {flow.models.length > 0 ? (
         <View style={{ paddingTop: space[1] }}>
           <Panel>
@@ -1014,14 +935,13 @@ function DigestLine({ item, title, onOpenTask }: { item: DigestItem; title: stri
   );
 }
 
-const targetLabels: Record<FindingTarget, string> = {
+/** Auto review findings are gone (GUARDRAILS-SPEC §7.2); any left over are not listed. */
+const targetLabels: Partial<Record<FindingTarget, string>> = {
   paseo_script: msg("paseo.json script"),
   worktree_setup: msg("Worktree setup"),
   repo_tool: msg("Repo tool"),
   agents_md: msg("AGENTS.md"),
   skill: msg("Skill"),
-  review_rule: msg("Auto review"),
-  review_pause: msg("Auto review"),
 };
 const confidenceLabels: Record<Finding["confidence"], string> = { high: msg("High confidence"), medium: msg("Medium confidence"), low: msg("Low confidence") };
 
@@ -1096,7 +1016,7 @@ function FindingRow({
         <TurnChevron open={open} size={14} color={colors.foregroundMuted} />
         <View style={{ paddingHorizontal: space[2], height: touch ? 22 : 20, justifyContent: "center", borderRadius: radius.full, backgroundColor: colors.surface2 }}>
           <Label size={font.xs} lines={1} selectable={false}>
-            {t(targetLabels[finding.target])}
+            {t(targetLabels[finding.target] ?? "")}
           </Label>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>

@@ -21,7 +21,6 @@ import {
   type Project,
   type Task,
   type Status,
-  autoReviewLimits,
 } from "../shared/model";
 import { Theme, useTheme, Button, IconButton, Field, Choices, Notice, Label, Row, Actions, Toggle, message, basename, font, radius, space, relativeTime } from "./ui";
 import { priorityLabels } from "./status";
@@ -37,14 +36,14 @@ import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
 import { tagValues } from "../shared/tags";
 import { autoReviewOf } from "../shared/auto-review";
-import { fromEditRules, toEditRules } from "./review-rules";
-import { AutoReviewSection, type ReviewEdit } from "./review-settings";
+import { AutoReviewSection, autoReviewPatch, type ReviewEdit } from "./review-settings";
 import { TagEditor } from "./tag-input";
 import { useStableCallback } from "./stable";
 import { ExternalChip, ExternalPicker, connectionsByFamily, familyNames, pickKey, useConnections } from "./connectors";
 import { BrandIcon } from "./brand-icons";
 import { connectorFamilies, connectorLimits, familyOf, type ConnectorFamily, type ConnectorProvider, type ExternalSummary } from "../shared/connectors";
 
+const newProjectReview: ReviewEdit = { on: true, rounds: "2" };
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 export function ProjectForm({
@@ -54,14 +53,11 @@ export function ProjectForm({
   onShowArchived,
   onClose,
   onSaved,
-  onOpenTask,
-  analyzeReview,
+  reviewOn,
 }: {
   project?: Project;
-  /** Opens a card on the board (Adjust with AI, AUTO-REVIEW-SPEC §6.3). */
-  onOpenTask?: (taskId: string) => void;
-  /** Opened to suggest checks from past cards (What's new, the Insights nudge): Auto review first, analysis started (§6.2). */
-  analyzeReview?: boolean;
+  /** Opened from What's new to turn Auto review on: the section first, its switch on (GUARDRAILS-SPEC §10). */
+  reviewOn?: boolean;
   /** Live cards per lane, so lanes in use can't be turned off. */
   laneCounts?: Partial<Record<Status, number>>;
   /** The board's Show archived view setting; edited here, stored with Save. */
@@ -92,11 +88,8 @@ export function ProjectForm({
     [workpad, setWorkpad] = useState(project?.workpad !== false),
     [workflowInsights, setWorkflowInsights] = useState(project?.workflowInsights !== false),
     [memory, setMemory] = useState(project?.memory !== false),
-    [review, setReview] = useState<ReviewEdit>(() => {
-      const config = autoReviewOf(project);
-      return { on: config.enabled, goal: config.goal, rules: toEditRules(config.rules), guidance: config.guidance ?? "", rounds: String(config.maxRounds) };
-    }),
-    [settingUp, setSettingUp] = useState(false),
+    // A new project starts with Auto review on (GUARDRAILS-SPEC §8, D1).
+    [review, setReview] = useState<ReviewEdit>(() => (project ? { on: autoReviewOf(project).enabled, rounds: String(autoReviewOf(project).maxRounds) } : newProjectReview)),
     [agentModel, setAgentModel] = useState<AgentModel | null>(project?.agentModel ?? null),
     [archivedShown, setArchivedShown] = useState(!!showArchived),
     [lanes, setLanes] = useState<Lane[]>(() => projectLanes(project)),
@@ -120,49 +113,13 @@ export function ProjectForm({
     staleTime: 0,
   });
   const restoring = !!found && !found.conflict && !startEmpty;
-  const setupCard = useRpc(rpc.reviewSetupCard);
-  const toast = useToast();
-  // Adjust with AI (AUTO-REVIEW-SPEC §6.3): open the project's setup card, creating it and its session the first time.
-  async function setUpWithAi() {
-    if (!project) return;
-    setSettingUp(true);
-    try {
-      const result = await setupCard({ projectId: project.id });
-      if (result.sessionError) toast.error(t("Task created, but the agent did not start: {error}. Start it from the task.", { error: result.sessionError }));
-      onOpenTask?.(result.taskId);
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      setSettingUp(false);
-    }
-  }
-  const reviewSection = project ? (
-    <AutoReviewSection
-      project={initialProject ?? project}
-      value={review}
-      onChange={setReview}
-      analyze={analyzeReview}
-      onAdjust={() => void setUpWithAi()}
-      adjusting={settingUp || !onOpenTask}
-      onApplied={() => onSaved(project.id)}
-      onOpenTask={onOpenTask}
-    />
-  ) : null;
+  const reviewSection = <AutoReviewSection project={project} value={review} onChange={setReview} switchOn={reviewOn} />;
   async function save() {
     setPending(true);
     setError("");
     try {
       if (project) {
-        // The checks as edited (AUTO-REVIEW-SPEC §9.3); P1 checks are saved back as rules here (§8.1 migration).
-        const edited = fromEditRules(review.rules);
-        if ("problem" in edited) {
-          setError(edited.problem);
-          return;
-        }
-        const guidance = review.guidance.trim().slice(0, autoReviewLimits.guidance);
-        // Same key order as autoReviewOf, so an unchanged section is not sent.
-        const shown = { enabled: review.on, maxRounds: Number(review.rounds), goal: review.goal, rules: edited.rules, ...(guidance ? { guidance } : {}) };
-        const autoReview = { enabled: review.on, maxRounds: Number(review.rounds), rules: edited.rules, ...(review.goal ? {} : { goal: false }), ...(guidance ? { guidance } : {}) };
+        const stored = autoReviewOf(project);
         let saved = await update({
           id: project.id,
           revision: project.revision,
@@ -172,7 +129,7 @@ export function ProjectForm({
           ...(workpad !== (project.workpad !== false) ? { workpad } : {}),
           ...(workflowInsights !== (project.workflowInsights !== false) ? { workflowInsights } : {}),
           ...(memory !== (project.memory !== false) ? { memory } : {}),
-          ...(JSON.stringify(shown) !== JSON.stringify(autoReviewOf(project)) ? { autoReview } : {}),
+          ...(review.on !== stored.enabled || Number(review.rounds) !== stored.maxRounds ? { autoReview: autoReviewPatch(review) } : {}),
           ...(JSON.stringify(lanes) !== JSON.stringify(projectLanes(project)) ? { lanes } : {}),
           ...(JSON.stringify(agentModel) !== JSON.stringify(project.agentModel ?? null) ? { agentModel } : {}),
         });
@@ -196,6 +153,9 @@ export function ProjectForm({
               primaryPath,
               ...(source === "native" && nativeId ? { paseoProjectId: nativeId } : {}),
             });
+      // projects.create turns Auto review on with 2 rounds; anything else is saved right after.
+      if (review.on !== newProjectReview.on || review.rounds !== newProjectReview.rounds)
+        await update({ id: result.id, revision: result.revision, autoReview: autoReviewPatch(review) });
       onSaved(result.id);
     } catch (e) {
       setError(message(e));
@@ -214,7 +174,7 @@ export function ProjectForm({
       <Modal.Content>
         <Theme.Provider value={theme}>
         <View style={{ gap: 16 }}>
-          {project && analyzeReview && reviewSection}
+          {project && reviewOn && reviewSection}
           {!restoring && <Field title={t("Name")} value={title} onChange={setTitle} placeholder={t("Project name")} />}
           {!restoring && (
             <Field
@@ -331,12 +291,12 @@ export function ProjectForm({
           {project && (
             <Toggle
               title={t("Card workpad")}
-              detail={t("Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.")}
+              detail={t("Agents keep an acceptance list on each card. Off hides it; what agents wrote is kept.")}
               value={workpad}
               onChange={setWorkpad}
             />
           )}
-          {project && !analyzeReview && reviewSection}
+          {!restoring && !(project && reviewOn) && reviewSection}
           {project && (
             <Toggle
               title={t("Skills")}
@@ -346,8 +306,8 @@ export function ProjectForm({
           )}
           {project && (
             <Toggle
-              title={t("Project memory")}
-              detail={t("Share confirmed decisions and pitfalls with new sessions on this project. Off stops injecting them and stops new suggestions; what is remembered is kept.")}
+              title={t("Guardrails")}
+              detail={t("Learn from what you send cards back for, and check the next cards for it.")}
               value={memory}
               onChange={setMemory}
             />

@@ -6,8 +6,8 @@ export interface WhatsNewItem {
   icon: string;
   /** One sentence, msg()-marked; translated at render. */
   text: string;
-  /** `review-analysis`: the current project's Edit project with the auto review history analysis started (AUTO-REVIEW-SPEC §6.2). */
-  action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" } | { label: string; to: "review-analysis" };
+  /** `auto-review`: the current project's Edit project with Auto review switched on (GUARDRAILS-SPEC §10). */
+  action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" } | { label: string; to: "auto-review" };
 }
 
 export interface WhatsNewRelease {
@@ -23,16 +23,21 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
-    // SEARCH-SPEC §8.
+    // SEARCH-SPEC §8, GUARDRAILS-SPEC §10.
     version: "1.8.0",
     items: [
       { icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") },
-      // AUTO-REVIEW-SPEC §9.6 (D15): a new project setting, off by default; the button suggests checks from past cards.
+      // GUARDRAILS-SPEC §10 (D1): on for new projects; existing ones turn it on here.
       {
         icon: "ShieldCheck",
-        text: msg("Auto review: deliveries are checked before they reach you, and go back to the agent when they fall short. Flowly can suggest the checks from your past cards."),
-        action: { label: msg("Suggest checks from past cards"), to: "review-analysis" },
+        text: msg("Auto review checks every delivery before it reaches you and sends it back to the agent when it falls short. On for new projects."),
+        action: { label: msg("Turn on for this project"), to: "auto-review" },
       },
+      {
+        icon: "Undo2",
+        text: msg("Flowly learns from what you send cards back for: the second card with the same problem turns it into a project guideline, checked on every delivery it applies to."),
+      },
+      { icon: "BookMarked", text: msg("Memory no longer needs confirming; what agents remember takes effect at once and retires by itself when unused.") },
     ],
   },
   {
