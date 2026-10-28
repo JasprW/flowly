@@ -221,6 +221,7 @@ CardItem {
   ```
 
   指令：这一轮用户是否在纠正已交付的工作（不是追加需求、不是闲聊）？是，用一句可判断的话归纳它（`new`）；它和列表里某一条是同一件事时给出那条 id（`same`），文字原样用那一条。不是纠正回 `none`。解析容错同 TASK-SUMMARY-SPEC §3；缺字段按 `none`。
+  纠正的判定（2026-10-29 实机验证后补）：用户说交付的改动“也要”“还要”“漏了”“应该”做某件本可以在这次改动里一起做的事（“新接口也要写进 README”“新文案也要进所有语言”），就是纠正，不要求用户写“你做错了”；“追加需求”只指和这次改动无关的新工作（另一个功能、另一个页面）。短句、没有主语、没有否定词都不影响判定。
 
 零额外模型调用。关闭了卡片总结的项目没有即时学习，只在每周运行里补（§7.3）。
 
@@ -312,8 +313,12 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
 
 评审开始时 daemon 算一次并写进评审记录：
 
-- `files`、`lines`：`git diff HEAD --numstat` 加最近 5 个提交（同现有 diff 取法）的增删行之和；二进制文件计 0。
-- `size`：`s` ≤50 行，`m` ≤400 行，`l` >400 行。
+- 取本卡自己的改动（2026-10-29 实机验证后改，之前是“`git diff HEAD` 加最近 5 个提交”，在 worktree 卡上会把基线分支的历史算进来，每张卡都成了 `m`）：
+  - worktree 卡（`task.baseRef` 非空且能解析）：`git merge-base <baseRef> HEAD` 为基点，`git diff <基点> --numstat` 覆盖分支以来已提交与未提交的改动；
+  - 目录卡或基点解析失败：`git diff HEAD --numstat` 加最近 5 个提交（旧取法，共享目录里别的卡的改动会算进来，见 D6）；
+  - 两种都加上未跟踪的新文件（`git ls-files --others --exclude-standard`）：文本文件按行数计，二进制计 0，不改索引（不做 `git add -N`）。
+- `files`、`lines`：上述增删行之和；`size`：`s` ≤50 行，`m` ≤400 行，`l` >400 行。
+- 评审 session 读的 diff 用同一基点（第 1 轮 `git diff <基点>`，目录卡为 `git diff HEAD` 加最近 5 个提交），未跟踪的新文件以 `git diff --no-index /dev/null <file>` 附在后面；第 2 轮起 `git diff <上一轮 sha>` 加当时仍未跟踪的新文件；总长仍截在 64 KiB。
 - 本卡最近一次交付的形状也写进 `task.review.shape`，供 §4.3 新项使用。
 - 共享工作区（非 worktree）里别的卡的改动会算进来，形状可能偏大；评审记录标 `shared`，不另做处理（D6）。
 
