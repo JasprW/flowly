@@ -76,7 +76,7 @@ export const whatsNew: { version: string; items: WhatsNewItem[] }[] = [ /* 新�
 | 图标 | 文案 | 按钮 |
 | --- | --- | --- |
 | `Search` | 搜索过去的卡片、总结、笔记、Workpad、想法和交付物；agent 也能搜（[SEARCH-SPEC](SEARCH-SPEC.md) §8） | — |
-| `ShieldCheck` | Auto review checks every delivery before it reaches you and sends it back to the agent when it falls short. On for new projects.（[GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §10） | **Turn on for this project**（`to: "auto-review"`：当前项目的 Edit project，Auto review 区块置顶、开关已打开并识别命令；取代 AUTO-REVIEW-SPEC 的 `review-analysis`） |
+| `ShieldCheck` | Auto review checks every delivery before it reaches you and sends it back to the agent when it falls short. On for new projects.（[GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §10） | **Turn on for this project**（`to: "auto-review"`：当前项目的 Edit project，Auto review 区块置顶、开关已打开；保存后由 daemon 识别命令；取代 AUTO-REVIEW-SPEC 的 `review-analysis`） |
 | `Undo2` | Flowly learns from what you send cards back for: the second card with the same problem turns it into a project guideline, checked on every delivery it applies to. | — |
 | `BookMarked` | Memory no longer needs confirming; what agents remember takes effect at once and retires by itself when unused. | — |
 
