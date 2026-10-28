@@ -9,6 +9,7 @@ import {
   guardrailsSection,
   guidelineToDisplace,
   inScope,
+  liveEntry,
   migrateToGuardrails,
   noteToDisplace,
   parseCorrection,
@@ -83,6 +84,16 @@ describe("correction parsing (§4.2)", () => {
     expect(correctionOf('{"update": false}')).toEqual({ kind: "none" });
     expect(correctionOf("no json")).toEqual({ kind: "none" });
     expect(correctionOf(null)).toEqual({ kind: "none" });
+  });
+  test("a superseded or merged entry resolves to the live end of its chain; a cycle or a missing successor stops", () => {
+    const a = guideline("a", { state: "archived", stateReason: "merged", supersededBy: "b" });
+    const b = guideline("b", { state: "archived", stateReason: "superseded", supersededBy: "c" });
+    const c = guideline("c");
+    expect(liveEntry([a, b, c], a)).toBe(c);
+    expect(liveEntry([a, b], a)).toBe(b);
+    const x = guideline("x", { supersededBy: "y" }), y = guideline("y", { supersededBy: "x" });
+    expect(liveEntry([x, y], x)).toBe(y);
+    expect(liveEntry([c], c)).toBe(c);
   });
   test("short ids resolve by a unique prefix of at least 6 characters", () => {
     const list = [{ id: "abcdef12-0000" }, { id: "abcdef34-0000" }, { id: "99999999-0000" }];

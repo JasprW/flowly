@@ -392,6 +392,19 @@ export function resolveShortId<T extends { id: string }>(ref: string, candidates
   return found.length === 1 ? found[0] : null;
 }
 
+/** The entry at the end of a `supersededBy` chain (a merged or replaced entry stands for its successor); cycles stop. */
+export function liveEntry(entries: readonly GuardrailEntry[], entry: GuardrailEntry): GuardrailEntry {
+  const seen = new Set([entry.id]);
+  let current = entry;
+  for (let next = current.supersededBy; next && !seen.has(next); next = current.supersededBy) {
+    const found = entries.find((e) => e.id === next);
+    if (!found) break;
+    seen.add(found.id);
+    current = found;
+  }
+  return current;
+}
+
 /**
  * The `Guardrails` section of a rework turn's summarizer input (§4.2, B2): at most 60 lines of at most 120
  * characters, in this order until full: active guidelines in this card's scope; this card's open items; active

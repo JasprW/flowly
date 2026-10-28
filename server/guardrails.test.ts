@@ -170,6 +170,22 @@ test("card A is Done before card B is sent back for the same problem: A's item s
   ]);
 });
 
+test("a correction that matches a merged guideline counts on the live one, which the old one is not revived over (§4.3)", async () => {
+  const x = await setup();
+  await seed(x, [
+    entry("aaaaaaaa-old", { text: "New strings go in every catalog", state: "archived", stateReason: "merged", supersededBy: "bbbbbbbb-new" }),
+    entry("bbbbbbbb-new", { text: "Every new UI string is in all language catalogs" }),
+  ]);
+  await x.learn("t", { kind: "same", matches: "aaaaaaaa" });
+  // By text too.
+  await x.learn("t", { kind: "new", text: "New strings go in every catalog" });
+  const s = await x.state();
+  expect(s.entries[0]).toMatchObject({ state: "archived", stateReason: "merged", revision: 1 });
+  expect(s.entries[1].sources.map((src) => src.taskId)).toEqual(["t"]);
+  expect(s.entries[1].revision).toBe(3);
+  expect(s.items).toEqual([]);
+});
+
 test("a disputed finding the user sends the card back for counts as caught, not missed, and the dispute ends (§6.6)", async () => {
   const x = await setup();
   await seed(x, [entry("cccccccc-1")]);

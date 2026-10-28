@@ -17,6 +17,7 @@ import {
   guidelineToDisplace,
   hasSecret,
   inScope,
+  liveEntry,
   migrateToGuardrails,
   noteToDisplace,
   openItemOverflow,
@@ -565,7 +566,8 @@ export class GuardrailsService {
         await pruneArchived(this.store.directory, state, project.id, at);
         return { value: { events, endedDisputes }, changed: true };
       }
-      const guideline = target;
+      // A merged or superseded guideline stands for the one that replaced it; that one is counted, never the old one revived.
+      const guideline = liveEntry(state.entries, target);
       if (disputed.has(guideline.id)) {
         // The dispute failed: the user sent the card back for exactly this (§6.6).
         endedDisputes.push(guideline.id);
