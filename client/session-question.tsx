@@ -1,5 +1,5 @@
 import { memo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, View, useWindowDimensions } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import {
   allAnswered,
@@ -41,27 +41,20 @@ type Respond = (request: PendingRequest, reply: PermissionReply) => void;
 
 /**
  * The session's open agent questions and permission requests, answered in
- * place (SESSION-QUESTION-SPEC). Above the composer (`bounded`) a tall form
- * scrolls inside a box of up to 60% of the window; in the drawer it grows with
- * the drawer's own scroll.
+ * place (SESSION-QUESTION-SPEC). It sits in the surrounding scroll (the
+ * transcript's, or the drawer's), so a tall form scrolls with it.
  */
 export const PendingRequests = memo(function PendingRequests({
   requests,
   disabled,
-  compact,
-  bounded,
   onRespond,
 }: {
   requests: readonly PendingRequest[];
   disabled: boolean;
-  compact: boolean;
-  bounded: boolean;
   onRespond: Respond;
 }) {
   const { colors } = useTheme();
-  const { height } = useWindowDimensions();
   if (!requests.length) return null;
-  const body = { padding: space[3], gap: space[3] };
   const forms = requests.map((request) => {
     const questions = parseQuestions(request);
     return questions ? (
@@ -75,7 +68,6 @@ export const PendingRequests = memo(function PendingRequests({
       <View
         testID="session-pending-requests"
         style={{
-          ...(bounded ? { maxHeight: Math.max(compact ? 320 : 420, Math.round(height * 0.6)) } : {}),
           borderRadius: radius.lg,
           borderWidth: 1,
           borderColor: tint(colors.statusWarning, 0.45),
@@ -83,13 +75,7 @@ export const PendingRequests = memo(function PendingRequests({
           overflow: "hidden",
         }}
       >
-        {bounded ? (
-          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={body}>
-            {forms}
-          </ScrollView>
-        ) : (
-          <View style={body}>{forms}</View>
-        )}
+        <View style={{ padding: space[3], gap: space[3] }}>{forms}</View>
       </View>
     </Enter>
   );
