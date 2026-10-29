@@ -17,6 +17,7 @@
 | D7 | 淘汰 | 只用退卡、不退、移到 Done 三个信号自动做，没有“不算问题”按钮，删除永远不是必需的（§6.6） |
 | D8 | 命令检查的更新 | 每周重识别加使用证据，新命令先观察 3 次评审（§4.5） |
 | D9 | Insights 与 workpad | 一份账两个视图：workpad 是卡的账，Insights 是项目的账（§7） |
+| D10（2026-10-29 试用后） | Memory 保留原名和独立入口，不并入 Guardrails 页 | 是。备忘和护栏关联不大，强行合并不合理；数据仍存在 guardrails.json（kind `note`），只是入口、页面和文案分开。Guardrails 页只剩 Commands、Guidelines |
 
 已有的决定仍然有效：AUTO-REVIEW-SPEC D1–D6、D9、D12（评审的尺子是用户的话，不是 agent 的自报）、D17。
 
@@ -457,17 +458,24 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 
    运行不能新建准则或命令；输出里出现这类内容时丢弃。
 
-### 7.4 Guardrails 页
+### 7.4 Guardrails 页与 Memory 页（D10）
 
-取代 Memory 页。入口：总览栏 **Guardrails** chip（有 `observing` 命令或本周新增时显示数量），快捷键 `M` 不变；项目菜单同名。整页，对齐 Ideas / Insights。
+**Guardrails 页**。入口：总览栏 **Guardrails** chip（有 `observing` 命令或本周新增时显示数量），快捷键 `G`；项目菜单同名。整页，对齐 Ideas / Insights。
 
-- 顶部三个分段：**Commands**、**Guidelines**、**Notes**；每段内按 active（observing）、paused、archived 分组，archived 默认收起。
+- 顶部两个分段：**Commands**、**Guidelines**；每段内按 active（observing）、paused、archived 分组，archived 默认收起。
 - 命令行：名称、命令原文、状态（observing 时显示 `observing 1/3`）、最近结果；菜单：Edit、Pause / Resume、Delete。段尾 **Add command**。
 - 准则行：原话（引用样式）、归纳句、范围 chip（类型、大小；`all` 不显示）、`caught 4 · missed 1 · misfire 0`、来源卡（可点）；菜单：Edit、Pause / Resume、Archive、Delete。paused 和 archived 的显示 `stateReason`。不提供 Add：准则只从退卡长出来；用户想加规则就在卡里退回时说。
-- 备忘行：同旧 Memory 页的条目（标题、正文、标签、Pin、来源、Used）；菜单：Edit、Pin、Copy as AGENTS.md rule（归档为 `promoted`）、Archive、Delete。段尾 **Add note**。
+- 空状态：“Nothing learned yet. Send a card back with what is wrong; Flowly checks the next cards for it.”
+
+**Memory 页**（保留旧名 Memory、旧入口；条目是 `kind: "note"` 的 entry）。入口：总览栏 **Memory** chip（本周新增数，没有时不显示数字），快捷键 `M`；项目菜单同名。
+
+- 工具条一行：类型过滤 chips（All、Decision、Pitfall、Convention、Contact，单选）、排序（**Newest**、**Most used**、**Recently used**；pinned 始终在前）、宽屏时布局切换（**List** / **Grid**）。过滤、排序、布局每台机器记住（`board-view` 设置：`memoryKind`、`memorySort`、`memoryLayout`）。
+- 布局：List 同旧 Memory 页一行一条；Grid 是瀑布流（Keep 式卡片）：列数按可用宽度算（每列 ≥ 280，最多 4 列），条目按估算高度放进当前最短的一列；紧凑布局（手机、窄栏）只有 List，切换不显示。
+- 每条按类型 color code：卡片左侧 3 像素色条加类型标签同色，四种类型各用一种主题色（不自定义颜色；主题没有足够区分度时退回到灰度）。标题、正文、标签、Pin、来源卡、Used 同旧页；菜单：Edit、Pin / Unpin、Copy as AGENTS.md rule（归档为 `promoted`）、Archive、Delete。archived 一组默认收起。页尾 / 工具条 **Add memory**。
 - 去掉：To review 区、Confirm / Dismiss、Clean up 筛选、Make room、容量提示、Find memories 按钮（复盘仍自动跑）。
 - 卡片侧栏的 Memory 段去掉；本卡产生的备忘和专属项在 Workpad 段的 This card 里显示。
-- 空状态：“Nothing learned yet. Send a card back with what is wrong; Flowly checks the next cards for it.”
+- 文案：用户可见处一律叫 Memory / memory（不叫 Notes）；agent 面（skill、get_task、工具说明）也用 memory。
+- 空状态：“No memory yet. Agents remember decisions, pitfalls and conventions as they work; you can add one too.”
 - 动效、输入、无障碍沿用 PROJECT-MEMORY-SPEC §8.1。
 
 ### 7.5 RPC
