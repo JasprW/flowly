@@ -470,7 +470,7 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 **Memory 页**（保留旧名 Memory、旧入口；条目是 `kind: "note"` 的 entry）。入口：总览栏 **Memory** chip（本周新增数，没有时不显示数字），快捷键 `M`；项目菜单同名。
 
 - 工具条一行：类型过滤 chips（All、Decision、Pitfall、Convention、Contact，单选）、排序（**Newest**、**Most used**、**Recently used**；pinned 始终在前）、宽屏时布局切换（**List** / **Grid**）。过滤、排序、布局每台机器记住（`board-view` 设置：`memoryKind`、`memorySort`、`memoryLayout`）。
-- 布局：List 同旧 Memory 页一行一条；Grid 是瀑布流（Keep 式卡片）：列数按可用宽度算（每列 ≥ 280，最多 4 列），条目按估算高度放进当前最短的一列；紧凑布局（手机、窄栏）只有 List，切换不显示。
+- 布局：List 同旧 Memory 页一行一条；Grid 是瀑布流（Keep 式卡片）：列数按可用宽度算（`clamp(floor(宽度/280), 2, 4)`，宽屏至少 2 列，最多 4 列），条目按估算高度放进当前最短的一列；紧凑布局（手机、窄栏）只有 List，切换不显示。
 - 每条按类型 color code：卡片左侧 3 像素色条加类型标签同色，四种类型各用一种主题色（不自定义颜色；主题没有足够区分度时退回到灰度）。标题、正文、标签、Pin、来源卡、Used 同旧页；菜单：Edit、Pin / Unpin、Copy as AGENTS.md rule（归档为 `promoted`）、Archive、Delete。archived 一组默认收起。页尾 / 工具条 **Add memory**。
 - 去掉：To review 区、Confirm / Dismiss、Clean up 筛选、Make room、容量提示、Find memories 按钮（复盘仍自动跑）。
 - 卡片侧栏的 Memory 段去掉；本卡产生的备忘和专属项在 Workpad 段的 This card 里显示。
@@ -483,7 +483,7 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 | 方法 | 输入 | 行为 |
 | --- | --- | --- |
 | `guardrails.read` | `{ projectId, etag? }` | `{ etag, value?: { entries, items, errors, running: taskId[] } }` |
-| `guardrails.counts` | `{ etag? }` | 总览 chip 用：每项目 observing 命令数与本周新增数 |
+| `guardrails.counts` | `{ etag? }` | 总览 chip 用：每项目 observing 命令数、本周新增准则数（`added`）与本周新建且未归档的备忘数（`notes`，Memory chip 用） |
 | `guardrails.create` | `{ projectId, kind: "command" \| "note", … }` | 人手写命令或备忘，直接 active |
 | `guardrails.update` | `{ id, revision, text?, body?, argv?, timeoutSec?, scope?, tags?, keywords?, pinned?, state?, stateReason? }` | 编辑、暂停、恢复、归档、复活。`revision` 不符 `GUARDRAIL_CONFLICT` |
 | `guardrails.delete` | `{ id, revision }` | 永久删除，写 `removed/` 备份 |
