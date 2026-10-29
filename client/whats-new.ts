@@ -22,9 +22,16 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
-    // SEARCH-SPEC §8.
+    // SEARCH-SPEC §8, CONNECTORS-SPEC §14.
     version: "1.8.0",
-    items: [{ icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") }],
+    items: [
+      { icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") },
+      {
+        icon: "PlugZap",
+        text: msg("Shortcut stories and epics can now be card inputs, next to Jira, Confluence, GitHub, GitLab and Azure DevOps."),
+        action: { label: msg("Open settings"), to: "settings", section: "connections" },
+      },
+    ],
   },
   {
     // INSIGHTS-REDESIGN-SPEC §5: Skills turn on for everyone who never touched the switch.
