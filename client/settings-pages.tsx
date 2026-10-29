@@ -482,7 +482,7 @@ export function MemoryFeatureGroup({ bare = false }: { bare?: boolean }) {
         onChange={(memory) => features.save({ memory })}
       />
       <SettingSwitch
-        title={t("Find notes in finished cards")}
+        title={t("Find memory in finished cards")}
         detail={aiCostText("memoryReview", summaryModelOf(summary.values))}
         value={on && (summary.values?.retroEnabled ?? true)}
         disabled={summary.busy || !on}

@@ -25,6 +25,9 @@ export function OverviewBar({
   guardrailCount,
   onGuardrails,
   guardrailsShortcut,
+  memoryCount,
+  onMemory,
+  memoryShortcut,
 }: {
   overview: BoardOverview;
   nameOf(status: Status): string;
@@ -41,6 +44,10 @@ export function OverviewBar({
   guardrailCount: number | null;
   onGuardrails(): void;
   guardrailsShortcut: string;
+  /** Memory added this week (GUARDRAILS-SPEC §7.4); null when guardrails are off for the project. */
+  memoryCount: number | null;
+  onMemory(): void;
+  memoryShortcut: string;
   /** Jump to a lane (compact: switch tabs; desktop: expand it if collapsed). */
   onLane(status: Status): void;
 }) {
@@ -117,6 +124,15 @@ export function OverviewBar({
             onPress={onGuardrails}
           >
             {guardrailCount ? t("Guardrails {n}", { n: guardrailCount }) : t("Guardrails")}
+          </Chip>
+        )}
+        {memoryCount !== null && (
+          <Chip
+            label={`${memoryCount ? t("Memory: {n} added this week", { n: memoryCount }) : t("Memory")}${memoryShortcut ? ` (${memoryShortcut})` : ""}`}
+            icon={<Icon name="BookMarked" size={13} color={memoryCount ? colors.accent : colors.foregroundMuted} />}
+            onPress={onMemory}
+          >
+            {memoryCount ? t("Memory {n}", { n: memoryCount }) : t("Memory")}
           </Chip>
         )}
         {onInsights && (

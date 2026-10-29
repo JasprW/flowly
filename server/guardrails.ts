@@ -301,18 +301,21 @@ export class GuardrailsService {
       enabled: memoryOn(project),
     };
   }
-  /** The overview chip (§7.4): observing commands and guidelines learned in the last 7 days, per project. */
-  async counts(): Promise<Record<string, { observing: number; added: number }>> {
+  /** The overview chips (§7.4): observing commands and guidelines learned in the last 7 days, and memory added in them, per project. */
+  async counts(): Promise<Record<string, { observing: number; added: number; notes: number }>> {
     const state = await this.store.read();
     const since = this.now() - 7 * 86_400_000;
-    const out: Record<string, { observing: number; added: number }> = {};
+    const out: Record<string, { observing: number; added: number; notes: number }> = {};
     for (const e of state.entries) {
       const observing = e.kind === "command" && e.state === "observing";
-      const added = e.kind === "guideline" && e.by === "learned" && Date.parse(e.createdAt) >= since;
-      if (!observing && !added) continue;
-      const c = (out[e.projectId] ||= { observing: 0, added: 0 });
+      const recent = Date.parse(e.createdAt) >= since;
+      const added = e.kind === "guideline" && e.by === "learned" && recent;
+      const note = e.kind === "note" && e.state !== "archived" && recent;
+      if (!observing && !added && !note) continue;
+      const c = (out[e.projectId] ||= { observing: 0, added: 0, notes: 0 });
       if (observing) c.observing++;
       if (added) c.added++;
+      if (note) c.notes++;
     }
     return out;
   }
@@ -586,7 +589,7 @@ export class GuardrailsService {
       } else {
         checkNote(input.text, input.body || "", input.keywords || []);
         if (own.some((e) => e.kind === "note" && e.state === "active" && titleKey(e.text) === titleKey(input.text))) throw new GuardrailError("MEMORY_DUPLICATE", "This project already has a note with that title.");
-        if (input.pinned && pinnedCount(own) >= guardrailLimits.pinned) throw new GuardrailError("GUARDRAIL_LIMIT", `A project can pin at most ${guardrailLimits.pinned} notes. Unpin one first.`);
+        if (input.pinned && pinnedCount(own) >= guardrailLimits.pinned) throw new GuardrailError("GUARDRAIL_LIMIT", `A project can pin at most ${guardrailLimits.pinned} memories. Unpin one first.`);
         entry = {
           ...base,
           kind: "note",
@@ -633,12 +636,12 @@ export class GuardrailsService {
         checkNote(next.text, next.body || "", next.keywords || []);
         if (titleKey(next.text) !== titleKey(entry.text) && own.some((e) => e.kind === "note" && e.state === "active" && titleKey(e.text) === titleKey(next.text)))
           throw new GuardrailError("MEMORY_DUPLICATE", "This project already has a note with that title.");
-      } else if (input.tags !== undefined || input.keywords !== undefined || input.pinned !== undefined) throw new GuardrailError("INVALID_INPUT", "Only notes have tags, keywords and a pin.");
+      } else if (input.tags !== undefined || input.keywords !== undefined || input.pinned !== undefined) throw new GuardrailError("INVALID_INPUT", "Only memories have tags, keywords and a pin.");
       else if (hasSecret(next.text, next.body)) throw new GuardrailError("MEMORY_SECRET", "This looks like it contains a secret (token, key or password). Guardrails never store credentials.");
       const state2 = input.state ?? entry.state;
       if (state2 === "observing" && entry.kind !== "command") throw new GuardrailError("INVALID_INPUT", "Only commands can be observing.");
       if (next.pinned && !entry.pinned && (state2 !== "active" || pinnedCount(own) >= guardrailLimits.pinned))
-        throw new GuardrailError("GUARDRAIL_LIMIT", `Only active notes can be pinned, at most ${guardrailLimits.pinned} per project. Unpin one first.`);
+        throw new GuardrailError("GUARDRAIL_LIMIT", `Only active memories can be pinned, at most ${guardrailLimits.pinned} per project. Unpin one first.`);
       const live = (s: GuardrailState) => s === "active" || s === "observing";
       if (entry.kind === "command" && live(state2) && !live(entry.state) && commandRoom(state.entries, entry.projectId) <= 0)
         throw new GuardrailError("GUARDRAIL_LIMIT", `A project runs at most ${guardrailLimits.commandsLive} commands. Pause or delete one first.`);

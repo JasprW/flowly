@@ -310,7 +310,9 @@ test("detection adds the found commands as observing, skips names and argv the p
   expect(result.found).toEqual(["Typecheck", "Tests"]);
   expect(result.added.map((e) => [e.text, e.state, e.by, e.observe])).toEqual([["Typecheck", "observing", "detect", { reviews: 0, passed: 0 }]]);
   expect((await x.guardrails.detect("p")).added).toEqual([]);
-  expect(await x.guardrails.counts()).toEqual({ p: { observing: 1, added: 0 } });
+  expect(await x.guardrails.counts()).toEqual({ p: { observing: 1, added: 0, notes: 0 } });
+  await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "decision", text: "Keep argv arrays" });
+  expect(await x.guardrails.counts()).toEqual({ p: { observing: 1, added: 0, notes: 1 } });
 });
 
 test("get_task.guardrails (§5.2): commands, guidelines in the card's current scope and its open items; memory has no candidates", async () => {

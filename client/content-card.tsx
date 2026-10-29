@@ -25,6 +25,7 @@ export function ContentCard({
   after,
   defaultOpen = false,
   openWhen,
+  stripe,
   children,
 }: {
   footer?: ReactNode;
@@ -33,11 +34,13 @@ export function ContentCard({
   defaultOpen?: boolean;
   /** Expands whenever this changes to a value (a search hit on the card); Show less still collapses it. */
   openWhen?: unknown;
+  /** A 3 pt left edge in this color (the Memory page's kind). */
+  stripe?: string;
   children: ReactNode;
 }) {
   const { colors } = useTheme();
   return (
-    <View style={cardFrameStyle(colors)}>
+    <View style={stripe ? [cardFrameStyle(colors), { borderLeftWidth: 3, borderLeftColor: stripe }] : cardFrameStyle(colors)}>
       <View style={{ padding: space[3], paddingBottom: space[3] }}>
         <Clamped background={colors.surface1} footer={footer} defaultOpen={defaultOpen} openWhen={openWhen}>
           {children}

@@ -1,5 +1,12 @@
 # Implementation progress
 
+## Memory gets its own page again (D10) — 2026-10-29
+
+- [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §7.4, D10: the Guardrails page (`client/guardrails.tsx`) keeps Commands and Guidelines only (Notes segment, Add note and note search removed); shortcut `G`. The `note` entries have the Memory page again (`client/memory.tsx`, shortcut `M`, overview chip **Memory** with this week's count, project menu item): kind chips All / Decision / Pitfall / Convention / Contact, sort Newest / Most used / Recently used (pinned first), List / Grid on wide layouts; all three per host in `board-view` (`memoryKind`, `memorySort`, `memoryLayout`). Grid is a masonry of 2–4 columns (one per 280 pt) placed by estimated height into the shortest column; a card keeps its column across refreshes (`client/memory-layout.ts`). Each card has a 3 pt left stripe and kind label in a theme color: Decision `accent`, Pitfall `statusWarning`, Convention `statusSuccess`, Contact `foregroundMuted`.
+- `guardrails.counts` adds `notes` (non-archived notes created in the last 7 days) for the Memory chip. Search's memory group and its Memory results open the Memory page.
+- Wording: Memory / memory instead of notes in the search page, settings (*Find memory in finished cards*), tour More features (new Memory line), README (separate Guardrails and Memory paragraphs, `G` / `M`), daemon pin errors and the Insights material's `## Memory` section; ONBOARDING, ONBOARDING-SETUP, DRAWER, SEARCH specs. No new tip; What's new 1.8.0 already says Memory.
+- Checks: see the commit's delivery note. Unrun: plugin reload, screenshots, phone.
+
 ## Guardrails rework after the live verification — 2026-10-29
 
 Three findings of [the live verification](verification/guardrails-live-2026-10-29/REPORT.md) (items 2.3, 2.6 and the shape note):

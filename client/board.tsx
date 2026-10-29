@@ -103,6 +103,7 @@ import { SearchPage } from "./search-page";
 import { focusOfHit, type DrawerFocus } from "./drawer-focus";
 import { searchSources as allSearchSources, type SearchCard, type SearchHit, type SearchMemoryHit } from "../shared/search";
 import { GuardrailsPage } from "./guardrails";
+import { MemoryPage, type MemoryPrefs } from "./memory";
 import { lastViewedProject, pickProject, rememberViewedProject } from "./project-memory";
 import { ProjectTabs } from "./project-tabs";
 import { RemoveProjectDialog } from "./project-remove";
@@ -332,7 +333,7 @@ function BoardContent(
     [movedToFinished, setMovedToFinished] = useState(false),
     [escapeRequest, setEscapeRequest] = useState<{ taskId: string; key: string } | null>(null),
     // Project-level page over the board area: Insights or Ideas (IDEAS-INBOX-SPEC §3.3).
-    [page, setPage] = useState<"insights" | "ideas" | "guardrails" | "search" | null>(null),
+    [page, setPage] = useState<"insights" | "ideas" | "guardrails" | "memory" | "search" | null>(null),
     // Search page (SEARCH-SPEC §5): the text it opens with and a key that remounts it for a new seed.
     [searchSeed, setSearchSeed] = useState({ text: "", key: 0 }),
     // A search hit for the drawer to land on (DRAWER-SPEC "Focus from search"); any other way of opening a card clears it.
@@ -1040,7 +1041,7 @@ function BoardContent(
     if (target) { setDetailTarget(target); setProject(target.projectId); }
     setTask(id);
   });
-  const togglePage = (next: "insights" | "ideas" | "guardrails" | "search") => {
+  const togglePage = (next: "insights" | "ideas" | "guardrails" | "memory" | "search") => {
     ignoredLink.current = linkKey;
     // Opening Insights is acting on the skill-draft tip (INSIGHTS-REDESIGN-SPEC §5).
     if (next === "insights" && onboarding.values && !onboarding.values.tipsSeen.includes("first-skill-draft")) void onboarding.markTipSeen("first-skill-draft");
@@ -1061,7 +1062,7 @@ function BoardContent(
   const openSearchMemory = useStableCallback((hit: SearchMemoryHit) => {
     ignoredLink.current = linkKey;
     setProject(hit.projectId);
-    setPage("guardrails");
+    setPage("memory");
   });
   const openSearch = (text: string) => {
     ignoredLink.current = linkKey;
@@ -1103,6 +1104,11 @@ function BoardContent(
   const guardrailsOn = features.memory && !!project && project.memory !== false;
   const projectGuardrails = guardrailsOn ? guardrailCounts.data?.[project!.id] : undefined;
   const guardrailCount = guardrailsOn ? (projectGuardrails ? projectGuardrails.observing + projectGuardrails.added : 0) : null;
+  const memoryCount = guardrailsOn ? (projectGuardrails?.notes ?? 0) : null;
+  // The Memory page's filter, sort and layout (board-view settings, GUARDRAILS-SPEC §7.4).
+  const memoryKind = view.values?.memoryKind ?? "all", memorySort = view.values?.memorySort ?? "newest", memoryLayout = view.values?.memoryLayout ?? "list";
+  const memoryPrefs = useMemo<MemoryPrefs>(() => ({ memoryKind, memorySort, memoryLayout }), [memoryKind, memorySort, memoryLayout]);
+  const saveMemoryPrefs = useStableCallback((patch: Partial<MemoryPrefs>) => void view.update(patch));
   const projectTasks = useMemo(() => (board?.tasks || []).filter((t) => t.projectId === project?.id), [board?.tasks, project?.id]);
   // A session of this project has a live Paseo child agent (SUBAGENTS-SPEC §7).
   const projectHasSubagent = useMemo(() => {
@@ -1347,7 +1353,12 @@ function BoardContent(
       ...(ideasOn
         ? [{ id: "ideas", label: t("Ideas"), icon: "Lightbulb", onPress: () => openIn(() => { setIdeaCard(""); setPage("ideas"); }) }]
         : []),
-      ...(features.memory && p.memory !== false ? [{ id: "guardrails", label: t("Guardrails"), icon: "ShieldCheck", onPress: () => openIn(() => setPage("guardrails")) }] : []),
+      ...(features.memory && p.memory !== false
+        ? [
+            { id: "guardrails", label: t("Guardrails"), icon: "ShieldCheck", onPress: () => openIn(() => setPage("guardrails")) },
+            { id: "memory", label: t("Memory"), icon: "BookMarked", onPress: () => openIn(() => setPage("memory")) },
+          ]
+        : []),
       { kind: "separator", id: "order" },
       { id: "left", label: t("Move left"), icon: "ChevronLeft", disabled: index === 0 || pending, onPress: () => reorderProject(p.id, { direction: "up" }) },
       { id: "right", label: t("Move right"), icon: "ChevronRight", disabled: index === projects.length - 1 || pending, onPress: () => reorderProject(p.id, { direction: "down" }) },
@@ -1398,6 +1409,10 @@ function BoardContent(
       case "guardrails":
         if (!project || !features.memory) return false;
         togglePage("guardrails");
+        return true;
+      case "memory":
+        if (!project || !features.memory) return false;
+        togglePage("memory");
         return true;
       case "search":
         if (!project) return false;
@@ -1790,7 +1805,10 @@ function BoardContent(
             ideasShortcut={shortcutsOn ? "B" : ""}
             guardrailCount={guardrailCount}
             onGuardrails={() => togglePage("guardrails")}
-            guardrailsShortcut={shortcutsOn ? "M" : ""}
+            guardrailsShortcut={shortcutsOn ? "G" : ""}
+            memoryCount={memoryCount}
+            onMemory={() => togglePage("memory")}
+            memoryShortcut={shortcutsOn ? "M" : ""}
             onLane={(status) => {
               setPage(null);
               if (compact) setMobileStatus(status);
@@ -1930,6 +1948,8 @@ function BoardContent(
                   />
                 ) : page === "guardrails" && board ? (
                   <GuardrailsPage project={project} tasks={projectTasks} compact={compact} nameOf={nameOf} onOpenTask={openTaskById} onBack={closePage} />
+                ) : page === "memory" && board ? (
+                  <MemoryPage project={project} tasks={projectTasks} compact={compact} prefs={memoryPrefs} nameOf={nameOf} onPrefs={saveMemoryPrefs} onOpenTask={openTaskById} onBack={closePage} />
                 ) : compact ? (
                   <>
                     <View style={{ paddingHorizontal: space[2], paddingTop: space[2] }}>

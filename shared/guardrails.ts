@@ -650,7 +650,7 @@ export function guardrailsMaterial(input: {
       `- #${shortId(g.id)} ${clip(g.text, 200)} [${scopeText(g.scope)}] caught ${g.counts.caught} · missed ${g.counts.missed} · misfire ${g.counts.misfire} · reviews ${g.counts.reviews}${hot}; cards ${g.sources.map((x) => shortId(x.taskId)).join(", ") || "-"}`,
     );
   }
-  lines.push("", "## Notes");
+  lines.push("", "## Memory");
   if (!notes.length) lines.push("(none)");
   for (const n of notes) lines.push(`- #${shortId(n.id)} [${n.noteKind || "note"}] ${clip(n.text, 120)}`);
   const items = input.items.filter((i) => i.projectId === input.projectId && i.state === "open");

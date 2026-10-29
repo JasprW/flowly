@@ -91,7 +91,7 @@ Status: **已实现，用户 2026-10-22 确认设计**（卡片“重设计onboa
 （GUARDRAILS-SPEC §10，2026-10-28 取代原来的 Project memory 页与 `MemoryDemo` 自动演示。）
 
 - 导语 “What you send a card back for is checked on the next ones.”
-- 开关组放在导语下面：开关 **Guardrails**（`features.memory`，默认开），说明 “Flowly remembers what you send cards back for and checks the next cards for it. Learning uses a few tokens per card.”；子项 **Find notes in finished cards**（`retroEnabled`，默认开；Guardrails 关时禁用），说明是成本预估（§3.3）。
+- 开关组放在导语下面：开关 **Guardrails**（`features.memory`，默认开），说明 “Flowly remembers what you send cards back for and checks the next cards for it. Learning uses a few tokens per card.”；子项 **Find memory in finished cards**（2026-10-29 由 Find notes 改名，GUARDRAILS-SPEC D10）（`retroEnabled`，默认开；Guardrails 关时禁用），说明是成本预估（§3.3）。
 - 示例是静态的两行（`GuardrailsExample`，不再有自动演示）：**You send card A back** + 原话 “New text needs every language too.”；**Card B is sent back before it reaches you** + “✗ 原话 zh-TW has no entry for “Rerun”.”。
 - 框下面一行三列说明：You send it back “Say what is wrong, as you would anyway.”、Flowly learns “The second card with the same problem makes it a project guideline.”、Later cards are checked “Checked does not mean right: Done is still yours.”
 

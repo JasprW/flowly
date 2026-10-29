@@ -571,7 +571,7 @@ Rules:
 ${
     guardrails
       ? `- Guardrails (see "# Guardrails" in the material) are what Flowly checks deliveries against; they grow only from what the owner sent cards back for. You never add guidelines or commands. A guideline marked "caught 5+ in 30 days" is a mistake agents keep making: suggest an "agents_md" rule or a "skill" that prevents it, citing the guideline's #id in the evidence.
-- When two active guidelines, or two active notes, say the same thing, merge them: "merges": [{"keep": "#id", "drop": "#id", "why": "one sentence"}], at most ${MAX_MERGES}. Only ids from the material, the same kind on both sides; leave it [] when nothing overlaps.
+- When two active guidelines, or two active memories, say the same thing, merge them: "merges": [{"keep": "#id", "drop": "#id", "why": "one sentence"}], at most ${MAX_MERGES}. Only ids from the material, the same kind on both sides; leave it [] when nothing overlaps.
 `
       : ""
   }- ${outputLanguageRule(language)}

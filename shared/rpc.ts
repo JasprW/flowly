@@ -762,11 +762,11 @@ export const readGuardrails = defineRpc({
   input: z.strictObject({ projectId: z.string().min(1).max(200), etag: z.string().max(200).optional() }),
   output: z.object({ etag: z.string(), value: guardrailsViewSchema.optional() }),
 });
-/** The overview chip: per project, observing commands and guidelines learned this week. */
+/** The overview chips: per project, observing commands, guidelines learned this week and memory added this week. */
 export const guardrailCounts = defineRpc({
   name: "guardrails.counts",
   input: etagInput,
-  output: z.object({ etag: z.string(), value: z.record(z.string(), z.object({ observing: z.number(), added: z.number() })).optional() }),
+  output: z.object({ etag: z.string(), value: z.record(z.string(), z.object({ observing: z.number(), added: z.number(), notes: z.number() })).optional() }),
 });
 /** A person's command or note, active at once; guidelines only grow from cards sent back (§7.4). */
 export const createGuardrail = defineRpc({

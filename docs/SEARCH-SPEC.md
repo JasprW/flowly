@@ -108,12 +108,12 @@ output = {
 ### 5.2 页面
 
 - 顶部：搜索框（`TextBox`，打开时自动聚焦，`commitDelay` 250 ms），右边一个范围切换 **This project / All projects**。
-- 下面一行来源筛选：Cards、Summaries、Notes、Workpads、Ideas、Deliverables、Project notes（2026-10-28 由 Memory 改名，GUARDRAILS-SPEC §7.4），可多选；都不选等于全选。
+- 下面一行来源筛选：Cards、Summaries、Notes、Workpads、Ideas、Deliverables、Memory（2026-10-29 改回 Memory，GUARDRAILS-SPEC §7.4 D10），可多选；都不选等于全选。
 - 结果列表：
   - 卡片行：标题、泳道名、类型；全部项目时加项目名；已归档的卡标 Archived。
   - 卡片行下面是命中行（卡片标题本身的命中不再单列一行，标题已在卡片行上）：来源名（Summary / Note / Workpad / Idea / Deliverable）+ 片段，命中词用粗体和主题强调色。Idea 命中带上它的状态（Dismissed 等）。
-  - 记忆单独一组，组标题 Project notes。
-- 状态：查询为空时什么都不显示；没有结果显示 **No results**；卡片达到上限且 `truncated` 时列表末尾一行 **Showing the first 30 cards**（只有记忆被截断时不显示）；`partial` 时顶部一行 **Summaries could not be read** / **Project notes could not be read**。不加说明文字。
+  - 记忆单独一组，组标题 Memory；点结果打开该项目的 Memory 页。
+- 状态：查询为空时什么都不显示；没有结果显示 **No results**；卡片达到上限且 `truncated` 时列表末尾一行 **Showing the first 30 cards**（只有记忆被截断时不显示）；`partial` 时顶部一行 **Summaries could not be read** / **Memory could not be read**。不加说明文字。
 - 范围和来源筛选只在本次打开期间记住；查询文字不持久化。
 - 动画：请求进行中旧结果保留并淡到半透明（约 120 ms）；每次新结果到达，整个结果列表淡入并轻微上移（共享 `Enter`，约 220 ms）。筛选项的选中状态即时变化。系统开了 Reduce Motion 时都不做动画。
 
