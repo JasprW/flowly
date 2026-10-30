@@ -136,6 +136,9 @@ test("temporary sessions run Claude in Plan Mode and leave other providers on th
   expect(readOnlyMode("claude/claude-haiku-5-5")).toBe("plan");
   expect(readOnlyMode("codex/gpt-5.4-mini")).toBeUndefined();
   expect(readOnlyMode("opencode/claude-sonnet")).toBeUndefined();
+  expect(readOnlyMode("claude-compass-smith-sqp/claude-sonnet-5-5")).toBe("plan");
+  expect(readOnlyMode("claude-aicodewith/claude-sonnet-5-5")).toBe("plan");
+  expect(readOnlyMode("codex-compass-smith-sqp/gpt-5.4")).toBeUndefined();
   expect(readOnlyConfig("claude/claude-haiku-5-5")).toEqual({ provider: "claude/claude-haiku-5-5", modeId: "plan" });
   expect(readOnlyConfig("codex/gpt-5.4-mini")).toEqual({ provider: "codex/gpt-5.4-mini" });
 });

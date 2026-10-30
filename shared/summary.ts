@@ -88,11 +88,13 @@ export function summaryModelsOf(settings?: Pick<SummarySettings, "summaryModel" 
 
 /**
  * A mode in which a temporary session (summarizer, reviewer, memory review, digest, workflow insights) cannot run tools
- * or edit, so it never stops on a permission prompt: Claude's Plan Mode. Other providers have no read-only mode and keep
- * their default (never full access in the card's workspace).
+ * or edit, so it never stops on a permission prompt: Claude's Plan Mode. That covers `claude` and the Claude Code profiles
+ * named `claude-*` (for example `claude-compass-smith-sqp`), which carry the same modes. Other providers have no read-only
+ * mode and keep their default (never full access in the card's workspace).
  */
 export function readOnlyMode(model: string): string | undefined {
-  return model.split("/")[0] === "claude" ? "plan" : undefined;
+  const provider = model.split("/")[0];
+  return provider === "claude" || provider.startsWith("claude-") ? "plan" : undefined;
 }
 /** `config` for a temporary session on `provider/model`, in its read-only mode when the provider has one. */
 export function readOnlyConfig(model: string): { provider: string; modeId?: string } {

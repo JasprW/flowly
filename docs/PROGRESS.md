@@ -2,6 +2,7 @@
 
 ## Temporary sessions run Claude in Plan Mode — 2026-10-30
 
+- Bug follow-up (2026-10-30): the same error came back as "claude-compass-smith-sqp/claude-sonnet-5-5: The summary model asked for a permission." `readOnlyMode` only matched the provider id `claude`, so Claude Code profiles named `claude-*` (SMITH/RCMD/KB SQP, AICodeWith) still ran in Always Ask. It now matches `claude` and `claude-*`; `codex-*` profiles stay on their default. Test added in `shared/summary.test.ts`. The match is by name, not by the provider's advertised modes (the SDK's provider list does not carry them without another call per provider).
 - Bug: an auto review ended `unavailable` with "claude/claude-haiku-5-5: The summary model asked for a permission." The review session was created without a mode, so Claude ran in Always Ask and its first tool call blocked on a permission. `readOnlyMode` / `readOnlyConfig` in `shared/summary.ts` give `claude/*` the `plan` mode and leave other providers on their default (Codex has no read-only mode; never full access). Used by the review session, the card summarizer, the memory finished-card review, the Insights digest, workflow insights, the guardrails catch-up and the outside-session insights run (it did not carry the parent's mode). AUTO-REVIEW-SPEC §4.4, TASK-SUMMARY-SPEC §2.
 - Unrun: a live Claude review after the change (needs a plugin reload).
 
