@@ -7,14 +7,14 @@ import { z } from "zod";
  * picker searches. Nothing here talks to a service.
  */
 
-export const connectorFamilies = ["jira", "confluence", "github", "gitlab", "azure"] as const;
+export const connectorFamilies = ["jira", "confluence", "github", "gitlab", "azure", "shortcut"] as const;
 export type ConnectorFamily = (typeof connectorFamilies)[number];
 
-export const connectorProviders = ["jira-dc", "jira-cloud", "confluence-dc", "confluence-cloud", "github", "gitlab", "azure-devops"] as const;
+export const connectorProviders = ["jira-dc", "jira-cloud", "confluence-dc", "confluence-cloud", "github", "gitlab", "azure-devops", "shortcut"] as const;
 export type ConnectorProvider = (typeof connectorProviders)[number];
 export const connectorProviderSchema = z.enum(connectorProviders);
 
-export const itemTypes = ["issue", "pull", "merge_request", "page"] as const;
+export const itemTypes = ["issue", "pull", "merge_request", "page", "story", "epic"] as const;
 export type ItemType = (typeof itemTypes)[number];
 export const itemTypeSchema = z.enum(itemTypes);
 
@@ -30,6 +30,8 @@ export const providerInfo: Record<
   github: { family: "github", email: false, defaultBaseUrl: "https://github.com" },
   gitlab: { family: "gitlab", email: false, defaultBaseUrl: "https://gitlab.com" },
   "azure-devops": { family: "azure", email: false },
+  // One connection is one workspace, so baseUrl carries the slug and there is no default.
+  shortcut: { family: "shortcut", email: false },
 };
 export const familyOf = (provider: ConnectorProvider) => providerInfo[provider].family;
 export const familyProviders = (family: ConnectorFamily) => connectorProviders.filter((p) => providerInfo[p].family === family);
@@ -333,6 +335,37 @@ export const azureItemUrl = (baseUrl: string, key: string) => {
   return id ? `${baseUrl}/_workitems/edit/${id}` : "";
 };
 
+/* ---------- Shortcut ---------- */
+
+const shortcutId = (value: string | null | undefined) => (value && /^\d{1,9}$/.test(value) ? value : null);
+
+/** Story keys use Shortcut's own branch-name form; epics have no short form, so they get a distinct prefix. */
+export const shortcutKey = (itemType: "story" | "epic", id: string) => `${itemType === "epic" ? "epic" : "sc"}-${id}`;
+
+/** sc-123 (any case) names a story. A bare number is only a key in a picker (classifyQuery). */
+export function shortcutIdOfKey(text: string, itemType: "story" | "epic" = "story") {
+  return shortcutId(new RegExp(`^${itemType === "epic" ? "epic" : "sc"}-(\\d{1,9})$`, "i").exec(text.trim())?.[1]);
+}
+
+/**
+ * (story|epic)/<id> below the workspace address, with any trailing title slug or
+ * subpage. The workspace slug is part of `baseUrl`, as an Azure DevOps organization is.
+ */
+export function shortcutFromUrl(value: string, baseUrl: string): { itemType: "story" | "epic"; key: string } | null {
+  const at = below(value, baseUrl);
+  if (!at) return null;
+  const match = /^\/(story|epic)\/(\d{1,9})(?:\/[^?#]*)?$/.exec(at.rest);
+  if (!match) return null;
+  const itemType = match[1] as "story" | "epic";
+  return { itemType, key: shortcutKey(itemType, match[2]!) };
+}
+
+export const shortcutItemUrl = (baseUrl: string, key: string, itemType: ItemType) => {
+  const kind = itemType === "epic" ? "epic" : "story";
+  const id = shortcutIdOfKey(key, kind);
+  return id ? `${baseUrl}/${kind}/${id}` : "";
+};
+
 /* ---------- Dispatch ---------- */
 
 /** The item a link of `connection` points at; null when it is not one. Display-name page links need a lookup. */
@@ -352,6 +385,7 @@ export function recognizeUrl(
   }
   if (family === "github") return githubFromUrl(value, connection.baseUrl);
   if (family === "azure") return azureFromUrl(value, connection.baseUrl);
+  if (family === "shortcut") return shortcutFromUrl(value, connection.baseUrl);
   return gitlabFromUrl(value, connection.baseUrl);
 }
 
@@ -383,6 +417,12 @@ export function parseKey(value: string, provider: ConnectorProvider): { itemType
     const id = azureIdOfKey(text);
     return id ? { itemType: "issue", key: azureKey(id) } : null;
   }
+  if (family === "shortcut") {
+    const story = shortcutIdOfKey(text);
+    if (story) return { itemType: "story", key: shortcutKey("story", story) };
+    const epic = shortcutIdOfKey(text, "epic");
+    return epic ? { itemType: "epic", key: shortcutKey("epic", epic) } : null;
+  }
   const parts = splitRepoKey(text);
   if (!parts) return null;
   if (family === "github") return parts.sep === "#" ? { itemType: "issue", key: `${parts.repo}#${parts.number}` } : null;
@@ -396,6 +436,7 @@ export function itemUrl(connection: Pick<Connection, "provider" | "baseUrl">, it
   if (family === "confluence") return pageUrl(connection.baseUrl, key);
   if (family === "github") return githubItemUrl(connection.baseUrl, key, itemType);
   if (family === "azure") return azureItemUrl(connection.baseUrl, key);
+  if (family === "shortcut") return shortcutItemUrl(connection.baseUrl, key, itemType);
   return gitlabItemUrl(connection.baseUrl, key, itemType);
 }
 
@@ -438,6 +479,11 @@ export function classifyQuery(raw: string, connection: Pick<Connection, "provide
     const id = azureId(/^#?(\d+)$/.exec(value)?.[1]);
     return id ? { kind: "key", itemType: "issue", key: azureKey(id) } : { kind: "text", text: value.slice(0, connectorLimits.query) };
   }
+  if (family === "shortcut") {
+    // Ids are unique per workspace: "123" and "sc-123" both name the story.
+    const id = shortcutId(/^(?:sc-)?(\d+)$/i.exec(value)?.[1]);
+    return id ? { kind: "key", itemType: "story", key: shortcutKey("story", id) } : { kind: "text", text: value.slice(0, connectorLimits.query) };
+  }
   if (family !== "confluence") {
     const number = /^([#!]?)(\d{1,9})$/.exec(value);
     if (number && (family === "gitlab" || number[1] !== "!"))
@@ -464,6 +510,7 @@ export function itemLabel(provider: ConnectorProvider, itemType: ItemType) {
   if (family === "jira") return "Jira ticket";
   if (family === "confluence") return "Confluence page";
   if (family === "azure") return "Azure DevOps work item";
+  if (family === "shortcut") return itemType === "epic" ? "Shortcut epic" : "Shortcut story";
   const name = family === "github" ? "GitHub" : "GitLab";
   return `${name} ${itemType === "pull" ? "pull request" : itemType === "merge_request" ? "merge request" : "issue"}`;
 }

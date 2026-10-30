@@ -42,12 +42,13 @@ export function useConnections(enabled = true) {
 }
 
 /** Service names are brands: shown as written in every language. */
-export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps" };
+export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps", shortcut: "Shortcut" };
 
 /** The row icon of an item: its kind, not its service. */
 export function itemIcon(provider: ConnectorProvider, itemType: ItemType) {
   if (itemType === "page") return "BookOpen";
   if (itemType === "pull" || itemType === "merge_request") return "GitPullRequest";
+  if (itemType === "epic") return "Layers";
   const family = familyOf(provider);
   return family === "jira" ? "Ticket" : family === "azure" ? "ClipboardList" : "CircleDot";
 }
@@ -58,6 +59,7 @@ export function itemKindLabel(provider: ConnectorProvider, itemType: ItemType) {
   if (family === "jira") return t("Jira ticket");
   if (family === "confluence") return t("Confluence page");
   if (family === "azure") return t("Azure DevOps work item");
+  if (family === "shortcut") return itemType === "epic" ? t("Shortcut epic") : t("Shortcut story");
   const service = familyNames[family];
   if (itemType === "pull") return t("{service} pull request", { service });
   if (itemType === "merge_request") return t("{service} merge request", { service });
@@ -71,6 +73,7 @@ export const linkTitles: Record<ConnectorFamily, string> = {
   github: msg("GitHub issue or pull request"),
   gitlab: msg("GitLab issue or merge request"),
   azure: msg("Azure DevOps work item"),
+  shortcut: msg("Shortcut story or epic"),
 };
 
 const searchHints: Record<ConnectorFamily, string> = {
@@ -79,6 +82,7 @@ const searchHints: Record<ConnectorFamily, string> = {
   github: msg("owner/repo#12, #12, a link or words from the title"),
   gitlab: msg("group/project!34, #12, !34, a link or words from the title"),
   azure: msg("Work item number, AB#123, a link or words from the title"),
+  shortcut: msg("Story number, sc-123, a link or words from the title"),
 };
 
 const recentTitles: Record<ConnectorFamily, string> = {
@@ -87,6 +91,7 @@ const recentTitles: Record<ConnectorFamily, string> = {
   github: msg("Open issues and pull requests I'm involved in"),
   gitlab: msg("Open issues and merge requests assigned to me or awaiting my review"),
   azure: msg("Open work items assigned to me"),
+  shortcut: msg("My open stories"),
 };
 
 const emptyRecent: Record<ConnectorFamily, string> = {
@@ -95,6 +100,7 @@ const emptyRecent: Record<ConnectorFamily, string> = {
   github: msg("No open issues or pull requests involve you."),
   gitlab: msg("Nothing open is assigned to you or awaiting your review."),
   azure: msg("No open work items are assigned to you."),
+  shortcut: msg("You have no open stories."),
 };
 
 /** Identity of an item across connections of one service: keys repeat between services (team/app#12 on GitHub and GitLab). */
@@ -432,6 +438,7 @@ const providerLabels: Record<ConnectorProvider, string> = {
   github: "GitHub",
   gitlab: "GitLab",
   "azure-devops": "Azure DevOps",
+  shortcut: "Shortcut",
 };
 
 const addTitles: Record<ConnectorFamily, string> = {
@@ -440,6 +447,7 @@ const addTitles: Record<ConnectorFamily, string> = {
   github: msg("Add a GitHub connection"),
   gitlab: msg("Add a GitLab connection"),
   azure: msg("Add an Azure DevOps connection"),
+  shortcut: msg("Add a Shortcut connection"),
 };
 
 /**
@@ -494,6 +502,8 @@ function tokenHint(provider: ConnectorProvider, hosted: boolean) {
         : t("Create one in GitHub → Settings → Developer settings → Personal access tokens, with read access to issues and pull requests.");
     case "azure-devops":
       return t("Create one in Azure DevOps → User settings → Personal access tokens, with the Work Items (Read) scope.");
+    case "shortcut":
+      return t("Create one in Shortcut → Settings → API Tokens.");
     default:
       return t("Create one in GitLab → Preferences → Access tokens with the read_api scope.");
   }
@@ -507,6 +517,7 @@ const addressPlaceholders: Record<ConnectorProvider, string> = {
   github: "https://github.example.com",
   gitlab: "https://gitlab.example.com",
   "azure-devops": "https://dev.azure.com/your-organization",
+  shortcut: "https://app.shortcut.com/your-workspace",
 };
 
 function ConnectionEditor({ family, connection, onClose }: { family: ConnectorFamily; connection: Connection | null; onClose(): void }) {
