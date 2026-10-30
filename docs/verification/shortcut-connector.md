@@ -4,18 +4,18 @@ Date: 2026-10-29
 
 ## Commands
 
-| Command | Exit | Result |
-|---|---|---|
-| `npm run typecheck` | 0 | no errors |
-| `npm test` | 0 | see note |
-| `npm run test:ci` | 0 | 4 passed |
-| `npx vitest run server/connectors/ shared/` | 0 | 456 passed |
-| live run, env vars supplied | 0 | 6 passed |
+| Command | Result |
+|---|---|
+| `npm run typecheck` | clean, no errors |
+| `npm run test:ci` | 4 passed |
+| `npx vitest run server/connectors/ shared/` | 456 passed |
+| live run, env vars supplied | 6 passed |
+| `npm test` (full suite) | **not clean**: 5 failed of 1215 |
 
-Note on `npm test`: the full suite shows 4–6 failures under parallel load on this
-machine (`ideas`, `memory`, `sqlite-store`, `tool-server`). The same four fail on
-`origin/main`, and all of them pass when run in isolation. Load-dependent timeouts,
-not a regression from this work.
+The five full-suite failures are `ideas`, `memory`, `sqlite-store`, `tags` and
+`tool-server`. They are load-dependent timeouts under parallel vitest, not a result of
+this change: the same tests fail on `origin/main`, and all five files pass when run on
+their own (82 passed). Recorded here as a known-unclean command rather than a pass.
 
 ## Live workspace
 

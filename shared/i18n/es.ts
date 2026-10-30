@@ -1316,7 +1316,7 @@ const catalog: Catalog = {
   "You have no open stories.": "No tienes historias abiertas.",
   "Add a Shortcut connection": "Añadir una conexión de Shortcut",
   "Create one in Shortcut → Settings → API Tokens.": "Crea uno en Shortcut → Configuración → API Tokens.",
-  "Start a card from a Jira ticket, Confluence page, GitHub/GitLab issue or pull request, Azure DevOps work item, or Shortcut story or epic, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.": "Crea una tarjeta desde un ticket de Jira, una página de Confluence, un issue o pull request de GitHub/GitLab un elemento de trabajo de Azure DevOps o una historia o épica de Shortcut, o añádelo con el + de Artefactos. Los agentes lo leen en cada turno; Flowly nunca lo modifica.",
+  "Start a card from a Jira ticket, Confluence page, GitHub/GitLab issue or pull request, Azure DevOps work item, or Shortcut story or epic, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.": "Crea una tarjeta desde un ticket de Jira, una página de Confluence, un issue o pull request de GitHub/GitLab, un elemento de trabajo de Azure DevOps o una historia o épica de Shortcut, o añádelo con el + de Artefactos. Los agentes lo leen en cada turno; Flowly nunca lo modifica.",
   "What's new": "Novedades",
   "Flowly {version}": "Flowly {version}",
   "Open settings": "Abrir ajustes",

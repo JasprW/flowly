@@ -336,6 +336,6 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 - **白名单**：`/api/v3/member`、`/api/v3/members`、`/api/v3/workflows`、`/api/v3/search/(stories|epics)`、`/api/v3/stories/:id`、`/api/v3/epics/:id`、`/api/v3/epics/:id/stories`。只发 GET，本族不新增 `queryEndpoints`。
 - **界面**：品牌图标按 §8.3 的做法，用 Simple Icons 的 Shortcut 路径（CC0）渲染成 48 px PNG，颜色 #58B1E4，以 data URI 打包。设置 → Connections 增加第六个分组。
 - **验收**：连接能校验并显示账户；粘贴 story 链接与手输 `sc-<id>` 都能解析；**From Shortcut** 列出当前用户的未完成 story；agent 能用 `flowly_read_external` 读 story 与 epic，且 epic 的 Markdown 列出它的 story；改描述会让指纹变化，只改状态不会；令牌被吊销时连接标记 `authFailed` 且不丢缓存内容。
-- **测试**：`server/connectors/shortcut.test.ts`（mock fetch：`Shortcut-Token` 头、派生的 API 域名、登录页、搜索转义、story 与 epic 读取、Markdown、状态变化时指纹不变、404 与 429、所有请求都在白名单内、环境变量回退且值不外泄）、`shared/connectors.test.ts`（链接识别、`sc-` 与 `epic-` key、查询分类）、`server/connectors/shortcut.live.test.ts`（真实 workspace 联调，未设 `SHORTCUT_API_TOKEN` 时自动跳过）。2026-10-29 在真实 workspace 联调通过（[证据](verification/shortcut-connector.md)）。
+- **测试**：`server/connectors/shortcut.test.ts`（mock fetch：`Shortcut-Token` 头、派生的 API 域名、登录页、搜索转义、story 与 epic 读取、Markdown、状态变化时指纹不变、404 与 429、所有请求都在白名单内）、`shared/connectors.test.ts`（链接识别、`sc-` 与 `epic-` key、查询分类）、`server/connectors/shortcut.live.test.ts`（真实 workspace 联调，未设 `SHORTCUT_API_TOKEN` 时自动跳过）。2026-10-29 在真实 workspace 联调通过（[证据](verification/shortcut-connector.md)）。
 - onboarding：更新欢迎页功能行、`jira-connect` tip 文案、README 与 1.8.0 的 What's new；不新增 tip id（连接与使用方式没有变化，已有 tip 覆盖）。
 - 遥测：不加心跳字段。TELEMETRY-SPEC §4.6 把“connector 的类型或地址”列为绝不发送，统计 Shortcut 连接数会与之冲突；已有的按回合、按卡片计数已经覆盖从 Shortcut 卡片做的工作。

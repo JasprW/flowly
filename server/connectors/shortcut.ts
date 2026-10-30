@@ -69,13 +69,15 @@ async function lookupNames(connection: StoredConnection, fetchImpl: Fetch): Prom
   if (cached && Date.now() - cached.at < NAMES_TTL) return cached.names;
   const client = http(connection, fetchImpl);
   const [workflows, members] = await Promise.all([
-    client.get<Workflow[]>("/workflows").then((r) => r.data, () => [] as Workflow[]),
-    client.get<Member[]>("/members").then((r) => r.data, () => [] as Member[]),
+    client.get<Workflow[]>("/workflows").then((r) => r.data, () => null),
+    client.get<Member[]>("/members").then((r) => r.data, () => null),
   ]);
   const names = emptyNames();
-  for (const w of workflows) for (const s of w.states || []) if (s.id && s.name) names.states.set(s.id, s.name);
-  for (const m of members) if (m.id && m.profile?.name) names.members.set(m.id, m.profile.name);
-  nameCache.set(cacheKey, { at: Date.now(), names });
+  for (const w of workflows || []) for (const s of w.states || []) if (s.id && s.name) names.states.set(s.id, s.name);
+  for (const m of members || []) if (m.id && m.profile?.name) names.members.set(m.id, m.profile.name);
+  // Only a complete lookup is cached: one transient failure would otherwise blank every
+  // status and owner for the whole TTL.
+  if (workflows && members) nameCache.set(cacheKey, { at: Date.now(), names });
   return names;
 }
 
