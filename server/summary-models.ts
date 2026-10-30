@@ -20,8 +20,34 @@ export class SummaryModelError extends Error {
 }
 
 type ModelAgent = RemovableAgent & {
-  waitForFinish(timeout: number): Promise<{ status: string; error?: string | null; lastMessage?: string | null }>;
+  waitForFinish(timeout: number): Promise<{
+    status: string;
+    error?: string | null;
+    lastMessage?: string | null;
+    final?: { pendingPermissions?: readonly { id: string }[] } | null;
+  }>;
+  respondToPermission?(options: { requestId: string; response: { behavior: "deny"; message?: string } }): Promise<void>;
 };
+
+/** Times a temporary session may be refused a permission before the run counts as failed. */
+const MAX_PERMISSION_DENIALS = 20;
+const DENIED = "Read-only review: this tool is not available. Continue without it and answer from what you already have.";
+
+/**
+ * A temporary session is read-only by design and nobody is there to approve a prompt, so a permission request is refused
+ * and the turn carries on; the model then answers without that tool. Without this a Codex session (no read-only mode)
+ * stopped on its first tool call and the whole run failed. Gives up when the request cannot be refused.
+ */
+export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: number) {
+  let result = await agent.waitForFinish(timeoutMs);
+  for (let denied = 0; result.status === "permission" && denied < MAX_PERMISSION_DENIALS; denied++) {
+    const pending = result.final?.pendingPermissions ?? [];
+    if (!pending.length || !agent.respondToPermission) break;
+    for (const request of pending) await agent.respondToPermission({ requestId: request.id, response: { behavior: "deny", message: DENIED } });
+    result = await agent.waitForFinish(timeoutMs);
+  }
+  return result;
+}
 
 /** Only model create/wait/parse/cleanup are retried; the caller persists after this returns. */
 export async function runSummaryModels<T>(
@@ -42,7 +68,7 @@ export async function runSummaryModels<T>(
       const agent = await options.create(model);
       let output: T;
       try {
-        const result = await agent.waitForFinish(options.timeoutMs);
+        const result = await finishRefusingPermissions(agent, options.timeoutMs);
         if (result.status !== "idle" || result.error) throw new Error(
           result.status === "timeout" ? "The summary model timed out."
             : result.status === "permission" ? "The summary model asked for a permission."

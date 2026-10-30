@@ -14,7 +14,7 @@ import { validZone } from "../shared/insights";
 import { SUMMARIZER_LABELS, readOnlyConfig, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import type { Board, Project } from "../shared/model";
 import { catchUpJsonSchema, catchUpPrompt, parseCatchUp, type Correction } from "../shared/guardrails";
-import { runSummaryModels } from "./summary-models";
+import { finishRefusingPermissions, runSummaryModels } from "./summary-models";
 import { readSkillBody, scanSkills, skillPath, writeSkill, type InstallResult } from "./project-skills";
 import {
   BACKFILL_DAYS,
@@ -534,7 +534,7 @@ export class WorkflowInsightsService {
         let usage: RunUsage | undefined;
         let parsed;
         try {
-          const result = await agent.waitForFinish(this.timeoutMs);
+          const result = await finishRefusingPermissions(agent, this.timeoutMs);
           if (result.status !== "idle")
             throw new Error(
               result.status === "timeout"

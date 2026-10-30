@@ -143,6 +143,7 @@ stateDiagram-v2
 - 输入：卡片标题、描述、type；内置检查的尺子（§4.2）；workpad；交付 note 与 outputs；命令检查结果摘要；项目 `guidance`；diff（`git diff HEAD` 加最近 5 个提交的 patch，截断到 64 KiB 并注明）；要判定的检查（id、name、prompt）。
 - 指令：只读，不改文件，不运行会改变状态的命令；每条单独判定。
 - 模式（2026-10-30）：`config.modeId = readOnlyMode(provider)`（`shared/summary.ts`）：`claude/*` 和 `claude-*` 自定义 provider（如 `claude-compass-smith-sqp`）用 `plan`，其他 provider 不设（绝不用 full-access）。否则 Claude 评审 session 在 Always Ask 下第一次调用工具就停在权限确认，`runSummaryModels` 把它当失败，整轮评审 `unavailable`（“The summary model asked for a permission.”）。
+- 权限请求（2026-10-30）：没有 Plan Mode 的 provider（Codex 等）仍可能停在权限确认，而临时 session 里没有人能批准。`finishRefusingPermissions`（`server/summary-models.ts`，`runSummaryModels` 和 workflow insights 共用）收到 `permission` 状态时，对 pending 的请求逐个回 deny（附说明让模型不用该工具继续作答），再等这一轮，最多 20 次；请求无法拒绝或超过次数才算失败。这样评审不会因为权限请求而 `unavailable`，卡片也不会因此留在 Attention（§3.2 Unavailable 仍按设计进入 Attention，用于真正跑不起来的情况）。
 - 输出（`outputSchema`，解析宽松：取第一个 JSON 对象，未知 id 和坏条目丢弃）：
 
   ```
