@@ -11,7 +11,7 @@ import { availableModels } from "./summaries";
 import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { validZone } from "../shared/insights";
-import { SUMMARIZER_LABELS, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import type { Board, Project } from "../shared/model";
 import { catchUpJsonSchema, catchUpPrompt, parseCatchUp, type Correction } from "../shared/guardrails";
 import { runSummaryModels } from "./summary-models";
@@ -524,7 +524,7 @@ export class WorkflowInsightsService {
       }) + (guardrails ? `\n\n${guardrails}` : "");
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
         const agent = await paseo.workspaces.ref(workspaceId).agents.create({
-          config: { provider: model },
+          config: readOnlyConfig(model),
           title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
           prompt: workflowPrompt(days, material, await this.language(), !!guardrails),
@@ -607,7 +607,7 @@ export class WorkflowInsightsService {
       const { output } = await runSummaryModels(paseo, summaryModelsOf(summary), {
         create: async (model) => {
           const agent = await paseo.workspaces.ref(workspaceId).agents.create({
-            config: { provider: model },
+            config: readOnlyConfig(model),
             title: `Flowly guardrails · ${project.title}`.slice(0, 120),
             labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
             prompt: catchUpPrompt(input.clues, input.section),

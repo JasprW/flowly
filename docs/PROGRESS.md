@@ -1,5 +1,10 @@
 # Implementation progress
 
+## Temporary sessions run Claude in Plan Mode — 2026-10-30
+
+- Bug: an auto review ended `unavailable` with "claude/claude-haiku-5-5: The summary model asked for a permission." The review session was created without a mode, so Claude ran in Always Ask and its first tool call blocked on a permission. `readOnlyMode` / `readOnlyConfig` in `shared/summary.ts` give `claude/*` the `plan` mode and leave other providers on their default (Codex has no read-only mode; never full access). Used by the review session, the card summarizer, the memory finished-card review, the Insights digest, workflow insights, the guardrails catch-up and the outside-session insights run (it did not carry the parent's mode). AUTO-REVIEW-SPEC §4.4, TASK-SUMMARY-SPEC §2.
+- Unrun: a live Claude review after the change (needs a plugin reload).
+
 ## Memory gets its own page again (D10) — 2026-10-29
 
 - [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §7.4, D10: the Guardrails page (`client/guardrails.tsx`) keeps Commands and Guidelines only (Notes segment, Add note and note search removed); shortcut `G`. The `note` entries have the Memory page again (`client/memory.tsx`, shortcut `M`, overview chip **Memory** with this week's count, project menu item): kind chips All / Decision / Pitfall / Convention / Contact, sort Newest / Most used / Recently used (pinned first), List / Grid on wide layouts; all three per host in `board-view` (`memoryKind`, `memorySort`, `memoryLayout`). Grid is a masonry of 2–4 columns (one per 280 pt) placed by estimated height into the shortest column; a card keeps its column across refreshes (`client/memory-layout.ts`). Each card has a 3 pt left stripe and kind label in a theme color: Decision `accent`, Pitfall `statusWarning`, Convention `statusSuccess`, Contact `foregroundMuted`.

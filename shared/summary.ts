@@ -86,6 +86,20 @@ export function summaryModelsOf(settings?: Pick<SummarySettings, "summaryModel" 
   return settings?.summaryModels ? [...settings.summaryModels] : settings?.summaryModel ? [settings.summaryModel] : [...AUTO_MODELS];
 }
 
+/**
+ * A mode in which a temporary session (summarizer, reviewer, memory review, digest, workflow insights) cannot run tools
+ * or edit, so it never stops on a permission prompt: Claude's Plan Mode. Other providers have no read-only mode and keep
+ * their default (never full access in the card's workspace).
+ */
+export function readOnlyMode(model: string): string | undefined {
+  return model.split("/")[0] === "claude" ? "plan" : undefined;
+}
+/** `config` for a temporary session on `provider/model`, in its read-only mode when the provider has one. */
+export function readOnlyConfig(model: string): { provider: string; modeId?: string } {
+  const modeId = readOnlyMode(model);
+  return modeId ? { provider: model, modeId } : { provider: model };
+}
+
 /** Stored values may predate fields; the host does not apply schema defaults. */
 export function summarySettingsValues(values: unknown): SummarySettings {
   const parsed = summarySettings.schema.safeParse(values ?? {});

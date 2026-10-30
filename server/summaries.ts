@@ -16,6 +16,7 @@ import {
   summaryModelsOf,
   summaryPrompt,
   summaryStateSchema,
+  readOnlyConfig,
   truncateTranscript,
   turnText,
   type SummaryEntry,
@@ -275,7 +276,7 @@ export class SummaryService {
     const { model, output } = await runSummaryModels(paseo, summaryModelsOf(settings), {
       create: (model) => paseo.workspaces.ref(task.workspaceId).agents.create({
         parent: batch.agentIds[batch.agentIds.length - 1],
-        config: { provider: model },
+        config: readOnlyConfig(model),
         title: `Kanban summary · ${task.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-task": taskId },
         prompt,

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
 import type { LocaleCode } from "../shared/i18n";
 import type { Board, Project, Task } from "../shared/model";
-import { SUMMARIZER_LABELS, summaryModelsOf, type SummarySettings } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import {
   RETRO_DELAY_MS,
   RETRO_LABEL,
@@ -454,7 +454,7 @@ export class MemoryService {
     const prompt = retroPrompt(m.text, await this.language());
     const { output } = await this.background.use(m.project, paseo, (workspaceId) => runSummaryModels(paseo, models, {
       create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
-        config: { provider: model },
+        config: readOnlyConfig(model),
         title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, ...RETRO_LABEL },
         prompt,

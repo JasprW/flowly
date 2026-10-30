@@ -1,5 +1,5 @@
 import type { PaseoApi } from "@getpaseo/client";
-import { SUMMARIZER_LABELS } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig } from "../shared/summary";
 import { autoReviewLimits } from "../shared/model";
 import { GOAL_ID } from "../shared/auto-review";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
@@ -137,7 +137,7 @@ export function llmReviewer(options: {
       create: (model) =>
         paseo.workspaces.ref(input.task.workspaceId).agents.create({
           parent: input.parentAgentId,
-          config: { provider: model },
+          config: readOnlyConfig(model),
           title: `Flowly review · ${input.task.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-task": input.task.id, "flowly-review": "1" },
           prompt: reviewPrompt(input),
