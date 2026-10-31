@@ -1,5 +1,9 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-10-28 项目护栏闭环（已设计，用户批准，实现中，分支 feat/guardrails）：把项目记忆、Workpad、交付自动验收和 Insights 的建议部分改成一条线。你退卡时说的话由卡片总结顺便归纳成卡片专属项，第二张卡再出现就自动升为项目准则（范围等于来源卡的类型与大小之并，只扩不缩）；agent 交付时 daemon 跑项目命令、评审 session 判内置检查、范围内准则和本卡专属项，不过退回返工；抓到、漏掉、误判三个计数由退卡、不退、移到 Done 自动算出，误判 2 次暂停、20 次没抓到归档，准则 20 条、命令 10 条、备忘 100 条满了挤出；记忆写入即生效，没有收件箱；命令每周重识别加观察期；workpad 只剩验收清单，自报验证与软门槛去掉；Insights 顶部换成 14 天交付数、首次通过率、误判率；Memory 页改为 Guardrails 页；新项目 Auto review 默认开。[GUARDRAILS-SPEC](GUARDRAILS-SPEC.md)。
+
+2026-10-28 交付自动验收（P1、P2 已实现未提交，P3 已设计）：项目开启后，agent 交付时 workpad 有失败或过期验证项当场拒绝；交付后 daemon 跑项目的检查命令，再由独立评审 session 判定内置检查“做到了用户要求的事”（对照卡片和用户在会话里的原话）与项目的 LLM 检查；不通过退回交付前的工作阶段并给原 session 发返工消息，达到上限移到 Blocked；通过才进入 Attention。打开开关时从仓库识别检查命令；老用户从 What's new、新用户在交付后返工多时从 Insights，用过往卡片生成门禁总结和预选检查；Insights 定期推荐增量检查；Adjust with AI 设置卡片为次要入口。[AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md)。
+
 2026-10-27 搜索（已实现）：daemon 内存扫描卡片、最新摘要、agent 笔记、workpad、ideas、交付物和项目记忆；`search.query` RPC + 看板 Search 页（默认当前项目，可切全部）；agent 工具 `flowly_search`（本项目、不含自己的卡和记忆）。FTS5 留第二期。[SEARCH-SPEC](SEARCH-SPEC.md)。
 
 2026-10-26 匿名使用数据（已实现，待随 1.7.0 发布）：daemon 每天最多向 PostHog Cloud US 发一条 `flowly_heartbeat`（不用 SDK），字段按白名单：版本、平台、界面实际语言（`ui_locale`，替代 GeoIP）、功能开关、窗口内计数、模型计数表；数量分桶，不发任何内容、路径或 ID。默认开启，Settings → General 与导览最后一页可关闭；`DO_NOT_TRACK` / `FLOWLY_TELEMETRY=0` 强制关闭；告知前也发送，关闭后不再发送。[spec](TELEMETRY-SPEC.md)。

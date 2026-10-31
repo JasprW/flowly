@@ -152,8 +152,12 @@ export type TelemetrySnapshot = {
     archiveOnDelete: boolean;
     workflowInsights: boolean;
     summary: boolean;
+    /** Some active project has Auto review on (AUTO-REVIEW-SPEC). */
+    autoReview: boolean;
   };
   projects: number;
+  /** Active guidelines across unarchived projects (GUARDRAILS-SPEC §10). */
+  guardrails: number;
   cardsOpen: number;
 };
 
@@ -179,7 +183,9 @@ export function heartbeatProperties(s: TelemetrySnapshot, counts: WindowCounts, 
     f_archive_on_delete: s.features.archiveOnDelete,
     f_workflow_insights: s.features.workflowInsights,
     f_summary: s.features.summary,
+    f_auto_review: s.features.autoReview,
     projects: bucket(s.projects),
+    c_guardrails: bucket(s.guardrails),
     cards_open: bucket(s.cardsOpen),
     ...counts,
     ...(windowDays !== undefined ? { window_days: windowDays } : {}),
@@ -238,7 +244,7 @@ export type TelemetryDeps = {
   /** The `telemetry` setting; unreadable settings count as on (the default). */
   enabled(): Promise<boolean>;
   snapshot(): Promise<TelemetrySnapshot>;
-  /** Flow-log entries of every project, and memory confirmation times. */
+  /** Flow-log entries of every project, and when each active note became active. */
   activity(): Promise<{ events: FlowEntry[]; memoryConfirmedAt: string[] }>;
 };
 

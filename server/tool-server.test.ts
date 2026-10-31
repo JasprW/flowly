@@ -94,9 +94,16 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
     "flowly_suggest_next_moves",
     "flowly_update_workpad",
   ]);
-  // The soft delivery gate and the workpad's own revision are part of the tool schemas (WORKPAD-SPEC §3, §5.3).
+  // flowly_propose_review_rules is gone (GUARDRAILS-SPEC §9).
+  // The setup gate and the workpad's own revision are part of the tool schemas (WORKPAD-SPEC §3, CARD-SETUP-SPEC §3.4).
   const listed = (await mcp("tools/list", {})).result.tools as { name: string; description: string; inputSchema: { properties: Record<string, unknown> } }[];
+  const described = (name: string) => listed.find((t) => t.name === name)!.description;
   expect(listed.find((t) => t.name === "flowly_update_status")!.inputSchema.properties).toHaveProperty("acknowledgeOpen");
+  // Disputed findings ride on the delivery (GUARDRAILS-SPEC §6.1).
+  expect(listed.find((t) => t.name === "flowly_update_status")!.inputSchema.properties).toHaveProperty("disputes");
+  expect(described("flowly_update_status")).not.toMatch(/WORKPAD_OPEN|WORKPAD_FAILING/);
+  expect(described("flowly_recall")).toContain("guidelines");
+  expect(described("flowly_remember")).toContain("takes effect at once");
   // The delivery call carries the next moves, and an empty list is a valid choice on every entry (NEXT-MOVES-SPEC §8.2).
   const allowsEmpty = (schema: unknown) => ((schema as { minItems?: number }).minItems ?? 0) === 0;
   for (const name of ["flowly_update_status", "flowly_report_progress"]) {
@@ -106,7 +113,6 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
   }
   expect(allowsEmpty(listed.find((t) => t.name === "flowly_suggest_next_moves")!.inputSchema.properties.moves)).toBe(true);
   // The text agents read says where the next moves go (NEXT-MOVES-SPEC §8.6).
-  const described = (name: string) => listed.find((t) => t.name === name)!.description;
   expect(described("flowly_update_status")).toMatch(/pass nextMoves/);
   expect(described("flowly_report_progress")).toMatch(/pass nextMoves/);
   expect(described("flowly_suggest_next_moves")).toMatch(/middle of a turn/);
@@ -135,9 +141,13 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
   expect(described("flowly_get_task")).toContain("setup.missing");
   for (const name of ["flowly_set_type", "flowly_set_tags", "flowly_update_workpad"])
     expect(described(name), name).toContain("at the start of the work, before you change code");
-  expect(Object.keys(listed.find((t) => t.name === "flowly_update_workpad")!.inputSchema.properties)).toEqual(
-    expect.arrayContaining(["workpadRevision", "acceptance", "validation", "confusions"]),
-  );
+  expect(Object.keys(listed.find((t) => t.name === "flowly_update_workpad")!.inputSchema.properties).sort()).toEqual(["acceptance", "expectedRevision", "request", "workpadRevision"]);
+  // The skill (GUARDRAILS-SPEC §9): no self-reported checks, no review rules, the guardrails paragraph.
+  for (const gone of ["WORKPAD_OPEN", "WORKPAD_FAILING", "flowly_propose_review_rules", "reviewRules", "dirty=true", "fresh=stale", "memory.candidates"]) expect(skillText).not.toContain(gone);
+  expect(skillText).toContain("`flowly_get_task.guardrails` lists what this delivery will be checked against");
+  expect(skillText).toContain("deliver with `disputes=[{id, reason}]`");
+  expect(skillText).toContain("write 3–5 acceptance criteria with flowly_update_workpad");
+  expect(skillText).toContain("What you remember takes effect at once.");
   const cold = await mcp("tools/call", {
     name: "flowly_get_task",
     arguments: {},
@@ -467,6 +477,11 @@ test("CLI runs a complete scoped flow; replay, wrong env, snapshots and flags", 
     ],
     ["status", "done", "--request-file", snapshot, "--note", "unauthorized"],
     ["note", "--request-file", snapshot, "--note", " "],
+    // GUARDRAILS-SPEC §9: no review-rules command; the workpad takes only {acceptance}; disputes only on status in_review.
+    ["review-rules", "--request-file", snapshot, "--rules", "[]", "--note", "n"],
+    ["workpad", "--request-file", snapshot, "--workpad-revision", "0", "--workpad", JSON.stringify({ acceptance: [], validation: [] })],
+    ["status", "development", "--request-file", snapshot, "--note", "n", "--disputes", "[]"],
+    ["status", "in_review", "--request-file", snapshot, "--note", "n", "--disputes", "{}"],
   ]) {
     await expect(cli(...args)).rejects.toMatchObject({ code: 1 });
   }

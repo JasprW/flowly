@@ -105,14 +105,16 @@ Content-Type: application/json
 | `f_auto_wrapup` / `f_archive_on_delete` | `wrap-up` 设置 | 布尔值 |
 | `f_workflow_insights` | `workflow-insights.enabled`，且 Insights 开着（Workflow insights 是 host 级开关，不是按项目） | 布尔值 |
 | `f_summary` | `task-summary.summaryEnabled` | 布尔值 |
+| `f_auto_review` | 是否有未归档项目开启了 Auto review（`project.autoReview.enabled`，AUTO-REVIEW-SPEC） | 布尔值 |
 | `projects` | 未归档项目数，按 §4.5 分桶 | |
+| `c_guardrails` | 未归档项目的 active 准则总数（`guardrails.json` 中 `kind: "guideline"`、`state: "active"`，GUARDRAILS-SPEC §10），按 §4.5 分桶；只有数字，不含文字 | 发送时的快照，不是窗口计数 |
 | `cards_open` | 所有项目中未归档、且不在 Done/Cancelled 的卡片数，按 §4.5 分桶 | |
 
 新增设置**不会**自动进入心跳。要加字段，必须先修改本节表格。
 
 ### 4.3 计数（窗口内）
 
-窗口是 `[windowStart, 发送时刻)`。数据来自 `flow/<projectId>.jsonl`，不读 `board.json` 的事件（每卡只保留 100 条，见项目记忆里的这条坑），以及 `memory.json`。所有项目的数字加在一起：
+窗口是 `[windowStart, 发送时刻)`。数据来自 `flow/<projectId>.jsonl`，不读 `board.json` 的事件（每卡只保留 100 条，见项目记忆里的这条坑），以及 `guardrails.json` 的备忘。所有项目的数字加在一起：
 
 | 字段 | 统计的是 |
 |---|---|
@@ -122,7 +124,7 @@ Content-Type: application/json
 | `c_next_moves` | `next_moves_suggested` 中 moves 非空的次数 |
 | `c_next_moves_picked` | 带 `pick` 的 `agent.turn_ended` |
 | `c_ideas_proposed` / `c_ideas_accepted` / `c_ideas_dismissed` | `idea_proposed` / `idea_accepted` 与 `idea_adopted` / `idea_dismissed` |
-| `c_memory_proposed` / `c_memory_confirmed` | `memory_proposed` 事件 / `memory.json` 中 `confirmedAt` 落在窗口内的条目 |
+| `c_memory_proposed` / `c_memory_confirmed` | `memory_proposed` 事件 / `guardrails.json` 中状态为 active、且在窗口内变为 active 的备忘（`stateAt`）。备忘写入即生效（GUARDRAILS-SPEC D2），所以它现在是窗口内新生效的备忘数，键名保留 |
 | `c_wrapups` | `wrapped_up` |
 | `models` | `agent.turn_ended.model` 的计数表，例如 `{"claude/claude-sonnet-5-5": 12}` |
 

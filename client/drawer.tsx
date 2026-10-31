@@ -1,7 +1,7 @@
 import { useCardDetailQuery, useTaskDetail } from "./card-detail-query";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isNoMoves, nextMovesAction } from "../shared/next-moves";
-import { workpadCheckedAction, workpadEnabled, workpadUpdatedAction } from "../shared/workpad";
+import { workpadCheckedAction, workpadUpdatedAction } from "../shared/workpad";
 import type { PaseoAgent } from "@getpaseo/client";
 import { Pressable, View } from "react-native";
 import { drawerNeedsBoard } from "./query-activity";
@@ -65,7 +65,6 @@ import { TaskProgress } from "./task-progress";
 import { TaskUsage } from "./task-usage";
 import { SessionMarkdown } from "./session-content";
 import { TaskIdeas } from "./task-ideas";
-import { TaskMemorySection } from "./memory";
 import { LinkOrigin, TaskLinks } from "./task-links";
 import { TaskArtifacts } from "./task-artifacts";
 import { TaskWorkpad } from "./task-workpad";
@@ -102,7 +101,7 @@ function TaskDrawerView({
   startRequest,
   startIdea,
   onAllIdeas,
-  onMemoryPage,
+  guardrails = false,
   onFilterTag,
   escapeRequest,
   attention,
@@ -143,8 +142,8 @@ function TaskDrawerView({
   startIdea?: Idea;
   /** Opens the project Ideas page showing only this card (IDEAS-INBOX-SPEC §5). */
   onAllIdeas?(taskId: string): void;
-  /** Opens the project Memory page (PROJECT-MEMORY-SPEC §8.2). */
-  onMemoryPage?(): void;
+  /** Guardrails on (Settings and the project switch): the Workpad shows what this card was sent back for (GUARDRAILS-SPEC §7.1). */
+  guardrails?: boolean;
   /** Adds a tag to the board filter (CARD-TAGS-SPEC §6.3). */
   onFilterTag?(tag: string): void;
   /** Changes on each board Esc shortcut: leave the session preview, else close. */
@@ -734,9 +733,7 @@ function TaskDrawerView({
         );
       case "workpad":
         return (
-          workpadEnabled(project) && (
-            <TaskWorkpad task={task} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
-          )
+          <TaskWorkpad task={task} project={project} guardrails={guardrails} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
         );
       case "artifacts":
         return (
@@ -830,8 +827,6 @@ function TaskDrawerView({
               section={sectionStates.ideas}
             />
           )}
-          {/* Project memory proposed from this card, right after its ideas (PROJECT-MEMORY-SPEC §8.2). */}
-          {onMemoryPage && <TaskMemorySection task={task} project={project} onOpenPage={onMemoryPage} />}
           </>
         );
       case "links":
@@ -1319,6 +1314,8 @@ const activityText: Record<string, string> = localizedLabels({
   progress_reported: msg("Reported progress"),
   idea_edited: msg("Edited the idea"),
   idea_removed: msg("Removed the idea"),
+  review_started: msg("Started the auto review"),
+  review_finished: msg("Finished the auto review"),
   "agent.turn_started": msg("Started a turn"),
   "agent.turn_ended": msg("Finished a turn"),
 });
@@ -1365,7 +1362,7 @@ function ActivityItem({
         </Label>
         {!!event.rule && (
           <View style={{ flexDirection: "row" }}>
-            <Badge>{t("Auto")}</Badge>
+            <Badge>{event.rule === "R1" || event.rule === "R2" ? t("Auto review") : t("Auto")}</Badge>
           </View>
         )}
         {!!event.note && !isNoMoves(event) && (

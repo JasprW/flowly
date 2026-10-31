@@ -14,7 +14,7 @@ import type { AgentLike, UsageService } from "./usage";
 import { modelId } from "./agent-model";
 import { laneName } from "../shared/lanes";
 import { historyStatusLabel, type Board, type HistoryStatus, type Project, type Task } from "../shared/model";
-import { SUMMARIZER_LABELS, isSummarizer, summaryModelsOf, type SummaryEntry, type SummarySettings } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig, isSummarizer, summaryModelsOf, type SummaryEntry, type SummarySettings } from "../shared/summary";
 import {
   TREND_DAYS,
   addDays,
@@ -374,7 +374,7 @@ export class InsightsService {
     const prompt = digestPrompt({ project: project.title, day: input.day, today: input.day === dayKey(this.now(), tz), material: text, language: await this.language() });
     const { model, output } = await this.background.use(project, paseo, (workspaceId) => runSummaryModels(paseo, summaryModelsOf(settings), {
       create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
-        config: { provider: model },
+        config: readOnlyConfig(model),
         title: `Kanban digest · ${project.title} · ${input.day}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
         prompt,

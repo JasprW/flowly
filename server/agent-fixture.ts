@@ -64,10 +64,6 @@ export async function agentFixture(
         projectId: "p",
         revision: 1,
         acceptance: [{ id: "seeded", text: "Seeded criterion", done: true, by: "human", at: stamp }],
-        validation: [],
-        confusions: [],
-        env: null,
-        head: null,
         updatedAt: stamp,
         updatedBy: "human",
       });

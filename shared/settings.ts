@@ -5,6 +5,11 @@ import { priorities, statusSchema, taskTypes } from "./model";
 import { languageChoices, localeCodes } from "./i18n";
 import { aiLanguageChoices } from "./ai-language";
 import { cardActivityModes } from "./card-display";
+import { memoryKinds } from "./memory";
+
+/** The Memory page's sort orders (GUARDRAILS-SPEC §7.4). */
+export const memorySorts = ["newest", "used", "recent"] as const;
+export type MemorySort = (typeof memorySorts)[number];
 
 /** Host-scoped board view preferences (not board data). */
 export const boardViewSettings = defineSettings({
@@ -46,6 +51,10 @@ export const boardViewSettings = defineSettings({
     drawerOpen: z.record(z.string().max(40), z.boolean()).catch({}).default({}),
     /** Card sidebar width in points as last dragged; 0 = never resized (UI-UX-SPEC, drawer width). */
     drawerWidth: z.number().int().min(0).max(2000).catch(0).default(0),
+    /** The Memory page's kind filter, sort and wide-screen layout (GUARDRAILS-SPEC §7.4). */
+    memoryKind: z.enum(["all", ...memoryKinds]).catch("all").default("all"),
+    memorySort: z.enum(memorySorts).catch("newest").default("newest"),
+    memoryLayout: z.enum(["list", "grid"]).catch("list").default("list"),
   }),
 });
 

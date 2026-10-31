@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
 import type { LocaleCode } from "../shared/i18n";
-import { SUMMARIZER_LABELS, isSummarizer, type SummaryModelChoice, truncateTranscript, turnText } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig, isSummarizer, type SummaryModelChoice, truncateTranscript, turnText } from "../shared/summary";
 import {
   SESSION_IDEAS_MAX,
   SESSION_INSIGHTS_MAX,
@@ -203,7 +203,7 @@ export class SessionInsightService {
     const { model, output } = await runSummaryModels(paseo, settings.model, {
       create: (model) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
         parent: agent.id,
-        config: { provider: model },
+        config: readOnlyConfig(model),
         title: `Flowly insights · ${agent.title || "session"}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-session": agent.id },
         prompt,

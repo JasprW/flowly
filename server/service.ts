@@ -442,6 +442,8 @@ export class BoardService {
           primaryPath,
           repos: [primaryPath],
           ...(links ? { links } : {}),
+          // Auto review is on for new projects (GUARDRAILS-SPEC D1); existing projects keep what they stored.
+          autoReview: { enabled: true, maxRounds: 2 },
           revision: 1,
           createdAt: now,
           updatedAt: now,
@@ -510,6 +512,7 @@ export class BoardService {
       const repoPaths = [project.primaryPath];
       const sourcePath = project.primaryPath;
       let workspaceId = input.workspaceId;
+      let baseRef: string | undefined;
       if (input.mode === "existing") {
         if (!workspaceId) throw new Error("Select a workspace.");
         const workspace = await paseo.workspaces.ref(workspaceId).refresh();
@@ -529,7 +532,7 @@ export class BoardService {
           input.mode === "worktree"
             ? input.branchName?.trim() || generatedBranchName(input.title, input.operationId)
             : undefined;
-        const baseRef =
+        baseRef =
           input.mode === "worktree"
             ? await resolveWorktreeBaseRef(sourcePath, input.baseRef)
             : undefined;
@@ -606,6 +609,7 @@ export class BoardService {
             updatedAt: now,
             archivedAt: null,
             ownsWorkspace: input.mode !== "existing",
+            ...(baseRef ? { baseRef } : {}),
             ...(idea ? { origin: { taskId: idea.taskId, ideaId: idea.id } } : {}),
           };
           current.tasks.push(task);

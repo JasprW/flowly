@@ -2,6 +2,7 @@ import type { Project, Task, BoardEvent } from "./model";
 import { openQuestion, silentTurn } from "./progress";
 import { pendingRequests } from "./permission-question";
 import { isDismissed, sessionSignalKeys, type AttentionDismissal } from "./attention-dismiss";
+import { reviewSignal, reviewing } from "./auto-review";
 import {
   sessionAttentionFromTurn,
   type AttentionAgent,
@@ -22,6 +23,8 @@ export type AttentionItem = {
   asks: number;
   /** Unread sessions whose last turn ended without any Kanban report (M2). */
   silent: number;
+  /** A finished automatic review waiting for a person (AUTO-REVIEW-SPEC §7). */
+  review: "failed" | "unavailable" | null;
   /** Set when exactly one session needs attention, so it can be opened directly. */
   sessionId: string | null;
   updatedAt: string;
@@ -58,6 +61,9 @@ export function attentionItemsWithFacts(
     if (task.archivedAt) continue;
     const project = board.projects.find((p) => p.id === task.projectId);
     if (!project || project.archivedAt) continue;
+    // A running review holds the card's unread sessions back until it finishes (AUTO-REVIEW-SPEC §3.2).
+    const held = reviewing(task);
+    const review = reviewSignal(task);
     const flagged = agents
       .filter((a) => a.workspaceId === task.workspaceId && !a.archivedAt)
       .map((agent) => ({
@@ -66,7 +72,7 @@ export function attentionItemsWithFacts(
       }))
       .map(({ agent, facts }) => {
         const state = sessionAttentionFromTurn(agent, task.id, receipts, facts?.latestTurn);
-        const unread = !readUnavailable && state.unread && !state.permission && !state.error;
+        const unread = !readUnavailable && !held && state.unread && !state.permission && !state.error;
         return {
           agent,
           signals: sessionSignalKeys({
@@ -88,8 +94,8 @@ export function attentionItemsWithFacts(
         };
       })
       .filter((s) => s.permission || s.error || s.question || s.unread);
-    if (!flagged.length) continue;
-    const signals = flagged.flatMap((s) => s.signals);
+    if (!flagged.length && !review) continue;
+    const signals = [...flagged.flatMap((s) => s.signals), ...(review ? [review.key] : [])];
     items.push({
       task,
       project,
@@ -99,19 +105,20 @@ export function attentionItemsWithFacts(
       questions: flagged.filter((s) => s.question).length,
       asks: flagged.filter((s) => s.asks).length,
       silent: flagged.filter((s) => s.silent && !s.question).length,
+      review: review?.state ?? null,
       sessionId: flagged.length === 1 ? flagged[0].agent.id : null,
       updatedAt: flagged
         .map((s) => s.agent.updatedAt || "")
         .sort()
-        .at(-1) || "",
+        .at(-1) || (review ? task.review?.finishedAt || "" : ""),
       signals,
       dismissed: isDismissed(signals, board.attentionDismissals?.find((d) => d.taskId === task.id)),
     });
   }
   return items.sort(
     (a, b) =>
-      Number(!!(b.permissions || b.errors || b.questions)) -
-        Number(!!(a.permissions || a.errors || a.questions)) ||
+      Number(!!(b.permissions || b.errors || b.questions || b.review === "failed")) -
+        Number(!!(a.permissions || a.errors || a.questions || a.review === "failed")) ||
       b.updatedAt.localeCompare(a.updatedAt),
   );
 }

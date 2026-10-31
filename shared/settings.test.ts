@@ -2,9 +2,11 @@ import { expect, test } from "vitest";
 import { boardViewValues, statusSettingsValues } from "./settings";
 
 test("older stored settings get defaults for newer fields; invalid values fall back", () => {
-  expect(boardViewValues({ lastProjectId: "p" })).toEqual({ lastProjectId: "p", sendBehavior: "steer", startAgentOnCreate: true, boardSort: "manual", collapsedColumns: [], filterSearch: "", filterPriority: "all", filterType: "all", filterTags: [], showArchived: false, hideFinishedAfterDays: 14, runningSweep: true, lastTicketConnection: "", lastConnections: {}, cardActivity: "auto", cardHidden: [], drawerOrder: [], drawerOpen: {}, drawerWidth: 0 });
-  expect(boardViewValues(undefined)).toEqual({ lastProjectId: "", sendBehavior: "steer", startAgentOnCreate: true, boardSort: "manual", collapsedColumns: [], filterSearch: "", filterPriority: "all", filterType: "all", filterTags: [], showArchived: false, hideFinishedAfterDays: 14, runningSweep: true, lastTicketConnection: "", lastConnections: {}, cardActivity: "auto", cardHidden: [], drawerOrder: [], drawerOpen: {}, drawerWidth: 0 });
+  expect(boardViewValues({ lastProjectId: "p" })).toEqual({ lastProjectId: "p", sendBehavior: "steer", startAgentOnCreate: true, boardSort: "manual", collapsedColumns: [], filterSearch: "", filterPriority: "all", filterType: "all", filterTags: [], showArchived: false, hideFinishedAfterDays: 14, runningSweep: true, lastTicketConnection: "", lastConnections: {}, cardActivity: "auto", cardHidden: [], drawerOrder: [], drawerOpen: {}, drawerWidth: 0, memoryKind: "all", memorySort: "newest", memoryLayout: "list" });
+  expect(boardViewValues(undefined)).toEqual({ lastProjectId: "", sendBehavior: "steer", startAgentOnCreate: true, boardSort: "manual", collapsedColumns: [], filterSearch: "", filterPriority: "all", filterType: "all", filterTags: [], showArchived: false, hideFinishedAfterDays: 14, runningSweep: true, lastTicketConnection: "", lastConnections: {}, cardActivity: "auto", cardHidden: [], drawerOrder: [], drawerOpen: {}, drawerWidth: 0, memoryKind: "all", memorySort: "newest", memoryLayout: "list" });
   expect(boardViewValues({ sendBehavior: "bogus" }).sendBehavior).toBe("steer");
+  expect(boardViewValues({ memoryKind: "pitfall", memorySort: "used", memoryLayout: "grid" })).toMatchObject({ memoryKind: "pitfall", memorySort: "used", memoryLayout: "grid" });
+  expect(boardViewValues({ memoryKind: "bogus", memorySort: "bogus", memoryLayout: "bogus", lastProjectId: "p" })).toMatchObject({ memoryKind: "all", memorySort: "newest", memoryLayout: "list", lastProjectId: "p" });
   expect(boardViewValues({ sendBehavior: "queue", startAgentOnCreate: false })).toMatchObject({ sendBehavior: "queue", startAgentOnCreate: false });
 });
 
@@ -46,7 +48,7 @@ test("card display options default to auto and all shown; a bad value does not r
   expect(boardViewValues({ drawerOrder: ["sessions", "future"] }).drawerOrder).toEqual(["sessions", "future"]);
   expect(boardViewValues({ boardSort: "priority", drawerOrder: "sessions" })).toMatchObject({ boardSort: "priority", drawerOrder: [] });
   expect(boardViewValues({ drawerOpen: { workpad: false } }).drawerOpen).toEqual({ workpad: false });
-  expect(boardViewValues({ boardSort: "priority", drawerOpen: { workpad: "no" } })).toMatchObject({ boardSort: "priority", drawerOpen: {}, drawerWidth: 0 });
+  expect(boardViewValues({ boardSort: "priority", drawerOpen: { workpad: "no" } })).toMatchObject({ boardSort: "priority", drawerOpen: {}, drawerWidth: 0, memoryKind: "all", memorySort: "newest", memoryLayout: "list" });
 });
 
 test("the timing log is off unless the host setting says so", async () => {

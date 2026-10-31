@@ -35,11 +35,14 @@ import { linkedCardCounts } from "./shared/connectors";
 import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
 import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./server/progress-rules";
+import { AutoReviewService, readConversation } from "./server/auto-review";
+import { llmReviewer } from "./server/review-session";
 import { NextMoveRows } from "./server/next-move-rows";
 import { SessionInsightService, SessionInsightStore } from "./server/session-insights";
 import { SummaryService, SummaryStore } from "./server/summaries";
 import { UsageService } from "./server/usage";
 import { summarySettings, summarySettingsValues, summaryModelsOf } from "./shared/summary";
+import { enabledStatuses, laneEnabled } from "./shared/lanes";
 import { FlowLog } from "./server/flow-log";
 import { ProjectFolders, snapshotPath } from "./server/project-folder";
 import { GitStats } from "./server/git-stats";
@@ -51,6 +54,9 @@ import { sessionModel } from "./server/agent-model";
 import { startedByUser, turnPick, userTexts } from "./shared/agent-habits";
 import { turnTimeline } from "./server/turn-timeline";
 import { MemoryService, setMemoryEverywhere, memoryOn } from "./server/memory";
+import { GuardrailsService } from "./server/guardrails";
+import { guardrailsLedger } from "./shared/guardrails";
+import { validZone } from "./shared/insights";
 import { SearchService } from "./server/search";
 import { POSTHOG_KEY, TelemetryService } from "./server/telemetry";
 import { FLOWLY_VERSION } from "./shared/version";
@@ -62,7 +68,7 @@ export default function contribute(host: PluginServerContext) {
   const languagePrefs = server.registerSettings(languageSettings);
   const aiLanguagePrefs = server.registerSettings(aiLanguageSettings);
   const devicePrefs = server.registerSettings(deviceLanguageSettings);
-  server.registerSettings(modelSettings);
+  const modelPrefs = server.registerSettings(modelSettings);
   server.registerSettings(onboardingSettings);
   const summaryPrefs = server.registerSettings(summarySettings);
   const wrapupPrefs = server.registerSettings(wrapupSettings);
@@ -90,6 +96,10 @@ export default function contribute(host: PluginServerContext) {
   };
   if (!process.env.FLOWLY_DATA_DIR && !process.env.ULTRA_KANBAN_DATA_DIR) migrateLegacyPluginData();
   const store = new BoardStore(dataDirectory(), { backend: "sqlite" });
+  // Project guardrails (GUARDRAILS-SPEC): the one-time move from memory.json and the review rules is queued ahead of every read.
+  let memoryRunning: () => readonly string[] = () => [];
+  const guardrails = new GuardrailsService(store, undefined, undefined, () => memoryRunning());
+  void guardrails.store.migrate(async () => (await store.read()).projects).catch((e) => logFailure("Flowly guardrails migration failed:", e));
   // The Next moves card in Paseo's own timeline (NATIVE-SESSION-SPEC §6.1).
   const nextRows = new NextMoveRows(store);
   // The language of everything AI writes (AI-LANGUAGE-SPEC §3); unreadable settings fall back along the chain.
@@ -263,24 +273,28 @@ export default function contribute(host: PluginServerContext) {
   tools.agents.connectors = connectors;
   // Project memory (PROJECT-MEMORY-SPEC): confirmed knowledge shared across a project's cards.
   const memory = new MemoryService(store, summaries.store, summaries.settings, aiLanguage, (taskId) => summaries.settled(taskId));
+  memoryRunning = () => memory.runningTasks();
+  // Learning from rework turns rides on the card summary (GUARDRAILS-SPEC §4.2).
+  summaries.guardrails = { section: (taskId) => guardrails.section(taskId), learn: (input) => guardrails.learn(input) };
   // Skill material: card summaries and project memory (INSIGHTS-REDESIGN-SPEC §3.2).
   workflow.skillSources = {
     summaries: async () => (await summaries.store.read()).entries,
-    memory: async () => memory.store.read(),
+    memory: async () => memory.memoryState(),
     memoryOn: (project) => memoryOn(project),
   };
   tools.agents.memory = memory;
-  server.handle(rpc.readMemory, async ({ projectId, etag }) => ifChanged(await memory.view(projectId), etag));
-  server.handle(rpc.memoryCounts, async ({ etag }) => ifChanged(await memory.counts(), etag));
-  server.handle(rpc.createMemory, (input) => memory.create(input));
-  server.handle(rpc.updateMemory, (input) => memory.update(input));
-  server.handle(rpc.confirmMemory, (input) => memory.confirm(input));
-  server.handle(rpc.dismissMemory, (input) => memory.dismiss(input));
-  server.handle(rpc.restoreMemory, (input) => memory.restore(input));
-  server.handle(rpc.archiveMemory, (input) => memory.archive(input));
-  server.handle(rpc.archiveStaleMemory, (input) => memory.archiveMany(input));
-  server.handle(rpc.deleteMemory, (input) => memory.remove(input));
-  server.handle(rpc.reviewForMemory, (input, { paseo }) => memory.manual(input.taskId, paseo));
+  tools.agents.guardrails = guardrails;
+  server.handle(rpc.readGuardrails, async ({ projectId, etag }) => ifChanged(await guardrails.view(projectId), etag));
+  server.handle(rpc.guardrailCounts, async ({ etag }) => ifChanged(await guardrails.counts(), etag));
+  server.handle(rpc.createGuardrail, (input) => guardrails.create(input));
+  server.handle(rpc.updateGuardrail, (input) => guardrails.update(input));
+  server.handle(rpc.deleteGuardrail, (input) => guardrails.remove(input));
+  server.handle(rpc.detectGuardrails, (input) => guardrails.detect(input.projectId));
+  server.handle(rpc.guardrailsInsights, async ({ projectId, tz }) => {
+    const [state, entries] = await Promise.all([guardrails.store.read(), flow.read(projectId)]);
+    return guardrailsLedger({ flow: entries, entries: state.entries, projectId, now: Date.now(), tz: validZone(tz) });
+  });
+  server.handle(rpc.retroGuardrails, (input, { paseo }) => memory.manual(input.taskId, paseo));
   // Unreadable settings keep the default (on).
   tools.agents.ideasOn = async () => {
     const state = await ideasPrefs.read().catch(() => null);
@@ -295,7 +309,7 @@ export default function contribute(host: PluginServerContext) {
   const search = new SearchService({
     board: () => store.read(),
     summaries: { path: summaries.store.path, read: async () => (await summaries.store.read()).entries },
-    memory: { path: memory.store.path, read: async () => (await memory.store.read()).entries },
+    memory: { path: memory.store.path, read: async () => (await memory.memoryState()).entries },
     memoryOn: (project) => memoryOn(project),
     ideasOn: () => tools.agents.ideasOn(),
     artifactsOn: () => tools.agents.artifactsOn(),
@@ -391,9 +405,14 @@ export default function contribute(host: PluginServerContext) {
   );
   server.handle(rpc.listResources, (_, { paseo }) => service.resources(paseo));
   server.handle(rpc.readResourcesChanged, async (input, { paseo }) => ifChanged(await service.resources(paseo), input.etag));
-  server.handle(rpc.createProject, (input, { paseo }) =>
-    service.createProject(input, paseo),
-  );
+  // A new project's check commands join its guardrails as observing (GUARDRAILS-SPEC §4.5); never blocks the creation.
+  const detectCommands = (projectId: string) =>
+    void guardrails.detect(projectId).catch((e) => logFailure("Flowly guardrail commands not detected:", e, projectId));
+  server.handle(rpc.createProject, async (input, { paseo }) => {
+    const project = await service.createProject(input, paseo);
+    detectCommands(project.id);
+    return project;
+  });
   server.handle(rpc.createTask, (input, { paseo }) =>
     service.createTask(input, paseo),
   );
@@ -415,6 +434,9 @@ export default function contribute(host: PluginServerContext) {
     }
     // Entering Done: the finished-card review for project memory (PROJECT-MEMORY-SPEC §4.2), in the background.
     if (task.status === "done" && previous !== "done") memory.afterDone(task.id, paseo);
+    // Entering Done or Cancelled: the card's remaining disputes count as misfires (GUARDRAILS-SPEC §6.6); its items stay open (§3.3).
+    if (finished(task.status) && !finished(previous))
+      void guardrails.finishTask(task.id).catch((e) => logFailure("Flowly guardrails not updated on finish:", e, task.id));
     if (!finished(task.status) || finished(previous)) return;
     void (async () => {
       const prefs = await wrapupPrefs.read().catch(() => null);
@@ -445,6 +467,8 @@ export default function contribute(host: PluginServerContext) {
     // Included again: read its last week once, like turning the switch on (§3.3).
     if (before?.workflowInsights === false && project.workflowInsights !== false && (await workflowValues()).enabled)
       void workflow.backfill(project.id, paseo).catch(() => undefined);
+    // Auto review switched on: the check commands join as observing (GUARDRAILS-SPEC §4.5).
+    if (!before?.autoReview?.enabled && project.autoReview?.enabled) detectCommands(project.id);
     return project;
   });
   server.handle(rpc.removeProject, async (input, { paseo }) => {
@@ -474,6 +498,32 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.deleteLink, (input) => deleteLink(store, input));
   const artifacts = new ArtifactService(store, connectors);
   const workpads = new WorkpadService(store);
+  // Automatic review of agent deliveries (AUTO-REVIEW-SPEC); rework goes out through the composer queue.
+  const reviews = new AutoReviewService(store, {
+    workspace: async (task, api) => {
+      const workspace = await api.workspaces.ref(task.workspaceId).refresh();
+      return workspace?.workspaceDirectory ? { directory: workspace.workspaceDirectory, worktree: workspace.workspaceKind === "worktree" } : null;
+    },
+    sessionBusy: async (agentId, api) => {
+      const status = (await api.agents.ref(agentId).refresh())?.agent?.status;
+      return status === "running" || status === "initializing";
+    },
+    sessionLive: async (agentId, task, api) => {
+      const agent = (await api.agents.ref(agentId).refresh())?.agent;
+      return !!agent && !agent.archivedAt && agent.workspaceId === task.workspaceId;
+    },
+    send: (message, api) => composer.push(message, api),
+    conversation: readConversation,
+    guardrails,
+    // A temporary session judges the built-in check, guidelines and card items, hard-deleted after like the summarizer.
+    llm: llmReviewer({
+      reviewModel: async () => (await summaries.settings()).reviewModel ?? "",
+      summaryModels: async () => summaryModelsOf(await summaries.settings()),
+    }),
+  });
+  tools.agents.onDelivered = (delivery, api) => void reviews.delivered(delivery, api);
+  void reviews.recover().catch((e) => logFailure("Flowly auto review recovery failed:", e));
+  server.handle(rpc.rerunReview, (input, { paseo }) => reviews.rerun(input.taskId, paseo));
   server.handle(rpc.listConnections, async () => {
     const [connections, board] = await Promise.all([connectors.list(), store.read()]);
     return { connections, linkedCards: linkedCardCounts(connections, board.artifacts) };
@@ -509,9 +559,7 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.deleteArtifact, (input) => artifacts.delete(input));
   server.handle(rpc.artifactStatus, (input, { paseo }) => artifacts.status(input, paseo));
   server.handle(rpc.previewArtifact, (input, { paseo }) => artifacts.preview(input, paseo));
-  server.handle(rpc.checkWorkpad, (input, { paseo }) => workpads.check(input, paseo));
-  server.handle(rpc.resolveConfusion, (input) => workpads.resolveConfusion(input));
-  server.handle(rpc.refreshWorkpad, (input, { paseo }) => workpads.refresh(input, paseo));
+  server.handle(rpc.checkWorkpad, (input) => workpads.check(input));
   server.handle(rpc.deleteTask, async (input, { paseo }) => {
     const archived = input.archive
       ? await wrapups.run({ ...input, keepCard: true, purpose: "delete" }, paseo)
@@ -538,7 +586,11 @@ export default function contribute(host: PluginServerContext) {
     return archived ? { ...deleted, archived: { sessions: archived.archivedSessions, workspace: archived.archivedWorkspace } } : deleted;
   });
   server.handle(rpc.removeProjectCheck, (input, { paseo }) => service.removeCheck(input.id, paseo));
-  server.handle(rpc.createLinkedProject, (input, { paseo }) => service.createLinked(input, paseo));
+  server.handle(rpc.createLinkedProject, async (input, { paseo }) => {
+    const project = await service.createLinked(input, paseo);
+    detectCommands(project.id);
+    return project;
+  });
   server.handle(rpc.setProjectLinks, (input) => service.setLinks(input));
   const picker = new NativeDirectoryPicker(detectNativePicker());
   server.handle(rpc.listDirectories, async (input) => listDirectories(input.path, await picker.available()));
@@ -620,22 +672,27 @@ export default function contribute(host: PluginServerContext) {
     const model = await sessionModel(paseo, event.agent);
     const timeline = await turn;
     const texts = userTexts(timeline);
+    // A rework turn: opened by the user's own words while the card was In review (GUARDRAILS-SPEC §4.1).
+    let rework: string | null = null;
     await store.mutate((board) => {
       recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(timeline) });
       if (auto) applyTurnEnded(store, board, identity, event.outcome);
+      rework = memory.reworkQuote(identity, timeline, board);
     });
+    // A delivery made in this turn is reviewed now that the turn is over (AUTO-REVIEW-SPEC §3.1); never blocks the hook.
+    void reviews.turnEnded(identity.agentId, paseo);
     // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
     void store
       .read()
       .then((board) => memory.recordTurn(identity, timeline, board))
       .catch((e) => logFailure("Flowly memory clue not recorded:", e));
-    // The session's plan and the workspace HEAD for the workpad (WORKPAD-SPEC §2.2, §5.2); never blocks the hook.
-    void workpads.recordTurn(identity, timeline, paseo).catch((e) =>
+    // The session's plan for the workpad (WORKPAD-SPEC §2.2); never blocks the hook.
+    void workpads.recordTurn(identity, timeline).catch((e) =>
       logFailure("Kanban workpad plan not recorded:", e),
     );
     // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
     if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
-      void summaries.enqueue(identity.taskId, identity.agentId, timeline, paseo, endedAt);
+      void summaries.enqueue(identity.taskId, identity.agentId, timeline, paseo, endedAt, rework);
   });
   // Queued follow-ups go out when any session's turn ends (Paseo "queue").
   server.on("agent.turn_ended", async (event, { paseo }) => {
@@ -698,8 +755,13 @@ export default function contribute(host: PluginServerContext) {
           archiveOnDelete: wrap.archiveOnDelete,
           workflowInsights: workflowState.enabled,
           summary: summary.summaryEnabled,
+          autoReview: projects.some((p) => !!p.autoReview?.enabled),
         },
         projects: projects.length,
+        guardrails: await guardrails.store
+          .read()
+          .then((g) => g.entries.filter((e) => e.kind === "guideline" && e.state === "active" && live.has(e.projectId)).length)
+          .catch(() => 0),
         cardsOpen: board.tasks.filter((t) => live.has(t.projectId) && !t.archivedAt && t.status !== "done" && t.status !== "cancelled").length,
       };
     },
@@ -707,7 +769,7 @@ export default function contribute(host: PluginServerContext) {
       const board = await store.view();
       const [events, state] = await Promise.all([
         Promise.all(board.projects.map((p) => flow.read(p.id).catch(() => []))).then((lists) => lists.flat()),
-        memory.store.read().catch(() => null),
+        memory.memoryState().catch(() => null),
       ]);
       return { events, memoryConfirmedAt: (state?.entries ?? []).flatMap((e) => (e.confirmedAt ? [e.confirmedAt] : [])) };
     },

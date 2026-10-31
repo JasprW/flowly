@@ -4,6 +4,7 @@ import { useBoardView } from "./board-view";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { View } from "react-native";
+import { useToast } from "@getpaseo/plugin/client/react-native";
 import { useSettled } from "./motion";
 import { perfLap } from "./perf";
 import { Modal } from "./modal";
@@ -34,12 +35,15 @@ import { newMessageId, rememberSentImages } from "./sent-images";
 import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
 import { tagValues } from "../shared/tags";
+import { autoReviewOf } from "../shared/auto-review";
+import { AutoReviewSection, autoReviewPatch, type ReviewEdit } from "./review-settings";
 import { TagEditor } from "./tag-input";
 import { useStableCallback } from "./stable";
 import { ExternalChip, ExternalPicker, connectionsByFamily, familyNames, pickKey, useConnections } from "./connectors";
 import { BrandIcon } from "./brand-icons";
 import { connectorFamilies, connectorLimits, familyOf, type ConnectorFamily, type ConnectorProvider, type ExternalSummary } from "../shared/connectors";
 
+const newProjectReview: ReviewEdit = { on: true, rounds: "2" };
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 export function ProjectForm({
@@ -49,8 +53,11 @@ export function ProjectForm({
   onShowArchived,
   onClose,
   onSaved,
+  reviewOn,
 }: {
   project?: Project;
+  /** Opened from What's new to turn Auto review on: the section first, its switch on (GUARDRAILS-SPEC §10). */
+  reviewOn?: boolean;
   /** Live cards per lane, so lanes in use can't be turned off. */
   laneCounts?: Partial<Record<Status, number>>;
   /** The board's Show archived view setting; edited here, stored with Save. */
@@ -61,6 +68,7 @@ export function ProjectForm({
   onSaved: (id: string, restored?: { restored: number; title: string }) => void;
 }) {
   const theme = useTheme();
+  const toast = useToast();
   const [project] = useState(initialProject);
   const create = useRpc(rpc.createProject),
     createLinked = useRpc(rpc.createLinkedProject),
@@ -81,6 +89,8 @@ export function ProjectForm({
     [workpad, setWorkpad] = useState(project?.workpad !== false),
     [workflowInsights, setWorkflowInsights] = useState(project?.workflowInsights !== false),
     [memory, setMemory] = useState(project?.memory !== false),
+    // A new project starts with Auto review on (GUARDRAILS-SPEC §8, D1).
+    [review, setReview] = useState<ReviewEdit>(() => (project ? { on: autoReviewOf(project).enabled, rounds: String(autoReviewOf(project).maxRounds) } : newProjectReview)),
     [agentModel, setAgentModel] = useState<AgentModel | null>(project?.agentModel ?? null),
     [archivedShown, setArchivedShown] = useState(!!showArchived),
     [lanes, setLanes] = useState<Lane[]>(() => projectLanes(project)),
@@ -104,11 +114,13 @@ export function ProjectForm({
     staleTime: 0,
   });
   const restoring = !!found && !found.conflict && !startEmpty;
+  const reviewSection = <AutoReviewSection project={project} value={review} onChange={setReview} switchOn={reviewOn} />;
   async function save() {
     setPending(true);
     setError("");
     try {
       if (project) {
+        const stored = autoReviewOf(project);
         let saved = await update({
           id: project.id,
           revision: project.revision,
@@ -118,6 +130,7 @@ export function ProjectForm({
           ...(workpad !== (project.workpad !== false) ? { workpad } : {}),
           ...(workflowInsights !== (project.workflowInsights !== false) ? { workflowInsights } : {}),
           ...(memory !== (project.memory !== false) ? { memory } : {}),
+          ...(review.on !== stored.enabled || Number(review.rounds) !== stored.maxRounds ? { autoReview: autoReviewPatch(review) } : {}),
           ...(JSON.stringify(lanes) !== JSON.stringify(projectLanes(project)) ? { lanes } : {}),
           ...(JSON.stringify(agentModel) !== JSON.stringify(project.agentModel ?? null) ? { agentModel } : {}),
         });
@@ -141,6 +154,12 @@ export function ProjectForm({
               primaryPath,
               ...(source === "native" && nativeId ? { paseoProjectId: nativeId } : {}),
             });
+      // projects.create turns Auto review on with 2 rounds; anything else is saved right after.
+      // The project exists now: a failed follow-up write must not leave the form open for a second Create.
+      if (review.on !== newProjectReview.on || review.rounds !== newProjectReview.rounds)
+        await update({ id: result.id, revision: result.revision, autoReview: autoReviewPatch(review) }).catch((e) =>
+          toast.error(t("Project created, but Auto review was not saved: {error}", { error: message(e) })),
+        );
       onSaved(result.id);
     } catch (e) {
       setError(message(e));
@@ -159,6 +178,7 @@ export function ProjectForm({
       <Modal.Content>
         <Theme.Provider value={theme}>
         <View style={{ gap: 16 }}>
+          {project && reviewOn && reviewSection}
           {!restoring && <Field title={t("Name")} value={title} onChange={setTitle} placeholder={t("Project name")} />}
           {!restoring && (
             <Field
@@ -275,11 +295,12 @@ export function ProjectForm({
           {project && (
             <Toggle
               title={t("Card workpad")}
-              detail={t("Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.")}
+              detail={t("Agents keep an acceptance list on each card. Off hides it; what agents wrote is kept.")}
               value={workpad}
               onChange={setWorkpad}
             />
           )}
+          {!restoring && !(project && reviewOn) && reviewSection}
           {project && (
             <Toggle
               title={t("Skills")}
@@ -289,8 +310,8 @@ export function ProjectForm({
           )}
           {project && (
             <Toggle
-              title={t("Project memory")}
-              detail={t("Share confirmed decisions and pitfalls with new sessions on this project. Off stops injecting them and stops new suggestions; what is remembered is kept.")}
+              title={t("Guardrails")}
+              detail={t("Learn from what you send cards back for, and check the next cards for it.")}
               value={memory}
               onChange={setMemory}
             />
