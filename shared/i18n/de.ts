@@ -915,6 +915,7 @@ const catalog: Catalog = {
   "Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.": "Agenten führen auf jeder Karte Akzeptanzkriterien und Prüfungen; wer mit offenen Punkten liefert, muss sie begründen. Aus blendet es aus und stoppt diese Prüfungen; was Agenten geschrieben haben, bleibt erhalten.",
   "Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display.": "Karten zu voll? Wähle in Einstellungen → Karten oder über das Menü Sortieren → Kartenanzeige, was sie zeigen.",
   "Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.": "Karten zu voll? Wähle in Einstellungen → Karten oder über Filter → Kartenanzeige, was sie zeigen.",
+  "Swipe left or right to switch lanes.": "Wische nach links oder rechts, um die Spalte zu wechseln.",
   "Card display…": "Kartenanzeige…",
   "Summary, else output": "Zusammenfassung, sonst Ausgabe",
   "The progress summary; the latest output until there is one": "Die Fortschrittszusammenfassung; bis es eine gibt, die neueste Ausgabe",

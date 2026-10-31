@@ -987,6 +987,14 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 修复：`server/turn-timeline.ts` 在空时读 timeline 最新一页的最后一轮，`agent.turn_ended` 入口统一使用；`agent.turn_ended` 的 `byUser` 在 10-26 起的事件里被记成 false，未回填。
 
 
+## 2026-10-31 手机看板左右滑动切换 lane
+
+- 用户要求：手机看板左右滑动切换 lane，不能和 Paseo 滑动打开侧边栏冲突；参照 better-paseo，只有在最左的 lane 才触发侧边栏。按 [UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts) 2026-10-31 lane swipe 条（替换原“不做横向分页”的规则）。
+- `client/lane-pager.tsx`：iOS/Android 上 lane 是原生横向分页 `ScrollView` 的页，顺序与状态菜单一致，跟手滑动，松手停在最近的 lane 并更新 `mobileStatus`。只挂载当前 lane，闲置 400 ms 后再挂载左右各一个，其余页是空占位。从状态菜单选择直接跳过去，保留原来的淡入（`lanePick`）。Web 不变。
+- 侧边栏：离开第一个 lane 时，`client/host-horizontal-scroll.ts` 通过 React fiber 找到 Paseo 的 `HorizontalScrollContext`，登记横向偏移 100，宿主的右滑打开侧边栏手势随即失败，右滑由分页处理。回到第一个 lane、卡片盖住看板、或卸载时注销。找不到注册表时什么都不做，也不报错。AGENTS.md 已加这条依赖 Paseo 内部实现的例外。
+- 引导：新增一次性提示 `lane-swipe`（"Swipe left or right to switch lanes."，9 个目录），排在 first-card 之后、card-display 之前；滑到别的 lane 也算看过。导览不变。What's new：补丁版本不加。遥测：不加字段（纯手势，不是开关或核心动作）。
+- 测试：`client/host-horizontal-scroll.test.ts`（找到注册表、忽略相似对象、环形树和抛错的树）、`lane-rows.test.ts` 的 `settledPage`、`onboarding-logic.test.ts` 的提示顺序。
+
 ## 2026-10-31 手机看板顶栏精简
 
 - 用户反馈：手机顶栏右侧按钮太多，项目名显示不全。按 [UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts) 2026-10-31 条：紧凑顶栏只留项目选择、Attention、搜索、筛选；New task 改为右下角悬浮按钮（`client/new-task-fab.tsx`，仅在看板列表可见），排序和 Card display… 移入筛选面板，项目设置走项目选择面板的 Edit。桌面端不变；无 RPC/存储改动。

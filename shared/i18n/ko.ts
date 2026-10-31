@@ -915,6 +915,7 @@ const catalog: Catalog = {
   "Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.": "에이전트가 카드마다 인수 기준과 검증 항목을 관리하고, 미완료 항목이 있는 채로 전달하려면 설명이 필요합니다. 끄면 숨겨지고 이 검사도 멈추며, 에이전트가 작성한 내용은 유지됩니다.",
   "Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display.": "카드가 너무 복잡한가요? 설정 → 카드 또는 정렬 메뉴 → 카드 표시에서 보여 줄 항목을 고르세요.",
   "Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.": "카드가 너무 복잡한가요? 설정 → 카드 또는 필터 → 카드 표시에서 보여 줄 항목을 고르세요.",
+  "Swipe left or right to switch lanes.": "왼쪽이나 오른쪽으로 스와이프해 레인을 전환하세요.",
   "Card display…": "카드 표시…",
   "Summary, else output": "요약, 없으면 출력",
   "The progress summary; the latest output until there is one": "진행 요약. 아직 없으면 최신 출력",
