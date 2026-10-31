@@ -37,8 +37,8 @@ describe("Memory page order (GUARDRAILS-SPEC §7.4)", () => {
 });
 
 describe("Memory grid", () => {
-  it("uses one column per 280 pt, two to four", () => {
-    expect([400, 600, 900, 1200, 2000].map(gridColumns)).toEqual([2, 2, 3, 4, 4]);
+  it("uses columns at least 340 pt wide, two or three", () => {
+    expect([400, 679, 680, 1019, 1020, 1120, 2000].map(gridColumns)).toEqual([2, 2, 2, 2, 3, 3, 3]);
   });
   it("places each entry into the shortest column and keeps earlier placements", () => {
     const items = [{ id: "1", h: 300 }, { id: "2", h: 100 }, { id: "3", h: 100 }, { id: "4", h: 100 }];
@@ -50,10 +50,16 @@ describe("Memory grid", () => {
     // A placement past the current column count is placed again.
     expect(ids(placeMasonry(items, 2, (x) => x.h, new Map([["1", 3]])))).toEqual([["1"], ["2", "3", "4"]]);
   });
-  it("estimates a longer body taller, up to the clamp", () => {
-    const short = estimateHeight(note("s", { body: "x" }), 300);
-    const long = estimateHeight(note("l", { body: "x".repeat(400) }), 300);
+  it("estimates a longer body taller, up to the six-line fold", () => {
+    const short = estimateHeight(note("s", { body: "x" }), 340);
+    const long = estimateHeight(note("l", { body: "x".repeat(400) }), 340);
     expect(long).toBeGreaterThan(short);
-    expect(estimateHeight(note("xl", { body: "x".repeat(4000) }), 300)).toBe(long);
+    expect(estimateHeight(note("xl", { body: "x".repeat(4000) }), 340)).toBe(long);
+  });
+  it("never folds the title, and counts the tags/usage line only when there is one", () => {
+    const one = estimateHeight(note("t"), 340);
+    expect(estimateHeight(note("t".repeat(400)), 340)).toBeGreaterThan(estimateHeight(note("t".repeat(200)), 340));
+    expect(estimateHeight(note("t", { tags: ["api"] }), 340)).toBeGreaterThan(one);
+    expect(estimateHeight(note("t", { counts: used(["t1", "2026-10-05T00:00:00.000Z"]) }), 340)).toBeGreaterThan(one);
   });
 });

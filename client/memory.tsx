@@ -1,24 +1,24 @@
 import { usePerfRender } from "./perf";
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import { Animated, Pressable, Text, View } from "react-native";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { Project, Status, Task } from "../shared/model";
 import { agentsRule, memoryKinds, type MemoryKind } from "../shared/memory";
 import type { GuardrailEntry, GuardrailState } from "../shared/guardrails";
 import type { BoardView, MemorySort } from "../shared/settings";
-import { ContentCard, CardBody, CardHeadline, CardMetaRow, CardMeta, CardText, SourceLine } from "./content-card";
-import { eventPoint, useMenuOpener, type MenuEntry } from "./context-menu";
+import { cardFrameStyle, SourceLine } from "./content-card";
+import { eventPoint, menuHandlers, useMenuOpener, type MenuEntry } from "./context-menu";
 import { Chevron, Collapse } from "./disclosure";
 import { ConfirmDialog, Editor, reasonText, useGuardrailActions, type NoteDraft } from "./guardrails";
 import { estimateHeight, gridColumns, placeMasonry, sortNotes } from "./memory-layout";
 import { Modal } from "./modal";
-import { Enter } from "./motion";
+import { Enter, useMotionValue } from "./motion";
 import { keepPageRows, usePageRows } from "./page-rows";
 import { useGuardrailsQuery } from "./queries";
 import { useStableCallback } from "./stable";
 import { IdeaRow, useExitList } from "./task-ideas";
-import { Actions, Button, Choices, Field, IconButton, Label, Notice, Theme, Toggle, font, message, noFocusRing, pageBarHeight, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
+import { Actions, Button, Choices, Dot, Field, IconButton, Label, Notice, Theme, Toggle, font, message, noFocusRing, pageBarHeight, radius, space, tint, touch, useTheme, verticalContent, verticalScroll } from "./ui";
 import { t, msg, tn } from "../shared/i18n";
 
 /** The Memory page (GUARDRAILS-SPEC §7.4, D10): the project's `note` entries, kept apart from the Guardrails page. */
@@ -55,7 +55,7 @@ const draftOf = (e?: GuardrailEntry): NoteDraft => ({
   pinned: !!e?.pinned,
 });
 
-const MemoryCard = memo(function MemoryCard({ entry, ops, busy, source, nameOf }: { entry: GuardrailEntry; ops: Ops; busy: boolean; source: Task | undefined; nameOf(status: Status): string }) {
+const MemoryCard = memo(function MemoryCard({ entry, ops, busy, compact, source, nameOf }: { entry: GuardrailEntry; ops: Ops; busy: boolean; compact: boolean; source: Task | undefined; nameOf(status: Status): string }) {
   const { colors } = useTheme();
   const openMenu = useMenuOpener();
   const [editing, setEditing] = useState(false);
@@ -63,6 +63,12 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, source, nameOf }
   const [edited, setEdited] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Kept only while the page is open.
+  const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  // Desktop shows the menu button on hover or keyboard focus; touch and compact layouts always show it.
+  const actionOpacity = useMotionValue(touch || compact || hovered || focused ? 1 : 0);
   const closeEditor = () => {
     setEdited(true);
     setEditing(false);
@@ -76,50 +82,70 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, source, nameOf }
   const archived = entry.state === "archived";
   const kind = entry.noteKind ?? "decision";
   const color = kindColor(colors, kind);
-  const items: MenuEntry[] = archived
-    ? [{ id: "restore", label: t("Restore"), icon: "ArchiveRestore", onPress: () => void ops.setState(entry, "active") }]
-    : [
-        { id: "edit", label: t("Edit"), icon: "Pencil", onPress: () => { ops.keep(entry.id); setEditing(true); } },
-        entry.pinned
-          ? { id: "unpin", label: t("Unpin"), icon: "PinOff", onPress: () => void ops.pin(entry, false) }
-          : { id: "pin", label: t("Pin: every new session sees it"), icon: "Pin", onPress: () => void ops.pin(entry, true) },
-        { id: "agents", label: t("Copy as AGENTS.md rule"), icon: "Copy", onPress: () => setPromoting(true) },
-        { id: "archive", label: t("Archive"), icon: "Archive", onPress: () => void ops.setState(entry, "archived") },
-      ];
-  items.push({ kind: "separator", id: "s" }, { id: "delete", label: t("Delete…"), icon: "Trash2", danger: true, onPress: () => setDeleting(true) });
-  const footer = openMenu ? (
-    <IconButton icon="Ellipsis" disabled={busy} label={t("Actions for {title}", { title: entry.text })} onPress={(event) => openMenu(eventPoint(event), entry.text, items)} />
-  ) : (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-      {items.flatMap((item) =>
-        item.kind !== "separator" && item.kind !== "label" ? [
-          <Button key={item.id} small quiet danger={!!item.danger} icon={item.icon} disabled={busy} onPress={item.onPress}>
-            {item.label}
-          </Button>,
-        ] : [],
-      )}
-    </View>
-  );
+  const items = (): MenuEntry[] => [
+    ...(archived
+      ? [{ id: "restore", label: t("Restore"), icon: "ArchiveRestore", onPress: () => void ops.setState(entry, "active") }]
+      : [
+          { id: "edit", label: t("Edit"), icon: "Pencil", onPress: () => { ops.keep(entry.id); setEditing(true); } },
+          entry.pinned
+            ? { id: "unpin", label: t("Unpin"), icon: "PinOff", onPress: () => void ops.pin(entry, false) }
+            : { id: "pin", label: t("Pin: every new session sees it"), icon: "Pin", onPress: () => void ops.pin(entry, true) },
+          { id: "agents", label: t("Copy as AGENTS.md rule"), icon: "Copy", onPress: () => setPromoting(true) },
+          { id: "archive", label: t("Archive"), icon: "Archive", onPress: () => void ops.setState(entry, "archived") },
+        ]),
+    { kind: "separator", id: "s" },
+    { id: "delete", label: t("Delete…"), icon: "Trash2", danger: true, onPress: () => setDeleting(true) },
+  ];
   const sourceId = entry.source?.taskId ?? entry.sources[0]?.taskId;
   const reason = entry.state !== "active" ? reasonText(entry.stateReason) : "";
   const cards = new Set(entry.counts.usedBy.map((u) => u.taskId)).size;
+  const facts = [entry.tags?.length ? entry.tags.map((tag) => `#${tag}`).join(" ") : "", entry.counts.usedAt ? tn(cards, "Used by {n} card", "Used by {n} cards") : ""].filter(Boolean).join(" · ");
   const content = (
-    <ContentCard stripe={color} footer={footer} after={sourceId ? <SourceLine task={source} nameOf={nameOf} onOpenTask={ops.openTask} /> : undefined}>
-      <CardBody>
-        <CardMetaRow>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-            <Icon name={kindIcons[kind]} size={12} color={color} />
-            <Label size={font.sm} color={color} selectable={false}>{t(kindLabels[kind])}</Label>
-          </View>
-          {entry.pinned && <CardMeta icon={<Icon name="Pin" size={12} color={colors.accent} />} text={t("Pinned")} />}
-          {!!reason && <CardMeta text={reason} />}
-        </CardMetaRow>
-        <CardHeadline>{entry.text}</CardHeadline>
-        {!!entry.body && <CardText>{entry.body}</CardText>}
-        {!!entry.tags?.length && <Label muted size={font.xs}>{entry.tags.map((tag) => `#${tag}`).join("  ")}</Label>}
-        <Label muted size={font.xs}>{entry.counts.usedAt ? tn(cards, "Used by {n} card", "Used by {n} cards") : t("Not used yet")}</Label>
-      </CardBody>
-    </ContentCard>
+    <Pressable
+      accessibilityRole={entry.body ? "button" : undefined}
+      accessibilityState={entry.body ? { expanded } : undefined}
+      accessibilityHint={entry.body ? (expanded ? t("Show less") : t("Show more")) : undefined}
+      onPress={entry.body ? () => setExpanded(!expanded) : undefined}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      {...menuHandlers(busy ? null : openMenu, entry.text, items)}
+      style={[cardFrameStyle(colors), noFocusRing, { borderLeftWidth: 2, borderLeftColor: color, padding: space[4], gap: space[2] }]}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: 24 }}>
+        <Dot size={6} color={color} />
+        <Label muted size={font.xs} selectable={false}>{t(kindLabels[kind])}</Label>
+        {!!reason && <Label muted size={font.xs} selectable={false}>· {reason}</Label>}
+        <View style={{ flex: 1 }} />
+        {entry.pinned && <Icon name="Pin" size={13} color={colors.foregroundMuted} />}
+        {openMenu && (
+          <Animated.View style={{ opacity: actionOpacity, marginRight: -space[1.5] }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Actions for {title}", { title: entry.text })}
+              disabled={busy}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onPress={(event) => openMenu(eventPoint(event), entry.text, items())}
+              hitSlop={touch ? 8 : 4}
+              style={(state) => {
+                const { pressed, hovered: over } = state as typeof state & { hovered?: boolean };
+                return { ...noFocusRing, width: 24, height: 24, alignItems: "center", justifyContent: "center", borderRadius: radius.md, backgroundColor: pressed || over || focused ? colors.surface2 : "transparent", opacity: busy ? 0.4 : 1 };
+              }}
+            >
+              <Icon name="Ellipsis" size={15} color={colors.foregroundMuted} />
+            </Pressable>
+          </Animated.View>
+        )}
+      </View>
+      <Label bold size={font.md}>{entry.text}</Label>
+      {!!entry.body && <BodyText text={entry.body} lines={expanded ? undefined : 6} />}
+      {!!sourceId && (
+        <View style={{ marginHorizontal: -space[3], marginBottom: -space[1.5] }}>
+          <SourceLine task={source} nameOf={nameOf} onOpenTask={ops.openTask} />
+        </View>
+      )}
+      {!!facts && <Label muted size={font.xs} selectable={false}>{facts}</Label>}
+    </Pressable>
   );
   return (
     <>
@@ -139,6 +165,16 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, source, nameOf }
     </>
   );
 });
+
+/** The card body: 12 pt at 1.5 line height, clamped to `lines` while folded. */
+function BodyText({ text, lines }: { text: string; lines?: number }) {
+  const { colors } = useTheme();
+  return (
+    <Text numberOfLines={lines} style={{ color: colors.foreground, fontSize: font.sm, lineHeight: Math.round(font.sm * 1.5) }}>
+      {text}
+    </Text>
+  );
+}
 
 /** Copy the memory as an AGENTS.md rule, paste it there, then stop injecting it (archived as promoted). */
 function PromoteDialog({ entry, ops, onClose }: { entry: GuardrailEntry; ops: Ops; onClose(): void }) {
@@ -244,7 +280,7 @@ export const MemoryPage = memo(function MemoryPage({
   const ops = useMemo<Ops>(() => ({ save, pin, setState, remove, copyRule, openTask, keep }), []);
   const card = (e: GuardrailEntry, leaving: boolean) => {
     const sourceId = e.source?.taskId ?? e.sources[0]?.taskId;
-    return <MemoryCard entry={e} ops={ops} busy={disabled || leaving || actions.busy === e.id} source={sourceId ? cards.get(sourceId) : undefined} nameOf={nameOf} />;
+    return <MemoryCard entry={e} ops={ops} busy={disabled || leaving || actions.busy === e.id} compact={compact} source={sourceId ? cards.get(sourceId) : undefined} nameOf={nameOf} />;
   };
   return (
     <View style={{ flex: 1, minHeight: 0 }}>
@@ -259,7 +295,7 @@ export const MemoryPage = memo(function MemoryPage({
         <View style={{ width: compact ? 56 : 72 }} />
       </View>
       <ScrollView {...verticalScroll} keyboardShouldPersistTaps="handled" onScroll={pageRows.onScroll} scrollEventThrottle={100} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ ...verticalContent, padding: space[3], paddingBottom: space[6] * 2, alignItems: "center" }}>
-        <View onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))} style={{ width: "100%", maxWidth: grid ? 1240 : 760, gap: space[3] }}>
+        <View onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))} style={{ width: "100%", maxWidth: grid ? 1120 : 760, gap: space[3] }}>
           {query.error && <Notice>{message(query.error)}</Notice>}
           {view && !view.enabled && <Notice tone="info">{t("Guardrails are off for this project. Turn them on in the project's settings; what is here is kept.")}</Notice>}
           <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
@@ -348,12 +384,12 @@ export const MemoryPage = memo(function MemoryPage({
 const noEntries: GuardrailEntry[] = [];
 
 /** A list of memory cards like the Ideas list: a card that leaves collapses away in place, one that arrives rises in. */
-function MemoryRows({ entries, render }: { entries: readonly GuardrailEntry[]; render(entry: GuardrailEntry, leaving: boolean): ReactNode }) {
+function MemoryRows({ entries, spacing, render }: { entries: readonly GuardrailEntry[]; spacing?: number; render(entry: GuardrailEntry, leaving: boolean): ReactNode }) {
   const rows = useExitList(entries);
   return (
     <View>
       {rows.map((row) => (
-        <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering}>
+        <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} spacing={spacing}>
           {render(row.item, row.leaving)}
         </IdeaRow>
       ))}
@@ -365,19 +401,21 @@ function MemoryRows({ entries, render }: { entries: readonly GuardrailEntry[]; r
  * Keep-style masonry: columns by width, each card into the shortest column by its estimated height.
  * Cards keep their column across refreshes; a new filter or sort (`layoutKey`) or column count lays them out again.
  */
+const gutter = space[4];
+
 function MemoryGrid({ entries, width, layoutKey, render }: { entries: readonly GuardrailEntry[]; width: number; layoutKey: string; render(entry: GuardrailEntry, leaving: boolean): ReactNode }) {
   const columns = gridColumns(width);
-  const columnWidth = (width - space[2] * (columns - 1)) / columns;
+  const columnWidth = (width - gutter * (columns - 1)) / columns;
   const placed = useRef<{ key: string; at: Map<string, number> }>({ key: "", at: new Map() });
   const key = `${layoutKey}|${columns}`;
   const previous = placed.current.key === key ? placed.current.at : undefined;
   const laid = placeMasonry(entries, columns, (e) => estimateHeight(e, columnWidth), previous);
   placed.current = { key, at: new Map(laid.flatMap((column, index) => column.map((e) => [e.id, index] as const))) };
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space[2] }}>
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: gutter }}>
       {laid.map((column, index) => (
         <View key={index} style={{ flex: 1, minWidth: 0 }}>
-          <MemoryRows entries={column} render={render} />
+          <MemoryRows entries={column} spacing={gutter} render={render} />
         </View>
       ))}
     </View>

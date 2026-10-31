@@ -3,8 +3,8 @@ import type { MemorySort } from "../shared/settings";
 
 /** The Memory page's ordering and grid (GUARDRAILS-SPEC §7.4). Pure: no React. */
 
-/** Grid columns for the page's width: one per 280 pt, two to four. */
-export const gridColumns = (width: number) => Math.max(2, Math.min(4, Math.floor(width / 280)));
+/** Grid columns for the page's width: columns at least 340 pt wide, two or three. */
+export const gridColumns = (width: number) => Math.max(2, Math.min(3, Math.floor(width / 340)));
 
 const usedCards = (e: GuardrailEntry) => new Set(e.counts.usedBy.map((u) => u.taskId)).size;
 
@@ -17,13 +17,22 @@ export function sortNotes(entries: readonly GuardrailEntry[], sort: MemorySort):
   );
 }
 
-/** About how tall a card renders in a column this wide; the body clamps near five lines, so this stays close. */
+/**
+ * About how tall a card renders in a column this wide: padding and stripe, the kind row, the full title,
+ * the body folded to six lines, the source line and the tags/usage line.
+ */
 export function estimateHeight(e: GuardrailEntry, width: number) {
-  const chars = Math.max(20, Math.floor((width - 28) / 7));
-  const lines = (text: string) => text.split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / chars)), 0);
-  const content = 18 + 8 + lines(e.text) * 20 + (e.body ? 8 + lines(e.body) * 18 : 0) + (e.tags?.length ? 8 + 16 : 0) + 8 + 16;
-  const source = e.source?.taskId || e.sources.length ? 36 : 0;
-  return Math.min(content, 104) + 8 + 32 + 24 + 2 + source;
+  const inner = width - 34;
+  const lines = (text: string, charWidth: number) => {
+    const chars = Math.max(20, Math.floor(inner / charWidth));
+    return text.split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / chars)), 0);
+  };
+  const gap = 8;
+  const title = gap + lines(e.text, 7.5) * 19;
+  const body = e.body ? gap + Math.min(6, lines(e.body, 6.5)) * 18 : 0;
+  const source = e.source?.taskId || e.sources.length ? gap + 28 : 0;
+  const facts = e.tags?.length || e.counts.usedAt ? gap + 16 : 0;
+  return 34 + 24 + title + body + source + facts;
 }
 
 /**

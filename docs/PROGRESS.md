@@ -1,5 +1,12 @@
 # Implementation progress
 
+## Memory page: readable cards and grid — 2026-10-31
+
+- User feedback: grid cards were narrow and cut off, the page looked dense. Content area at most 1120 pt, centered; List one column at most 760 pt; Grid a masonry of columns at least 340 pt wide, two or three (`gridColumns`), 16 pt gutters, cards at their own height; `estimateHeight` follows the new card (title never folded, body six lines, source line, tags/usage line only when present). Tests in `client/memory-layout.test.ts`.
+- One card for both layouts (`client/memory.tsx`, own frame; `ContentCard` untouched): 16 pt padding, 2 pt left stripe in the kind color; top row = kind dot + kind name (small, muted), paused/archived reason after it, pin icon at the right when pinned, then `…`. Title `font.md` bold, never clamped; body `font.sm` at 1.5 line height, six lines, pressing the card unfolds/folds it (per card, while the page is open); source line; `#tag #tag · Used by n cards` in one small muted line. The `…` menu (Edit / Pin or Unpin / Copy as AGENTS.md rule / Archive or Restore / Delete…) replaces the button row; on desktop it fades in on hover or keyboard focus (Reduce Motion: instant) and stays focusable; compact and touch layouts always show it. Right-click / long-press open the same menu.
+- Strings removed from all catalogs: "Not used yet", "Pinned". No new strings. Tour/tips: unchanged (the page's features are the same). Telemetry: none.
+- Checks: see the commit's delivery note. Unrun: plugin reload, screenshots, phone.
+
 ## Temporary sessions run Claude in Plan Mode — 2026-10-30
 
 - Bug follow-up 2 (2026-10-30): the Ask SMITH card sat in Attention with nothing to do because its review ended `unavailable` ("asked for a permission") and that signal stays until the card moves. Plan Mode only helps Claude profiles; a Codex review session still stopped on its first tool call. `finishRefusingPermissions` (`server/summary-models.ts`, used by `runSummaryModels` and the workflow-insights run) now answers each pending permission request with deny and waits for the turn again, up to 20 times, so no temporary session fails on a permission any more. Tests in `server/summary-models.test.ts` (refused and continues; unrefusable and endless still fail). Unavailable still raises Attention for real failures (spec §3.2); I left that as designed. AUTO-REVIEW-SPEC §4.4, TASK-SUMMARY-SPEC §2.
