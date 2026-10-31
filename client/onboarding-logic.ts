@@ -29,7 +29,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "summary-models", "first-skill-draft", "first-memory-candidate", "search", "settings-entry"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "summary-models", "first-skill-draft", "first-memory-candidate", "search", "lane-swipe", "settings-entry"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -82,6 +82,8 @@ export interface TipFacts {
   memoryCandidate: boolean;
   /** The current project shows 10 or more cards and no card is open, so there is history to search (SEARCH-SPEC §8). */
   searchable: boolean;
+  /** A phone board (iOS/Android) shows two or more lanes, the project has cards, and no card or page is open (UI-UX-SPEC §5, lane swipe). */
+  laneSwipe: boolean;
 }
 
 /** Banner tips; `settings-entry` is the callout by the settings button instead (settingsHintDue). */
@@ -111,13 +113,14 @@ const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
   "first-skill-draft": "skillDraft",
   "first-memory-candidate": "memoryCandidate",
   search: "searchable",
+  "lane-swipe": "laneSwipe",
 };
 
 /** The one tip to show now: first in priority order whose fact holds and that was not shown before. */
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-skill-draft", "first-workflow-insight", "ai-language", "summary-models", "first-artifact", "first-ticket", "first-tag", "first-card", "card-display", "search", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
+  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "first-workpad", "subagents", "first-idea", "first-memory-candidate", "first-skill-draft", "first-workflow-insight", "ai-language", "summary-models", "first-artifact", "first-ticket", "first-tag", "first-card", "lane-swipe", "card-display", "search", "connectors", "session-history", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 

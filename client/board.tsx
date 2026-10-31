@@ -70,7 +70,8 @@ import { useStableCallback, useStableTheme } from "./stable";
 import { isLegacyScope } from "../shared/scope";
 import { LaneList } from "./lane-list";
 import { perfConfigure, perfMark, usePerfRender } from "./perf";
-import { laneRows, sameRows } from "./lane-rows";
+import { laneRows, sameRows, type LaneRow } from "./lane-rows";
+import { LanePager } from "./lane-pager";
 import { LiveTaskCard, type CardDrag, type LiveTaskCardProps } from "./card";
 import { useConnections } from "./connectors";
 import { cardProgress, useSummaries } from "./task-progress";
@@ -161,6 +162,7 @@ const tipText: Record<TipId, (compact?: boolean) => string> = {
   search: () => t("Find past cards, notes, workpads and deliverables with the search button or S."),
   "first-memory-candidate": () => t("An agent suggested something to remember. Confirm it in Memory and new sessions on this project will know it; you can edit or delete it any time."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
+  "lane-swipe": () => t("Swipe left or right to switch lanes."),
   "card-display": (compact) => compact
     // Compact puts the Sort choices and Card display… in the Filters dialog.
     ? t("Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.")
@@ -341,6 +343,8 @@ function BoardContent(
     // `idea`: Start session prefilled from an idea on the Ideas page (IDEAS-SPEC §6.3).
     [startRequest, setStartRequest] = useState<{ taskId: string; key: string; idea?: Idea } | null>(null),
     [mobileStatus, setMobileStatus] = useState<Status>("todo"),
+    // Phones: a lane chosen from the status chooser fades in; a swiped one is already on screen (UI-UX-SPEC §5).
+    [lanePick, setLanePick] = useState(0),
     [reveal, setReveal] = useState<{ status: Status; n: number; at: number; center?: boolean; taskId?: string }>({ status: "todo", n: 0, at: 0 }),
     [actionTask, setActionTask] = useState<Task | null>(null),
     [projectForm, setProjectForm] = useState<"new" | "edit" | null>(null),
@@ -643,11 +647,21 @@ function BoardContent(
     const sorted = sortTasks(column, boardSort, taskActivity);
     return older.size ? [...sorted.filter((t) => !older.has(t.id)), ...sorted.filter((t) => older.has(t.id))] : sorted;
   };
-  const laneAll = sortColumn(visible.filter((t) => t.status === mobileStatus));
-  const list = laneAll.filter((t) => !older.has(t.id));
-  const listOlder = laneAll.filter((t) => older.has(t.id));
-  const laneRowsRef = useRef<ReturnType<typeof laneRows<Task>> | undefined>(undefined);
-  const laneRowList = (laneRowsRef.current = sameRows(laneRowsRef.current, laneRows(list, listOlder, olderShown.includes(mobileStatus))));
+  // The phone's lanes: the selected one, plus its neighbours in the native lane pager (UI-UX-SPEC §5).
+  const laneRowsRef = useRef(new Map<Status, LaneRow<Task>[]>());
+  const lanesNow = new Map<Status, { count: number; olderCount: number; rows: LaneRow<Task>[] }>();
+  const laneOf = (status: Status) => {
+    const known = lanesNow.get(status);
+    if (known) return known;
+    const all = sortColumn(visible.filter((t) => t.status === status));
+    const recent = all.filter((t) => !older.has(t.id));
+    const olderCards = all.filter((t) => older.has(t.id));
+    const rows = sameRows(laneRowsRef.current.get(status), laneRows(recent, olderCards, olderShown.includes(status)));
+    laneRowsRef.current.set(status, rows);
+    const lane = { count: all.length, olderCount: olderCards.length, rows };
+    lanesNow.set(status, lane);
+    return lane;
+  };
   // Status-change flash: remember the last snapshot, emphasize cards that moved.
   const statusMemory = useRef<Map<string, string> | null>(null);
   const [flashing, setFlashing] = useState<ReadonlySet<string>>(new Set());
@@ -1216,9 +1230,15 @@ function BoardContent(
           skillDraft: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open" && f.target === "skill" && !!f.skill),
           memoryCandidate: !task && !!memoryCandidates,
           searchable: !task && projectTasks.filter((x) => !x.archivedAt).length >= 10,
+          laneSwipe: touch && !task && !page && shownStatuses.length > 1 && projectTasks.some((x) => !x.archivedAt),
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
       });
+  // A swipe to another lane shows the lane-swipe tip was not needed.
+  const settleLane = (next: Status) => {
+    if (next !== mobileStatus && onboarding.values && !onboarding.values.tipsSeen.includes("lane-swipe")) void onboarding.markTipSeen("lane-swipe");
+    setMobileStatus(next);
+  };
   const dismissTip = (id: TipId) => {
     if (id === "first-done") setMovedToFinished(false);
     void onboarding.markTipSeen(id);
@@ -1301,6 +1321,40 @@ function BoardContent(
       onOpen={openCard}
       onActions={openCardActions}
       menuFor={cardMenuFor}
+    />
+  );
+  const renderLane = (status: Status) => (
+    <LaneList
+      key={status}
+      data={laneOf(status).rows}
+      keyOf={(row) => row.key}
+      renderItem={(row) =>
+        row.kind === "task" ? (
+          renderCard(row.task)
+        ) : row.kind === "older" ? (
+          <OlderToggle count={laneOf(status).olderCount} shown={olderShown.includes(status)} onPress={() => toggleOlder(status)} />
+        ) : row.hasOlder ? (
+          <View style={{ paddingVertical: space[4], alignItems: "center" }}>
+            <Label muted selectable={false}>{t("No recent tasks")}</Label>
+          </View>
+        ) : (
+          <View style={{ paddingVertical: space[6], gap: space[3], alignItems: "center" }}>
+            <Label muted selectable={false}>
+              {filterCount
+                ? t("No tasks match these filters.")
+                : t("No tasks in {lane}.", { lane: nameOf(status) })}
+            </Label>
+            <Button
+              icon="Plus"
+              disabled={!!project?.archivedAt}
+              onPress={() =>
+                setTaskForm({ status })
+              }
+            >
+              {t("Add task")}</Button>
+          </View>
+        )
+      }
     />
   );
   const projectMenuClose = () => setMenu(null);
@@ -1863,7 +1917,7 @@ function BoardContent(
           <View style={{ flex: 1, minHeight: 0, flexDirection: "row", ...(resizing ? { userSelect: "none" } : null) } as never}>
             {(
               <MotionReveal
-                transitionKey={`${project.id}|${page || (compact ? mobileStatus : "columns")}`}
+                transitionKey={`${project.id}|${page || (compact ? (touch ? `pick${lanePick}` : mobileStatus) : "columns")}`}
                 direction={-1}
                 distance={compact ? 0 : 18}
                 {...covered}
@@ -1926,45 +1980,24 @@ function BoardContent(
                         leading={<StatusIcon status={mobileStatus} size={16} />}
                         trailing={
                           <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-                            <Label muted size={font.md} selectable={false}>{laneAll.length}</Label>
+                            <Label muted size={font.md} selectable={false}>{laneOf(mobileStatus).count}</Label>
                             <Icon name="ChevronsUpDown" size={14} color={colors.foregroundMuted} />
                           </View>
                         }
                         onPress={() => setMenu("status")}
                       />
                     </View>
-                    <LaneList
-                      key={mobileStatus}
-                      data={laneRowList}
-                      keyOf={(row) => row.key}
-                      renderItem={(row) =>
-                        row.kind === "task" ? (
-                          renderCard(row.task)
-                        ) : row.kind === "older" ? (
-                          <OlderToggle count={listOlder.length} shown={olderShown.includes(mobileStatus)} onPress={() => toggleOlder(mobileStatus)} />
-                        ) : row.hasOlder ? (
-                          <View style={{ paddingVertical: space[4], alignItems: "center" }}>
-                            <Label muted selectable={false}>{t("No recent tasks")}</Label>
-                          </View>
-                        ) : (
-                          <View style={{ paddingVertical: space[6], gap: space[3], alignItems: "center" }}>
-                            <Label muted selectable={false}>
-                              {filterCount
-                                ? t("No tasks match these filters.")
-                                : t("No tasks in {lane}.", { lane: nameOf(mobileStatus) })}
-                            </Label>
-                            <Button
-                              icon="Plus"
-                              disabled={!!project.archivedAt}
-                              onPress={() =>
-                                setTaskForm({ status: mobileStatus })
-                              }
-                            >
-                              {t("Add task")}</Button>
-                          </View>
-                        )
-                      }
-                    />
+                    {touch ? (
+                      <LanePager<Status>
+                        lanes={shownStatuses}
+                        index={Math.max(0, shownStatuses.indexOf(mobileStatus))}
+                        active={!boardHidden}
+                        onSettle={settleLane}
+                        renderLane={renderLane}
+                      />
+                    ) : (
+                      renderLane(mobileStatus)
+                    )}
                   </>
                 ) : (
                   <DesktopColumns
@@ -2271,6 +2304,7 @@ function BoardContent(
                     </Label>
                   }
                   onPress={() => {
+                    if (s !== mobileStatus) setLanePick((n) => n + 1);
                     setMobileStatus(s);
                     setMenu(null);
                   }}

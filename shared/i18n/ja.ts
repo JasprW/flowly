@@ -915,6 +915,7 @@ const catalog: Catalog = {
   "Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.": "エージェントが各カードに受け入れ基準とチェックを記録し、未完了のまま納品するときは説明が必要になります。オフにすると非表示になりチェックも止まりますが、書かれた内容は残ります。",
   "Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display.": "カードが混み合っていますか？ 設定 → カード、または 並べ替え メニュー → カードの表示 で表示内容を選べます。",
   "Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.": "カードが混み合っていますか？ 設定 → カード、または フィルター → カードの表示 で表示内容を選べます。",
+  "Swipe left or right to switch lanes.": "左右にスワイプしてレーンを切り替えます。",
   "Card display…": "カードの表示…",
   "Summary, else output": "要約、なければ出力",
   "The progress summary; the latest output until there is one": "進捗の要約。まだなければ最新の出力",

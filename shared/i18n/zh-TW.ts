@@ -915,6 +915,7 @@ const catalog: Catalog = {
   "Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.": "Agent 在每張卡片上維護驗收標準和驗證項目，帶著未完成項目交付時必須說明。關閉後隱藏它並停止這些檢查；agent 已寫的內容會保留。",
   "Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display.": "卡片太擁擠？在 設定 → 卡片 中選擇要顯示的內容，或從 排序 選單 → 卡片顯示 進入。",
   "Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.": "卡片太擁擠？在 設定 → 卡片 中選擇要顯示的內容，或從 篩選 → 卡片顯示 進入。",
+  "Swipe left or right to switch lanes.": "左右滑動即可切換泳道。",
   "Card display…": "卡片顯示…",
   "Summary, else output": "摘要，否則輸出",
   "The progress summary; the latest output until there is one": "進展摘要；還沒有摘要時顯示最新輸出",
