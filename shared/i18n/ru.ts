@@ -914,6 +914,7 @@ const catalog: Catalog = {
   "Card workpad": "Workpad карточки",
   "Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.": "Агенты ведут на каждой карточке критерии приёмки и проверки, а сдача с незакрытыми пунктами требует пояснения. Если выключить, он скрывается и эти проверки прекращаются; записанное агентами сохраняется.",
   "Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display.": "Карточки перегружены? Выберите, что на них показывать, в Настройки → Карточки или через меню Сортировка → Вид карточек.",
+  "Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.": "Карточки перегружены? Выберите, что на них показывать, в Настройки → Карточки или через Фильтры → Вид карточек.",
   "Card display…": "Вид карточек…",
   "Summary, else output": "Сводка, иначе вывод",
   "The progress summary; the latest output until there is one": "Сводка хода работы; пока её нет — последний вывод",

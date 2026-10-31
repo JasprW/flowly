@@ -914,6 +914,7 @@ const catalog: Catalog = {
   "Card workpad": "Workpad de la tarjeta",
   "Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.": "Los agentes mantienen criterios de aceptación y comprobaciones en cada tarjeta, y entregar con elementos abiertos requiere una nota. Desactivado, se oculta y se detienen estas comprobaciones; lo que escribieron los agentes se conserva.",
   "Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display.": "¿Tarjetas demasiado cargadas? Elige qué muestran en Ajustes → Tarjetas, o desde el menú Ordenar → Vista de tarjetas.",
+  "Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.": "¿Tarjetas demasiado cargadas? Elige qué muestran en Ajustes → Tarjetas, o desde Filtros → Vista de tarjetas.",
   "Card display…": "Vista de tarjetas…",
   "Summary, else output": "Resumen o, si no, salida",
   "The progress summary; the latest output until there is one": "El resumen de avance; la última salida mientras no haya uno",

@@ -986,3 +986,10 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 根因：Paseo 0.13 的 `publishAgentStream` 对 turn_completed/failed/canceled 一律发 `timeline: []`（SDK 类型仍声明该字段，所以编译无报错）。`SummaryService.enqueue` 对空文本直接返回，无错误记录。同一个空数组还影响 `byUser`/`pick`（Agent habits）、记忆线索、workpad 计划、外部会话 insights。
 - 修复：`server/turn-timeline.ts` 在空时读 timeline 最新一页的最后一轮，`agent.turn_ended` 入口统一使用；`agent.turn_ended` 的 `byUser` 在 10-26 起的事件里被记成 false，未回填。
 
+
+## 2026-10-31 手机看板顶栏精简
+
+- 用户反馈：手机顶栏右侧按钮太多，项目名显示不全。按 [UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts) 2026-10-31 条：紧凑顶栏只留项目选择、Attention、搜索、筛选；New task 改为右下角悬浮按钮（`client/new-task-fab.tsx`，仅在看板列表可见），排序和 Card display… 移入筛选面板，项目设置走项目选择面板的 Edit。桌面端不变；无 RPC/存储改动。
+- 已运行：typecheck、npm test（148 files / 1291 passed / 1 skipped）、make check；web 紧凑宽度截图。未运行：Android 真机（未连接）。[验证记录](verification/mobile-header-2026-10-31/report.md)。
+- 引导：不改导览。`card-display` 提示在紧凑布局改为指向 “Filters → Card display”（桌面仍是 Sort 菜单），新字符串已加入 9 个目录，ONBOARDING-SPEC 提示表同步。What's new / 遥测：无。
+- 润色（同日）：Low/Normal 优先级图标改为 `ArrowDown`/`Minus`（原信号格图标几乎看不见）；分组标题折叠摘要贴行尾右对齐（`SectionHeader`、`Disclosure`）；Ideas/Memory 来源行的状态不再折行。typecheck、npm test（1291 passed, 1 skipped）、make check 均 exit 0；impeccable detect 无发现。真机未验证。证据：`docs/verification/mobile-header-2026-10-31/report.md`。
