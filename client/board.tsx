@@ -77,6 +77,7 @@ import { cardProgress, useSummaries } from "./task-progress";
 import { LocaleRoot } from "./i18n";
 import { agentModelFromValues, effectiveAgentModel, startingAgent } from "../shared/agent-defaults";
 import { SettingsFab, SettingsModal, type SettingsSection } from "./summary-settings";
+import { NewTaskFab } from "./new-task-fab";
 import { SettingsOpenerContext } from "./settings-opener";
 import { findingDescription, workflowInsightsSettings, workflowSettingsValues, type Finding } from "../shared/workflow-insights";
 import { WrapupModal } from "./wrapup";
@@ -139,7 +140,7 @@ import { cardDisplay } from "../shared/card-display";
 import { parentOf } from "../shared/subagents";
 
 /** One-time tip texts (ONBOARDING-SPEC §5). */
-const tipText: Record<TipId, () => string> = {
+const tipText: Record<TipId, (compact?: boolean) => string> = {
   "first-card": () => t("Your card moves by itself as the agent works. Open it any time to see its sessions, output and summary."),
   "needs-you": () => t("A card is waiting for you. Reply goes straight to the session."),
   "first-idea": () => t("An agent suggested follow-up work. Good idea starts a card or continues here; Dismiss removes it."),
@@ -160,7 +161,10 @@ const tipText: Record<TipId, () => string> = {
   search: () => t("Find past cards, notes, workpads and deliverables with the search button or S."),
   "first-memory-candidate": () => t("An agent suggested something to remember. Confirm it in Memory and new sessions on this project will know it; you can edit or delete it any time."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
-  "card-display": () => t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
+  "card-display": (compact) => compact
+    // Compact puts the Sort choices and Card display… in the Filters dialog.
+    ? t("Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.")
+    : t("Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display."),
   "attention-dismiss": () => t("Not ready to decide? Dismiss a card from Attention. It comes back when something new happens."),
   "sidebar-order": () => t("Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar."),
   "session-history": () => t("A session's output now starts at the beginning of its current turn. Press Load earlier at the top to read further back."),
@@ -1679,8 +1683,8 @@ function BoardContent(
                 {t("{n} shown", { n: visible.length })}
               </Label>
             )}
-            {!!project && (
-              // Opens the project's own settings (name, lanes, auto status) at once, not through the chooser.
+            {!!project && !compact && (
+              // Opens the project's own settings (name, lanes, auto status) at once; phones use the chooser's Edit row.
               <IconButton
                 icon="SlidersHorizontal"
                 label={t("Project settings")}
@@ -1707,9 +1711,8 @@ function BoardContent(
                 onPress={toggleAttentionMenu}
               />
             </View>
-            <SortButton
+            {!compact && <SortButton
               mode={boardSort}
-              compact={compact}
               onPress={(event) =>
                 openMenu?.(eventPoint(event), t("Sort cards"), [
                   { kind: "label", id: "label", label: t("Sort cards in each column") },
@@ -1732,17 +1735,19 @@ function BoardContent(
                   },
                 ])
               }
-            />
+            />}
             {project && (
               <IconButton icon="Search" label={withKey(t("Search"), "S")} active={page === "search"} onPress={() => (page === "search" ? setPage(null) : openSearch(""))} />
             )}
             <FilterButton
               count={filterCount}
+              // Phones sort from the Filters dialog, so a non-manual sort lights its icon too.
+              lit={compact && boardSort !== "manual"}
               compact={compact}
               shortcut={shortcutsOn ? "/" : ""}
               onPress={() => setMenu("filters")}
             />
-            {project && (
+            {project && !compact && (
               <Button
                 primary
                 icon="Plus"
@@ -1752,7 +1757,7 @@ function BoardContent(
                   setTaskForm({ status: "todo" })
                 }
               >
-                {compact ? "" : t("New task")}
+                {t("New task")}
               </Button>
             )}
           </View>
@@ -1794,7 +1799,7 @@ function BoardContent(
         )}
         {!emptyProjectHint && !!tip && (
           <GuideBanner
-            text={tipText[tip]()}
+            text={tipText[tip](compact)}
             dismissLabel={t("Got it")}
             onDismiss={() => dismissTip(tip)}
           />
@@ -2156,6 +2161,31 @@ function BoardContent(
                 ]}
                 onChange={setPriority}
               />
+              {compact && (
+                <View style={{ gap: space[1.5] }}>
+                  <Choices
+                    title={t("Sort cards")}
+                    value={boardSort}
+                    options={boardSorts.map((mode) => ({ value: mode, label: t(boardSortText[mode].label) }))}
+                    onChange={chooseSort}
+                  />
+                  <View style={{ flexDirection: "row" }}>
+                    <Button
+                      small
+                      quiet
+                      icon="LayoutList"
+                      onPress={() => {
+                        setMenu(null);
+                        afterModalClose(() => {
+                          setSettingsSection("cards");
+                          setMenu("settings");
+                        });
+                      }}
+                    >
+                      {t("Card display…")}</Button>
+                  </View>
+                </View>
+              )}
               <Actions>
                 <Button
                   quiet
@@ -2463,6 +2493,9 @@ function BoardContent(
           </CardDetailProvider>
         )}
         {compact && drawerView}
+        {compact && !task && !page && !!project && !project.archivedAt && !!board && (
+          <NewTaskFab onPress={() => setTaskForm({ status: "todo" })} />
+        )}
         {!(compact && task) && (
           <SettingsFab
             open={menu === "settings"}
@@ -2616,7 +2649,7 @@ const sortIcons: Record<BoardSort, string> = {
   title: "ArrowDownAZ",
 };
 
-function SortButton({ mode, compact, onPress }: { mode: BoardSort; compact: boolean; onPress(event: GestureResponderEvent): void }) {
+function SortButton({ mode, onPress }: { mode: BoardSort; onPress(event: GestureResponderEvent): void }) {
   const { colors } = useTheme();
   const custom = mode !== "manual";
   return (
@@ -2634,29 +2667,29 @@ function SortButton({ mode, compact, onPress }: { mode: BoardSort; compact: bool
           height: touch ? 44 : 32,
           minWidth: touch ? 44 : 32,
           justifyContent: "center",
-          paddingHorizontal: compact ? 0 : space[2] + 2,
+          paddingHorizontal: space[2] + 2,
           borderRadius: radius.md,
           backgroundColor: hover || pressed ? colors.surface2 : "transparent",
         };
       }}
     >
       <Icon name="ArrowUpDown" size={15} color={custom ? colors.foreground : colors.foregroundMuted} />
-      {!compact && (
-        <Label size={font.md} medium muted={!custom} selectable={false}>
-          {custom ? t(boardSortText[mode].label) : t("Sort")}
-        </Label>
-      )}
+      <Label size={font.md} medium muted={!custom} selectable={false}>
+        {custom ? t(boardSortText[mode].label) : t("Sort")}
+      </Label>
     </Pressable>
   );
 }
 
 function FilterButton({
   count,
+  lit = false,
   compact,
   shortcut,
   onPress,
 }: {
   count: number;
+  lit?: boolean;
   compact: boolean;
   shortcut: string;
   onPress(): void;
@@ -2684,7 +2717,7 @@ function FilterButton({
         };
       }}
     >
-      <Icon name="ListFilter" size={15} color={count ? colors.foreground : colors.foregroundMuted} />
+      <Icon name="ListFilter" size={15} color={count || lit ? colors.foreground : colors.foregroundMuted} />
       {!compact && (
         <Label size={font.md} medium muted={!count} selectable={false}>
           {t("Filter")}</Label>

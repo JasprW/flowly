@@ -30,7 +30,7 @@ const priorityGlyph: Record<Priority, { icon: string; color(c: Colors): string }
   urgent: { icon: "TriangleAlert", color: (c) => c.statusDanger },
   high: { icon: "ArrowUp", color: (c) => c.statusWarning },
   normal: null,
-  low: { icon: "SignalLow", color: (c) => c.foregroundMuted },
+  low: { icon: "ArrowDown", color: (c) => c.foregroundMuted },
 };
 export const priorityLabels: Record<Priority, string> = localizedLabels({
   urgent: msg("Urgent"),
@@ -47,7 +47,7 @@ export function priorityAccent(colors: Colors, priority: Priority): string | nul
 /** Renders nothing for Normal priority: the default carries no signal. */
 export function PriorityIcon({ priority, size = 14, always = false }: { priority: Priority; size?: number; always?: boolean }) {
   const { colors } = useTheme();
-  const glyph = priorityGlyph[priority] || (always ? { icon: "SignalMedium", color: (c: Colors) => c.foregroundMuted } : null);
+  const glyph = priorityGlyph[priority] || (always ? { icon: "Minus", color: (c: Colors) => c.foregroundMuted } : null);
   if (!glyph) return null;
   return <Icon name={glyph.icon} size={size} color={glyph.color(colors)} />;
 }

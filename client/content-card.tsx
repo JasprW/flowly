@@ -236,7 +236,9 @@ export function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefine
       <View style={{ flexShrink: 1, minWidth: 0 }}>
         <Label size={font.sm} lines={1} selectable={false}>{task.title}</Label>
       </View>
-      <Label muted size={font.xs} selectable={false}>· {task.archivedAt ? t("Archived") : nameOf(task.status)}</Label>
+      <View style={{ flexShrink: 0 }}>
+        <Label muted size={font.xs} lines={1} selectable={false}>· {task.archivedAt ? t("Archived") : nameOf(task.status)}</Label>
+      </View>
       <View style={{ flex: 1 }} />
       <Icon name="ChevronRight" size={13} color={colors.foregroundMuted} />
     </Pressable>

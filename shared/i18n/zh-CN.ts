@@ -914,6 +914,7 @@ const catalog: Catalog = {
   "Card workpad": "卡片 Workpad",
   "Agents keep acceptance criteria and checks on each card, and delivering with open items needs a note. Off hides it and stops these checks; what agents wrote is kept.": "Agent 在每张卡片上维护验收标准和验证项，带着未完成项交付时必须说明。关闭后隐藏它并停止这些检查；agent 已写的内容会保留。",
   "Cards too busy? Choose what they show in Settings → Cards, or from the Sort menu → Card display.": "卡片太拥挤？在 设置 → 卡片 中选择要显示的内容，或从 排序 菜单 → 卡片显示 进入。",
+  "Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.": "卡片太拥挤？在 设置 → 卡片 中选择要显示的内容，或从 筛选 → 卡片显示 进入。",
   "Card display…": "卡片显示…",
   "Summary, else output": "摘要，否则输出",
   "The progress summary; the latest output until there is one": "进展摘要；还没有摘要时显示最新输出",

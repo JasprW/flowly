@@ -801,7 +801,8 @@ export function SectionHeader({
         <View style={{ ...titleBox, ...row }}>{heading}</View>
       )}
       {showSummary && (
-        <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, maxWidth: "60%", alignItems: "flex-end" }}>
+        // Pushed to the row's end, so every collapsed section's summary ends at one right edge.
+        <View style={{ flexShrink: 1, minWidth: 0, maxWidth: "60%", marginLeft: "auto" }}>
           <Label muted size={font.sm} lines={1} selectable={false}>
             {summary}
           </Label>
