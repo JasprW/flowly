@@ -470,8 +470,10 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 **Memory 页**（保留旧名 Memory、旧入口；条目是 `kind: "note"` 的 entry）。入口：总览栏 **Memory** chip（本周新增数，没有时不显示数字），快捷键 `M`；项目菜单同名。
 
 - 工具条一行：类型过滤 chips（All、Decision、Pitfall、Convention、Contact，单选）、排序（**Newest**、**Most used**、**Recently used**；pinned 始终在前）、宽屏时布局切换（**List** / **Grid**）。过滤、排序、布局每台机器记住（`board-view` 设置：`memoryKind`、`memorySort`、`memoryLayout`）。
-- 布局：List 同旧 Memory 页一行一条；Grid 是瀑布流（Keep 式卡片）：列数按可用宽度算（`clamp(floor(宽度/280), 2, 4)`，宽屏至少 2 列，最多 4 列），条目按估算高度放进当前最短的一列；紧凑布局（手机、窄栏）只有 List，切换不显示。
-- 每条按类型 color code：卡片左侧 3 像素色条加类型标签同色，四种类型各用一种主题色（不自定义颜色；主题没有足够区分度时退回到灰度）。标题、正文、标签、Pin、来源卡、Used 同旧页；菜单：Edit、Pin / Unpin、Copy as AGENTS.md rule（归档为 `promoted`）、Archive、Delete。archived 一组默认收起。页尾 / 工具条 **Add memory**。
+- 布局（2026-10-31 重设计：第一版列太窄、内容截断、信息密集）：内容区最宽 1120，居中；List 单列、最宽 760；Grid 是瀑布流（Keep 式）：列宽至少 340，列数 `clamp(floor(宽度/340), 2, 3)`，列间距与卡间距 16，条目按估算高度放进当前最短的一列；紧凑布局只有 List，切换不显示。卡片高度随内容，不固定。
+- 卡片（两种布局同一张）：内边距 16；第一行一个类型标记（主题色小圆点 + 类型名，小号）和右侧的 Pin 图标（只在 pinned 时显示）；标题 `font.md` 加粗、不截断；正文 `font.sm`、行高 1.5，默认最多 6 行，点卡片展开全文、再点收起（展开状态只在本页内保留）；标签和使用情况合成最后一行小号灰字（`#tag #tag · Used by 3 cards`，没用过不写“Not used yet”，都没有就不显示这一行）；来源卡一行在正文下方，可点。左侧色条 2 像素，颜色同类型；paused / archived 的状态原因接在类型标记后面。
+- 操作：桌面上卡片右上角的 `…` 只在悬停或聚焦时显示（始终可聚焦），紧凑布局始终显示；菜单：Edit、Pin / Unpin、Copy as AGENTS.md rule（归档为 `promoted`）、Archive / Restore、Delete（confirm）。不再在卡片底部平铺一排按钮。archived 一组默认收起。工具条右侧 **Add memory**。
+- 每条按类型 color code：四种类型各用一种主题色（不自定义颜色；主题没有足够区分度时退回到灰度）。
 - 去掉：To review 区、Confirm / Dismiss、Clean up 筛选、Make room、容量提示、Find memories 按钮（复盘仍自动跑）。
 - 卡片侧栏的 Memory 段去掉；本卡产生的备忘和专属项在 Workpad 段的 This card 里显示。
 - 文案：用户可见处一律叫 Memory / memory（不叫 Notes）；agent 面（skill、get_task、工具说明）也用 memory。
