@@ -987,6 +987,14 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 修复：`server/turn-timeline.ts` 在空时读 timeline 最新一页的最后一轮，`agent.turn_ended` 入口统一使用；`agent.turn_ended` 的 `byUser` 在 10-26 起的事件里被记成 false，未回填。
 
 
+## 2026-11-01 Android 返回键逐级回退
+
+- 用户反馈：Android 返回键在任何位置都直接关闭 Flowly。按 [UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts) 2026-11-01 Android Back 条：返回键与 Esc 走同一条 `runIntent("escape")`，session 视图 → 卡片 → 页面/看板，看板根部才交给 Paseo。
+- `client/android-back.ts`：仅 Android 订阅 `BackHandler`；每次按下先通过 React fiber 找到 Flowly 所在屏幕的 react-navigation 导航对象并调用 `isFocused()`，Paseo 推入的 agent/workspace 屏幕在上面时不接管。找不到或出错时返回 false，保持宿主行为。fiber 遍历抽到 `client/host-fiber.ts`，与 `host-horizontal-scroll.ts` 共用。AGENTS.md 已加例外。
+- 未处理（未加代码）：宿主侧边栏盖在 Flowly 上时按返回会关掉其后的卡片；宿主弹窗呈现动画期间（约 300 ms）按返回由 Flowly 处理。
+- 引导：标准平台行为，不加提示、不改导览。What's new：补丁版本不加。遥测：不加字段。无新字符串。
+- 测试：`client/android-back.test.ts`（最近的屏幕导航对象、忽略相似对象、抛错的树）。
+
 ## 2026-10-31 手机看板左右滑动切换 lane
 
 - 用户要求：手机看板左右滑动切换 lane，不能和 Paseo 滑动打开侧边栏冲突；参照 better-paseo，只有在最左的 lane 才触发侧边栏。按 [UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts) 2026-10-31 lane swipe 条（替换原“不做横向分页”的规则）。

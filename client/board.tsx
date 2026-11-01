@@ -72,6 +72,7 @@ import { LaneList } from "./lane-list";
 import { perfConfigure, perfMark, usePerfRender } from "./perf";
 import { laneRows, sameRows, type LaneRow } from "./lane-rows";
 import { LanePager } from "./lane-pager";
+import { useAndroidBack } from "./android-back";
 import { LiveTaskCard, type CardDrag, type LiveTaskCardProps } from "./card";
 import { useConnections } from "./connectors";
 import { cardProgress, useSummaries } from "./task-progress";
@@ -1489,6 +1490,8 @@ function BoardContent(
     }
   };
   const keyboardProps = shortcutsOn ? { focusable: true, onKeyDown } : {};
+  // Same steps as Esc; on the bare board Back falls through to the host. Open host modals take Back first.
+  useAndroidBack(rootRef, () => runIntent("escape"));
   // Opening the board from the sidebar leaves keyboard focus on the host's sidebar row, which draws a
   // focus ring while the board scrolls. Hand focus to the board root (it draws no ring of its own).
   // Once per mount: a later compact -> wide resize must not pull focus out of an active control.

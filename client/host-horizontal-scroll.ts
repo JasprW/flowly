@@ -6,14 +6,12 @@
  * This relies on Paseo internals, not a plugin API (AGENTS.md exception, user-approved 2026-10-31): everything is
  * feature-detected, nothing throws, and a host with another tree shape returns null and keeps its gestures.
  */
+import { findHostValue } from "./host-fiber";
+
 export interface HostHorizontalScroll {
   registerScrollOffset(id: string, offset: number): void;
   unregisterScrollOffset(id: string): void;
 }
-
-type Fiber = { return?: Fiber | null; memoizedProps?: { value?: unknown } | null };
-
-const maxDepth = 4000;
 
 function asHorizontalScroll(value: unknown): HostHorizontalScroll | null {
   if (!value || typeof value !== "object") return null;
@@ -26,15 +24,5 @@ function asHorizontalScroll(value: unknown): HostHorizontalScroll | null {
 
 /** The nearest registry above a mounted native view (a `View` ref), or null. */
 export function findHostHorizontalScroll(node: unknown): HostHorizontalScroll | null {
-  try {
-    let fiber = (node as { __internalInstanceHandle?: Fiber } | null)?.__internalInstanceHandle ?? null;
-    for (let depth = 0; fiber && depth < maxDepth; depth++) {
-      const found = asHorizontalScroll(fiber.memoizedProps?.value);
-      if (found) return found;
-      fiber = fiber.return ?? null;
-    }
-  } catch {
-    // Another tree shape: the host keeps its gestures as they are.
-  }
-  return null;
+  return findHostValue(node, asHorizontalScroll);
 }
