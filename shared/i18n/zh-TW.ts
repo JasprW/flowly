@@ -150,6 +150,7 @@ const catalog: Catalog = {
   "{running} running, {finished} finished turns, {unread} unread sessions, {attention} need attention": "{running} 個執行中，{finished} 個已結束回合，{unread} 個未讀工作階段，{attention} 個需要關注",
   "Drag this card with the mouse or open task actions to change status.": "用滑鼠拖動此卡片，或開啟任務操作來更改狀態。",
   "Open details and agent sessions.": "開啟詳情和智慧體工作階段。",
+  "Open latest session": "開啟最近的工作階段",
   "Actions for {title}": "{title} 的操作",
   "Needs you": "需要你處理",
   "Waiting on {waiting}": "正在等待 {waiting}",

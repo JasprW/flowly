@@ -21,6 +21,15 @@ Four tiers, top to bottom. Every tier is omitted when empty.
 - Status order: Needs you, waiting on cards, approvals, errors, workspace problems, running, unread, workpad checks, ideas, Archived, Legacy.
 - The accessibility label of the card is unchanged and always lists every fact, whatever is hidden.
 
+### 2.1 Tapping the session signal
+
+Added 2026-11-05 (issue #74).
+
+- The session signals (running/starting, unread, the session count) form one target. Tapping it opens the card's latest session — the same one the activity line reads (`pickOutputSession`: the card's own sessions first, newest activity wins; archived sessions never) — through the drawer's session entry, as the Attention list does.
+- Tapping anywhere else on the card still opens Details. A card with no live session, a stale or unavailable summary, the settings preview and the tour demos keep the signal display-only.
+- A mouse drag that starts on the signal still drags the card; the tap after a drag is suppressed as for the card body.
+- The target is a button labelled *Open latest session*; the card's own label and hint are unchanged.
+
 ## 3. Options (Settings → Cards)
 
 Host-scoped (`board-view` settings), so every board on this device uses them.

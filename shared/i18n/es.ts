@@ -150,6 +150,7 @@ const catalog: Catalog = {
   "{running} running, {finished} finished turns, {unread} unread sessions, {attention} need attention": "{running} en ejecución, {finished} turnos terminados, {unread} sesiones sin leer, {attention} requieren atención",
   "Drag this card with the mouse or open task actions to change status.": "Arrastra esta tarjeta con el ratón o abre las acciones de la tarea para cambiar el estado.",
   "Open details and agent sessions.": "Abre los detalles y las sesiones de agentes.",
+  "Open latest session": "Abrir la última sesión",
   "Actions for {title}": "Acciones de {title}",
   "Needs you": "Te necesita",
   "Waiting on {waiting}": "Esperando {waiting}",

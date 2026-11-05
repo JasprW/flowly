@@ -26,10 +26,12 @@ export type CardDrag = {
 
 type TaskCardProps = Parameters<typeof TaskCard>[0];
 
-export type LiveTaskCardProps = Omit<TaskCardProps, "output" | "menu" | "onOpen" | "onActions"> & {
+export type LiveTaskCardProps = Omit<TaskCardProps, "output" | "menu" | "onOpen" | "onOpenSession" | "onActions"> & {
   outputSession?: OutputSession | null;
   /** Stable handlers shared by all cards; they receive the card's task (PERFORMANCE-SPEC §3). */
   onOpen(task: Task): void;
+  /** Opens the card on one of its sessions: the session signal opens the latest (CARD-DISPLAY-SPEC §2.1). */
+  onOpenSession?(task: Task, sessionId: string): void;
   onActions(task: Task): void;
   menuFor?(task: Task): MenuEntry[];
 };
@@ -54,6 +56,7 @@ function sameLiveCard(a: LiveTaskCardProps, b: LiveTaskCardProps) {
 export const LiveTaskCard = memo(function LiveTaskCard({
   outputSession,
   onOpen: openTask,
+  onOpenSession: openTaskSession,
   onActions: taskActions,
   menuFor,
   ...props
@@ -68,8 +71,13 @@ export const LiveTaskCard = memo(function LiveTaskCard({
     [openMenu, menuFor, task],
   );
   const onOpen = useCallback(() => openTask(task), [openTask, task]);
+  const latestSession = outputSession?.id;
+  const onOpenSession = useMemo(
+    () => (openTaskSession && latestSession ? () => openTaskSession(task, latestSession) : undefined),
+    [openTaskSession, task, latestSession],
+  );
   const onActions = useCallback(() => taskActions(task), [taskActions, task]);
-  return <TaskCard {...props} output={output} menu={menu} onOpen={onOpen} onActions={onActions} />;
+  return <TaskCard {...props} output={output} menu={menu} onOpen={onOpen} onOpenSession={onOpenSession} onActions={onActions} />;
 }, sameLiveCard);
 
 export function TaskCard({
@@ -98,6 +106,7 @@ export function TaskCard({
   disabled,
   drag,
   onOpen,
+  onOpenSession,
   onActions,
   menu,
 }: {
@@ -137,6 +146,8 @@ export function TaskCard({
   disabled?: boolean;
   drag?: CardDrag;
   onOpen(): void;
+  /** Opens the card's latest session; without it the session signal is not tappable. */
+  onOpenSession?(): void;
   onActions(): void;
   /** Context-menu handlers (right-click / long-press) for the card body. */
   menu?: object;
@@ -319,6 +330,13 @@ export function TaskCard({
           waiting={waiting}
           attentionDismissed={attentionDismissed}
           display={display}
+          onOpenSession={
+            onOpenSession
+              ? () => {
+                  if (Date.now() >= suppressUntil.current) onOpenSession();
+                }
+              : undefined
+          }
         />
       </Pressable>
       {accent && (
@@ -432,6 +450,23 @@ function Signal({ color, icon, text, pulse = false }: { color?: string; icon?: s
   );
 }
 
+/** The session signals as one target: tapping them opens the latest session instead of Details. */
+function SessionSignals({ onPress, children }: { onPress?: () => void; children: ReactNode }) {
+  const row = <View style={{ flexDirection: "row", alignItems: "center", columnGap: space[3] }}>{children}</View>;
+  if (!onPress) return row;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t("Open latest session")}
+      hitSlop={6}
+      onPress={onPress}
+      style={({ pressed }) => ({ ...noFocusRing, opacity: pressed ? 0.6 : 1, outlineStyle: "none" }) as never}
+    >
+      {row}
+    </Pressable>
+  );
+}
+
 function CardSignals({
   task,
   legacy,
@@ -447,6 +482,7 @@ function CardSignals({
   waiting,
   attentionDismissed,
   display,
+  onOpenSession,
 }: {
   task: Task;
   legacy: boolean;
@@ -462,10 +498,17 @@ function CardSignals({
   waiting: number;
   attentionDismissed: boolean;
   display: CardDisplay;
+  onOpenSession?(): void;
 }) {
   const { colors } = useTheme();
   // Asks for the user first, then what is happening (CARD-DISPLAY-SPEC §2).
   const items: ReactNode[] = [];
+  // Running, unread and the session count open the latest session (CARD-DISPLAY-SPEC §2.1).
+  const chat: ReactNode[] = [];
+  const flushChat = () => {
+    if (!chat.length) return;
+    items.push(<SessionSignals key="chat" onPress={onOpenSession}>{chat.splice(0)}</SessionSignals>);
+  };
   if (questions || (available && summary?.questions))
     items.push(<Signal key="question" icon="MessageCircleQuestion" color={colors.statusWarning} text={t("Needs you")} />);
   if (waiting) items.push(<Signal key="waiting" icon="Hourglass" text={t("Waiting on {waiting}", { waiting })} />);
@@ -485,7 +528,7 @@ function CardSignals({
       items.push(<Signal key="err" color={colors.statusDanger} text={tn(summary.errors, "{n} error", "{n} errors")} />);
     if (display.sessions) {
       if (summary.running || summary.starting)
-        items.push(
+        chat.push(
           <Signal
             key="run"
             pulse
@@ -496,14 +539,17 @@ function CardSignals({
       // A session with an open question is already shown as "Needs you".
       const unread = Math.max(0, summary.unread - questions - summary.questions);
       if (unread)
-        items.push(<Signal key="unread" color={colors.statusSuccess} text={t("{n} unread", { n: unread })} />);
-      if (!items.length && summary.total)
-        items.push(<Signal key="total" icon="MessageSquare" text={`${summary.total}`} />);
+        chat.push(<Signal key="unread" color={colors.statusSuccess} text={t("{n} unread", { n: unread })} />);
+      if (!items.length && !chat.length && summary.total)
+        chat.push(<Signal key="total" icon="MessageSquare" text={`${summary.total}`} />);
+      flushChat();
       if (summaryState === "stale")
         items.push(<Signal key="stale" icon="Clock" text={t("Last known")} />);
     }
-  } else if (sessions && display.sessions)
-    items.push(<Signal key="fallback" icon="MessageSquare" text={running ? t("{running}/{sessions} running", { running, sessions }) : `${sessions}`} />);
+  } else if (sessions && display.sessions) {
+    chat.push(<Signal key="fallback" icon="MessageSquare" text={running ? t("{running}/{sessions} running", { running, sessions }) : `${sessions}`} />);
+    flushChat();
+  }
   if (attentionDismissed) items.push(<Signal key="dismissed" icon="BellOff" text={t("Dismissed")} />);
   if (workpad && display.workpad)
     items.push(
