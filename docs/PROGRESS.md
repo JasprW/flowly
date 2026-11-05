@@ -1259,7 +1259,8 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - RPC `connectors.repo-check`（输入 projectId、connectionId、repo；输出 state/projectTitle/others≤3）；判定纯函数 `repoVerdict`（大小写不敏感，空即 unknown）在 `server/connectors/repos.ts`；handler 在 `index.server.ts`（复用 5 分钟缓存的 `projectRepos`，others 排除归档项目）。客户端 `client/connectors.tsx`：`useRepoCheck`（失败/空数据静默）与 `ForeignRepoWarning`（Notice + Cancel/确认），`LinkExternal` 与 `client/forms.tsx` 的 `pickExternal`（拆出 `addExternal`）接入。
 - 范围外（有意）：Artifacts"文件或链接"表单粘贴条目链接的自动识别不做校验（非选择器路径），已按 spec 注明。
 - 引导：不改导览、不加 tip（警告本身即提示，无新入口）；What's new 不加（当前 1.7.2 为补丁版本）；遥测不加字段（客户端一次性警告，daemon 侧无核心动作可计数）。
-- 已运行：typecheck、npm test（146 files / 1223 passed / 6 skipped）、`npx vitest run server/connectors/repos.test.ts`（3 passed）。未运行：桌面/手机 UI 实机走查、本地 daemon 实际 RPC 联调（不在本 session reload 运行中的插件）。
+- 已运行：typecheck、npm test（146 files / 1223 passed / 6 skipped）、`npx vitest run server/connectors/repos.test.ts`（3 passed）；桌面 UI 实机走查（2026-11-05，本地 remove+install 交换安装，Playwright + shot-lib）：foreign 建卡警告（含其他项目提示）、Cancel/Add anyway、挂接路径警告/确认/清理、双项目 member 沉默全部 PASS，无卡片或 artifact 残留。未运行：非 git 族沉默（该 daemon 无对应连接，结构性短路）、手机端走查、D2（另一看板 foreign，等价路径覆盖）。[验证记录](verification/repo-check-2026-11-05/report.md)。
+
 ## 2026-11-05 看板卡片可访问名称与稳定 testID（自动化定位）
 
 - 来源卡：看板卡片补齐可访问名称，让 UI 自动化验证可定位。此前卡片可访问名称不含泳道、无 testID，Playwright `getByText` 只命中宿主侧栏同名会话条目，pager/横向滚动落点不定时点卡片经常点空；按 [UI-UX-SPEC §2](UI-UX-SPEC.md#2-board-toolbar-and-secondary-controls) 2026-11-04 automation names 条（本次新增）落契约。

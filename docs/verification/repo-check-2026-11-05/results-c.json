@@ -1,0 +1,17 @@
+[
+  {
+    "id": "C1 attach picker warns",
+    "ok": true,
+    "note": "warning before rpc.createArtifact, Link anyway offered"
+  },
+  {
+    "id": "C2 confirm links the artifact",
+    "ok": true,
+    "note": "artifact row appears on this card"
+  },
+  {
+    "id": "C3 cleanup",
+    "ok": true,
+    "note": "test artifact removed"
+  }
+]
