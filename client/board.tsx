@@ -140,6 +140,7 @@ import { PROJECT_UNAVAILABLE, gone } from "../shared/card-detail";
 import { workpadEnabled } from "../shared/workpad";
 import { cardDisplay } from "../shared/card-display";
 import { parentOf } from "../shared/subagents";
+import { openNativeSession } from "./session-state";
 
 /** One-time tip texts (ONBOARDING-SPEC §5). */
 const tipText: Record<TipId, (compact?: boolean) => string> = {
@@ -244,6 +245,12 @@ function BoardContent(
     paseo = usePaseo();
   const queryClient = useQueryClient();
   const linkMount = useId();
+  // Sent by a ⌘-click on "Open in Paseo" in another window (new-window.ts): this window shows that session.
+  const openAgent = props.params?.openAgent;
+  const openAgentHost = props.params?.openAgentHost;
+  useEffect(() => {
+    if (openAgent) openNativeSession(props.navigation, openAgent, openAgentHost || props.host.id);
+  }, [openAgent, openAgentHost]);
   const [detailTarget, setDetailTarget] = useState<{ id: string; workspaceId: string; projectId: string } | null>(null);
   const input = useMemo(() => {
     try {
