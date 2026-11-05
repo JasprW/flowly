@@ -1,5 +1,14 @@
 # Implementation progress
 
+## Session preview ui-fence notice (card "Recognize ui blocks in flowly's session preview") — 2026-11-05
+
+- ui/app fenced blocks in agent replies render as a compact collapsed notice — "Inline UI — open in Paseo to view it live" — expandable to the still-selectable source, instead of a plain code dump (`isInlineUiFence` in `client/session-markdown.ts`, `UiFenceBlock` in `client/session-content.tsx`). Detection matches genui's rule: the fence's first language word, case-insensitive, so "```ui"/"```app"/"```APP" are caught and "apples" is not. [SESSION-UX-SPEC](SESSION-UX-SPEC.md) §8 updated.
+- Applies everywhere `SessionMarkdown` renders (card session preview, card descriptions, artifact text). Live rendering stays out of scope by design: plugin timeline transformers only run in the host session view (confirmed again on screen — the same block renders live there).
+- One new string in all nine catalogs; fence-detection tests in `client/session-markdown.test.ts`.
+- Verified: `npm run typecheck`, `npm test` (1222 passed; one `server/tool-server.test.ts` timeout appears only under full-suite load and passes in isolation), focused vitest. Real desktop screenshot of the card session preview showing the collapsed notice: [verification/ui-fence-notice-2026-11-05](verification/ui-fence-notice-2026-11-05/).
+- UNRUN: phone preview (SM-S911B not connected via adb this session) and a pixel capture of the expanded state — the web board's lane pager made card targeting nondeterministic for automation; the expand uses the shared `Collapse`/`Chevron` components. Superseded same day: the user confirmed the notice on the phone with the merged build ([verification/ui-fence-notice-2026-11-05/phone-preview-user-confirmed.jpg](verification/ui-fence-notice-2026-11-05/phone-preview-user-confirmed.jpg)).
+- Onboarding: no tour, tip or What's new change — the notice explains itself in context. Telemetry: no new switch or core action, so no heartbeat field.
+
 ## Search (card "搜索功能") — 2026-10-27
 
 - Focus from search: a hit row opens the card at its section and item (Progress, Activity, Workpad, Ideas, Artifacts), widening Activity's last-12 window, Workpad/Artifacts pages and Ideas → Closed to reach it, then a short accent ring; the stored section choices are untouched ([DRAWER-SPEC](DRAWER-SPEC.md#focus-from-search), `client/drawer-focus.tsx`).
@@ -1009,3 +1018,11 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 已运行：typecheck、npm test（148 files / 1291 passed / 1 skipped）、make check；web 紧凑宽度截图。未运行：Android 真机（未连接）。[验证记录](verification/mobile-header-2026-10-31/report.md)。
 - 引导：不改导览。`card-display` 提示在紧凑布局改为指向 “Filters → Card display”（桌面仍是 Sort 菜单），新字符串已加入 9 个目录，ONBOARDING-SPEC 提示表同步。What's new / 遥测：无。
 - 润色（同日）：Low/Normal 优先级图标改为 `ArrowDown`/`Minus`（原信号格图标几乎看不见）；分组标题折叠摘要贴行尾右对齐（`SectionHeader`、`Disclosure`）；Ideas/Memory 来源行的状态不再折行。typecheck、npm test（1291 passed, 1 skipped）、make check 均 exit 0；impeccable detect 无发现。真机未验证。证据：`docs/verification/mobile-header-2026-10-31/report.md`。
+
+## 2026-11-05 建卡/挂接时校验 GitHub/GitLab 条目仓库归属
+
+- 背景：2026-11-05 一张 paseo-sync PR 卡误建在 flowly 项目，卡片工作区锁在错误仓库根，session 得去工作区外找代码。按 [CONNECTORS-SPEC §4.3](CONNECTORS-SPEC.md#43-项目仓库范围github--gitlab) 新增建卡/挂接校验：New task 表单与卡片侧栏挂接选择器选中 GitHub/GitLab 条目时，先问 daemon 该仓库（`ExternalSummary.container`）是否属于当前项目的项目仓库；`foreign` 先出非阻断警告（点名条目与项目，说明卡片工作区不包含该仓库，若其他项目包含则点名），确认后才加入/挂接；`unknown`（项目仓库为空、container 为空、RPC 失败）与非 git 族保持沉默。校验在选中时机进行，天然覆盖"我参与的"范围与链接/owner/repo#nr 直查等绕过项目搜索范围的路径。
+- RPC `connectors.repo-check`（输入 projectId、connectionId、repo；输出 state/projectTitle/others≤3）；判定纯函数 `repoVerdict`（大小写不敏感，空即 unknown）在 `server/connectors/repos.ts`；handler 在 `index.server.ts`（复用 5 分钟缓存的 `projectRepos`，others 排除归档项目）。客户端 `client/connectors.tsx`：`useRepoCheck`（失败/空数据静默）与 `ForeignRepoWarning`（Notice + Cancel/确认），`LinkExternal` 与 `client/forms.tsx` 的 `pickExternal`（拆出 `addExternal`）接入。
+- 范围外（有意）：Artifacts"文件或链接"表单粘贴条目链接的自动识别不做校验（非选择器路径），已按 spec 注明。
+- 引导：不改导览、不加 tip（警告本身即提示，无新入口）；What's new 不加（当前 1.7.2 为补丁版本）；遥测不加字段（客户端一次性警告，daemon 侧无核心动作可计数）。
+- 已运行：typecheck、npm test（146 files / 1223 passed / 6 skipped）、`npx vitest run server/connectors/repos.test.ts`（3 passed）；桌面 UI 实机走查（2026-11-05，本地 remove+install 交换安装，Playwright + shot-lib）：foreign 建卡警告（含其他项目提示）、Cancel/Add anyway、挂接路径警告/确认/清理、双项目 member 沉默全部 PASS，无卡片或 artifact 残留。未运行：非 git 族沉默（该 daemon 无对应连接，结构性短路）、手机端走查、D2（另一看板 foreign，等价路径覆盖）。[验证记录](verification/repo-check-2026-11-05/report.md)。

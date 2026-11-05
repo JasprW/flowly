@@ -316,6 +316,22 @@ export const searchExternal = defineRpc({
   input: z.strictObject({ connectionId: z.string().min(1), query: z.string().max(500), projectId: z.string().min(1).optional(), all: z.boolean().optional() }),
   output: z.object({ results: z.array(externalSummarySchema) }),
 });
+/**
+ * Whether a picked GitHub/GitLab item's repository belongs to the project's
+ * repositories (CONNECTORS-SPEC §4.3): "unknown" when membership can't be judged
+ * (no repositories on that host); "foreign" also names the other projects that
+ * have it. Client-only warning material; the daemon decides.
+ */
+export const repoCheck = defineRpc({
+  name: "connectors.repo-check",
+  input: z.strictObject({ projectId: z.string().min(1), connectionId: z.string().min(1), repo: z.string().trim().min(1).max(300) }),
+  output: z.object({
+    state: z.enum(["member", "foreign", "unknown"]),
+    projectTitle: z.string(),
+    /** Other projects whose repositories contain the repo (foreign only, at most 3). */
+    others: z.array(z.object({ id: z.string(), title: z.string() })),
+  }),
+});
 /** Current summaries of a card's external inputs (cached up to 30 minutes unless `refresh`). */
 export const cardExternals = defineRpc({
   name: "connectors.card",

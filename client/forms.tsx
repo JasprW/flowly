@@ -36,7 +36,7 @@ import { t, tn } from "../shared/i18n";
 import { tagValues } from "../shared/tags";
 import { TagEditor } from "./tag-input";
 import { useStableCallback } from "./stable";
-import { ExternalChip, ExternalPicker, connectionsByFamily, familyNames, pickKey, useConnections } from "./connectors";
+import { ExternalChip, ExternalPicker, ForeignRepoWarning, connectionsByFamily, familyNames, pickKey, useConnections, useRepoCheck, type RepoCheck } from "./connectors";
 import { BrandIcon } from "./brand-icons";
 import { connectorFamilies, connectorLimits, familyOf, type ConnectorFamily, type ConnectorProvider, type ExternalSummary } from "../shared/connectors";
 
@@ -476,14 +476,24 @@ export function TaskForm({
     [picking, setPicking] = useState<ConnectorFamily | null>(null);
   // The title the last pick filled in: a later pick may replace it only while it is unchanged.
   const prefilled = useRef("");
-  const pickExternal = useStableCallback((item: ExternalSummary, provider: ConnectorProvider) => {
+  // A GitHub/GitLab item from another project's repositories warns first (CONNECTORS-SPEC §4.3).
+  const repoCheck = useRepoCheck(project.id);
+  const [foreignConfirm, setForeignConfirm] = useState<{ item: ExternalSummary; provider: ConnectorProvider; check: RepoCheck } | null>(null);
+  const addExternal = useStableCallback((item: ExternalSummary, provider: ConnectorProvider) => {
     const id = pickKey(familyOf(provider), item.key);
     setExternals((current) => (current.some((x) => pickKey(familyOf(x.provider), x.item.key) === id) ? current : [...current, { item, provider }]));
-    setPicking(null);
     if (!title.trim() || title === prefilled.current) {
       setTitle(item.summary);
       prefilled.current = item.summary;
     }
+  });
+  const pickExternal = useStableCallback((item: ExternalSummary, provider: ConnectorProvider) => {
+    setPicking(null);
+    setForeignConfirm(null);
+    void repoCheck(item, familyOf(provider)).then((check) => {
+      if (check?.state === "foreign") return setForeignConfirm({ item, provider, check });
+      addExternal(item, provider);
+    });
   });
   const externalKeys = useMemo(() => new Set(externals.map((x) => pickKey(familyOf(x.provider), x.item.key))), [externals]);
   // Items other cards of this project already reference (shown, still choosable).
@@ -622,6 +632,18 @@ export function TaskForm({
           {ready ? <>
           {!task && byFamily.size > 0 && (
             <View style={{ gap: space[2] }}>
+              {foreignConfirm && (
+                <ForeignRepoWarning
+                  itemKey={foreignConfirm.item.key}
+                  check={foreignConfirm.check}
+                  confirmLabel={t("Add anyway")}
+                  onConfirm={() => {
+                    addExternal(foreignConfirm.item, foreignConfirm.provider);
+                    setForeignConfirm(null);
+                  }}
+                  onCancel={() => setForeignConfirm(null)}
+                />
+              )}
               {externals.map((x) => (
                 <ExternalChip
                   key={`${x.item.connectionId}:${x.item.key}`}

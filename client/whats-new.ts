@@ -22,6 +22,13 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
+    // CONNECTORS-SPEC §4.3.
+    version: "1.9.0",
+    items: [
+      { icon: "TriangleAlert", text: msg("Adding a GitHub or GitLab item from another project's repositories to a card now warns first, so its workspace keeps the right code.") },
+    ],
+  },
+  {
     // SEARCH-SPEC §8, CONNECTORS-SPEC §14.
     version: "1.8.0",
     items: [

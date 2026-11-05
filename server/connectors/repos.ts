@@ -36,3 +36,17 @@ export async function projectRepos(root: string, baseUrl: string, clock = () => 
   }
   return out;
 }
+
+/** CONNECTORS-SPEC §4.3: a picked item's repository vs a project's repositories. */
+export type RepoVerdict = "member" | "foreign" | "unknown";
+
+/**
+ * Whether `container` (an item's `ExternalSummary.container`) is among `repos`.
+ * Case-insensitive (GitHub and GitLab paths are); an empty container or an empty
+ * list can't be judged, so they stay "unknown" and never warn.
+ */
+export function repoVerdict(container: string, repos: readonly string[]): RepoVerdict {
+  const repo = container.trim().toLowerCase();
+  if (!repo || !repos.length) return "unknown";
+  return repos.some((r) => r.trim().toLowerCase() === repo) ? "member" : "foreign";
+}

@@ -30,7 +30,7 @@ import { createLink, deleteLink } from "./server/links";
 import { ArtifactService } from "./server/artifacts";
 import { WorkpadService } from "./server/workpad";
 import { ConnectorService, migrateTicketDirectory, refKey } from "./server/connectors/service";
-import { projectRepos } from "./server/connectors/repos";
+import { projectRepos, repoVerdict } from "./server/connectors/repos";
 import { linkedCardCounts } from "./shared/connectors";
 import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
@@ -482,6 +482,23 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.testConnection, (input) => connectors.test(input));
   server.handle(rpc.deleteConnection, (input) => connectors.remove(input.id));
   server.handle(rpc.searchExternal, (input) => connectors.search(input));
+  // A picked GitHub/GitLab item's repository vs the project's repositories (CONNECTORS-SPEC §4.3).
+  server.handle(rpc.repoCheck, async (input) => {
+    const unknown = { state: "unknown" as const, projectTitle: "", others: [] as { id: string; title: string }[] };
+    const [connection, board] = await Promise.all([connectors.connections.get(input.connectionId).catch(() => null), store.read()]);
+    const project = board.projects.find((p) => p.id === input.projectId && !p.archivedAt);
+    if (!connection || !project) return unknown;
+    const repos = await projectRepos(project.primaryPath, connection.baseUrl).catch(() => []);
+    const state = repoVerdict(input.repo, repos);
+    if (state !== "foreign") return { state, projectTitle: project.title, others: [] };
+    const others: { id: string; title: string }[] = [];
+    for (const other of board.projects) {
+      if (other.id === project.id || other.archivedAt || others.length >= 3) continue;
+      const list = await projectRepos(other.primaryPath, connection.baseUrl).catch(() => []);
+      if (repoVerdict(input.repo, list) === "member") others.push({ id: other.id, title: other.title });
+    }
+    return { state, projectTitle: project.title, others };
+  });
   server.handle(rpc.cardExternals, async (input) => {
     const list = (await store.read()).artifacts.filter((a) => a.taskId === input.taskId && a.external);
     const located = await connectors.locate(list);

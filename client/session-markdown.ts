@@ -17,6 +17,17 @@ export type MarkdownBlock =
       align: ("left" | "center" | "right")[];
     };
 
+/**
+ * A ui/app fence is inline UI that a plugin (genui) renders live in the host
+ * session view; timeline transformers never run inside flowly's preview, so
+ * SessionMarkdown shows a notice instead of the code. Matching follows genui's
+ * rule: the fence's first language word, case-insensitive.
+ */
+export function isInlineUiFence(language: string): boolean {
+  const first = language.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  return first === "ui" || first === "app";
+}
+
 function tableCells(line: string) {
   let trimmed = line.trim().replace(/^\|/, "");
   if (trimmed.endsWith("|") && trimmed.at(-2) !== "\\")
