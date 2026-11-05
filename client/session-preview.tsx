@@ -61,6 +61,7 @@ import {
   sessionState,
   turnEventKey,
 } from "./session-state";
+import { DictationButton } from "./dictation";
 import { sendCardInstruction, workspaceSession } from "./session";
 import { useStableCallback } from "./stable";
 import { PendingRequests } from "./session-question";
@@ -733,17 +734,26 @@ function SessionPreviewView({
             />
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-            {imageInputSupported ? (
-              <IconButton
-                icon="ImagePlus"
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
+              {imageInputSupported && (
+                <IconButton
+                  icon="ImagePlus"
+                  size={sendSize}
+                  label={t("Attach images")}
+                  disabled={!canWrite || attachments.length >= maxImages}
+                  onPress={() => void pickImageFiles().then((files) => addImages.current(files))}
+                />
+              )}
+              <DictationButton
                 size={sendSize}
-                label={t("Attach images")}
-                disabled={!canWrite || attachments.length >= maxImages}
-                onPress={() => void pickImageFiles().then((files) => addImages.current(files))}
+                disabled={!canWrite}
+                onText={(spoken) => {
+                  const current = draftBuffer.read().trim();
+                  onDraftChange(sessionId, current ? `${current} ${spoken}` : spoken);
+                }}
+                onError={setError}
               />
-            ) : (
-              <View />
-            )}
+            </View>
             {stopMode ? (
               <Pressable
                 accessibilityRole="button"

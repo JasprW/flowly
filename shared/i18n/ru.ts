@@ -1407,5 +1407,10 @@ const catalog: Catalog = {
   "Previous day": "Предыдущий день",
   "Next day": "Следующий день",
   "agent {time}": "агент {time}",
+  "Dictate": "Диктовать",
+  "Stop recording": "Остановить запись",
+  "Could not use the microphone: {reason}": "Не удалось использовать микрофон: {reason}",
+  "The recording is too long.": "Запись слишком длинная.",
+  "Could not transcribe the recording.": "Не удалось расшифровать запись.",
 };
 export default catalog;

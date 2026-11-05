@@ -1407,5 +1407,10 @@ const catalog: Catalog = {
   "Previous day": "前一天",
   "Next day": "后一天",
   "agent {time}": "agent {time}",
+  "Dictate": "听写",
+  "Stop recording": "停止录音",
+  "Could not use the microphone: {reason}": "无法使用麦克风：{reason}",
+  "The recording is too long.": "录音太长。",
+  "Could not transcribe the recording.": "无法转写录音。",
 };
 export default catalog;
