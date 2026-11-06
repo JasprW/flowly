@@ -48,8 +48,19 @@ export async function openAgentInNewWindow(agentId: string, hostId: string): Pro
   const store = storage();
   if (typeof openNew !== "function" || !store) return false;
   const handoff: Handoff = { agentId, hostId, from: windowTag, at: Date.now() };
-  store.setItem(handoffKey, JSON.stringify(handoff));
-  await openNew({});
+  const serialized = JSON.stringify(handoff);
+  try {
+    store.setItem(handoffKey, serialized);
+  } catch {
+    return false;
+  }
+  try {
+    await openNew({});
+  } catch (error) {
+    // Drop only this request: a newer one may have replaced it while openNew was pending.
+    if (store.getItem(handoffKey) === serialized) store.removeItem(handoffKey);
+    throw error;
+  }
   return true;
 }
 
@@ -65,9 +76,30 @@ export function takeNewWindowAgent(): PluginScreenParams | null {
     store.removeItem(handoffKey);
     return null;
   }
+  if (!handoff || typeof handoff !== "object") {
+    store.removeItem(handoffKey);
+    return null;
+  }
   if (handoff.from === windowTag) return null;
   store.removeItem(handoffKey);
   if (typeof handoff.agentId !== "string" || typeof handoff.hostId !== "string") return null;
   if (typeof handoff.at !== "number" || Date.now() - handoff.at > handoffTtlMs) return null;
-  return { openAgent: handoff.agentId, openAgentHost: handoff.hostId };
+  return { openAgent: handoff.agentId, openAgentHost: handoff.hostId, openAgentAt: String(handoff.at) };
+}
+
+const consumedOpens = new Set<string>();
+
+/** The handed-over agent to open now, or null: route params outlive the handoff (reload, history), so each opens once and only while fresh. */
+export function takeOpenAgentParams(
+  params: PluginScreenParams | undefined,
+  now = Date.now(),
+): { agentId: string; hostId?: string } | null {
+  const agentId = params?.openAgent;
+  const at = params?.openAgentAt;
+  if (!agentId || !at || !/^\d{1,16}$/.test(at)) return null;
+  if (now - Number(at) > handoffTtlMs * 2) return null;
+  const key = `${agentId}|${at}`;
+  if (consumedOpens.has(key)) return null;
+  consumedOpens.add(key);
+  return { agentId, hostId: params?.openAgentHost || undefined };
 }

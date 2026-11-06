@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { GestureResponderEvent } from "react-native";
-import { openAgentInNewWindow, takeNewWindowAgent, wantsNewWindow } from "./new-window";
+import { openAgentInNewWindow, takeNewWindowAgent, takeOpenAgentParams, wantsNewWindow } from "./new-window";
 
 const key = "flowly:open-agent-in-new-window";
 const store = new Map<string, string>();
@@ -40,7 +40,7 @@ test("the asking window opens a blank window and does not take its own request",
 
 test("another window takes the request once", () => {
   store.set(key, JSON.stringify({ agentId: "a1", hostId: "h1", from: "other", at: Date.now() }));
-  expect(takeNewWindowAgent()).toEqual({ openAgent: "a1", openAgentHost: "h1" });
+  expect(takeNewWindowAgent()).toMatchObject({ openAgent: "a1", openAgentHost: "h1" });
   expect(takeNewWindowAgent()).toBeNull();
 });
 
@@ -51,4 +51,33 @@ test("a stale or broken request is dropped", () => {
   store.set(key, "{");
   expect(takeNewWindowAgent()).toBeNull();
   expect(store.has(key)).toBe(false);
+  store.set(key, "null");
+  expect(takeNewWindowAgent()).toBeNull();
+  expect(store.has(key)).toBe(false);
+});
+
+test("a full storage opens in place", async () => {
+  vi.stubGlobal("paseoDesktop", { window: { openNew: vi.fn(async () => {}) } });
+  vi.stubGlobal("localStorage", { ...localStorage, setItem: () => { throw new Error("QuotaExceededError"); } });
+  expect(await openAgentInNewWindow("a1", "h1")).toBe(false);
+});
+
+test("a failed openNew drops its own request but not a newer one", async () => {
+  vi.stubGlobal("paseoDesktop", { window: { openNew: vi.fn(async () => { throw new Error("no"); }) } });
+  await expect(openAgentInNewWindow("a1", "h1")).rejects.toThrow("no");
+  expect(store.has(key)).toBe(false);
+  vi.stubGlobal("paseoDesktop", {
+    window: { openNew: vi.fn(async () => { store.set(key, "newer"); throw new Error("no"); }) },
+  });
+  await expect(openAgentInNewWindow("a1", "h1")).rejects.toThrow("no");
+  expect(store.get(key)).toBe("newer");
+});
+
+test("the board opens a handed-over agent once, and only while fresh", () => {
+  const now = Date.now();
+  const params = { openAgent: "a9", openAgentHost: "h1", openAgentAt: String(now) };
+  expect(takeOpenAgentParams(params, now)).toEqual({ agentId: "a9", hostId: "h1" });
+  expect(takeOpenAgentParams(params, now)).toBeNull();
+  expect(takeOpenAgentParams({ openAgent: "a8", openAgentAt: String(now - 60_000) }, now)).toBeNull();
+  expect(takeOpenAgentParams({ openAgent: "a7" }, now)).toBeNull();
 });
