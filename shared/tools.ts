@@ -540,11 +540,6 @@ export const preparationSchema = z.object({
   cliPath: z.string(),
   skillPath: z.string(),
   instructions: z.string(),
-  mcp: z.object({
-    type: z.literal("http"),
-    url: z.string(),
-    headers: z.record(z.string(), z.string()),
-  }),
 });
 export type ToolContext = z.infer<typeof toolContextSchema>;
 export type ToolResult = z.infer<typeof toolResultSchema>;

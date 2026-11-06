@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -299,7 +299,9 @@ test("prepared ID and scoped files are stable, selected existing actor verified"
     x.server.prepareSession("t", "operation", x.paseo),
   ]);
   expect(a.agentId).toBe(b.agentId);
-  expect(a.mcp.url).toBe(x.url + "mcp");
+  // A new session gets the MCP server at launch, not in its saved config.
+  expect(a).not.toHaveProperty("mcp");
+  expect(await x.server.secrets.contextMethods(a.agentId)).toEqual(["launch-mcp"]);
   await expect(
     x.server.prepareExisting("t", "wrong", x.paseo),
   ).rejects.toMatchObject({ code: "SESSION_MISMATCH" });
@@ -611,12 +613,77 @@ test("port collision preserves discovery/key/board; after conflict removal liste
 test("session_open injection is limited to Kanban-managed sessions", async () => {
   const x = await setup();
   // A session in the card workspace that the plugin never prepared gets nothing.
-  expect(await x.server.sessionContext("unmanaged-agent", x.identity.workspaceId, x.paseo)).toBeNull();
+  expect(await x.server.sessionLaunch("unmanaged-agent", x.identity.workspaceId, x.paseo)).toBeNull();
   expect(await x.server.secrets.hasContext("unmanaged-agent")).toBe(false);
   expect(await x.server.secrets.hasContext("../escape")).toBe(false);
-  // Once prepared (card launch or explicit opt-in), reopening refreshes its context.
-  await x.server.secrets.writeContext(x.identity, "mcp");
-  const path = await x.server.sessionContext(x.identity.agentId, x.identity.workspaceId, x.paseo);
-  expect(path).toBe(x.server.secrets.contextFile(x.identity.agentId));
-  expect(JSON.parse(await readFile(path!, "utf8")).methods).toEqual(["mcp", "cli"]);
+  // Launched from the card: each open refreshes its context and adds the MCP server.
+  await x.server.secrets.writeContext(x.identity, "launch-mcp");
+  const launch = await x.server.sessionLaunch(x.identity.agentId, x.identity.workspaceId, x.paseo);
+  expect(launch?.contextFile).toBe(x.server.secrets.contextFile(x.identity.agentId));
+  expect(launch?.mcp).toEqual({
+    type: "http",
+    url: x.url + "mcp",
+    headers: { Authorization: x.authorization },
+  });
+  expect(JSON.parse(await readFile(launch!.contextFile, "utf8")).methods).toEqual(["launch-mcp", "cli"]);
+  expect((await x.server.accessState("t", "actor", x.paseo)).methods).toEqual(["mcp", "cli"]);
+});
+test("session_open never adds a second flowly server or one not confirmed for the provider (§4.3)", async () => {
+  const x = await setup();
+  // Saved in the agent config before launch injection: adding it again would fail the open.
+  await x.server.secrets.writeContext(x.identity, "mcp", "launch-mcp");
+  const saved = await x.server.sessionLaunch(x.identity.agentId, x.identity.workspaceId, x.paseo);
+  expect(saved?.mcp).toBeNull();
+  // Opted in through the CLI only: no MCP until the provider is known to take it.
+  const other = { ...x.identity, agentId: "second" };
+  await x.server.secrets.writeContext(other, "cli");
+  expect((await x.server.sessionLaunch("second", other.workspaceId, x.paseo))?.mcp).toBeNull();
+  // Unknown values written by a newer version are kept, not reset.
+  await writeFile(
+    x.server.secrets.contextFile("second"),
+    JSON.stringify({ ...JSON.parse(await readFile(x.server.secrets.contextFile("second"), "utf8")), methods: ["future"] }),
+  );
+  await x.server.sessionLaunch("second", other.workspaceId, x.paseo);
+  expect(await x.server.secrets.contextMethods("second")).toEqual(["future", "cli"]);
+});
+test("opting in an existing session records MCP only once its provider is known to take it", async () => {
+  const x = await setup();
+  // Idle: reopened now; the reloaded (live) snapshot confirms MCP support.
+  x.actors.actor.capabilities = { supportsMcpServers: true };
+  await x.server.prepareExisting("t", "actor", x.paseo);
+  expect(x.reloads).toEqual(["actor"]);
+  expect(await x.server.secrets.contextMethods("actor")).toEqual(["cli", "launch-mcp"]);
+  expect((await x.server.sessionLaunch("actor", "w", x.paseo))?.mcp).not.toBeNull();
+  // Already has it: sending again does not reopen the session.
+  await x.server.prepareExisting("t", "actor", x.paseo);
+  expect(x.reloads).toEqual(["actor"]);
+  // Idle, but the provider takes no MCP servers: the mark is removed again.
+  x.actors.second.capabilities = { supportsMcpServers: false };
+  await x.server.prepareExisting("t", "second", x.paseo);
+  expect(x.reloads).toEqual(["actor", "second"]);
+  expect(await x.server.secrets.contextMethods("second")).toEqual(["cli"]);
+  expect((await x.server.sessionLaunch("second", "w", x.paseo))?.mcp).toBeNull();
+});
+test("opting in never interrupts a running turn; a failed reopen leaves the CLI", async () => {
+  const x = await setup();
+  // Running and loaded: no reload; the next open adds MCP.
+  x.actors.actor.status = "running";
+  x.actors.actor.capabilities = { supportsMcpServers: true };
+  await x.server.prepareExisting("t", "actor", x.paseo);
+  expect(x.reloads).toEqual([]);
+  expect(await x.server.secrets.contextMethods("actor")).toEqual(["cli", "launch-mcp"]);
+  // Running with unconfirmed capabilities: CLI only.
+  x.actors.second.status = "running";
+  await x.server.prepareExisting("t", "second", x.paseo);
+  expect(await x.server.secrets.contextMethods("second")).toEqual(["cli"]);
+  // Idle, reload fails: logged, the instructions still go out over the CLI.
+  x.actors.second.status = "idle";
+  x.actors.second.capabilities = { supportsMcpServers: true };
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const ref = x.paseo.agents.ref;
+  x.paseo.agents.ref = ((id: string) => ({ ...ref(id), reload: async () => { throw new Error("busy"); } })) as typeof ref;
+  await expect(x.server.prepareExisting("t", "second", x.paseo)).resolves.toMatchObject({ agentId: "second" });
+  expect(await x.server.secrets.contextMethods("second")).toEqual(["cli"]);
+  expect(error).toHaveBeenCalledWith("Kanban session reload for MCP failed:", "second", "busy");
+  error.mockRestore();
 });

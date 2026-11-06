@@ -84,6 +84,7 @@ export async function agentFixture(
       title: string;
       status: string;
       archivedAt: string | null;
+      capabilities?: { supportsMcpServers: boolean };
     }
   > = {
     actor: {
@@ -125,10 +126,16 @@ export async function agentFixture(
     status: "done",
     archivingAt: null,
   };
+  /** Agent IDs reopened with `reload()`, in order. */
+  const reloads: string[] = [];
   const paseo = {
     agents: {
       ref: (id: string) => ({
         refresh: async () => (actors[id] ? { agent: actors[id] } : null),
+        reload: async () => {
+          reloads.push(id);
+          return actors[id] ? { agent: actors[id] } : null;
+        },
       }),
       list: async () => ({
         entries: Object.values(actors).map((agent) => ({ agent })),
@@ -148,6 +155,7 @@ export async function agentFixture(
     identity,
     actors,
     paseo,
+    reloads,
     service,
     advance: (ms: number) => {
       now += ms;

@@ -11,7 +11,7 @@
 
 **Flowly 是一个 Paseo 插件：把 agent session 变成会自己运转的工作流，看板是它的界面。** 你只管派活、拍板、验收；进度、提醒、总结、后续想法和数据复盘由看板自动维护。
 
-> 插件 ID `flowly` · 需要 Paseo `>=0.11.2` · 支持桌面、平板和手机客户端。
+> 插件 ID `flowly` · 需要 Paseo `>=0.14.0` · 支持桌面、平板和手机客户端。
 
 ![看板：卡片随 agent 工作在 Design、Development、Test、In review 之间流转](docs/promo/screenshots/01-board-auto-status.png)
 

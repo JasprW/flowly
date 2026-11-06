@@ -1,5 +1,7 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-11-06 Paseo 0.14 插件工具接入（已实现）：最低 Paseo 升到 0.14.0。`agent.session_open` hook 在每次启动时给 Flowly 管理的 session 注入 `flowly` MCP server（只在启动时生效，不写进 agent 配置），新建 session 不再把 MCP URL 和凭据存进 agent 配置；“Send Kanban work instructions” 加入的空闲 session 重开后也有 MCP。保存配置里已带 `flowly` 的旧 session、不支持 MCP 的 provider 不注入。不接 `defineAgentTool`（并入 Paseo 自己的 MCP，Paseo tools 关闭时会静默消失）。[PASEO-SESSION-TOOLS-SPEC](PASEO-SESSION-TOOLS-SPEC.md)。
+
 2026-10-27 搜索（已实现）：daemon 内存扫描卡片、最新摘要、agent 笔记、workpad、ideas、交付物和项目记忆；`search.query` RPC + 看板 Search 页（默认当前项目，可切全部）；agent 工具 `flowly_search`（本项目、不含自己的卡和记忆）。FTS5 留第二期。[SEARCH-SPEC](SEARCH-SPEC.md)。
 
 2026-10-26 匿名使用数据（已实现，待随 1.7.0 发布）：daemon 每天最多向 PostHog Cloud US 发一条 `flowly_heartbeat`（不用 SDK），字段按白名单：版本、平台、界面实际语言（`ui_locale`，替代 GeoIP）、功能开关、窗口内计数、模型计数表；数量分桶，不发任何内容、路径或 ID。默认开启，Settings → General 与导览最后一页可关闭；`DO_NOT_TRACK` / `FLOWLY_TELEMETRY=0` 强制关闭；告知前也发送，关闭后不再发送。[spec](TELEMETRY-SPEC.md)。

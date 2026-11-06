@@ -16,7 +16,7 @@ Task cards show running, finished-turn, unread and needs-attention session count
 
 New tasks work from the Paseo project root. To work across repositories, place them under a common directory and register that directory as the Paseo project. A directory workspace starts there; a worktree requires the project root itself to be a Git repository. Existing workspaces within the root or matching a worktree of that root can be linked while preserving their native project ownership. Cards created before the single-root change retain their saved legacy directory scope and workspace links.
 
-Requires Paseo 0.11.2 or newer. Board data is stored on the daemon machine. Archiving a card or board project preserves its Paseo resources. The daemon needs the Paseo CLI on its path to register a new native project. Desktop shows a task drawer beside the board; compact layouts show task detail on its own.
+Requires Paseo 0.14.0 or newer. Board data is stored on the daemon machine. Archiving a card or board project preserves its Paseo resources. The daemon needs the Paseo CLI on its path to register a new native project. Desktop shows a task drawer beside the board; compact layouts show task detail on its own.
 
 ## Agent Kanban tools
 

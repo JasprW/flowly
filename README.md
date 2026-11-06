@@ -11,7 +11,7 @@
 
 **A Paseo plugin that turns agent sessions into a workflow that runs itself, with a kanban board as its face.** You hand out work, make the calls, and review. Progress, reminders, summaries, follow-up ideas and daily stats are kept up to date by the board.
 
-> Plugin ID `flowly` · requires Paseo `>=0.11.2` · runs on desktop, tablet and phone clients.
+> Plugin ID `flowly` · requires Paseo `>=0.14.0` · runs on desktop, tablet and phone clients.
 
 ![Board: cards move across Design, Development, Test and In review as agents work](docs/promo/screenshots/01-board-auto-status.png)
 

@@ -45,11 +45,14 @@ import {
 import { AgentService } from "./agent-service";
 import { BoardStore } from "./store";
 import { BoardService } from "./service";
-import { ToolSecrets, writePrivate } from "./tool-context";
+import { ToolSecrets, writePrivate, type ContextMethod } from "./tool-context";
 import { ToolError, toolFailure } from "./tool-error";
 import { cliSource } from "./cli-source";
 import { skillText, workingInstructions } from "./skill-source";
 import { logFailure } from "./error-report";
+
+/** The launch-only `flowly` MCP server entry handed to the session_open hook. */
+export type LaunchMcp = { type: "http"; url: string; headers: Record<string, string> };
 
 const maxBody = 262144;
 
@@ -486,7 +489,7 @@ export class ToolServer {
   private async prepare(
     identity: ToolIdentity,
     context: string,
-    method: "mcp" | "cli",
+    method: ContextMethod,
   ): Promise<ToolPreparation> {
     await this.start();
     const contextFile = await this.secrets.writeContext(identity, method),
@@ -503,12 +506,15 @@ export class ToolServer {
         contextFile,
         skillPath,
       ),
-      mcp: {
-        type: "http",
-        url: `${this.url}mcp`,
-        headers: {
-          Authorization: `Bearer ${this.secrets.credential(identity)}`,
-        },
+    };
+  }
+  /** The `flowly` MCP server of one session, added at launch only (never saved in its agent config). */
+  private mcpServer(identity: ToolIdentity): LaunchMcp {
+    return {
+      type: "http",
+      url: `${this.url}mcp`,
+      headers: {
+        Authorization: `Bearer ${this.secrets.credential(identity)}`,
       },
     };
   }
@@ -539,7 +545,8 @@ export class ToolServer {
           "SESSION_MISMATCH",
           "Prepared agent ID now belongs to an unavailable/different session.",
         );
-      return this.prepare(identity, ctx.context, "mcp");
+      // The session_open hook adds the MCP server when the session opens.
+      return this.prepare(identity, ctx.context, "launch-mcp");
     });
     this.preparation = job.then(
       () => undefined,
@@ -558,13 +565,42 @@ export class ToolServer {
       throw new ToolError("ARCHIVED", "Task/project is archived.");
     const ctx = await new BoardService(this.store).context(taskId, paseo);
     void this.agents.memory?.markUsed(ctx.memoryIds, taskId).catch(() => undefined);
-    return this.prepare(identity, ctx.context, "cli");
+    const prepared = await this.prepare(identity, ctx.context, "cli"),
+      methods = await this.secrets.contextMethods(agentId);
+    if (methods.includes("mcp") || methods.includes("launch-mcp")) return prepared;
+    // Launch injection is recorded only once the provider is known to take MCP
+    // servers; a stored (not loaded) agent's snapshot cannot tell (§4.3).
+    const ref = paseo.agents.ref(agentId),
+      snapshot = (await ref.refresh())?.agent;
+    if (snapshot?.status === "running") {
+      // Loaded, so its capabilities are real; its turn is never interrupted and the next open adds MCP.
+      if (snapshot.capabilities?.supportsMcpServers === true)
+        await this.secrets.writeContext(identity, "launch-mcp");
+    } else if (snapshot?.status === "idle") {
+      // Reopen now so the session_open hook adds MCP; Paseo refuses an
+      // unsupported provider before replacing the session, which stays as it was.
+      await this.secrets.writeContext(identity, "launch-mcp");
+      const reloaded = await ref.reload().catch((e) => {
+        logFailure("Kanban session reload for MCP failed:", e, agentId);
+        return null;
+      });
+      if (reloaded?.agent?.capabilities?.supportsMcpServers !== true)
+        await this.secrets.dropContextMethod(identity, "launch-mcp");
+    }
+    return prepared;
   }
-  async sessionContext(
+  /**
+   * What an opening interactive session gets: its context file, and the
+   * `flowly` MCP server when launch injection is recorded for it (`launch-mcp`)
+   * and its saved config does not already have the server (`mcp`). Adding a
+   * duplicate, or a server its provider cannot take, would make the open fail
+   * (PASEO-SESSION-TOOLS-SPEC §4.3).
+   */
+  async sessionLaunch(
     agentId: string,
     workspaceId: string | null,
     paseo: PaseoApi,
-  ) {
+  ): Promise<{ contextFile: string; mcp: LaunchMcp | null } | null> {
     this.attach(paseo);
     if (!workspaceId) return null;
     const board = await this.store.read(),
@@ -576,10 +612,11 @@ export class ToolServer {
     // instructions". Other sessions in a card's workspace stay untouched.
     if (!(await this.secrets.hasContext(agentId))) return null;
     await this.start();
-    return this.secrets.writeContext(
-      { agentId, workspaceId, taskId: task.id },
-      "cli",
-    );
+    const identity = { agentId, workspaceId, taskId: task.id },
+      methods = await this.secrets.contextMethods(agentId),
+      inject = methods.includes("launch-mcp") && !methods.includes("mcp"),
+      contextFile = await this.secrets.writeContext(identity, "cli");
+    return { contextFile, mcp: inject ? this.mcpServer(identity) : null };
   }
   async accessState(taskId: string, agentId: string, paseo: PaseoApi) {
     this.attach(paseo);
@@ -596,7 +633,14 @@ export class ToolServer {
         await readFile(this.secrets.contextFile(agentId), "utf8"),
       );
       if (data.identity.taskId === taskId)
-        methods = z.array(z.string()).parse(data.methods || []);
+        methods = [
+          ...new Set(
+            z
+              .array(z.string())
+              .parse(data.methods || [])
+              .map((m) => (m === "launch-mcp" ? "mcp" : m)),
+          ),
+        ];
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }

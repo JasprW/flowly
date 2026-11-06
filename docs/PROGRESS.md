@@ -1,5 +1,15 @@
 # Implementation progress
 
+## Launch-time Flowly MCP on Paseo 0.14 (card "paseo tools接入") — 2026-11-06
+
+- [PASEO-SESSION-TOOLS-SPEC](PASEO-SESSION-TOOLS-SPEC.md): research of the 0.14 plugin tools (`defineAgentTool`, launch-only `mcpServers`); user chose route B and Paseo `>=0.14.0` (D1, D2).
+- SDK/protocol/client pinned to 0.14.0, manifest `requirements.paseo >=0.14.0`, README/OVERVIEW requirement updated.
+- `server/session-open.ts` (the `agent.session_open` hook) adds `flowly` at launch from `ToolServer.sessionLaunch` when the context records `launch-mcp` and not `mcp` (saved in the config); failures are logged, never thrown.
+- New sessions no longer save `flowly` in their create config (`client/session.ts`, `client/session-create.tsx`); `ToolPreparation` drops `mcp`. `tools.prepare-existing` records `launch-mcp` only once MCP support is confirmed: an idle session is reloaded and kept only if the live snapshot says so; a running one is never interrupted and gets MCP at its next open.
+- Found while implementing: a stored (not loaded) agent's snapshot always reports `supportsMcpServers: false`, so the hook cannot check the provider itself (spec §4.3).
+- Context `methods` gains `launch-mcp` and keeps unknown values; `tools.access-state` shows it as MCP.
+- No onboarding tour or tip change: nothing new to point at in the UI. No telemetry field: no new switch or action.
+
 ## Search (card "搜索功能") — 2026-10-27
 
 - Focus from search: a hit row opens the card at its section and item (Progress, Activity, Workpad, Ideas, Artifacts), widening Activity's last-12 window, Workpad/Artifacts pages and Ideas → Closed to reach it, then a short accent ring; the stored section choices are untouched ([DRAWER-SPEC](DRAWER-SPEC.md#focus-from-search), `client/drawer-focus.tsx`).

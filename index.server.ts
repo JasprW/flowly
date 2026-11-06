@@ -8,6 +8,7 @@ import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./se
 import * as rpc from "./shared/rpc";
 import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
+import { openKanbanSession } from "./server/session-open";
 import { SessionReadStore, SessionReadService, daemonNativeAttention } from "./server/session-reads";
 import { readAttentionCount } from "./server/attention-count";
 import { WrapupService } from "./server/wrapup";
@@ -718,29 +719,9 @@ export default function contribute(host: PluginServerContext) {
   process.on("uncaughtExceptionMonitor", onUncaught);
   server.handle(rpc.telemetryStatus, () => ({ forcedOff: telemetry.forcedOff() }));
   console.log("Flowly store ready:", store.directory);
-  server.before("agent.session_open", async ({ request }, { paseo }) => {
-    tools.attach(paseo);
-    if (request.purpose !== "interactive") return;
-    try {
-      const contextFile = await tools.sessionContext(
-        request.agentId,
-        request.workspaceId,
-        paseo,
-      );
-      if (contextFile)
-        return {
-          ...request,
-          env: {
-            ...request.env,
-            FLOWLY_CONTEXT_FILE: contextFile,
-            FLOWLY_CLI: store.directory + "/flowly.mjs",
-            FLOWLY_SKILL: store.directory + "/SKILL.md",
-          },
-        };
-    } catch (e) {
-      logFailure("Kanban session CLI unavailable:", e);
-    }
-  });
+  server.before("agent.session_open", ({ request }, { paseo }) =>
+    openKanbanSession(request, tools, store.directory, paseo),
+  );
   return () => {
     void store.close().catch((e) => logFailure("Flowly storage: close failed:", e));
     workflow.stop();

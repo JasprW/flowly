@@ -156,9 +156,6 @@ export function SessionCreate({
         config: {
           provider: `${provider}/${chosen}`,
           systemPrompt: preparation?.instructions || latestScope.context,
-          ...(preparation
-            ? { mcpServers: { flowly: preparation.mcp } }
-            : {}),
           ...(chosenMode ? { modeId: chosenMode } : {}),
           ...(choice.chosenThinking ? { thinkingOptionId: choice.chosenThinking } : {}),
         },
