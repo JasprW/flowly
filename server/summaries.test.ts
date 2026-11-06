@@ -119,6 +119,14 @@ test("a turn writes a version without touching board or task revisions; the sess
   expect(after.tasks[0].revision).toBe(1);
 });
 
+test("a workspace whose directory Paseo removed (merged/archived) skips the run without an error or a child agent", async () => {
+  const x = await setup();
+  x.replies.push({ createError: "Workspace wks_x has no available directory" }, { createError: "Workspace wks_x has no available directory" });
+  await x.service.enqueue("t", "a1", x.turn("x"), x.paseo);
+  expect(await x.store.latest("t")).toBeNull();
+  expect((await x.store.read()).errors).toEqual([]);
+});
+
 test("falls back to GPT-6-Luna when Claude is unavailable", async () => {
   const x = await setup({ claude: false });
   x.replies.push({ text: x.json("s") });

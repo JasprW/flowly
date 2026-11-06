@@ -19,6 +19,16 @@ export class SummaryModelError extends Error {
   override name = "SummaryModelError";
 }
 
+/** The SDK refuses agents.create with this exact message when the workspace is not active (Paseo removed a merged/archived workspace's directory). */
+const WORKSPACE_GONE = /: Workspace \S+ has no available directory$/;
+
+/** Every configured model failed only because the workspace's directory is gone: the run is skipped, nothing is broken. A real failure mixed in is never hidden. */
+export function isWorkspaceGone(error: unknown): boolean {
+  if (!(error instanceof SummaryModelError)) return false;
+  const segments = error.message.split(/; /);
+  return segments.length > 0 && segments.every((segment) => WORKSPACE_GONE.test(segment));
+}
+
 type ModelAgent = RemovableAgent & {
   waitForFinish(timeout: number): Promise<{ status: string; error?: string | null; lastMessage?: string | null }>;
 };
