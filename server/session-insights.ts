@@ -23,7 +23,7 @@ import {
 } from "../shared/session-insights";
 import { sessionSummaryRow } from "../shared/native-session";
 import { within } from "./summaries";
-import { runSummaryModels } from "./summary-models";
+import { runSummaryModels, isWorkspaceGone } from "./summary-models";
 import type { NextMoveRows } from "./next-move-rows";
 import { generatedBranchName, resolveWorktreeBaseRef } from "./service";
 import { logFailure } from "./error-report";
@@ -200,7 +200,9 @@ export class SessionInsightService {
         transcript: truncateTranscript(batch.text), openIdeas: open.map((i) => i.title),
         openIdeaCount: open.length, parts, language,
     });
-    const { model, output } = await runSummaryModels(paseo, settings.model, {
+    // Paseo removes a merged/archived workspace's directory (autoArchiveAfterMerge) right after the turn
+    // ends: the child cannot be created and the session is gone with it, so skip instead of failing.
+    const result = await runSummaryModels(paseo, settings.model, {
       create: (model) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
         parent: agent.id,
         config: { provider: model },
@@ -212,7 +214,12 @@ export class SessionInsightService {
       parse: (text) => parseInsightOutput(text, parts),
       remove: this.remove,
       timeoutMs: this.timeoutMs,
+    }).catch((error) => {
+      if (!isWorkspaceGone(error)) throw error;
+      return null;
     });
+    if (!result) return;
+    const { model, output } = result;
     const now = new Date().toISOString();
     // The person already started another turn: the suggestions are for the past one (the summary still counts).
     const stale = (this.started.get(agent.id) ?? "") > batch.endedAt;
