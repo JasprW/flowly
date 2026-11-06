@@ -71,7 +71,8 @@ export const LiveTaskCard = memo(function LiveTaskCard({
     [openMenu, menuFor, task],
   );
   const onOpen = useCallback(() => openTask(task), [openTask, task]);
-  const latestSession = outputSession?.id;
+  // A stale or unavailable summary keeps the session signal display-only (CARD-DISPLAY-SPEC §2.1).
+  const latestSession = (props.summaryState ?? "ready") === "ready" ? outputSession?.id : undefined;
   const onOpenSession = useMemo(
     () => (openTaskSession && latestSession ? () => openTaskSession(task, latestSession) : undefined),
     [openTaskSession, task, latestSession],
@@ -296,6 +297,11 @@ export function TaskCard({
         onPress={() => {
           if (Date.now() >= suppressUntil.current) onOpen();
         }}
+        // The card groups its children for screen readers, so the nested session target is offered here too.
+        accessibilityActions={onOpenSession ? [{ name: "openSession", label: t("Open latest session") }] : undefined}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === "openSession") onOpenSession?.();
+        }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={({ pressed }) => ({ ...noFocusRing,
@@ -452,7 +458,11 @@ function Signal({ color, icon, text, pulse = false }: { color?: string; icon?: s
 
 /** The session signals as one target: tapping them opens the latest session instead of Details. */
 function SessionSignals({ onPress, children }: { onPress?: () => void; children: ReactNode }) {
-  const row = <View style={{ flexDirection: "row", alignItems: "center", columnGap: space[3] }}>{children}</View>;
+  const row = (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space[3], rowGap: space[1] }}>
+      {children}
+    </View>
+  );
   if (!onPress) return row;
   return (
     <Pressable
@@ -460,7 +470,7 @@ function SessionSignals({ onPress, children }: { onPress?: () => void; children:
       accessibilityLabel={t("Open latest session")}
       hitSlop={6}
       onPress={onPress}
-      style={({ pressed }) => ({ ...noFocusRing, opacity: pressed ? 0.6 : 1, outlineStyle: "none" }) as never}
+      style={({ pressed }) => ({ ...noFocusRing, flexShrink: 1, opacity: pressed ? 0.6 : 1, outlineStyle: "none" }) as never}
     >
       {row}
     </Pressable>
