@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "vitest";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LogLocator, UsageService, readClaudeLog, readCodexLog, summarize } from "./usage";
+import { LogLocator, UsageService, readClaudeLog, readCodexLog, readDshLog, summarize } from "./usage";
 import { BoardStore } from "./store";
 import { cacheHitRate, compactDuration, compactNumber, percent, totalTokens } from "../shared/usage";
 
@@ -193,4 +193,56 @@ test("token buckets: Claude messages by timestamp slot (deduped); Codex count di
     [slot("2026-10-16T09:00:00Z"), { input: 30, cacheRead: 170, cacheWrite: 0, output: 20, reasoning: 0 }],
     [slot("2026-10-16T09:30:00Z"), { input: 10, cacheRead: 40, cacheWrite: 0, output: 5, reasoning: 0 }],
   ]);
+});
+
+test("dsh-web log: sums per-turn rows, counts turns, buckets by row time", async () => {
+  const slot = (iso: string) => Math.floor(Date.parse(iso) / (15 * 60_000));
+  const r = await root();
+  const dir = join(r, "plugin-data", "dsh-web-provider", "usage");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `${SID}.jsonl`);
+  await writeFile(
+    path,
+    jsonl([
+      {
+        time: "2026-11-11T10:05:00Z",
+        turnId: "t1",
+        inputTokens: 100,
+        cachedInputTokens: 80,
+        outputTokens: 10,
+        startedAt: "2026-11-11T10:04:50Z",
+        endedAt: "2026-11-11T10:05:00Z",
+      },
+      { time: "2026-11-11T10:40:00Z", turnId: "t2", inputTokens: 30, cachedInputTokens: 0, outputTokens: 5 },
+      { time: "2026-11-11T11:20:00Z", turnId: "t3", inputTokens: 10, cachedInputTokens: 40, outputTokens: 5 },
+    ]),
+  );
+  const locator = new LogLocator(undefined, undefined, () => Date.now(), r);
+  const found = await locator.dsh(SID);
+  expect(found).toBe(path);
+  const usage = await readDshLog(path);
+  expect(usage.tokens).toEqual({ input: 140, cacheRead: 120, cacheWrite: 0, output: 20, reasoning: 0 });
+  expect(usage.turns).toBe(3);
+  expect(usage.activeMs).toBe(10_000); // only row t1 carries both timestamps
+  expect([...usage.buckets]).toEqual([
+    [slot("2026-11-11T10:05:00Z"), { input: 100, cacheRead: 80, cacheWrite: 0, output: 10, reasoning: 0 }],
+    [slot("2026-11-11T10:40:00Z"), { input: 30, cacheRead: 0, cacheWrite: 0, output: 5, reasoning: 0 }],
+    [slot("2026-11-11T11:20:00Z"), { input: 10, cacheRead: 40, cacheWrite: 0, output: 5, reasoning: 0 }],
+  ]);
+  // Path safety: an id that could escape the directory never resolves.
+  expect(await locator.dsh("../escape")).toBeNull();
+});
+
+test("dsh-web lookup resolves the plugin persistence handle to the DSH session id", async () => {
+  const r = await root();
+  const dir = join(r, "plugin-data", "dsh-web-provider", "usage");
+  await mkdir(dir, { recursive: true });
+  const dshId = "session-7b235f16-0bc4-4229-919a-fd03c00bcbae";
+  await writeFile(join(dir, `${dshId}.jsonl`), jsonl([{ time: "2026-11-11T10:05:00Z", turnId: "t1", inputTokens: 5, cachedInputTokens: 0, outputTokens: 2 }]));
+  const locator = new LogLocator(undefined, undefined, () => Date.now(), r);
+  const handle = `plugin:${JSON.stringify({ version: 1, data: { sessionId: dshId } })}`;
+  expect(await locator.dsh(handle)).toBe(join(dir, `${dshId}.jsonl`));
+  // A malformed or path-unsafe handle resolves to nothing.
+  expect(await locator.dsh("plugin:not-json")).toBeNull();
+  expect(await locator.dsh(`plugin:${JSON.stringify({ version: 1, data: { sessionId: "../x" } })}`)).toBeNull();
 });
