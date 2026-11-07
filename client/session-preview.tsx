@@ -61,6 +61,7 @@ import {
   sessionState,
   turnEventKey,
 } from "./session-state";
+import { openAgentInNewWindow, wantsNewWindow } from "./new-window";
 import { sendCardInstruction, workspaceSession } from "./session";
 import { useStableCallback } from "./stable";
 import { PendingRequests } from "./session-question";
@@ -907,13 +908,15 @@ function SessionPreviewView({
             icon="ArrowUpRight"
             label={t("Open in Paseo")}
             disabled={!visible || !active || current.isError || busy}
-            onPress={() =>
+            onPress={(event) => {
+              const newWindow = wantsNewWindow(event);
               void perform(async () => {
                 await workspaceSession(paseo, sessionId, task.workspaceId);
-                if (mounted.current)
-                  openNativeSession(navigation, sessionId, hostId);
-              })
-            }
+                if (!mounted.current) return;
+                if (newWindow && (await openAgentInNewWindow(sessionId, hostId))) return;
+                openNativeSession(navigation, sessionId, hostId);
+              });
+            }}
           />
         )}
         {active && (

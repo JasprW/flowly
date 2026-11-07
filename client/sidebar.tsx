@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Pressable } from "react-native";
 import { LocaleRoot } from "./i18n";
 import { useRpc, type PluginSidebarItemProps } from "@getpaseo/plugin/client";
@@ -5,6 +6,7 @@ import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
 import { readAttentionCount } from "../shared/rpc";
 import { attentionBadgeText, attentionScreenParams } from "./attention";
+import { takeNewWindowAgent } from "./new-window";
 import { CountPill, Theme, noFocusRing } from "./ui";
 import { tn } from "../shared/i18n";
 
@@ -31,6 +33,11 @@ export function SidebarEntry(props: PluginSidebarItemProps) {
 
 function SidebarEntryRow({ currentScreen, openScreen, theme }: PluginSidebarItemProps) {
   const count = useAttentionCount();
+  // A window opened by ⌘-click on "Open in Paseo" shows that session (new-window.ts).
+  useEffect(() => {
+    const params = takeNewWindowAgent();
+    if (params) openScreen({ screenId: "board", params });
+  }, []);
   const text = attentionBadgeText(count);
   return (
     <SidebarRow
