@@ -196,6 +196,7 @@ export async function readDshLog(path: string): Promise<LogUsage> {
   let activeMs = 0;
   const buckets: TokenBuckets = new Map();
   for await (const row of lines(path) as AsyncGenerator<DshUsageRow>) {
+    if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
     if (typeof row.turnId !== "string" || row.turnId === "") continue;
     turns += 1;
     const rowTokens = {
@@ -209,7 +210,8 @@ export async function readDshLog(path: string): Promise<LogUsage> {
     tokens.cacheRead += rowTokens.cacheRead;
     tokens.output += rowTokens.output;
     const carriesTokens = rowTokens.input + rowTokens.cacheRead + rowTokens.output > 0;
-    const at = time(row.time ?? row.endedAt);
+    const rowTime = time(row.time);
+    const at = Number.isFinite(rowTime) ? rowTime : time(row.endedAt);
     if (carriesTokens && Number.isFinite(at)) addTo(buckets, at, rowTokens);
     const started = time(row.startedAt);
     const ended = time(row.endedAt);

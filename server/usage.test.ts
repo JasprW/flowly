@@ -215,19 +215,25 @@ test("dsh-web log: sums per-turn rows, counts turns, buckets by row time", async
       },
       { time: "2026-11-11T10:40:00Z", turnId: "t2", inputTokens: 30, cachedInputTokens: 0, outputTokens: 5 },
       { time: "2026-11-11T11:20:00Z", turnId: "t3", inputTokens: 10, cachedInputTokens: 40, outputTokens: 5 },
+      // A parseable non-object row (a literal null, a number) is skipped, not a turn.
+      null,
+      42,
+      // An unusable time falls back to endedAt for the bucket slot.
+      { time: "not-a-date", turnId: "t4", inputTokens: 7, cachedInputTokens: 0, outputTokens: 1, endedAt: "2026-11-11T12:00:00Z" },
     ]),
   );
   const locator = new LogLocator(undefined, undefined, () => Date.now(), r);
   const found = await locator.dsh(SID);
   expect(found).toBe(path);
   const usage = await readDshLog(path);
-  expect(usage.tokens).toEqual({ input: 140, cacheRead: 120, cacheWrite: 0, output: 20, reasoning: 0 });
-  expect(usage.turns).toBe(3);
+  expect(usage.tokens).toEqual({ input: 147, cacheRead: 120, cacheWrite: 0, output: 21, reasoning: 0 });
+  expect(usage.turns).toBe(4);
   expect(usage.activeMs).toBe(10_000); // only row t1 carries both timestamps
   expect([...usage.buckets]).toEqual([
     [slot("2026-11-11T10:05:00Z"), { input: 100, cacheRead: 80, cacheWrite: 0, output: 10, reasoning: 0 }],
     [slot("2026-11-11T10:40:00Z"), { input: 30, cacheRead: 0, cacheWrite: 0, output: 5, reasoning: 0 }],
     [slot("2026-11-11T11:20:00Z"), { input: 10, cacheRead: 40, cacheWrite: 0, output: 5, reasoning: 0 }],
+    [slot("2026-11-11T12:00:00Z"), { input: 7, cacheRead: 0, cacheWrite: 0, output: 1, reasoning: 0 }],
   ]);
   // Path safety: an id that could escape the directory never resolves.
   expect(await locator.dsh("../escape")).toBeNull();
