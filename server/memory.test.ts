@@ -528,8 +528,7 @@ test("screening off (default) runs one model call and writes a plain active note
   expect(list[0].source.screened).toBeUndefined();
 });
 
-test("screened provenance survives the store's parse-on-write round trip", async () => {
-  const x = await screened();
+test("screened provenance survives the store's parse-on-write round trip", async () => {  const x = await screened();
   x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "card-specific"));
   await x.memory.manual("t", x.model);
   await new Promise((r) => setTimeout(r, 50));
@@ -538,4 +537,48 @@ test("screened provenance survives the store's parse-on-write round trip", async
   // A full serialize/parse round trip keeps the declared fields.
   const again = await x.memory.store.update((s) => ({ value: s.screenedOut?.length, changed: false }));
   expect(again).toBe(1);
+});
+
+// ---- CodeRabbit review fixes on PR 95 ------------------------------------------------
+
+test("a secret only in the evidence quote is blocked before the screener is called", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Token kept in the evidence line", { evidence: "sk-live-abc123def456ghi789jkl012 logged the failure" }));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created).toHaveLength(1);
+  expect(await x.entries()).toEqual([]);
+  expect((await x.memory.store.read()).errors).toEqual([expect.objectContaining({ message: expect.stringContaining("contains a secret") })]);
+});
+
+test("the screener prompt carries the reuse line", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("confirm", "high"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created[1].prompt).toContain("Reuse (the later card that needs it): any card that opens a dialog from another");
+});
+
+test("a screening reason that contains a credential is redacted before it is stored", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "the key sk-live-abc123def456ghi789jkl012 leaked here"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  const state = await x.memory.store.read();
+  expect(state.screenedOut?.[0]?.reason).toBe("[redacted: the screening reason contained a credential]");
+  expect(JSON.stringify(state.screenedOut)).not.toContain("sk-live");
+});
+
+test("screenedOut trimming is per project: another project's records survive", async () => {
+  const x = await screened();
+  await x.memory.store.update((s) => {
+    s.screenedOut = Array.from({ length: 20 }, (_, i) => ({ projectId: "other", at: new Date().toISOString(), noteKind: "pitfall" as const, title: `other ${i}`, reason: "r" }));
+    return { value: undefined, changed: true };
+  });
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "card-specific"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  const out = (await x.memory.store.read()).screenedOut || [];
+  expect(out.filter((o) => o.projectId === "other")).toHaveLength(20);
+  expect(out.filter((o) => o.projectId === "p")).toHaveLength(1);
 });

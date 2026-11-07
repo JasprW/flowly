@@ -141,8 +141,8 @@ export const guardrailEntrySchema = z
       eventId: z.string().optional(),
       /** §4.7: the decision screener's verdict on a retro note; declared here because the store parses on every write. */
       screened: z.enum(["auto-confirmed", "auto-dismissed", "flagged"]).optional(),
-      /** Why the screener decided; a note's evidence stays its source quote. */
-      screenReason: z.string().max(guardrailLimits.stateReason).optional(),
+      /** Why the screener decided; a note's evidence stays its source quote. Same 300 cap as the screening schema. */
+      screenReason: z.string().max(memoryLimits.evidence).optional(),
     }).optional(),
     by: z.enum(guardrailBy),
     supersedes: z.string().optional(),
@@ -189,8 +189,8 @@ export const guardrailsStateSchema = z.object({
   recallStats: z.record(z.string(), z.object({ days: z.record(z.string(), z.object({ queries: z.number(), empty: z.number() })) })),
   /** Weekly catch-up learning (§7.3): the newest `feedback` clue already learned from, per project. */
   learnedUntil: z.record(z.string(), z.string()).optional(),
-  /** §4.7: retro candidates the screener dismissed, with the reason; the title blocks re-proposals. */
-  screenedOut: z.array(z.object({ projectId: z.string(), taskId: z.string().optional(), at: iso, noteKind: z.enum(memoryKinds), title: z.string(), reason: z.string().max(guardrailLimits.stateReason) })).max(guardrailLimits.screenedOut).optional(),
+  /** §4.7: retro candidates the screener dismissed, with the reason; the title blocks re-proposals. The 20 cap is per project, enforced in server/memory.ts. */
+  screenedOut: z.array(z.object({ projectId: z.string(), taskId: z.string().optional(), at: iso, noteKind: z.enum(memoryKinds), title: z.string(), reason: z.string().max(memoryLimits.evidence) })).optional(),
   /** §4.7: when the screening model last failed, so a broken screener is visible, not silent. */
   screenerUnavailableAt: z.string().optional(),
 });

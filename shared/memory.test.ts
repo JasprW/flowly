@@ -279,3 +279,9 @@ describe("native question answers (timelines checked 2026-10-22)", () => {
     expect(answerText("  ")).toBeNull();
   });
 });
+
+it("parseScreenOutput takes the first balanced object, so trailing prose with braces cannot corrupt it (PR 95 review)", async () => {
+  const { parseScreenOutput } = await import("./memory");
+  expect(parseScreenOutput('{"verdict": "dismiss", "confidence": "high", "reason": "card-specific"}\nNote: braces { look like } this.')).toEqual({ verdict: "dismiss", confidence: "high", reason: "card-specific" });
+  expect(parseScreenOutput('Sure!\n{"verdict": "confirm", "confidence": "high", "reason": "ok"}')).toEqual({ verdict: "confirm", confidence: "high", reason: "ok" });
+});

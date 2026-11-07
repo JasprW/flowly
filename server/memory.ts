@@ -102,7 +102,8 @@ const notesOf = (state: GuardrailsState, projectId: string) => state.entries.fil
  * once, so one card may add at most five: MEMORY_LIMIT past that.
  */
 export function checkProposal(state: GuardrailsState, p: Omit<Proposal, "by" | "eventId" | "agentId">) {
-  if (containsSecret(`${p.title}\n${p.body}\n${p.keywords.join(" ")}`))
+  // The evidence quote reaches the screener prompt, so it is scanned too (CodeRabbit 4502246749).
+  if (containsSecret(`${p.title}\n${p.body}\n${p.keywords.join(" ")}\n${p.evidence || ""}`))
     throw new MemoryError("MEMORY_SECRET", "This looks like it contains a secret (token, key or password). Memory never stores credentials: describe where it is kept instead.");
   const own = notesOf(state, p.projectId);
   const same = own.find((e) => e.state === "active" && titleKey(e.text) === titleKey(p.title));
@@ -560,17 +561,19 @@ export class MemoryService {
         .catch(() => undefined);
       return { candidates, preDropped };
     }
+    // A model-generated reason is stored in provenance and screenedOut: never persist one that carries a credential (CodeRabbit 4502246754).
+    const safeReason = (d: ScreenDecision) => (containsSecret(d.reason) ? "[redacted: the screening reason contained a credential]" : d.reason);
     const screened = survivors.map((c) => {
       const d = decisions.get(c);
       if (!d) return c;
-      if (d.verdict === "dismiss" && d.confidence === "high") return { ...c, dropped: d.reason } as const;
+      if (d.verdict === "dismiss" && d.confidence === "high") return { ...c, dropped: safeReason(d) } as const;
       // confirm+high writes active as upstream does; everything else writes flagged.
       const uncertain = d.verdict !== "confirm" || d.confidence !== "high" || !!c.supersedes;
       return {
         ...c,
         proposeState: (uncertain ? "observing" : "active") as "observing" | "active",
         screened: (uncertain ? "flagged" : "auto-confirmed") as "flagged" | "auto-confirmed",
-        screenReason: d.reason,
+        screenReason: safeReason(d),
       };
     });
     const written = screened.filter((c) => !("dropped" in c));
@@ -578,11 +581,14 @@ export class MemoryService {
     if (dismissed.length)
       await this.store
         .update((s) => {
-          s.screenedOut = (s.screenedOut || []).filter((o) => o.projectId === m.project.id);
+          // The 20-record cap is per project: other projects' dismissal records are untouched (CodeRabbit 4502246757).
+          s.screenedOut = s.screenedOut || [];
           for (const d of dismissed)
             s.screenedOut.push({ projectId: m.project.id, taskId, at: this.iso(), noteKind: d.kind, title: d.title.trim(), reason: d.dropped });
-          const over = s.screenedOut.length - guardrailLimits.screenedOut;
-          if (over > 0) s.screenedOut = s.screenedOut.slice(over);
+          const mine = s.screenedOut.filter((o) => o.projectId === m.project.id);
+          const other = s.screenedOut.filter((o) => o.projectId !== m.project.id);
+          const over = mine.length - guardrailLimits.screenedOut;
+          s.screenedOut = over > 0 ? [...other, ...mine.slice(over)] : s.screenedOut;
           return { value: undefined, changed: true };
         })
         .catch(() => undefined);

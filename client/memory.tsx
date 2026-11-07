@@ -80,12 +80,14 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, compact, source,
       </Enter>
     );
   const archived = entry.state === "archived";
+  const observing = entry.state === "observing";
   const kind = entry.noteKind ?? "decision";
   const color = kindColor(colors, kind);
   const items = (): MenuEntry[] => [
     ...(archived
       ? [{ id: "restore", label: t("Restore"), icon: "ArchiveRestore", onPress: () => void ops.setState(entry, "active") }]
       : [
+          ...(observing ? [{ id: "activate", label: t("Activate"), icon: "Eye", onPress: () => void ops.setState(entry, "active") }] : []),
           { id: "edit", label: t("Edit"), icon: "Pencil", onPress: () => { ops.keep(entry.id); setEditing(true); } },
           entry.pinned
             ? { id: "unpin", label: t("Unpin"), icon: "PinOff", onPress: () => void ops.pin(entry, false) }
@@ -115,6 +117,12 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, compact, source,
         <Dot size={6} color={color} />
         <Label muted size={font.xs} selectable={false}>{t(kindLabels[kind])}</Label>
         {!!reason && <Label muted size={font.xs} selectable={false}>· {reason}</Label>}
+        {observing && (
+          <>
+            <Icon name="Eye" size={12} color={colors.foregroundMuted} />
+            <Label muted size={font.xs} selectable={false}>{t("Screened: awaiting your review")}</Label>
+          </>
+        )}
         <View style={{ flex: 1 }} />
         {entry.pinned && <Icon name="Pin" size={13} color={colors.foregroundMuted} />}
         {openMenu && (
@@ -139,6 +147,7 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, compact, source,
       </View>
       <Label bold size={font.md}>{entry.text}</Label>
       {!!entry.body && <BodyText text={entry.body} lines={expanded ? undefined : 6} />}
+      {observing && !!entry.source?.screenReason && <Label muted size={font.xs} selectable>{t("Screened: {reason}", { reason: entry.source.screenReason })}</Label>}
       {!!sourceId && (
         <View style={{ marginHorizontal: -space[3], marginBottom: -space[1.5] }}>
           <SourceLine task={source} nameOf={nameOf} onOpenTask={ops.openTask} />

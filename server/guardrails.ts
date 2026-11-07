@@ -219,13 +219,15 @@ export function removeProjectGuardrails(store: GuardrailsStore, projectId: strin
     const clues = state.clues.filter((c) => c.projectId === projectId);
     const errors = state.errors.filter((e) => e.projectId === projectId);
     const retros = state.retros.filter((r) => taskIds.has(r.taskId));
-    if (!entries.length && !items.length && !clues.length && !errors.length && !retros.length && !state.recallStats[projectId]) return { value: null, changed: false };
-    await writeBackup(store.directory, `${projectId}-guardrails`, { entries, items, clues, errors, retros }, at);
+    const screenedOut = (state.screenedOut || []).filter((o) => o.projectId === projectId);
+    if (!entries.length && !items.length && !clues.length && !errors.length && !retros.length && !screenedOut.length && !state.recallStats[projectId]) return { value: null, changed: false };
+    await writeBackup(store.directory, `${projectId}-guardrails`, { entries, items, clues, errors, retros, screenedOut }, at);
     state.entries = state.entries.filter((e) => e.projectId !== projectId);
     state.items = state.items.filter((i) => i.projectId !== projectId);
     state.clues = state.clues.filter((c) => c.projectId !== projectId);
     state.errors = state.errors.filter((e) => e.projectId !== projectId);
     state.retros = state.retros.filter((r) => !taskIds.has(r.taskId));
+    state.screenedOut = (state.screenedOut || []).filter((o) => o.projectId !== projectId);
     delete state.recallStats[projectId];
     return { value: null, changed: true };
   });
@@ -639,7 +641,8 @@ export class GuardrailsService {
       } else if (input.tags !== undefined || input.keywords !== undefined || input.pinned !== undefined) throw new GuardrailError("INVALID_INPUT", "Only memories have tags, keywords and a pin.");
       else if (hasSecret(next.text, next.body)) throw new GuardrailError("MEMORY_SECRET", "This looks like it contains a secret (token, key or password). Guardrails never store credentials.");
       const state2 = input.state ?? entry.state;
-      if (state2 === "observing" && entry.kind !== "command") throw new GuardrailError("INVALID_INPUT", "Only commands can be observing.");
+      // An edit must keep a flagged (observing) note observing; introducing observing from another state stays refused (§4.7).
+      if (state2 === "observing" && entry.state !== "observing") throw new GuardrailError("INVALID_INPUT", "Only commands and flagged notes can be observing.");
       if (next.pinned && !entry.pinned && (state2 !== "active" || pinnedCount(own) >= guardrailLimits.pinned))
         throw new GuardrailError("GUARDRAIL_LIMIT", `Only active memories can be pinned, at most ${guardrailLimits.pinned} per project. Unpin one first.`);
       const live = (s: GuardrailState) => s === "active" || s === "observing";

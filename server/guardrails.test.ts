@@ -480,3 +480,41 @@ test("reviewInput: commands always; guidelines in scope and the card's open item
   const off = await x.guardrails.reviewInput(board.tasks[0]!, { ...board.projects[0]!, memory: false }, "m");
   expect([off.commands.length, off.guidelines.length, off.items.length]).toEqual([1, 0, 0]);
 });
+
+test("a flagged (observing) note can be edited in place; other notes still cannot become observing (PR 95 review)", async () => {
+  const x = await setup();
+  await x.guardrails.store.update((s) => {
+    s.entries.push({
+      id: "flagged", projectId: "p", kind: "note", noteKind: "pitfall", text: "Two modals freeze Paseo", state: "observing",
+      observe: { reviews: 0, passed: 0 }, stateAt: new Date().toISOString(), counts: emptyCounts(), sources: [], by: "retro",
+      revision: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      source: { screened: "flagged", screenReason: "unsure" },
+    } as GuardrailEntry);
+    return { value: undefined, changed: true };
+  });
+  const flagged = await x.guardrails.update({ id: "flagged", revision: 1, body: "Close one first." });
+  expect(flagged.state).toBe("observing");
+  expect(flagged.source?.screened).toBe("flagged");
+  const plain = await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "convention", text: "Plain note" });
+  await expect(x.guardrails.update({ id: plain.id, revision: plain.revision, state: "observing" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
+
+test("project remove backs up and clears that project's screening dismissals, and keeps other projects' (PR 95 review)", async () => {
+  const x = await setup();
+  await x.guardrails.store.update((s) => {
+    s.screenedOut = [
+      { projectId: "p", at: new Date().toISOString(), noteKind: "pitfall", title: "dismissed for p", reason: "card-specific" },
+      { projectId: "q", at: new Date().toISOString(), noteKind: "pitfall", title: "dismissed for q", reason: "card-specific" },
+    ];
+    return { value: undefined, changed: true };
+  });
+  await x.guardrails.removeProject("p", new Set());
+  const after = await x.guardrails.store.read();
+  expect(after.screenedOut?.map((o) => o.projectId)).toEqual(["q"]);
+  const fs = await import("node:fs/promises");
+  const removed = join(x.guardrails.store.directory, "removed");
+  const backups = (await fs.readdir(removed)).filter((f) => f.startsWith("p-guardrails"));
+  expect(backups.length).toBeGreaterThan(0);
+  const backup = JSON.parse(await fs.readFile(join(removed, backups[0]), "utf8"));
+  expect((backup.screenedOut as { title: string }[] | undefined)?.map((o) => o.title)).toEqual(["dismissed for p"]);
+});

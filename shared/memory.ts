@@ -530,6 +530,8 @@ export function fitCandidate(c: RetroCandidate) {
     tags: [...new Set(c.tags.map((t) => t.toLowerCase().replace(/[^a-z0-9./-]+/g, "-").replace(/^-+|-+$/g, "")).filter(Boolean))].slice(0, memoryLimits.tags),
     keywords: [...new Set(c.keywords.map((k) => clip(k, memoryLimits.keyword)))].slice(0, memoryLimits.keywords),
     evidence: clip(c.evidence.trim(), memoryLimits.evidence),
+    // The screener needs the reuse line: it is the cross-feature case for the candidate (CodeRabbit 4502246743).
+    ...(c.reuse ? { reuse: clip(c.reuse, 300) } : {}),
     ...(c.supersedes ? { supersedes: c.supersedes } : {}),
   };
 }
@@ -564,7 +566,8 @@ export function parseScreenOutput(value: string | null | undefined): ScreenDecis
   const trimmed = value.trim();
   let raw: unknown;
   try {
-    const json = trimmed.startsWith("{") ? trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1) : firstObject(trimmed);
+    // firstObject extracts the first balanced object, so trailing prose with braces cannot corrupt the parse (CodeRabbit 4502246808).
+    const json = firstObject(trimmed);
     if (!json) throw new Error("no json");
     raw = JSON.parse(json);
   } catch {
