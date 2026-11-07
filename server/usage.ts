@@ -200,10 +200,10 @@ export async function readDshLog(path: string): Promise<LogUsage> {
     if (typeof row.turnId !== "string" || row.turnId === "") continue;
     turns += 1;
     const rowTokens = {
-      input: num(row.inputTokens),
-      cacheRead: num(row.cachedInputTokens),
+      input: Math.max(0, num(row.inputTokens)),
+      cacheRead: Math.max(0, num(row.cachedInputTokens)),
       cacheWrite: 0,
-      output: num(row.outputTokens),
+      output: Math.max(0, num(row.outputTokens)),
       reasoning: 0,
     };
     tokens.input += rowTokens.input;

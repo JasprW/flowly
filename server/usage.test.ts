@@ -252,10 +252,11 @@ test("dsh-web log: stray JSON lines are not turns; tokenless turns stay out of b
       { note: "some other JSON the log happens to carry" }, // no turnId: not a turn
       { time: "2026-11-11T10:30:00Z", turnId: "t2" }, // tokenless turn: counts, no bucket
       { time: "2026-11-11T10:40:00Z", turnId: "t3", inputTokens: 30, cachedInputTokens: 0, outputTokens: 5 },
+      { time: "2026-11-11T10:50:00Z", turnId: "t4", inputTokens: -50, cachedInputTokens: -1, outputTokens: -9 }, // negative counts clamp to 0
     ]),
   );
   const usage = await readDshLog(path);
-  expect(usage.turns).toBe(3); // t1, t2, t3 — the stray line is not a turn
+  expect(usage.turns).toBe(4); // t1–t4 — the stray line is not a turn
   expect(usage.tokens).toEqual({ input: 130, cacheRead: 0, cacheWrite: 0, output: 15, reasoning: 0 });
   expect([...usage.buckets]).toEqual([
     [slot("2026-11-11T10:05:00Z"), { input: 100, cacheRead: 0, cacheWrite: 0, output: 10, reasoning: 0 }],
