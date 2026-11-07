@@ -233,6 +233,30 @@ test("dsh-web log: sums per-turn rows, counts turns, buckets by row time", async
   expect(await locator.dsh("../escape")).toBeNull();
 });
 
+test("dsh-web log: stray JSON lines are not turns; tokenless turns stay out of buckets", async () => {
+  const slot = (iso: string) => Math.floor(Date.parse(iso) / (15 * 60_000));
+  const r = await root();
+  const dir = join(r, "plugin-data", "dsh-web-provider", "usage");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `${SID}.jsonl`);
+  await writeFile(
+    path,
+    jsonl([
+      { time: "2026-11-11T10:05:00Z", turnId: "t1", inputTokens: 100, cachedInputTokens: 0, outputTokens: 10 },
+      { note: "some other JSON the log happens to carry" }, // no turnId: not a turn
+      { time: "2026-11-11T10:30:00Z", turnId: "t2" }, // tokenless turn: counts, no bucket
+      { time: "2026-11-11T10:40:00Z", turnId: "t3", inputTokens: 30, cachedInputTokens: 0, outputTokens: 5 },
+    ]),
+  );
+  const usage = await readDshLog(path);
+  expect(usage.turns).toBe(3); // t1, t2, t3 — the stray line is not a turn
+  expect(usage.tokens).toEqual({ input: 130, cacheRead: 0, cacheWrite: 0, output: 15, reasoning: 0 });
+  expect([...usage.buckets]).toEqual([
+    [slot("2026-11-11T10:05:00Z"), { input: 100, cacheRead: 0, cacheWrite: 0, output: 10, reasoning: 0 }],
+    [slot("2026-11-11T10:40:00Z"), { input: 30, cacheRead: 0, cacheWrite: 0, output: 5, reasoning: 0 }],
+  ]); // the tokenless t2 enters no bucket
+});
+
 test("dsh-web lookup resolves the plugin persistence handle to the DSH session id", async () => {
   const r = await root();
   const dir = join(r, "plugin-data", "dsh-web-provider", "usage");

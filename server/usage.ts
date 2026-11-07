@@ -183,12 +183,20 @@ export function dshLookupId(sessionId: string): string | null {
   return /^[A-Za-z0-9_-]+$/.test(sessionId) ? sessionId : null;
 }
 
+/**
+ * Aggregates the dsh-web provider's per-session usage log (one JSON row per
+ * finished turn). Only provider-authored rows — those carrying a non-empty
+ * `turnId` — count as turns, so stray JSON lines in the log cannot inflate the
+ * count; tokenless turn rows still count (a failed turn is a turn) but enter
+ * no bucket, so zero-token rows never pollute the 15-minute buckets.
+ */
 export async function readDshLog(path: string): Promise<LogUsage> {
   const tokens = zeroUsage();
   let turns = 0;
   let activeMs = 0;
   const buckets: TokenBuckets = new Map();
   for await (const row of lines(path) as AsyncGenerator<DshUsageRow>) {
+    if (typeof row.turnId !== "string" || row.turnId === "") continue;
     turns += 1;
     const rowTokens = {
       input: num(row.inputTokens),
@@ -200,8 +208,9 @@ export async function readDshLog(path: string): Promise<LogUsage> {
     tokens.input += rowTokens.input;
     tokens.cacheRead += rowTokens.cacheRead;
     tokens.output += rowTokens.output;
+    const carriesTokens = rowTokens.input + rowTokens.cacheRead + rowTokens.output > 0;
     const at = time(row.time ?? row.endedAt);
-    if (Number.isFinite(at)) addTo(buckets, at, rowTokens);
+    if (carriesTokens && Number.isFinite(at)) addTo(buckets, at, rowTokens);
     const started = time(row.startedAt);
     const ended = time(row.endedAt);
     if (Number.isFinite(started) && Number.isFinite(ended) && ended > started) {
