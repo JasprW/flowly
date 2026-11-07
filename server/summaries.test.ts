@@ -85,7 +85,7 @@ async function setup(options: { claude?: boolean } = {}) {
       }),
     },
   } as unknown as PaseoApi;
-  let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true };
+  let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true, memoryScreening: false, memoryScreeningModel: "" };
   const store = new SummaryStore(board.directory);
   const service = new SummaryService(board, store, async () => settings, async () => "en", undefined, 50, async (a) => { await a.archive(); });
   const turn = (text: string) => [{ type: "user_message", text }, { type: "assistant_message", text: "ok " + text }];

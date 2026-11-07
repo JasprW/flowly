@@ -56,6 +56,10 @@
 - 新项目与“编辑项目”的 Auto review 只有开关、成本一句和 Max rework rounds；客户端不调用 `guardrails.detect`，由 daemon 在创建项目和保存开关时识别命令（取消表单不留副作用）。
 - What's new 1.8.0 带“Turn on for this project”按钮，打开当前项目的 Auto review 设置；已有项目的 Auto review 保持关闭，新项目默认开、2 轮。
 
+### 0.4 决策筛选（2026-11-07，用户批准）
+
+复盘（Done 复盘，§4.4）产生的备忘由模型直接写入 active，没有任何质量把关：一条模型编造或过于针对本卡的备忘会进入之后每个会话的注入。用户决定加一层**决策筛选**（decision screening）：一个单独配置的模型在写入前逐条判断复盘候选，`confirm` 且高置信才照旧写 active，`dismiss` 且高置信直接不写（理由记录在库里），没有把握的照写但以 `observing` 标记，由人在 Guardrails 页提升。开关 `task-summary.memoryScreening`，默认关。设计依据与完整规则见 §4.7；这是对“写入即生效”（§4.4、D2）的一个显式例外，只作用于 `by: "retro"` 的写入，`flowly_remember` 与人手写不受影响。
+
 ## 1. 目的
 
 ### 1.1 本机数据（Flowly 项目流转日志，2026-10-14 至 10-28）
@@ -152,8 +156,9 @@ Entry {
   revision, createdAt, updatedAt }
 ```
 
-- `state` 的含义：`active` 参与评审或注入；`observing` 只有命令有，跑但不退卡；`paused` 不参与，保留计数，可自动复活；`archived` 不参与，保留历史，可恢复。
+- `state` 的含义：`active` 参与评审或注入；`observing` 命令在观察期跑但不退卡（§4.5），备忘在筛选没把握时被标记（§4.7），都不注入、可由人提升为 active；`paused` 不参与，保留计数，可自动复活；`archived` 不参与，保留历史，可恢复。
 - 准则的 `text` 是用户原话的归纳，`sources[].quote` 是原话本身。界面以原话为主显示。
+- `source.screened?: "auto-confirmed" | "auto-dismissed" | "flagged"` 与 `source.screenReason?: string ≤300`（§4.7）：决策筛选对 `by: "retro"` 备忘的裁决与理由；`evidence` 语义不变（来源原话，§4.2），筛选理由绝不写进它。声明在 schema 里，因为 store 每次写都重新 parse，未声明的键会被静默丢弃。
 
 ### 3.3 CardItem（卡片专属项）
 
@@ -179,6 +184,7 @@ CardItem {
 | 每项目 `command` active + observing | 10 | 新识别到的不加入，Insights 记一行 |
 | 每项目 `note` active | 100 | 挤掉最久没用过的一条（归档） |
 | 每项目 pinned 备忘 | 5 | 拒绝 |
+| 每项目 `screenedOut` 记录（§4.7） | 20 | 删最早的 |
 | 每卡 `open` CardItem | 5 | 关闭最早的 |
 | 每项目 archived | 300 | 删除最早的，写 `removed/` 备份 |
 
@@ -244,10 +250,25 @@ CardItem {
 ### 4.4 备忘
 
 - `flowly_remember`：输入不变（PROJECT-MEMORY-SPEC §4.1），写入即 active；`supersedes` 立即归档旧条目（`stateReason: "superseded"`）。校验不变：`MEMORY_DUPLICATE`、`MEMORY_LIMIT`（按 §3.4）、`MEMORY_SECRET`、`MEMORY_DISABLED`。回执与幂等不变。
-- Done 复盘：触发、跳过、运行位置、输入、通用性检验、0–1 条，全部沿用 PROJECT-MEMORY-SPEC §4.2；结果直接 active，`by: "retro"`。
+- Done 复盘：触发、跳过、运行位置、输入、通用性检验、0–1 条，全部沿用 PROJECT-MEMORY-SPEC §4.2；筛选开关打开时（§4.7）先筛选再写入，关闭时照旧直接 active，`by: "retro"`。
 - 人手写：Guardrails 页 Add。
 
 备忘只注入，不参与评审。agent 和复盘不能产生准则或命令。
+
+### 4.7 决策筛选（decision screening，2026-11-07）
+
+复盘的候选在写入前由一个**单独配置的模型**逐条判断（§0.4）。它不是复盘模型自己给自己打分：`task-summary.memoryScreeningModel` 为空时才回落到 summary 模型链，命名上就是另一个模型位。
+
+- **触发与位置**：`MemoryService.execute` 在 `parseRetroOutput → fitCandidate` 之后、`propose` 之前，同一个后台 workspace 会话内，一次 `runSummaryModels` 调用（复盘每轮最多 1 条候选，§4.2）。子会话用 `readOnlyConfig`。
+- **写入前先过信任门**：`checkProposal`（密钥、`MEMORY_DUPLICATE`、§3.4 上限）与 `screenedOut` 标题精确去重（`titleKey` 相同即拒）在调用筛选模型**之前**跑，被拒的候选不花模型调用，也不再把拒绝抛进复盘错误路径。
+- **裁决矩阵**（筛选模型输出 `{verdict: "confirm" | "dismiss" | "human", confidence: "high" | "medium" | "low", reason ≤300}`，zod 解析，容错与 `parseRetroOutput` 同风格）：
+  - `confirm` + `high` 且无 `supersedes` → 照旧 `propose`（active，`by: "retro"`），`source.screened: "auto-confirmed"`、`source.screenReason` 记理由。
+  - `dismiss` + `high` → **不写入**；在 `state.screenedOut` 记 `{projectId, taskId?, at, noteKind, title, reason}`（≤20 条，满了删最早的，§3.4）。同标题的后续复盘候选直接拒，防止“提议→筛选→丢弃”每轮空转。
+  - 其余（`human`、非 `high` 置信）→ 照写，但 `state: "observing"`、`observe: {reviews: 0, passed: 0}`、`source.screened: "flagged"`、`source.screenReason` 记理由。Guardrails 页把它和 active 归在一组并带观察标记；注入与评审只认 `active`（§3.2），所以它不进任何会话；人在页上 Resume 提升为 active。
+  - `supersedes` 一律走 `observing` 路径，无论裁决——且 `propose` 只在写入 active 时才归档被替换的条目；观察中的替换不位移在用备忘，人在页上提升后自行归档旧的（§4.4 的 `supersedes` 立即归档语义只该由人触发）。
+- **筛选失败即放行**：模型错误、超时、JSON 不合 schema → 候选照旧写入 active（与筛选关闭时逐字节一致），`state.errors` 记一条 `Decision screening is unavailable: …`，`state.screenerUnavailableAt` 记时间；下次筛选成功时清除。筛选失败永远不阻断或丢失复盘本身。
+- **失败可见**：`screenerUnavailableAt` 在状态里，`guardrails.read` 的 `errors` 已把带 `taskId` 的错误带给页面；配置坏了（模型名不存在）不是静默的。
+- **不改的边界**：筛选只作用于 `by: "retro"` 的写入；`flowly_remember`（`by: "agent"`）与人手写不筛选。`checkProposal` 在每个分支的 `propose` 里照旧执行，筛选模型永远碰不到信任门。复盘事件 `memory_proposed` 只在确有写入时发，措辞与筛选关闭时一致。
 
 ### 4.5 命令检查
 
