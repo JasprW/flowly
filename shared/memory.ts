@@ -68,6 +68,9 @@ export const memoryEntrySchema = z.object({
     agentId: z.string().optional(),
     /** The card event the agent's proposal wrote; makes the write idempotent (§4.1). */
     eventId: z.string().optional(),
+    /** GUARDRAILS-SPEC §4.7: the decision screener's verdict on a retro note (mirrors GuardrailEntry.source). */
+    screened: z.enum(["auto-confirmed", "auto-dismissed", "flagged"]).optional(),
+    screenReason: z.string().optional(),
   }),
   revision: z.number().int().positive(),
   createdAt: z.string(),
@@ -529,4 +532,77 @@ export function fitCandidate(c: RetroCandidate) {
     evidence: clip(c.evidence.trim(), memoryLimits.evidence),
     ...(c.supersedes ? { supersedes: c.supersedes } : {}),
   };
+}
+// ---- Decision screener (GUARDRAILS-SPEC §4.7) ---------------------------------------
+
+export const SCREEN_VERDICTS = ["confirm", "dismiss", "human"] as const;
+export type ScreenVerdict = (typeof SCREEN_VERDICTS)[number];
+export const SCREEN_CONFIDENCES = ["high", "medium", "low"] as const;
+export type ScreenConfidence = (typeof SCREEN_CONFIDENCES)[number];
+export type ScreenDecision = { verdict: ScreenVerdict; confidence: ScreenConfidence; reason: string };
+
+export const screenJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["verdict", "confidence", "reason"],
+  properties: {
+    verdict: { type: "string", enum: [...SCREEN_VERDICTS] },
+    confidence: { type: "string", enum: [...SCREEN_CONFIDENCES] },
+    reason: { type: "string", maxLength: memoryLimits.evidence },
+  },
+} as const;
+
+const screenDecision = z.object({
+  verdict: z.enum(SCREEN_VERDICTS),
+  confidence: z.enum(SCREEN_CONFIDENCES),
+  reason: z.string().trim().max(memoryLimits.evidence).transform((v) => v || ""),
+});
+
+/** Tolerates fences and prose around the JSON, like parseRetroOutput. */
+export function parseScreenOutput(value: string | null | undefined): ScreenDecision {
+  if (!value) throw new Error("The screening model returned nothing.");
+  const trimmed = value.trim();
+  let raw: unknown;
+  try {
+    const json = trimmed.startsWith("{") ? trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1) : firstObject(trimmed);
+    if (!json) throw new Error("no json");
+    raw = JSON.parse(json);
+  } catch {
+    throw new Error("The screening model returned no JSON.");
+  }
+  const parsed = screenDecision.safeParse(raw);
+  if (!parsed.success) throw new Error("The screening model's output did not match the schema.");
+  return parsed.data;
+}
+
+/** One-line memory summary for the screener's context (id-less, like the retro material). */
+const screenLine = (e: { kind: MemoryKind; title: string }) => `- [${memoryKindLabel[e.kind]}] ${e.title}`;
+
+/**
+ * The screener judges one retro candidate independently. The screener's own model is
+ * separately configured, so this is never the retro model grading its own proposal.
+ */
+export function screenPrompt(candidate: { kind: MemoryKind; title: string; body: string; evidence: string; reuse?: string }, context: { active: { noteKind: MemoryKind; text: string }[]; instructions?: string }, cardTitle: string, language: LocaleCode): string {
+  const listed = (label: string, list: { noteKind: MemoryKind; text: string }[]) => `# ${label}\n${list.map((e) => `- [${memoryKindLabel[e.noteKind]}] ${e.text}`).join("\n") || "(none)"}`;
+  return `You are screening one proposed project-memory note. The proposer already argued it passes the generality test; judge it independently. Answer for the candidate:
+- confirm: it is durable project knowledge a later card on a DIFFERENT feature needs, it is not already covered by the notes listed below (the same problem in other words counts as covered), and it does not repeat what the repository's instruction files say.
+- dismiss: it is this card's own progress or results, an open question or plan, something the code, git history or docs already say, a near-duplicate of a listed note, or too card-specific to ever be reused.
+- human: you are not confident either way.
+
+Never confirm a candidate that carries supersedes: answer human. Confidence must be high only when the verdict would survive a human reader checking the evidence line. Do not use any tools.
+
+# The candidate
+Kind: ${candidate.kind}
+Title: ${candidate.title}
+Body: ${candidate.body}
+Evidence (the line of the material it is based on): ${candidate.evidence || "(none)"}
+${candidate.reuse ? `Reuse (the later card that needs it): ${candidate.reuse}` : "Reuse: (none)"}
+# The card it came from
+${cardTitle}
+${listed("Active project notes", context.active)}
+${context.instructions?.trim() ? `# The repository's instruction files (rules already written down: do not suggest any of them)\n${clip(context.instructions, RETRO_INSTRUCTIONS_LIMIT)}` : ""}
+
+Answer with JSON only: {"verdict": "confirm" | "dismiss" | "human", "confidence": "high" | "medium" | "low", "reason": "<= ${memoryLimits.evidence} characters"}.
+
+${outputLanguageRule(language)}`;
 }

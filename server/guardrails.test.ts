@@ -327,7 +327,7 @@ test("get_task.guardrails (§5.2): commands, guidelines in the card's current sc
     { ...entry("cmd-2"), kind: "command", text: "Lint", argv: ["npm", "run", "lint"], scope: undefined, state: "paused" },
   ]);
   await x.learn("t", { kind: "new", text: "Rerun button is missing" });
-  x.service.memory = new MemoryService(x.store, new SummaryStore(x.store.directory), async () => ({ summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true }), async () => "en");
+  x.service.memory = new MemoryService(x.store, new SummaryStore(x.store.directory), async () => ({ summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true, memoryScreening: false, memoryScreeningModel: "" }), async () => "en");
   const ctx = await x.service.get(x.identity);
   expect(ctx.guardrails).toMatchObject({
     enabled: true,
@@ -384,7 +384,7 @@ test("a deleted card's open and closed items go (backed up), its promoted ones s
 
 test("a rework turn is one the user opened while the card was In review", async () => {
   const x = await setup();
-  const memory = new MemoryService(x.store, new SummaryStore(x.store.directory), async () => ({ summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true }), async () => "en");
+  const memory = new MemoryService(x.store, new SummaryStore(x.store.directory), async () => ({ summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true, memoryScreening: false, memoryScreeningModel: "" }), async () => "en");
   const turn = async (text: string, delivered: boolean) => {
     await x.store.mutate((board) => {
       if (delivered) x.store.event(board, { taskId: "t", agentId: "actor", actor: "agent", action: "status_changed", from: "development", to: "in_review", note: "done" });

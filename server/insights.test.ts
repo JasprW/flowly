@@ -75,7 +75,7 @@ async function setup() {
       }),
     },
   } as unknown as PaseoApi;
-  let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true };
+  let settings: SummarySettings = { summaryEnabled: true, summaryModel: "", digestEnabled: true, retroEnabled: true, memoryScreening: false, memoryScreeningModel: "" };
   const digests = new DigestStore(board.directory);
   const git = new GitStats(async () => "");
   const service = new InsightsService(board, flow, git, new SummaryStore(board.directory), digests, async () => settings, async () => "en", 1000, () => NOW, new BackgroundWorkspaces(board.directory, async () => "live"), async (agent) => {
