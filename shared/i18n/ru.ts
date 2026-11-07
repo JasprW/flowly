@@ -150,6 +150,7 @@ const catalog: Catalog = {
   "{running} running, {finished} finished turns, {unread} unread sessions, {attention} need attention": "в работе: {running}, завершённых ходов: {finished}, непрочитанных сессий: {unread}, требуют внимания: {attention}",
   "Drag this card with the mouse or open task actions to change status.": "Перетащите эту карточку мышью или откройте действия с задачей, чтобы сменить статус.",
   "Open details and agent sessions.": "Открывает подробности и сессии агентов.",
+  "Open latest session": "Открыть последнюю сессию",
   "Actions for {title}": "Действия: {title}",
   "Needs you": "Нужны вы",
   "Waiting on {waiting}": "Ожидает: {waiting}",

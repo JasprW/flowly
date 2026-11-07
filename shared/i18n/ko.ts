@@ -150,6 +150,7 @@ const catalog: Catalog = {
   "{running} running, {finished} finished turns, {unread} unread sessions, {attention} need attention": "실행 중 {running}, 종료된 턴 {finished}, 읽지 않은 세션 {unread}, 확인 필요 {attention}",
   "Drag this card with the mouse or open task actions to change status.": "마우스로 이 카드를 드래그하거나 작업 메뉴를 열어 상태를 변경하세요.",
   "Open details and agent sessions.": "상세 정보와 에이전트 세션을 엽니다.",
+  "Open latest session": "최근 세션 열기",
   "Actions for {title}": "{title} 메뉴",
   "Needs you": "확인 필요",
   "Waiting on {waiting}": "{waiting} 대기 중",

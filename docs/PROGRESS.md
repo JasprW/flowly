@@ -1028,3 +1028,8 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 已运行：typecheck、npm test（148 files / 1291 passed / 1 skipped）、make check；web 紧凑宽度截图。未运行：Android 真机（未连接）。[验证记录](verification/mobile-header-2026-10-31/report.md)。
 - 引导：不改导览。`card-display` 提示在紧凑布局改为指向 “Filters → Card display”（桌面仍是 Sort 菜单），新字符串已加入 9 个目录，ONBOARDING-SPEC 提示表同步。What's new / 遥测：无。
 - 润色（同日）：Low/Normal 优先级图标改为 `ArrowDown`/`Minus`（原信号格图标几乎看不见）；分组标题折叠摘要贴行尾右对齐（`SectionHeader`、`Disclosure`）；Ideas/Memory 来源行的状态不再折行。typecheck、npm test（1291 passed, 1 skipped）、make check 均 exit 0；impeccable detect 无发现。真机未验证。证据：`docs/verification/mobile-header-2026-10-31/report.md`。
+
+## 2026-11-05 Card session signal opens the latest session (#74)
+
+- [CARD-DISPLAY-SPEC §2.1](CARD-DISPLAY-SPEC.md#21-tapping-the-session-signal): running/unread/count on a card are one tappable target that opens the latest session; the rest of the card keeps opening Details.
+- `client/card.tsx` (`SessionSignals`, `onOpenSession`), `client/board.tsx` (`openCardSession` sets the session entry), one new string in every catalog. No tour copy or tip: it is a shortcut to something the drawer already shows.

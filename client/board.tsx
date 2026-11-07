@@ -954,6 +954,11 @@ function BoardContent(
     setDrawerFocus(null);
     setTask(t.id);
   });
+  // The card's session signal opens it on its latest session (CARD-DISPLAY-SPEC §2.1).
+  const openCardSession = useStableCallback((t: Task, sessionId: string) => {
+    openCard(t);
+    setSessionEntry({ taskId: t.id, sessionId, requestId: `card-${Date.now()}` });
+  });
   const openCardActions = useStableCallback((t: Task) => setActionTask(t));
   const cardMenuFor = useStableCallback((t: Task) => cardMenu(t));
   // Stable drawer callbacks (memoized drawer).
@@ -1278,7 +1283,7 @@ function BoardContent(
   // changes, so opening a card, a menu or a filter does not recompute every
   // card of the lane in the same frame as its animation.
   const cardDerived = useMemo(
-    () => new WeakMap<Task, Omit<LiveTaskCardProps, "selected" | "flash" | "drag" | "dragging" | "disabled" | "display" | "onOpen" | "onActions" | "menuFor">>(),
+    () => new WeakMap<Task, Omit<LiveTaskCardProps, "selected" | "flash" | "drag" | "dragging" | "disabled" | "display" | "onOpen" | "onOpenSession" | "onActions" | "menuFor">>(),
     [cardIndex, receipts, summaryState, attentionByTask, managedIds, summaries.data, !!board, openIdeaCount, externalKeys, project, waitingIndex, factsByTask, sessionFacts],
   );
   const derivedFor = (t: Task) => {
@@ -1320,6 +1325,7 @@ function BoardContent(
       dragging={dragging}
       disabled={pending || !!project?.archivedAt || !!t.archivedAt}
       onOpen={openCard}
+      onOpenSession={openCardSession}
       onActions={openCardActions}
       menuFor={cardMenuFor}
     />
