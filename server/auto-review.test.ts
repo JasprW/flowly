@@ -257,6 +257,8 @@ test("R1: a failure sends the card back to the stage it was delivered from, then
     expect(task.status).toBe(stage);
     expect(task.review).toMatchObject({ state: "rework", round: 1 });
     expect(task.review!.items[0]).toMatchObject({ state: "failed", exitCode: 1, tail: "FAIL expected 1 to be 2" });
+    // One repository: nothing to say where it ran (§6.3).
+    expect(task.review!.items[0]!.detail).toBeUndefined();
     // D9: the review session runs only when every gating command passed.
     expect(task.review!.items[1]).toMatchObject({ id: "goal", state: "skipped", reason: "A command failed." });
     expect(called).toBe(false);
@@ -835,7 +837,7 @@ test("linked root review: shape from both repositories, commands per repository,
   const review = board.tasks[0]!.review!;
   // Admin is untouched (its only commit predates the card): only SMITH runs the commands.
   expect(cwds).toEqual(["npm test @ SMITH", "npm run typecheck @ SMITH"]);
-  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "passed", ms: 2 });
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "passed", ms: 2, detail: "Ran in SMITH." });
   expect(review.items.find((i) => i.id === "make")).toMatchObject({ state: "skipped", reason: "No repository this delivery changed has this command." });
   expect(review.shape!.files).toBeGreaterThan(0);
   expect(review.fingerprint.repos).toEqual({ Admin: expect.stringMatching(/^[0-9a-f]{12}$/), SMITH: expect.stringMatching(/^[0-9a-f]{12}$/) });
@@ -855,7 +857,7 @@ test("linked root review: a command that fails in one repository fails, with tha
     run: async (_argv, cwd) => (cwd.endsWith("SMITH") ? { exitCode: 1, timedOut: false, ms: 3, output: "FAIL smith.test.ts\n" } : { exitCode: 0, timedOut: false, ms: 2, output: "" }),
   });
   const review = (await x.deliver("development")).tasks[0]!.review!;
-  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1, ms: 5 });
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1, ms: 5, detail: "Ran in Admin, SMITH." });
   expect(review.items.find((i) => i.id === "tests")!.tail).toContain("[SMITH]");
   expect(review.items.find((i) => i.id === "goal")).toMatchObject({ state: "skipped" });
 }, 20_000);

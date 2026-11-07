@@ -441,19 +441,20 @@ export async function changedRepos(repos: readonly LinkedRepo[], since: string |
 
 /**
  * Runs one project command in a linked root (§6.3): in each repository where it applies, in order, until one fails.
- * null when it applies in none. The failing run's output names its repository; the time is the sum.
+ * null when it applies in none. The failing run's output names its repository; the time is the sum; `ran` lists the
+ * repositories it ran in, the failing one last.
  */
-export async function runInRepos(run: RunCheck, argv: readonly string[], repos: readonly LinkedRepo[], timeoutMs: number): Promise<CheckRun | null> {
-  let ms = 0,
-    ran = false;
+export async function runInRepos(run: RunCheck, argv: readonly string[], repos: readonly LinkedRepo[], timeoutMs: number): Promise<(CheckRun & { ran: string[] }) | null> {
+  let ms = 0;
+  const ran: string[] = [];
   for (const repo of repos) {
     if (!(await commandApplies(argv, repo.directory))) continue;
-    ran = true;
+    ran.push(repo.name);
     const result = await run(argv, repo.directory, timeoutMs);
     ms += result.ms;
-    if (result.exitCode !== 0 || result.timedOut || result.spawnError) return { ...result, ms, output: `[${repo.name}]\n${result.output}` };
+    if (result.exitCode !== 0 || result.timedOut || result.spawnError) return { ...result, ms, ran, output: `[${repo.name}]\n${result.output}` };
   }
-  return ran ? { exitCode: 0, timedOut: false, ms, output: "" } : null;
+  return ran.length ? { exitCode: 0, timedOut: false, ms, ran, output: "" } : null;
 }
 
 /** What a review reads of the project's guardrails (GUARDRAILS-SPEC §6.3) and reports back at its end (§6.6). */
@@ -678,7 +679,7 @@ export class AutoReviewService {
         const entry = guard?.commands.find((c) => c.id === item.id);
         await set(item.id, { state: "running" });
         const timeout = (entry?.timeoutSec ?? defaultCheckTimeoutSec) * 1000;
-        const run = linked.length ? await runInRepos(this.run, item.argv || [], runIn, timeout) : await this.run(item.argv || [], where.directory, timeout);
+        const run: (CheckRun & { ran?: string[] }) | null = linked.length ? await runInRepos(this.run, item.argv || [], runIn, timeout) : await this.run(item.argv || [], where.directory, timeout);
         if (!run) {
           await set(item.id, { state: "skipped", reason: runIn.length < linked.length ? "No repository this delivery changed has this command." : "No repository in this workspace has this command." });
           continue;
@@ -693,6 +694,7 @@ export class AutoReviewService {
           ...(run.timedOut ? { timedOut: true } : {}),
           ms: Math.max(0, Math.round(run.ms)),
           ...(!passed && tail ? { tail } : {}),
+          ...(run.ran ? { detail: `Ran in ${run.ran.join(", ")}.`.slice(0, autoReviewLimits.detail) } : {}),
           ...(run.spawnError ? { reason: `Could not start: ${run.spawnError}`.slice(0, autoReviewLimits.reason) } : {}),
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
         });

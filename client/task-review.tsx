@@ -68,7 +68,9 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
   const evidence = item.kind === "command" ? item.tail : item.detail;
   const body = item.state === "disputed" ? item.disputeReason || item.detail : item.state === "skipped" || item.state === "unavailable" ? evidence || item.reason : evidence;
   const where = item.file ? `${item.file}${item.line ? `:${item.line}` : ""}` : "";
-  const more = !!body || !!where || !!item.quote || (item.kind === "command" && !!item.argv);
+  // A command's detail is where it ran in a multi-repository root (GUARDRAILS-SPEC §6.3).
+  const ranIn = item.kind === "command" ? item.detail : undefined;
+  const more = !!body || !!where || !!item.quote || !!ranIn || (item.kind === "command" && !!item.argv);
   // Unset until the user toggles, so a row that fails while the drawer is open still opens.
   const [toggled, setOpen] = useState<boolean | null>(null);
   const open = toggled ?? item.state === "failed";
@@ -119,6 +121,11 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
           {item.kind === "command" && !!item.argv && (
             <Label size={font.sm} muted mono selectable>
               {item.argv.join(" ")}
+            </Label>
+          )}
+          {!!ranIn && (
+            <Label size={font.sm} muted selectable>
+              {ranIn}
             </Label>
           )}
           {!!where && (

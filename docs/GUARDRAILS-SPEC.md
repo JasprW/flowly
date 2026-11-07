@@ -328,7 +328,7 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
 
 ### 6.3 顺序与判定
 
-1. **命令**：active 与 observing 的命令全部跑完（执行方式同 AUTO-REVIEW-SPEC §4.3）。只有 active 的参与总判定。多仓根目录（§6.2）里每条命令只在本次交付改动过的仓库里跑（有未提交或未跟踪的改动，或者有卡片创建之后的提交；git 读不了的仓库算改动过；一个都没改动时退回全部仓库），在这些仓库里依次挑适用的跑，任一仓库失败即该项失败（失败输出前标 `[<仓库名>]`，耗时为各次之和），后面的仓库不再跑：`npm` / `pnpm` / `yarn` / `bun`（及 `npx` 等）的脚本要求该仓库 `package.json` 有这个脚本（`run <x>`、`test` 等别名；其余子命令只要求有 `package.json`）；`make <target>` 要求有 makefile 且写了该 target；`go` / `cargo` 要求有 `go.mod` / `Cargo.toml`；其他命令在每个仓库都跑。没有一个仓库适用时该项记 `skipped`（`No repository in this workspace has this command.`；只看改动过的仓库时为 `No repository this delivery changed has this command.`），不让评审变成 Unavailable。
+1. **命令**：active 与 observing 的命令全部跑完（执行方式同 AUTO-REVIEW-SPEC §4.3）。只有 active 的参与总判定。多仓根目录（§6.2）里每条命令只在本次交付改动过的仓库里跑（有未提交或未跟踪的改动，或者有卡片创建之后的提交；git 读不了的仓库算改动过；一个都没改动时退回全部仓库），在这些仓库里依次挑适用的跑，任一仓库失败即该项失败（失败输出前标 `[<仓库名>]`，耗时为各次之和），后面的仓库不再跑；该项的 `detail` 记下实际跑过的仓库（`Ran in agent-smith, search-admin.`，失败的仓库在最后），评审记录里展开命令即可看到，通过时也有（目录本身是 Git 仓库时不写）：`npm` / `pnpm` / `yarn` / `bun`（及 `npx` 等）的脚本要求该仓库 `package.json` 有这个脚本（`run <x>`、`test` 等别名；其余子命令只要求有 `package.json`）；`make <target>` 要求有 makefile 且写了该 target；`go` / `cargo` 要求有 `go.mod` / `Cargo.toml`；其他命令在每个仓库都跑。没有一个仓库适用时该项记 `skipped`（`No repository in this workspace has this command.`；只看改动过的仓库时为 `No repository this delivery changed has this command.`），不让评审变成 Unavailable。
 2. **评审 session**：所有参与判定的命令都通过时才跑（D9）。一次判定全部：内置检查 `goal`（“Does what you asked”，尺子同 AUTO-REVIEW-SPEC §4.2：卡片、用户原话、验收清单只作上下文）、范围内的每条准则、本卡每条 `open` 项。输出：
 
    ```
