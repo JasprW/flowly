@@ -1408,5 +1408,10 @@ const catalog: Catalog = {
   "Previous day": "前の日",
   "Next day": "次の日",
   "agent {time}": "エージェント {time}",
+  "Dictate": "音声入力",
+  "Stop recording": "録音を停止",
+  "Could not use the microphone: {reason}": "マイクを使用できませんでした: {reason}",
+  "The recording is too long.": "録音が長すぎます。",
+  "Could not transcribe the recording.": "録音を文字起こしできませんでした。",
 };
 export default catalog;

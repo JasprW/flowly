@@ -1408,5 +1408,10 @@ const catalog: Catalog = {
   "Previous day": "Día anterior",
   "Next day": "Día siguiente",
   "agent {time}": "agente {time}",
+  "Dictate": "Dictar",
+  "Stop recording": "Dejar de grabar",
+  "Could not use the microphone: {reason}": "No se pudo usar el micrófono: {reason}",
+  "The recording is too long.": "La grabación es demasiado larga.",
+  "Could not transcribe the recording.": "No se pudo transcribir la grabación.",
 };
 export default catalog;

@@ -6,6 +6,8 @@ import { BoardService, dataDirectory, migrateLegacyPluginData, paseoHome } from 
 import { readPaseoVersion } from "./server/paseo-version";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
+import { dictationAvailable, transcribeDictation } from "./shared/dictation";
+import { dictationEndpoint, transcribe } from "./server/dictation";
 import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
 import { ToolServer } from "./server/tool-server";
 import { openKanbanSession } from "./server/session-open";
@@ -247,6 +249,8 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.sendQueuedNow, (input, { paseo }) => composer.sendNow(input, paseo));
   const images = new SessionImageService(store);
   server.handle(rpc.sessionImage, (input, { paseo }) => images.read(input, paseo));
+  server.handle(dictationAvailable, () => ({ available: dictationEndpoint() !== null }));
+  server.handle(transcribeDictation, (input) => transcribe(input));
   const tails = new SessionTailService(store);
   const archived = new ArchivedSessionsService(store);
   server.handle(rpc.archivedSessions, (input, { paseo }) => archived.list(input.taskId, paseo));
