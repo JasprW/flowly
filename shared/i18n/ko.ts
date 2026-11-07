@@ -527,6 +527,7 @@ const catalog: Catalog = {
   "Agent activity": "에이전트 활동",
   "Collapse": "접기",
   "Expand": "펼치기",
+  "Inline UI — open in Paseo to view it live": "인라인 UI — Paseo에서 열면 실시간으로 표시됩니다",
   "Working": "작업 중",
   "Thinking…": "생각하는 중…",
   "Tool": "도구",

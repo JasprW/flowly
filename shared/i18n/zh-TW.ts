@@ -527,6 +527,7 @@ const catalog: Catalog = {
   "Agent activity": "智慧體活動",
   "Collapse": "收起",
   "Expand": "展開",
+  "Inline UI — open in Paseo to view it live": "內嵌 UI — 在 Paseo 開啟可即時查看",
   "Working": "工作中",
   "Thinking…": "思考中…",
   "Tool": "工具",

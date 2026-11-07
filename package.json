@@ -1,6 +1,6 @@
 {
   "name": "paseo-flowly",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "description": "Flowly: the agent-native workflow for Paseo",
   "keywords": [
     "paseo",
@@ -43,8 +43,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude 'docs/verification/**'",
-    "dev": "vitest --exclude 'docs/verification/**'",
+    "test": "vitest run --exclude 'docs/verification/**' --exclude '.claude/**'",
+    "dev": "vitest --exclude 'docs/verification/**' --exclude '.claude/**'",
     "test:ci": "node --test server/ci/release.checks.mjs",
     "ci:package": "node server/ci/package.mjs"
   },

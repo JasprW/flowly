@@ -527,6 +527,7 @@ const catalog: Catalog = {
   "Agent activity": "Agent-Aktivität",
   "Collapse": "Zuklappen",
   "Expand": "Aufklappen",
+  "Inline UI — open in Paseo to view it live": "Inline-UI — in Paseo öffnen, um sie live zu sehen",
   "Working": "Arbeitet",
   "Thinking…": "Denkt nach …",
   "Tool": "Werkzeug",

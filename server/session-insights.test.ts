@@ -27,7 +27,7 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
   roots.push(root);
   const store = new SessionInsightStore(join(root, "data"));
   const rows = new NextMoveRows(new BoardStore(join(root, "data")));
-  const replies: { text?: string; status?: string; gate?: Promise<void> }[] = [];
+  const replies: { text?: string; status?: string; gate?: Promise<void>; createError?: string }[] = [];
   const created: { workspaceId: string; parent?: string; prompt: string; labels?: Record<string, string>; config: { provider: string } }[] = [];
   const appended: { agentId: string; row: { kind: string; id: string; data: Record<string, unknown> } }[] = [];
   const sent: { agentId: string; text: string }[] = [];
@@ -43,9 +43,10 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
         refresh: async () => ({ id: workspaceId, projectId: "prj", workspaceDirectory: options.directory ?? "/repo" }),
         agents: {
           create: async (o: { parent?: string; prompt: string; labels?: Record<string, string>; config: { provider: string } }) => {
+            const reply = replies.shift() || {};
+            if (reply.createError) throw new Error(reply.createError);
             created.push({ workspaceId, ...o });
             if (!o.parent) return { id: `new-${created.length}` };
-            const reply = replies.shift() || {};
             return {
               waitForFinish: async () => {
                 await reply.gate;
@@ -166,6 +167,22 @@ test("ideas: no duplicate open titles, at most 5 open; a failed run is recorded,
   x.replies.push({ status: "timeout" });
   await x.service.enqueue(x.agent, turn("t9"), x.paseo);
   expect((await x.store.read()).sessions[0].error?.message).toMatch(/timed out/);
+});
+
+test("a workspace whose directory Paseo removed (merged/archived) skips the run: no error row, no stored insight", async () => {
+  const x = await setup();
+  x.replies.push({ createError: "Workspace wks_x has no available directory" });
+  await x.service.enqueue(x.agent, turn("x"), x.paseo);
+  expect((await x.store.read()).sessions).toEqual([]);
+  expect(await x.service.view()).toEqual([]);
+});
+
+test("only a workspace-gone failure skips; a real failure mixed in is still recorded", async () => {
+  const x = await setup({ settings: { model: ["claude/claude-haiku-5-5", "claude/claude-sonnet-5-5"] } });
+  x.replies.push({ createError: "Workspace wks_x has no available directory" }, { createError: "The provider rate limited the request." });
+  await x.service.enqueue(x.agent, turn("x"), x.paseo);
+  const [s] = (await x.store.read()).sessions;
+  expect(s.error?.message).toContain("rate limited");
 });
 
 test("idea actions: here sends the instruction, session starts one in the workspace, workspace branches off; each marks it adopted once", async () => {
