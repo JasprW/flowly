@@ -504,18 +504,24 @@ export function TaskForm({
   // A GitHub/GitLab item from another project's repositories warns first (CONNECTORS-SPEC §4.3).
   const repoCheck = useRepoCheck(project.id);
   const [foreignConfirm, setForeignConfirm] = useState<{ item: ExternalSummary; provider: ConnectorProvider; check: RepoCheck } | null>(null);
+  // A check that resolves after a later pick must not add its (superseded) item.
+  const pickSeq = useRef(0);
   const addExternal = useStableCallback((item: ExternalSummary, provider: ConnectorProvider) => {
     const id = pickKey(familyOf(provider), item.key);
-    setExternals((current) => (current.some((x) => pickKey(familyOf(x.provider), x.item.key) === id) ? current : [...current, { item, provider }]));
-    if (!title.trim() || title === prefilled.current) {
+    setExternals((current) =>
+      current.some((x) => pickKey(familyOf(x.provider), x.item.key) === id) || current.length >= connectorLimits.perCreate ? current : [...current, { item, provider }],
+    );
+    if ((!title.trim() || title === prefilled.current) && externals.length < connectorLimits.perCreate) {
       setTitle(item.summary);
       prefilled.current = item.summary;
     }
   });
   const pickExternal = useStableCallback((item: ExternalSummary, provider: ConnectorProvider) => {
+    const seq = ++pickSeq.current;
     setPicking(null);
     setForeignConfirm(null);
     void repoCheck(item, familyOf(provider)).then((check) => {
+      if (seq !== pickSeq.current) return;
       if (check?.state === "foreign") return setForeignConfirm({ item, provider, check });
       addExternal(item, provider);
     });

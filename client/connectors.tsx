@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { openExternalUrl, useRpc, useSettings } from "@getpaseo/plugin/client";
@@ -388,28 +388,36 @@ export function LinkExternal({
   const [error, setError] = useState("");
   // A picked item from another project's repositories warns first (CONNECTORS-SPEC §4.3).
   const [confirming, setConfirming] = useState<{ item: ExternalSummary; check: RepoCheck } | null>(null);
-  const attach = async (item: ExternalSummary) => {
+  // A pending repository check must not attach a superseded pick, or one whose modal was closed meanwhile.
+  const pickSeq = useRef(0);
+  const close = useStableCallback(() => {
+    pickSeq.current += 1;
+    onClose();
+  });
+  const attach = useStableCallback(async (item: ExternalSummary) => {
     setPending(true);
     setError("");
     try {
       await create({ taskId, role: "input", target: item.url, external: { connectionId: item.connectionId, key: item.key, itemType: item.itemType } });
       await queryClient.invalidateQueries({ queryKey: boardKey });
       toast.show(t("Linked {key}", { key: item.itemType === "page" ? item.summary : item.key }), { variant: "success" });
-      onClose();
+      close();
     } catch (e) {
       setError(externalError(e, family));
     } finally {
       setPending(false);
     }
-  };
-  const pick = async (item: ExternalSummary) => {
+  });
+  const pick = useStableCallback(async (item: ExternalSummary) => {
+    const seq = ++pickSeq.current;
     setConfirming(null);
     const check = await repoCheck(item, family);
+    if (seq !== pickSeq.current) return;
     if (check?.state === "foreign") return setConfirming({ item, check });
     await attach(item);
-  };
+  });
   return (
-    <Modal open title={t("Add {item}", { item: t(linkTitles[family]) })} icon={<BrandIcon family={family} size={18} />} onOpenChange={(open) => !open && !pending && onClose()}>
+    <Modal open title={t("Add {item}", { item: t(linkTitles[family]) })} icon={<BrandIcon family={family} size={18} />} onOpenChange={(open) => !open && !pending && close()}>
       <Modal.Content>
         <Theme.Provider value={theme}>
           <View style={{ gap: space[3] }}>

@@ -1258,7 +1258,7 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 背景：2026-11-05 一张 paseo-sync PR 卡误建在 flowly 项目，卡片工作区锁在错误仓库根，session 得去工作区外找代码。按 [CONNECTORS-SPEC §4.3](CONNECTORS-SPEC.md#43-项目仓库范围github--gitlab) 新增建卡/挂接校验：New task 表单与卡片侧栏挂接选择器选中 GitHub/GitLab 条目时，先问 daemon 该仓库（`ExternalSummary.container`）是否属于当前项目的项目仓库；`foreign` 先出非阻断警告（点名条目与项目，说明卡片工作区不包含该仓库，若其他项目包含则点名），确认后才加入/挂接；`unknown`（项目仓库为空、container 为空、RPC 失败）与非 git 族保持沉默。校验在选中时机进行，天然覆盖"我参与的"范围与链接/owner/repo#nr 直查等绕过项目搜索范围的路径。
 - RPC `connectors.repo-check`（输入 projectId、connectionId、repo；输出 state/projectTitle/others≤3）；判定纯函数 `repoVerdict`（大小写不敏感，空即 unknown）在 `server/connectors/repos.ts`；handler 在 `index.server.ts`（复用 5 分钟缓存的 `projectRepos`，others 排除归档项目）。客户端 `client/connectors.tsx`：`useRepoCheck`（失败/空数据静默）与 `ForeignRepoWarning`（Notice + Cancel/确认），`LinkExternal` 与 `client/forms.tsx` 的 `pickExternal`（拆出 `addExternal`）接入。
 - 范围外（有意）：Artifacts"文件或链接"表单粘贴条目链接的自动识别不做校验（非选择器路径），已按 spec 注明。
-- 引导：不改导览、不加 tip（警告本身即提示，无新入口）；What's new 不加（当前 1.7.2 为补丁版本）；遥测不加字段（客户端一次性警告，daemon 侧无核心动作可计数）。
+- 引导：不改导览、不加 tip（警告本身即提示，无新入口）；What's new：条目并入 1.8.0 块（CodeRabbit 审查意见：版本号写"带上这些变化发布的那个版本"，构建版本是 1.8.0；单列 1.9.0 会让用户提前标记 1.9.0 已读、错过真 1.9.0 的通知）；遥测不加字段（客户端一次性警告，daemon 侧无核心动作可计数）。
 - 已运行：typecheck、npm test（146 files / 1223 passed / 6 skipped）、`npx vitest run server/connectors/repos.test.ts`（3 passed）；桌面 UI 实机走查（2026-11-05，本地 remove+install 交换安装，Playwright + shot-lib）：foreign 建卡警告（含其他项目提示）、Cancel/Add anyway、挂接路径警告/确认/清理、双项目 member 沉默全部 PASS，无卡片或 artifact 残留。未运行：非 git 族沉默（该 daemon 无对应连接，结构性短路）、手机端走查、D2（另一看板 foreign，等价路径覆盖）。[验证记录](verification/repo-check-2026-11-05/report.md)。
 
 ## 2026-11-05 看板卡片可访问名称与稳定 testID（自动化定位）

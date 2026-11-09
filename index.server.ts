@@ -548,13 +548,16 @@ export default function contribute(host: PluginServerContext) {
     const repos = await projectRepos(project.primaryPath, connection.baseUrl).catch(() => []);
     const state = repoVerdict(input.repo, repos);
     if (state !== "foreign") return { state, projectTitle: project.title, others: [] };
-    const others: { id: string; title: string }[] = [];
-    for (const other of board.projects) {
-      if (other.id === project.id || other.archivedAt || others.length >= 3) continue;
-      const list = await projectRepos(other.primaryPath, connection.baseUrl).catch(() => []);
-      if (repoVerdict(input.repo, list) === "member") others.push({ id: other.id, title: other.title });
-    }
-    return { state, projectTitle: project.title, others };
+    // Other projects are checked concurrently: a cold scan of each root would otherwise delay the warning (§4.3).
+    const members = await Promise.all(
+      board.projects
+        .filter((other) => other.id !== project.id && !other.archivedAt)
+        .map(async (other) => {
+          const list = await projectRepos(other.primaryPath, connection.baseUrl).catch(() => []);
+          return repoVerdict(input.repo, list) === "member" ? { id: other.id, title: other.title } : null;
+        }),
+    );
+    return { state, projectTitle: project.title, others: members.filter((m): m is { id: string; title: string } => !!m).slice(0, 3) };
   });
   server.handle(rpc.cardExternals, async (input) => {
     const list = (await store.read()).artifacts.filter((a) => a.taskId === input.taskId && a.external);

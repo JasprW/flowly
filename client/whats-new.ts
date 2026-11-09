@@ -23,17 +23,14 @@ export interface WhatsNewRelease {
  */
 export const whatsNew: WhatsNewRelease[] = [
   {
-    // CONNECTORS-SPEC §4.3.
-    version: "1.9.0",
-    items: [
-      { icon: "TriangleAlert", text: msg("Adding a GitHub or GitLab item from another project's repositories to a card now warns first, so its workspace keeps the right code.") },
-    ],
-  },
-  {
-    // SEARCH-SPEC §8, GUARDRAILS-SPEC §10, CONNECTORS-SPEC §14.
+    // SEARCH-SPEC §8, GUARDRAILS-SPEC §10, CONNECTORS-SPEC §14, §4.3.
     version: "1.8.0",
     items: [
       { icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") },
+      {
+        icon: "TriangleAlert",
+        text: msg("Adding a GitHub or GitLab item from another project's repositories to a card now warns first, so its workspace keeps the right code."),
+      },
       // GUARDRAILS-SPEC §10 (D1): on for new projects; existing ones turn it on here.
       {
         icon: "ShieldCheck",
