@@ -404,6 +404,7 @@ export function AiPage() {
         />
       </SettingsGroup>
       <MemoryFeatureGroup />
+      {(features.values?.memory ?? true) && (summary.values?.retroEnabled ?? true) && (summary.values?.memoryScreening ?? false) && <ScreeningModelGroup active />}
       <InsightsFeatureGroup />
       {(features.values?.insights ?? true) && <WorkflowInsightsGroup />}
       <SettingsGroup title={t("Ideas")}>
@@ -470,6 +471,7 @@ export function MemoryFeatureGroup({ bare = false }: { bare?: boolean }) {
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
   const features = useStored(useSettings(featureSettings), featureSettingsValues);
   const on = features.values?.memory ?? true;
+  const retro = summary.values?.retroEnabled ?? true;
   return (
     <SettingsGroup
       title={bare ? undefined : t("Guardrails")}
@@ -484,10 +486,66 @@ export function MemoryFeatureGroup({ bare = false }: { bare?: boolean }) {
       <SettingSwitch
         title={t("Find memory in finished cards")}
         detail={aiCostText("memoryReview", summaryModelOf(summary.values))}
-        value={on && (summary.values?.retroEnabled ?? true)}
+        value={on && retro}
         disabled={summary.busy || !on}
         onChange={(retroEnabled) => summary.save({ retroEnabled })}
       />
+      <SettingSwitch
+        title={t("Screen what the review remembers")}
+        detail={`${t("A second model judges each memory the finished-card review proposes before it is kept. What it drops is listed on the Memory page with one-click Restore.")} ${aiCostText("memoryReview", summary.values?.memoryScreeningModel || summaryModelOf(summary.values)[0] || "")}`}
+        value={on && retro && (summary.values?.memoryScreening ?? false)}
+        disabled={summary.busy || !on || !retro}
+        onChange={(memoryScreening) => summary.save({ memoryScreening })}
+      />
+    </SettingsGroup>
+  );
+}
+
+/** The screening model (GUARDRAILS-SPEC §4.7); Automatic: the summary models chain. */
+function ScreeningModelGroup({ active }: { active: boolean }) {
+  const paseo = usePaseo();
+  const summary = useStored(useSettings(summarySettings), summarySettingsValues);
+  const stored = summary.values?.memoryScreeningModel || AUTO;
+  const storedProvider = stored ? stored.slice(0, stored.indexOf("/")) : AUTO;
+  const [provider, setProvider] = useState(storedProvider);
+  useEffect(() => setProvider(storedProvider), [storedProvider]);
+  const providers = useQuery({ queryKey: ["flowly", "providers"], queryFn: () => paseo.providers.listAvailable(), enabled: active });
+  const providerInfo = useQuery({ queryKey: ["flowly", "providerSnapshot"], queryFn: () => paseo.providers.snapshot(), enabled: active, staleTime: 60000 });
+  const models = useQuery({
+    queryKey: ["flowly", "screening-models", provider],
+    queryFn: async () => {
+      const result = await paseo.providers.listModels(provider);
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
+    enabled: active && provider !== AUTO,
+  });
+  const fallbackLabel = t("Summary models");
+  return (
+    <SettingsGroup title={t("Screening model")}>
+      <SettingSelect
+        title={t("Provider")}
+        value={provider}
+        placeholder={fallbackLabel}
+        disabled={summary.busy}
+        loading={providers.isPending}
+        options={[{ value: AUTO, label: fallbackLabel }, ...providerOptions(providers.data?.providers || [], providerInfo.data?.entries || [])]}
+        onChange={(next) => {
+          setProvider(next);
+          if (next === AUTO) summary.save({ memoryScreeningModel: "" });
+        }}
+      />
+      {provider !== AUTO && (
+        <SettingSelect
+          title={t("Model")}
+          value={stored.startsWith(`${provider}/`) ? stored.slice(provider.length + 1) : ""}
+          placeholder={t("Choose a model")}
+          disabled={summary.busy}
+          loading={models.isPending}
+          options={modelOptions(models.data?.models || [])}
+          onChange={(model) => summary.save({ memoryScreeningModel: `${provider}/${model}` })}
+        />
+      )}
     </SettingsGroup>
   );
 }

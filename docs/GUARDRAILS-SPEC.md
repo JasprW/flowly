@@ -257,7 +257,7 @@ CardItem {
 
 ### 4.7 决策筛选（decision screening，2026-11-07）
 
-复盘的候选在写入前由一个**单独配置的模型**逐条判断（§0.4）。它不是复盘模型自己给自己打分：`task-summary.memoryScreeningModel` 为空时才回落到 summary 模型链，命名上就是另一个模型位。
+复盘的候选在写入前由一个**单独配置的模型**逐条判断（§0.4）。它不是复盘模型自己给自己打分：`task-summary.memoryScreeningModel` 为空时才回落到 summary 模型链，命名上就是另一个模型位。两个开关都在 Settings → AI features 的 Guardrails 组里（2026-11-10）：筛选开关只在复盘开关打开时可开，其下是筛选模型的 Provider/Model 选择（留空即回落 summary 模型链）。
 
 - **触发与位置**：`MemoryService.execute` 在 `parseRetroOutput → fitCandidate` 之后、`propose` 之前，同一个后台 workspace 会话内，一次 `runSummaryModels` 调用（复盘每轮最多 1 条候选，§4.2）。子会话用 `readOnlyConfig`。
 - **写入前先过信任门**：`checkProposal`（密钥、`MEMORY_DUPLICATE`、§3.4 上限）与 `screenedOut` 标题精确去重（`titleKey` 相同即拒）在调用筛选模型**之前**跑，被拒的候选不花模型调用，也不再把拒绝抛进复盘错误路径。

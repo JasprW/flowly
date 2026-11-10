@@ -1,5 +1,11 @@
 # Implementation progress
 
+## Settings UI for the screening switches (card "Enable Decision Engine") — 2026-11-10
+
+- The screening feature was only reachable by hand-editing settings. Settings → AI features, Guardrails group (`client/settings-pages.tsx`): the new "Screen what the review remembers" switch sits under "Find memory in finished cards" and is only switchable when Guardrails and the finished-card review are on (the screener only runs when the review runs); the cost line uses the review's token mix (one extra short call per run, same shape). When it is on, a "Screening model" group appears below with Provider/Model selects mirroring the review-model picker; leaving it empty falls back to the summary models chain (GUARDRAILS-SPEC §4.7).
+- Spec: §4.7 notes the switches and their location and gating. Onboarding: no tour or tip change — the switch is a sub-setting of the existing Guardrails group, the same class as the finished-card review switch, which carries no tip either. Telemetry: none.
+- Strings: three new in all 9 catalogs. Tests: `npm run typecheck` exit 0; client suite 272 passed (catalog parity included); full suite 1346 passed with only the 9 known environmental failures that PR #98 fixes upstream.
+
 ## Screened-out panel and one-click restore (card "Enable Decision Engine") — 2026-11-10
 
 - Follow-up to the decision screening (GUARDRAILS-SPEC §4.7): a wrong auto-dismiss was invisible — the record sat in `guardrails.json` with no UI, and undoing it meant re-proposing by hand. The undo path is now as visible as the action.
