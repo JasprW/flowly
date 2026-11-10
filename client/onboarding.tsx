@@ -3,10 +3,10 @@ import { Animated, Modal as RNModal, Pressable, StyleSheet, View, useWindowDimen
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useSettings } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
-import { nativeSessionSettings, nativeSessionSettingsValues } from "../shared/settings";
+import { nativeSessionSettings, nativeSessionSettingsValues, wrapupSettings, wrapupSettingsValues } from "../shared/settings";
 import { FlowlyMark } from "./brand-icons";
 import { Enter, MotionReveal, motionDuration, useMotionValue } from "./motion";
-import { firstRunOutside, outsidePatch, outsideShown, stepPage, tourKey, welcomePageCount, type OutsideChoice } from "./onboarding-logic";
+import { firstRunOutside, firstRunWrapup, outsidePatch, outsideShown, stepPage, tourKey, welcomePageCount, type OutsideChoice } from "./onboarding-logic";
 import { AiLanguageRow, InsightsFeatureGroup, InterfaceLanguageRow, MemoryFeatureGroup, SummaryModelGroup, UsageDataGroup, aiCostText, summaryModelOf } from "./settings-pages";
 import { summarySettings, summarySettingsValues } from "../shared/summary";
 import { SettingSwitch, SettingsGroup } from "./settings-ui";
@@ -425,6 +425,7 @@ function MoreFeatures() {
   const more = [
     { icon: "ListChecks", title: t("Workpad"), text: t("Agents set the card's type and tags and write an acceptance list before they start; the card shows how many items are met, next to the latest review.") },
     { icon: "ShieldCheck", title: t("Auto review"), text: t("Deliveries are checked before they reach you, and go back to the agent when they fall short.") },
+    { icon: "PackageCheck", title: t("Auto wrap up"), text: t("Cards moved to Done or Cancelled have their sessions and workspace archived when nothing is left unsaved. Unwrap in the card brings them back.") },
     { icon: "Package", title: t("Inputs and outputs"), text: t("Each card lists the files and links it worked from and delivered, added by agents or by you.") },
     { icon: "Ticket", title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, GitHub/GitLab issue or pull request, Azure DevOps work item, or Shortcut story or epic, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
     { icon: "BookMarked", title: t("Memory"), text: t("Agents remember the project's decisions, pitfalls and conventions; new sessions see them. Open Memory to pin, edit or archive them.") },
@@ -574,13 +575,14 @@ export function WelcomeTour({
   theme: PluginTheme;
   /** There is no project yet: the last page offers Create project. */
   canCreate: boolean;
-  /** Opened by itself for a new user: the outside-session switches are a draft stored when it closes. */
+  /** Opened by itself for a new user: the outside-session switches are a draft stored when it closes, and Auto wrap up is turned on unless already set. */
   firstRun: boolean;
   onClose(): void;
   onCreate(): void;
 }) {
   useShortcutBlock(open);
   const native = useStored(useSettings(nativeSessionSettings), nativeSessionSettingsValues);
+  const wrapup = useStored(useSettings(wrapupSettings), wrapupSettingsValues);
   // First run: nothing outside Flowly changes until the tour closes (ONBOARDING-SETUP-SPEC §4).
   const [draft, setDraft] = useState<OutsideChoice>(firstRunOutside);
   useEffect(() => {
@@ -589,7 +591,10 @@ export function WelcomeTour({
   const outside = firstRun ? draft : native.values ? outsideShown(native.values) : firstRunOutside;
   const changeOutside = (next: OutsideChoice) => (firstRun ? setDraft(next) : native.save(outsidePatch(next)));
   const finish = (then: () => void) => {
-    if (firstRun) void native.saveSure(outsidePatch(draft));
+    if (firstRun) {
+      void native.saveSure(outsidePatch(draft));
+      void wrapup.saveSure(firstRunWrapup);
+    }
     then();
   };
   const close = () => finish(onClose);

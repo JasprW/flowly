@@ -504,6 +504,12 @@ export const wrapup = defineRpc({
   }),
   output: wrapupResultSchema,
 });
+/** Unwrap in place: restore a wrapped-up Done/Cancelled card's workspace and sessions (WORKSPACE-RESTORE-SPEC). */
+export const unwrap = defineRpc({
+  name: "tasks.unwrap",
+  input: z.strictObject({ id: z.string().min(1) }),
+  output: z.object({ restored: z.boolean(), failed: z.array(z.string()) }),
+});
 /** Preflight for archiving Paseo resources before a permanent delete. */
 export const deleteCheck = defineRpc({
   name: "tasks.delete-check",

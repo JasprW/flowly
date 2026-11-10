@@ -1,11 +1,40 @@
 # Implementation progress
 
+## Auto wrap up first-run write fixed (card "Done 卡片支持 Unwrap up", step 2) — 2026-11-10
+
+- A UI test on an isolated daemon (separate home, port 6868, empty board) showed that the first-run tour never wrote `wrap-up.json`. The host hands plugins schema output with defaults filled in, so `autoWrapup` was always `false` and `firstRunWrapup` read it as "already chosen". The unit test missed this because it passed raw objects.
+- Fix: `autoWrapup` is `z.boolean().optional()`, and `wrapupSettingsValues` maps unset to off. A new test feeds `wrapupSettings.schema.parse(...)`, which is what the host hands out.
+- UI results on the isolated daemon, after the fix:
+  - Fresh install, tour closed from its last page (Create project): `{"autoWrapup":true,"archiveOnDelete":false}`.
+  - Fresh install, Skip on the first page: the same.
+  - Stored `{"autoWrapup":false}`, Skip: unchanged.
+  - Stored `{"autoWrapup":false,"archiveOnDelete":true}`, last page: unchanged.
+  - Before the fix, the same run wrote no `wrap-up.json`.
+- The fixture daemon, its home and its temp directory were removed. The real `~/.paseo` settings were never touched.
+
+## Auto wrap up on for new installs (card "Done 卡片支持 Unwrap up", step 2) — 2026-11-10
+
+- How the setting is stored: Paseo saves only the values a user changed (`wrap-up.json` is `{"version":1,"values":{...}}`), readers fill the rest from schema defaults, and the daemon cannot write settings. Changing `default(false)` would therefore have turned it on for every existing user who never touched it, so the default stays off.
+- Instead, the first, auto-opened welcome tour writes `autoWrapup=true` when it closes, but only if no value is stored yet (`firstRunWrapup` in `client/onboarding-logic.ts`, through `saveSure`, which now also accepts a patch function). This is the same pattern as the outside-session switches (ONBOARDING-SETUP-SPEC D3).
+- Also updated: a More features line, the `first-done` tip text, and README and OVERVIEW.md. Two strings were added to all 9 catalogs and the old tip string was removed. No new tip id. There is no What's new entry: per the user's decision (2026-11-10), the release task writes it.
+- Telemetry: `f_auto_wrapup` already exists, so the heartbeat is unchanged. The version was not bumped.
+- Checks: `npm run typecheck` passed (exit 0) and `npm test` passed (exit 0; 153 files, 1353 passed, 6 skipped). The plugin reloaded and runs.
+- Not run: a UI pass of the first-run tour on a clean host, and an independent verification.
+
+## Telemetry error fixes (card "近期error排查") — 2026-11-10
+
+- 30 days of `$exception` reports grouped by source, type, frames and version: [verification/telemetry-errors-2026-11-10.md](verification/telemetry-errors-2026-11-10.md). Every report still arriving from 1.8.0 comes from the local daemon connection.
+- `server/local-daemon.ts`: `paseo.pid` is read again (10 × 50 ms, like Paseo's `readPidLock`) while Paseo rewrites it in place; a missing or still unreadable file and a connection the daemon does not complete are `LocalDaemonUnavailable` (logged, not reported). A rejected local credential (`DaemonAuthenticationError`, found by the independent Haiku check) and a Paseo without the needed methods stay reported. [WORKSPACE-RESTORE-SPEC](WORKSPACE-RESTORE-SPEC.md) step 1, [TELEMETRY-SPEC §11.2](TELEMETRY-SPEC.md).
+- `DaemonRpcError` reports (6 in 30 days, 4 installs, unknown cause) now carry `value` = `requestType:code` from the error's fields, lowercased, each part kept only when wholly `^[a-z][a-z0-9_.]{0,59}$`; never the message. No new property: the `$exception` key set is unchanged. [TELEMETRY-SPEC §11.3](TELEMETRY-SPEC.md). The in-app notice is unchanged (a Paseo request name is not user content); README and OVERVIEW.md now say a failed Paseo request sends the request's name.
+- Independent check of eb62c81 (before the two items above): [verification/telemetry-errors-2026-11-10-verify.md](verification/telemetry-errors-2026-11-10-verify.md), pass with notes; its Medium finding (auth failures hidden) is fixed, the timing-dependent retry test now waits within a 200 ms retry.
+- Open, proposed as an idea: Windows linked roots (`symlink` EPERM without Developer Mode).
+- Onboarding and heartbeat fields: none (internal fixes; nothing new to learn or count).
 ## Test suite: git is hermetic (test-hygiene fix) — 2026-11-10
 
 - Bug (found while verifying PR #95 on this machine): the fixtures' own `git commit` calls inherited the machine's global git config, whose hooks path carries a pre-commit guard — any fixture commit on a branch named `main` was blocked. `server/repos.test.ts` ("matches canonical subdirectories…"), `server/wrapup.test.ts` ("real git: uncommitted and local-only commits are detected") and the six linked-root tests in `server/auto-review.test.ts` failed on a machine with such a hook and passed on machines without one; the suite was machine-dependent.
 - `npm test` and `npm run dev` now set `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_SYSTEM=/dev/null` for the vitest process, so git subprocesses see no global or system config. Tests needing a git identity already pass `-c user.name/-c user.email` per command, so nothing else changes.
 - Checks: `npm run typecheck` exit 0; `npm test` 1339 passed, 0 failed (the same run previously carried the 8 environment-dependent failures); each of the two named tests and the six linked-root tests verified passing in isolation on this machine.
-- Onboarding and telemetry: none (test hygiene, nothing user-visible).
+- Onboarding and telemetry: none (test hygiene, nothing user-visible).origin/main
 
 ## Auto review reads every repository of a linked root — 2026-11-07
 
@@ -1154,3 +1183,24 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - `docs/promo/shot-lib.mjs`：`open()` 的 Flowly 入口与项目 tab 改为按横向带（侧栏 / 插件 tab 行）精确文本定点点击，找不到即抛错，不再静默停在错误项目；看板就绪等待改为 testID/aria-label（不依赖语言）。新增 `openCard(s, title)`（仅凭标题：`getByRole("button", { name: /^Open task {title}\./ })` 点击并等待 `task-drawer-motion` 显示该标题）与 `closeCard(s)`（Esc + 等 pointer-events 失效）。
 - 测试：`client/card-label.test.ts`（标题+泳道开头、无泳道省略、信号段顺序、优先级/类型段）。验证脚本 `docs/verification/board-card-open-2026-11-05/run.mjs`：真机 web 上仅凭标题连续 5 次打开并关闭指定卡片侧栏（真实 flowly 项目——本机 daemon 未建过 Tinylink fixture），详见该目录 report。
 - 引导：无 UI/入口变化，不加导览、提示或 What's new。遥测：不加字段。无新用户可见字符串（lane 名为已有本地化数据）。性能：仅多一个字符串段与既有 testID 属性，卡片 memo 比较含 lane 字符串。
+
+## 2026-11-10 项目设置 lane 拖拽手柄修复
+
+- 来源卡：project设置lane调整交互修复。症状：Edit project → Lanes 拖手柄排序常不生效。原因：`SortableList` 手柄模式只在指针仍在 16×14 的手柄上移动满 6 px 时才接管（`onMoveShouldSetPanResponderCapture`），快速拖动时第一批 move 事件已落在手柄外的行/输入框上，手势从未开始。
+- [x] `client/sortable-list.tsx`：手柄模式在鼠标按下时即接管 responder（`onStartShouldSetPanResponder`），之后的 move 无论指针在哪都送达；拖动仍在移动 6 pt 后才开始，单击不抬起、不改顺序。整行可按模式（project tabs）不变。`client/lane-editor.tsx`、`client/card-settings.tsx` 手柄改为 24 宽、撑满行高、`userSelect: none`。契约见 [UI-REFRESH-SPEC](UI-REFRESH-SPEC.md) Lanes 条。
+- [x] `npm run typecheck` 0；`npm test` 153 文件 / 1344 通过、6 跳过。
+- [x] Web 实测（Tinylink，shot-lib，Playwright，表单未保存直接关闭）：按住 Todo 手柄先横移 40 px 离开手柄再下拉 100 px → Todo 移到 Development 之后；单击 Design 手柄不改顺序。同一脚本在修复前代码上顺序不变（复现原问题）。
+- [ ] 未跑：Card sidebar 布局设置与 project tabs 拖拽的实机回归（共用同一组件，逻辑路径仅手柄模式变化）；触屏仍用箭头，不受影响。
+- 引导/What's new/遥测：bug 修复，不加。无新字符串。
+
+## 2026-11-10 Done 卡片就地 Unwrap
+
+- 来源卡：Done 卡片支持 Unwrap up（第一步；默认开启 Auto wrap up 为第二步，待本改动合入后另做）。规格：`docs/WORKSPACE-RESTORE-SPEC.md` “Unwrap in place”，`docs/MULTITASK-SPEC.md` 已收尾状态。
+- [x] 核实：自动收尾只在卡片从其它列进入 Done/Cancelled 时由 `index.server.ts` `afterStatus` 触发，无后台扫描或重启重扫；Unwrap 后留在 Done 的卡片不会被再收一遍。
+- [x] `server/workspace-restore.ts`：`WorkspaceRestoreService.unwrap` 与移出 Done 的恢复共用同一流程和每卡锁；手动入口要求卡片在 Done/Cancelled、未归档，未处于已收尾状态时静默返回；成功（含工作区本就活着、只回来会话）记 `workspace_restored`（actor human），失败/跳过记 `workspace_restore_skipped` 并以原因拒绝。新 RPC `tasks.unwrap`。
+- [x] 侧栏 Wrapped up 块：说明精简为“归档了什么（时间）”，加 Unwrap 按钮；成功 toast “Unwrapped”，有会话未恢复时显示错误。5 条新字符串补齐 9 个目录。README 的 wrap-up 一句补上 Unwrap。
+- [x] `npm run typecheck` 0；`npm test` 153 文件 / 1351 通过、6 跳过（含 `server/workspace-restore.test.ts` 新增 7 个 Unwrap 用例）。注意：工作区同时有其它会话未提交的改动（`client/native-popovers.tsx`、`docs/NATIVE-SESSION-SPEC.md` 等），全量测试跑在混合树上。
+- [x] 本机已装插件端到端（`docs/verification/unwrap-2026-11-10/`，基于 602f5f4 加未提交改动）：在 Tinylink 里新建一张 worktree fixture 卡片和一个 Haiku 会话，移到 Done 后被自动收尾；在桌面侧栏点 Unwrap 后，同一工作区 ID 恢复、worktree 在原分支重建、会话解档，卡片仍在 Done 且 revision 不变，10 秒内没有再次自动收尾，手机宽度侧栏显示 Finished。结果 22/22 PASS，exit 0。fixture 卡片、会话、worktree 和分支都已清理，Tinylink 原有卡片不受影响。
+- 端到端测出并修复：Unwrap 后侧栏仍显示 "Workspace is unavailable or archived."（工作区查询缓存的还是归档状态）；现在 Unwrap 后会像 Refresh details 那样重新读取。
+- [ ] 未跑：真机手机（只在浏览器手机宽度下验证）、独立会话复验。
+- 引导/提示/What's new：本步不加，Unwrap 只在已收尾卡片的侧栏里出现、按钮自明；第二步默认开启 Auto wrap up 时一并更新 `first-done` 提示、导览和 What's new。遥测：不加字段，第二步再定。

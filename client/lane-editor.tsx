@@ -67,7 +67,7 @@ export function LaneEditor({
                   <View
                     {...handleProps}
                     accessibilityLabel={t("Drag to reorder {lane}", { lane: statusLabels[lane.status] })}
-                    style={{ width: 16, alignItems: "center", ...({ cursor: "grab" } as object) }}
+                    style={{ width: 24, alignSelf: "stretch", alignItems: "center", justifyContent: "center", ...({ cursor: "grab", userSelect: "none" } as object) }}
                   >
                     <Icon name="GripVertical" size={14} color={colors.foregroundMuted} />
                   </View>

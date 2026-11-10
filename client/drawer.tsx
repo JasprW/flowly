@@ -168,7 +168,8 @@ function TaskDrawerView({
     update = useRpc(rpc.updateTask),
     adoptIdea = useRpc(rpc.adoptIdea),
     contextRead = useRpc(rpc.taskContext),
-    configure = useRpc(rpc.configureSession);
+    configure = useRpc(rpc.configureSession),
+    unwrap = useRpc(rpc.unwrap);
   const { query: readState, receipts, markRead, markUnread } = useSessionReads();
   const [selected, setSelected] = useState(sessionEntry?.sessionId || ""),
     [highlighted, setHighlighted] = useState(""),
@@ -1037,20 +1038,30 @@ function TaskDrawerView({
                   </Label>
                   <Label muted size={font.sm}>
                     {wrapped
-                      ? t(
-                          /(^|; )workspace kept(;|$)/.test(wrapped.note || "")
-                            ? task.status === "done"
-                              ? "Sessions archived {time}. Move the card out of Done to bring them back."
-                              : "Sessions archived {time}. Move the card out of Cancelled to bring them back."
-                            : task.status === "done"
-                              ? "Workspace and sessions archived {time}. Move the card out of Done to bring them back."
-                              : "Workspace and sessions archived {time}. Move the card out of Cancelled to bring them back.",
-                          { time: relativeTime(wrapped.at) },
-                        )
+                      ? /(^|; )workspace kept(;|$)/.test(wrapped.note || "")
+                        ? t("Sessions archived {time}.", { time: relativeTime(wrapped.at) })
+                        : t("Workspace and sessions archived {time}.", { time: relativeTime(wrapped.at) })
                       : t("Wrap up to archive its sessions, worktree and the card.")}
                   </Label>
                 </View>
-                {!wrapped && (
+                {wrapped ? (
+                  <Button
+                    icon="ArchiveRestore"
+                    disabled={!active || sending}
+                    onPress={() =>
+                      void perform(async () => {
+                        const result = await unwrap({ id: task.id });
+                        // The workspace query still holds the archived state; reread it like Refresh details.
+                        refreshAll();
+                        void workspace.refetch();
+                        void scope.refetch();
+                        if (result.failed.length)
+                          throw new Error(t("Not restored: {sessions}", { sessions: result.failed.join("; ") }));
+                      }, t("Unwrapped"))
+                    }
+                  >
+                    {t("Unwrap")}</Button>
+                ) : (
                   <Button icon="Archive" disabled={!active || sending} onPress={() => setShowWrapup(true)}>
                     {t("Wrap up")}</Button>
                 )}
