@@ -68,6 +68,9 @@ export type WindowCounts = {
   c_memory_proposed: number;
   c_memory_confirmed: number;
   c_wrapups: number;
+  c_reviews: number;
+  c_reviews_failed: number;
+  c_user_actions: number;
   models: Record<string, number>;
 };
 
@@ -89,11 +92,15 @@ export function countWindow(events: readonly FlowEntry[], memoryConfirmedAt: rea
     c_memory_proposed: 0,
     c_memory_confirmed: 0,
     c_wrapups: 0,
+    c_reviews: 0,
+    c_reviews_failed: 0,
+    c_user_actions: 0,
     models: {},
   };
   const models = new Map<string, number>();
   for (const e of events) {
     if (!inside(e.at)) continue;
+    if (e.actor === "human" || (e.action === "agent.turn_ended" && e.byUser)) c.c_user_actions++;
     switch (e.action) {
       case "created": c.c_cards_created++; break;
       case "agent.turn_ended":
@@ -109,6 +116,11 @@ export function countWindow(events: readonly FlowEntry[], memoryConfirmedAt: rea
       case "idea_dismissed": c.c_ideas_dismissed++; break;
       case "memory_proposed": c.c_memory_proposed++; break;
       case "wrapped_up": c.c_wrapups++; break;
+      case "review_finished":
+        if (!e.results?.length) break;
+        c.c_reviews++;
+        if (e.results.some((r) => r.gating !== false && r.state === "failed")) c.c_reviews_failed++;
+        break;
     }
   }
   c.c_memory_confirmed = memoryConfirmedAt.filter(inside).length;

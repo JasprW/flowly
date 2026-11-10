@@ -198,6 +198,23 @@ function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { i
   const { busy, error, act } = useIdeaAction(close);
   const [confirm, setConfirm] = useState(false);
   const client = chipClient();
+  // The agent's suggestion (scope, missing reads as "new") gets the filled button, last in the row.
+  const here = idea.scope === "here";
+  const newTask = (
+    <Button
+      small
+      quiet={here}
+      icon="SquarePlus"
+      disabled={busy || !client}
+      onPress={() => {
+        if (!client) return;
+        newCardFromIdea(client, { ideaId: idea.id, projectId: idea.projectId });
+        close();
+      }}
+    >
+      {t("Start a new task")}
+    </Button>
+  );
   return (
     <IdeaShell
       idea={idea}
@@ -213,29 +230,18 @@ function IdeaItem({ idea, agentId, canContinue, expanded, onToggle, close }: { i
       <Button small quiet disabled={busy || !client} label={t("Dismiss {title}", { title: idea.title })} onPress={() => client && act(() => dismissIdea(client, { ideaId: idea.id, projectId: idea.projectId }), t("Idea dismissed"))}>
         {t("Dismiss")}
       </Button>
-      <Button
-        small
-        quiet
-        icon="SquarePlus"
-        disabled={busy || !client}
-        onPress={() => {
-          if (!client) return;
-          newCardFromIdea(client, { ideaId: idea.id, projectId: idea.projectId });
-          close();
-        }}
-      >
-        {t("Start a new task")}
-      </Button>
+      {here && newTask}
       {canContinue &&
         (confirm ? (
           <Button small primary icon="CornerDownRight" disabled={busy || !client} onPress={() => client && act(() => continueIdea(client, { ideaId: idea.id, projectId: idea.projectId, agentId }), t("Idea sent"))}>
             {t("Send")}
           </Button>
         ) : (
-          <Button small icon="CornerDownRight" disabled={busy} onPress={() => setConfirm(true)}>
+          <Button small quiet={!here} icon="CornerDownRight" disabled={busy} onPress={() => setConfirm(true)}>
             {t("Continue here")}
           </Button>
         ))}
+      {!here && newTask}
     </IdeaShell>
   );
 }
@@ -268,6 +274,13 @@ function OutsideIdeaItem({ idea, agentId, expanded, onToggle, close }: { idea: S
   const client = chipClient();
   const run = (target: "here" | "session" | "workspace", done: string) =>
     client && act(() => runSessionIdea(client, { agentId, ideaId: idea.id, target }), done);
+  // Divergent work (scope "new") suggests a fresh session; "here" keeps Continue here first.
+  const here = idea.scope === "here";
+  const newSession = (
+    <Button small quiet={here} icon="Plus" disabled={busy || !client} onPress={() => run("session", t("Started in a new session"))}>
+      {t("New session")}
+    </Button>
+  );
   return (
     <IdeaShell
       idea={idea}
@@ -286,18 +299,17 @@ function OutsideIdeaItem({ idea, agentId, expanded, onToggle, close }: { idea: S
       <Button small quiet icon="GitBranch" disabled={busy || !client} onPress={() => run("workspace", t("Started in a new workspace"))}>
         {t("New workspace")}
       </Button>
-      <Button small quiet icon="Plus" disabled={busy || !client} onPress={() => run("session", t("Started in a new session"))}>
-        {t("New session")}
-      </Button>
+      {here && newSession}
       {confirm ? (
         <Button small primary icon="CornerDownRight" disabled={busy || !client} onPress={() => run("here", t("Idea sent"))}>
           {t("Send")}
         </Button>
       ) : (
-        <Button small icon="CornerDownRight" disabled={busy} onPress={() => setConfirm(true)}>
+        <Button small quiet={!here} icon="CornerDownRight" disabled={busy} onPress={() => setConfirm(true)}>
           {t("Continue here")}
         </Button>
       )}
+      {!here && newSession}
     </IdeaShell>
   );
 }

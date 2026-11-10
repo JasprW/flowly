@@ -74,16 +74,22 @@ export const wrapupSettings = defineSettings({
   scope: "host",
   version: 1,
   schema: z.object({
-    /** Off: ask whether to wrap up. On: archive the workspace automatically when the preflight is clean. */
-    autoWrapup: z.boolean().default(false),
+    /**
+     * Off: ask whether to wrap up. On: archive the workspace automatically when the preflight is clean.
+     * Optional, not default(false): the host fills schema defaults into the values it hands out, so
+     * only an optional field lets the first-run tour tell "never set" from "turned off". Readers go
+     * through wrapupSettingsValues, which treats unset as off.
+     */
+    autoWrapup: z.boolean().optional(),
     /** Off: deleting a card asks whether to archive its sessions/workspace. On: archive without asking when the preflight is clean. */
     archiveOnDelete: z.boolean().default(false),
   }),
 });
-export type WrapupSettings = z.infer<typeof wrapupSettings.schema>;
+export type WrapupSettings = { autoWrapup: boolean; archiveOnDelete: boolean };
 export function wrapupSettingsValues(values: unknown): WrapupSettings {
   const parsed = wrapupSettings.schema.safeParse(values ?? {});
-  return parsed.success ? parsed.data : wrapupSettings.schema.parse({});
+  const data = parsed.success ? parsed.data : wrapupSettings.schema.parse({});
+  return { autoWrapup: data.autoWrapup ?? false, archiveOnDelete: data.archiveOnDelete };
 }
 
 /** Whether session lifecycle rules may move cards between lanes (AUTO-STATUS-SPEC). */

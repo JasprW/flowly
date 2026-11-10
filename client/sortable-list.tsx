@@ -140,39 +140,55 @@ function SortableRow({
   }, [dragging, shift, reduced, slide]);
   const lift = useMotionValue(held ? 1 : 0);
   const mousePress = useRef(false),
+    // `claimed`: this row holds the responder; `active`: the drag has started.
+    claimed = useRef(false),
     active = useRef(false);
-  const current = useRef({ id, disabled, handlers, horizontal });
-  current.current = { id, disabled, handlers, horizontal };
+  const current = useRef({ id, disabled, handlers, horizontal, handle });
+  current.current = { id, disabled, handlers, horizontal, handle };
   const along = (g: { dx: number; dy: number }) => (current.current.horizontal ? g.dx : g.dy);
+  const threshold = 6;
   useEffect(
     () => () => {
       if (active.current) current.current.handlers.cancel();
     },
     [],
   );
+  const release = () => {
+    mousePress.current = false;
+    claimed.current = false;
+    const was = active.current;
+    active.current = false;
+    return was;
+  };
   const pan = useRef(
     PanResponder.create({
+      // A grip does nothing else, so it takes the press at once: the moves that
+      // follow reach it even after the pointer has left the small grip.
+      onStartShouldSetPanResponder: () => current.current.handle && !current.current.disabled && mousePress.current,
+      // A whole row is also pressable, so it takes over only once the pointer moves.
       onMoveShouldSetPanResponderCapture: (_e, g) =>
-        !current.current.disabled && mousePress.current && Math.abs(along(g)) >= 6,
-      onPanResponderGrant: () => {
+        !current.current.disabled && mousePress.current && Math.abs(along(g)) >= threshold,
+      onPanResponderGrant: (_e, g) => {
+        claimed.current = true;
+        if (Math.abs(along(g)) < threshold) return;
         active.current = true;
         current.current.handlers.start(current.current.id);
       },
       onPanResponderMove: (_e, g) => {
-        if (active.current) current.current.handlers.move(along(g));
+        if (!claimed.current) return;
+        if (!active.current) {
+          if (Math.abs(along(g)) < threshold) return;
+          active.current = true;
+          current.current.handlers.start(current.current.id);
+        }
+        current.current.handlers.move(along(g));
       },
       onPanResponderRelease: (_e, g) => {
-        mousePress.current = false;
-        if (!active.current) return;
-        active.current = false;
-        current.current.handlers.end(along(g));
+        if (release()) current.current.handlers.end(along(g));
       },
       onPanResponderTerminationRequest: () => false,
       onPanResponderTerminate: () => {
-        mousePress.current = false;
-        if (!active.current) return;
-        active.current = false;
-        current.current.handlers.cancel();
+        if (release()) current.current.handlers.cancel();
       },
     }),
   ).current;

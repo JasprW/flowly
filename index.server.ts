@@ -270,6 +270,7 @@ export default function contribute(host: PluginServerContext) {
     wrapups.check(input.id, paseo),
   );
   server.handle(rpc.wrapup, (input, { paseo }) => wrapups.run(input, paseo));
+  server.handle(rpc.unwrap, (input) => restores.unwrap(input.id));
   const tools = new ToolServer(store);
   tools.agents.connectors = connectors;
   // Project memory (PROJECT-MEMORY-SPEC): confirmed knowledge shared across a project's cards.

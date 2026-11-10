@@ -127,7 +127,7 @@ export const whatsNew: { version: string; items: WhatsNewItem[] }[] = [ /* 新�
 
 ## 9. 上手维护规则（AGENTS.md “Onboarding upkeep” 补一条）
 
-发布含用户可见变化、且**老用户在使用中不会自己遇到**的 minor 或 major 版本（新设置、对老用户默认不同的开关、换了位置的入口）时，在 `client/whats-new.ts` 加一个该版本的条目（≤ 7 条，每条一句话），加在列表最前面（旧版本保留，最早到 1.5.0）。在某个场景里能自然遇到的功能仍用一次性 tip，不进 What's new。patch 版本（x.y.Z）从不加条目（用户决定 2026-10-27）。都不需要时在交付说明里写明。
+功能、修复和文档改动不改 `client/whats-new.ts`，只交付功能本身；What's new 由发版任务统一写（用户决定 2026-11-10）：minor 或 major 版本的 bump PR 之前，总结上一个发布 tag 到当前 `main` 的主要用户可见变化（发版说明和 What's new）。发布含用户可见变化、且**老用户在使用中不会自己遇到**的 minor 或 major 版本（新设置、对老用户默认不同的开关、换了位置的入口）时，在 `client/whats-new.ts` 加一个该版本的条目（≤ 7 条，每条一句话），加在列表最前面（旧版本保留，最早到 1.5.0）。在某个场景里能自然遇到的功能仍用一次性 tip，不进 What's new。patch 版本（x.y.Z）从不加条目（用户决定 2026-10-27）。都不需要时在交付说明里写明。
 
 ## 10. 验收
 

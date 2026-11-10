@@ -169,6 +169,16 @@ export function outsidePatch(c: OutsideChoice) {
   return { outside: c.progress || c.nextMoves || c.ideas, outsideProgress: c.progress, outsideNextMoves: c.nextMoves, outsideIdeas: c.ideas };
 }
 
+/**
+ * Auto wrap up on a new install (ONBOARDING-SETUP-SPEC §4): the first-run tour turns it on when it
+ * closes, unless the stored wrap-up settings already hold a choice. Existing users never get the
+ * first-run tour, so an unset value keeps meaning off for them.
+ */
+export function firstRunWrapup(stored: unknown): { autoWrapup: true } | null {
+  const value = stored && typeof stored === "object" ? (stored as { autoWrapup?: unknown }).autoWrapup : undefined;
+  return typeof value === "boolean" ? null : { autoWrapup: true };
+}
+
 export type TourKeyAction = "next" | "back" | "finish";
 
 /**

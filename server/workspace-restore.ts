@@ -3,6 +3,7 @@ import type { BoardStore } from "./store";
 import type { BoardEvent } from "../shared/model";
 import { paseoHome } from "./service";
 import { isSummarizer } from "../shared/summary";
+import { currentWrapup } from "../shared/wrapup-state";
 
 /** Paseo's answer to "can this archived workspace come back?". */
 export type RecoveryState =
@@ -119,62 +120,85 @@ export class WorkspaceRestoreService {
     readonly recovery: WorkspaceRecovery = daemonWorkspaceRecovery(),
   ) {}
 
-  private readonly runs = new Map<string, Promise<void>>();
+  private readonly runs = new Map<string, Promise<UnwrapResult>>();
 
   restoreAfterReopen(id: string): Promise<void> {
+    return this.locked(id, () => this.once(id, false)).then(() => undefined);
+  }
+
+  /**
+   * Unwrap in place (WORKSPACE-RESTORE-SPEC "Unwrap in place"): the same restore
+   * for a wrapped-up card that stays in Done/Cancelled. Rejects with the reason
+   * when nothing could be restored; a card not wrapped up is a silent no-op.
+   */
+  async unwrap(id: string): Promise<UnwrapResult> {
+    const board = await this.store.read();
+    const task = board.tasks.find((t) => t.id === id);
+    if (!task) throw new Error("Task not found.");
+    if (task.archivedAt) throw new Error("Card is archived.");
+    if (!finished(task.status)) throw new Error("Only Done or Cancelled cards can be unwrapped.");
+    return this.locked(id, () => this.once(id, true));
+  }
+
+  private locked(id: string, start: () => Promise<UnwrapResult>) {
     const pending = this.runs.get(id);
     if (pending) return pending;
-    const run = this.once(id).finally(() => this.runs.delete(id));
+    const run = start().finally(() => this.runs.delete(id));
     this.runs.set(id, run);
     return run;
   }
 
-  private async once(id: string) {
+  private async once(id: string, manual: boolean): Promise<UnwrapResult> {
+    const none: UnwrapResult = { restored: false, failed: [] };
+    const actor = manual ? "human" : "system";
     const record = (action: string, note: string) =>
       this.store.mutate((board) => {
         if (board.tasks.some((t) => t.id === id))
-          this.store.event(board, { taskId: id, actor: "system", action, note });
+          this.store.event(board, { taskId: id, actor, action, note });
       });
+    // Unwrap reports why nothing came back; a reopen only records it.
+    const skip = async (note: string, report: boolean) => {
+      if (report || manual) await record("workspace_restore_skipped", note);
+      if (manual) throw new Error(note);
+      return none;
+    };
     const board = await this.store.read();
     const task = board.tasks.find((t) => t.id === id);
-    if (!task || task.archivedAt || finished(task.status)) return;
+    if (!task || task.archivedAt) return none;
+    if (manual ? !currentWrapup(board.events, id) : finished(task.status)) return none;
     const wrapped = board.events.some(
       (e) => e.taskId === id && (e.action === "wrapped_up" || e.action === "workspace_auto_archived"),
     );
     const ours = archivedByWrapup(board.events, id);
     const owned = task.ownsWorkspace === true;
-    if (!wrapped && !owned) return;
+    if (!wrapped && !owned) return none;
     let daemon: RecoveryConnection;
     try {
       daemon = await this.recovery.connect();
     } catch (e) {
-      if (ours) await record("workspace_restore_skipped", `Could not reach Paseo: ${message(e)}`);
-      return;
+      return skip(`Could not reach Paseo: ${message(e)}`, ours);
     }
     try {
       let state: RecoveryState;
       try {
         state = await daemon.inspect(task.workspaceId);
       } catch (e) {
-        if (ours) await record("workspace_restore_skipped", `Could not reach Paseo: ${message(e)}`);
-        return;
+        return skip(`Could not reach Paseo: ${message(e)}`, ours);
       }
       let restored: RecoveryState | null = null;
       if (state.kind === "recoverable") {
         // Someone else archived it: leave the workspace and its sessions alone.
-        if (!ours && !owned) return;
+        if (!ours && !owned) return manual ? skip("The workspace was archived outside this card's wrap-up.", true) : none;
         const current = (await this.store.read()).tasks.find((t) => t.id === id);
-        if (!current || current.archivedAt || finished(current.status)) return;
+        if (!current || current.archivedAt || (!manual && finished(current.status))) return none;
         try {
           await daemon.restore(task.workspaceId);
         } catch (e) {
-          await record("workspace_restore_skipped", `Restoring failed: ${message(e)}`);
-          return;
+          return skip(`Restoring failed: ${message(e)}`, true);
         }
         restored = state;
       } else if (state.reason !== "workspace_not_archived") {
-        if (ours) await record("workspace_restore_skipped", state.message);
-        return;
+        return skip(state.message, ours);
       }
       const revive = sessionsArchivedByWrapup(
         (await this.store.read()).events,
@@ -200,11 +224,17 @@ export class WorkspaceRestoreService {
           "workspace_restored",
           `${restored.action === "restore" ? `Worktree recreated${restored.branch ? ` on branch ${restored.branch}` : ""} and workspace restored` : "Workspace restored"}; ${sessions}.`,
         );
+      // Unwrap always ends the wrapped-up state, even when only sessions came back.
+      else if (manual) await record("workspace_restored", `Workspace already active; ${sessions}.`);
       else if (revive.length) await record("sessions_restored", `${sessions}.`);
+      else return none;
+      return { restored: true, failed };
     } finally {
       await daemon.close();
     }
   }
 }
+
+export type UnwrapResult = { restored: boolean; failed: string[] };
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

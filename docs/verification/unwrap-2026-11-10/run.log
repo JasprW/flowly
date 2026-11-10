@@ -1,0 +1,25 @@
+card 70252d4b-ea49-4a17-9eb5-46148a617d1d wks_3d70d848c92dd2f1 /Users/bofan.wang/.paseo/worktrees/246o38bv/kanban-unwrap-e2e-1794301753488-3bdd4c kanban/unwrap-e2e-1794301753488-3bdd4c ownsWorkspace true
+session 73bb7d6e-ddb5-4928-a30c-626a72fc742c first turn: idle
+auto wrap-up: workspace_auto_archived Worktree and 1 session(s) archived; the directory may be removed by Paseo, the branch is kept.
+PASS wrapped: workspace archived (recoverable/restore)
+PASS wrapped: session archived
+PASS UI: sidebar shows Wrapped up with Unwrap (desktop and phone)
+PASS UI: success toast Unwrapped
+PASS UI: Unwrap button gone
+PASS UI: no stale workspace warning after Unwrap
+PASS event workspace_restored by human (Worktree recreated on branch kanban/unwrap-e2e-1794301753488-3bdd4c and workspace restored; 1 session(s) restored.)
+PASS same workspace ID active again
+PASS worktree directory exists
+PASS worktree on branch kanban/unwrap-e2e-1794301753488-3bdd4c
+PASS session unarchived
+PASS card still in Done, not archived (done)
+PASS card revision and workspace binding unchanged
+PASS no second auto wrap-up (auto-archive events: 1)
+PASS workspace still active after 10 s
+PASS UI: phone shows Finished after Unwrap
+cleanup {"taskId":"70252d4b-ea49-4a17-9eb5-46148a617d1d","workspaceId":"wks_3d70d848c92dd2f1","agentId":"73bb7d6e-ddb5-4928-a30c-626a72fc742c","dir":"/Users/bofan.wang/.paseo/worktrees/246o38bv/kanban-unwrap-e2e-1794301753488-3bdd4c","branch":"kanban/unwrap-e2e-1794301753488-3bdd4c"}
+PASS cleanup: card removed
+PASS cleanup: session deleted
+PASS cleanup: worktree removed
+PASS cleanup: branch removed
+PASS Tinylink's own cards still present

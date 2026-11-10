@@ -37,7 +37,7 @@ const expectedKeys = [
   "$process_person_profile", "$geoip_disable", "flowly_version", "node_major", "os", "arch", "ui_language", "ui_locale", "ai_language",
   "f_memory", "f_insights", "f_ideas", "f_artifacts", "f_outside_sessions", "f_auto_status", "f_auto_wrapup", "f_archive_on_delete", "f_workflow_insights", "f_summary", "f_auto_review",
   "projects", "cards_open", "c_guardrails",
-  "c_cards_created", "c_turns", "c_deliveries", "c_next_moves", "c_next_moves_picked", "c_ideas_proposed", "c_ideas_accepted", "c_ideas_dismissed", "c_memory_proposed", "c_memory_confirmed", "c_wrapups", "models",
+  "c_cards_created", "c_turns", "c_deliveries", "c_next_moves", "c_next_moves_picked", "c_ideas_proposed", "c_ideas_accepted", "c_ideas_dismissed", "c_memory_proposed", "c_memory_confirmed", "c_wrapups", "c_reviews", "c_reviews_failed", "c_user_actions", "models",
 ].sort();
 
 function harness(directory: string, options: { env?: NodeJS.ProcessEnv; enabled?: () => Promise<boolean>; status?: number; throws?: boolean; now?: () => number; events?: FlowEntry[] } = {}) {
@@ -180,9 +180,15 @@ test("§9-7: counts only the window; invalid model keys fold into other, at most
     event("next_moves_suggested", inside, { offered: 0 }),
     event("idea_adopted", inside),
     event("wrapped_up", inside),
+    event("review_finished", inside, { results: [{ id: "a", state: "failed", gating: false }, { id: "b", state: "passed" }] }),
+    event("review_finished", inside, { results: [{ id: "b", state: "failed" }] }),
+    event("review_finished", inside),
+    event("edited", inside, { actor: "human" }),
+    event("edited", before, { actor: "human" }),
+    event("agent.turn_ended", inside, { byUser: true }),
   ];
   const c = countWindow(events, [inside, before], start, NOW);
-  expect(c).toMatchObject({ c_cards_created: 1, c_turns: 2, c_next_moves_picked: 1, c_deliveries: 1, c_next_moves: 1, c_ideas_accepted: 1, c_wrapups: 1, c_memory_confirmed: 1 });
+  expect(c).toMatchObject({ c_cards_created: 1, c_turns: 3, c_next_moves_picked: 1, c_deliveries: 1, c_next_moves: 1, c_ideas_accepted: 1, c_wrapups: 1, c_memory_confirmed: 1, c_reviews: 2, c_reviews_failed: 1, c_user_actions: 3 });
   expect(c.models).toEqual({ "claude/claude-sonnet-5-5": 1, other: 1 });
   const many = new Map(Array.from({ length: 12 }, (_, i) => [`p/m${i}`, 12 - i] as [string, number]));
   const table = modelTable(many);

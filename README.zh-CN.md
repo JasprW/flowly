@@ -1,9 +1,9 @@
-<h1>
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo/flowly-lockup-dark.svg">
-    <img src="docs/brand/logo/flowly-lockup-light.svg" alt="Flowly" height="56">
+    <img src="docs/brand/logo/flowly-lockup-light.svg" alt="Flowly" height="96">
   </picture>
-</h1>
+</p>
 
 **Flowly**——给 Paseo 的 agent 原生工作流。
 

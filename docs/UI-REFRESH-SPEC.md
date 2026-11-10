@@ -209,7 +209,7 @@ Status: authorized by the user's 2026-10-14 request to redesign the whole Kanban
 
 ## 7t. Project lanes (workflow), finished lanes no longer a filter, lane motion (2026-10-15, user request)
 
-**Lanes are a project setting** (Edit project → Lanes). The 7 built-in statuses can be reordered (drag the grip on desktop, arrows on touch), turned on/off, and renamed (blank = built-in name). Stored as optional `project.lanes` (`[{status, enabled, name?}]`, all 7, unique, at least one on). Absent means the default workflow, so existing projects and cards need no migration. The user chose this over fully custom lanes.
+**Lanes are a project setting** (Edit project → Lanes). The 7 built-in statuses can be reordered (drag the grip on desktop, arrows on touch; the grip spans the row's height and takes the mouse press at once, so a fast drag that leaves it keeps going, and the row moves only after 6 pt so a click alone reorders nothing), turned on/off, and renamed (blank = built-in name). Stored as optional `project.lanes` (`[{status, enabled, name?}]`, all 7, unique, at least one on). Absent means the default workflow, so existing projects and cards need no migration. The user chose this over fully custom lanes.
 
 Lanes define the workflow everywhere:
 - Board columns, compact lane tabs, card "Move to", drawer status chip/menu, the task form, toasts and activity text use the enabled lanes, in order, by name (`shared/lanes.ts`).
