@@ -638,6 +638,8 @@ const catalog: Catalog = {
   "Restore": "復元",
   "Activate": "\u6709\u52b9\u5316",
   "Screened: awaiting your review": "\u30b9\u30af\u30ea\u30fc\u30cb\u30f3\u30b0\u6e08\u307f\uff1a\u78ba\u8a8d\u5f85\u3061",
+  "Screened out \u00b7 {n}": "\u30b9\u30af\u30ea\u30fc\u30cb\u30f3\u30b0\u9664\u5916 \u00b7 {n}",
+  "Restored.": "\u5fa9\u5143\u3057\u307e\u3057\u305f\u3002",
   "Screened: {reason}": "\u30b9\u30af\u30ea\u30fc\u30cb\u30f3\u30b0\u6e08\u307f\uff1a{reason}",
   "Links": "リンク",
   "Add a link: link to a card or start a follow-up task": "リンクを追加：カードにリンクするか、フォローアップタスクを作成",

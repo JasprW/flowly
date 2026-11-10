@@ -762,6 +762,12 @@ export const readGuardrails = defineRpc({
   input: z.strictObject({ projectId: z.string().min(1).max(200), etag: z.string().max(200).optional() }),
   output: z.object({ etag: z.string(), value: guardrailsViewSchema.optional() }),
 });
+/** §4.7: undo a screening dismissal — recreate the note active and drop the record. */
+export const restoreGuardrail = defineRpc({
+  name: "guardrails.restore",
+  input: z.strictObject({ projectId: z.string().min(1).max(200), id: z.string().min(1).max(200) }),
+  output: guardrailEntrySchema,
+});
 /** The overview chips: per project, observing commands, guidelines learned this week and memory added this week. */
 export const guardrailCounts = defineRpc({
   name: "guardrails.counts",

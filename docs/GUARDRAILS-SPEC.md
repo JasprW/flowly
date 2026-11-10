@@ -268,6 +268,7 @@ CardItem {
   - `supersedes` 一律走 `observing` 路径，无论裁决——且 `propose` 只在写入 active 时才归档被替换的条目；观察中的替换不位移在用备忘，人在页上提升后自行归档旧的（§4.4 的 `supersedes` 立即归档语义只该由人触发）。
 - **筛选失败即放行**：模型错误、超时、JSON 不合 schema → 候选照旧写入 active（与筛选关闭时逐字节一致），`state.errors` 记一条 `Decision screening is unavailable: …`，`state.screenerUnavailableAt` 记时间；下次筛选成功时清除。筛选失败永远不阻断或丢失复盘本身。
 - **失败可见**：`screenerUnavailableAt` 在状态里，`guardrails.read` 的 `errors` 已把带 `taskId` 的错误带给页面；配置坏了（模型名不存在）不是静默的。
+- **撤销路径与-dismissal 本身一样可见**（2026-11-10）：`screenedOut` 记录带 `id` 和候选自己的 `body`/`tags`/`keywords`，随 `guardrails.read` 返回；Memory 页底部有折叠的 “Screened out · {n}” 区，逐条显示标题、种类与理由，一键 `guardrails.restore`（新建 active 备忘并删除记录；标题已存在时不报错——知识已在，记录照样删）。恢复是人的覆盖裁决：新备忘不带筛选来源标记。
 - **不改的边界**：筛选只作用于 `by: "retro"` 的写入；`flowly_remember`（`by: "agent"`）与人手写不筛选。`checkProposal` 在每个分支的 `propose` 里照旧执行，筛选模型永远碰不到信任门。复盘事件 `memory_proposed` 只在确有写入时发，措辞与筛选关闭时一致。
 
 ### 4.5 命令检查

@@ -638,6 +638,8 @@ const catalog: Catalog = {
   "Restore": "恢复",
   "Activate": "\u542f\u7528",
   "Screened: awaiting your review": "\u5df2\u7b5b\u9009\uff1a\u7b49\u5f85\u4f60\u786e\u8ba4",
+  "Screened out \u00b7 {n}": "\u5df2\u7b5b\u9009\u6389 \u00b7 {n}",
+  "Restored.": "\u5df2\u6062\u590d\u3002",
   "Screened: {reason}": "\u5df2\u7b5b\u9009\uff1a{reason}",
   "Links": "关联",
   "Add a link: link to a card or start a follow-up task": "添加关联：关联到某张卡片，或新建后续任务",

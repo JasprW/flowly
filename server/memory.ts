@@ -584,7 +584,19 @@ export class MemoryService {
           // The 20-record cap is per project: other projects' dismissal records are untouched (CodeRabbit 4502246757).
           s.screenedOut = s.screenedOut || [];
           for (const d of dismissed)
-            s.screenedOut.push({ projectId: m.project.id, taskId, at: this.iso(), noteKind: d.kind, title: d.title.trim(), reason: d.dropped });
+            s.screenedOut.push({
+              id: randomUUID(),
+              projectId: m.project.id,
+              taskId,
+              at: this.iso(),
+              noteKind: d.kind,
+              title: d.title.trim(),
+              reason: d.dropped,
+              // The candidate's own fields, so a restore can recreate the note faithfully (§4.7).
+              ...(d.body ? { body: d.body } : {}),
+              ...(d.tags.length ? { tags: d.tags } : {}),
+              ...(d.keywords.length ? { keywords: d.keywords } : {}),
+            });
           const mine = s.screenedOut.filter((o) => o.projectId === m.project.id);
           const other = s.screenedOut.filter((o) => o.projectId !== m.project.id);
           const over = mine.length - guardrailLimits.screenedOut;

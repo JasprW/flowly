@@ -638,6 +638,8 @@ const catalog: Catalog = {
   "Restore": "복원",
   "Activate": "\ud65c\uc131\ud654",
   "Screened: awaiting your review": "\ud544\ud130\ub9c1\ub428: \uac80\ud1a0 \ub300\uae30 \uc911",
+  "Screened out \u00b7 {n}": "\ud544\ud130\ub9c1 \uc81c\uc678 \u00b7 {n}",
+  "Restored.": "\ubcf5\uc6d0\ub418\uc5c8\uc2b5\ub2c8\ub2e4.",
   "Screened: {reason}": "\ud544\ud130\ub9c1\ub428: {reason}",
   "Links": "링크",
   "Add a link: link to a card or start a follow-up task": "링크 추가: 카드에 연결하거나 후속 작업 만들기",

@@ -638,6 +638,8 @@ const catalog: Catalog = {
   "Restore": "Восстановить",
   "Activate": "\u0410\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u0442\u044c",
   "Screened: awaiting your review": "\u041e\u0442\u0444\u0438\u043b\u044c\u0442\u0440\u043e\u0432\u0430\u043d\u043e: \u0436\u0434\u0451\u0442 \u0432\u0430\u0448\u0435\u0439 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438",
+  "Screened out \u00b7 {n}": "\u041e\u0442\u0444\u0438\u043b\u044c\u0442\u0440\u043e\u0432\u0430\u043d\u043e \u00b7 {n}",
+  "Restored.": "\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u043e.",
   "Screened: {reason}": "\u041e\u0442\u0444\u0438\u043b\u044c\u0442\u0440\u043e\u0432\u0430\u043d\u043e: {reason}",
   "Links": "Связи",
   "Add a link: link to a card or start a follow-up task": "Добавить связь: связать с карточкой или начать задачу-продолжение",

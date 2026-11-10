@@ -299,9 +299,48 @@ export class GuardrailsService {
       entries: state.entries.filter((e) => e.projectId === projectId),
       items: state.items.filter((i) => i.projectId === projectId),
       errors: state.errors.filter((e) => e.projectId === projectId),
+      screenedOut: (state.screenedOut || []).filter((o) => o.projectId === projectId),
       running: this.running().filter((id) => board.tasks.some((t) => t.id === id && t.projectId === projectId)),
       enabled: memoryOn(project),
     };
+  }
+
+  /**
+   * §4.7: undo a screening dismissal — recreate the note active and drop the record.
+   * The human's restore overrides the screener's verdict, so the note writes active
+   * with no screening provenance. A title that now exists is not an error: the
+   * knowledge is present, which is what the restore wanted — the record is dropped
+   * and the existing note returned.
+   */
+  async restoreScreened(projectId: string, id: string): Promise<GuardrailEntry> {
+    await this.project(projectId);
+    const record = (await this.store.read()).screenedOut?.find((o) => o.id === id && o.projectId === projectId);
+    if (!record) throw new GuardrailError("NOT_FOUND", "This screened-out memory no longer exists. Reload to see the latest.");
+    let entry: GuardrailEntry;
+    try {
+      entry = await this.create({
+        projectId,
+        kind: "note",
+        noteKind: record.noteKind,
+        text: record.title,
+        body: record.body,
+        tags: record.tags,
+        keywords: record.keywords,
+        pinned: false,
+      });
+    } catch (e) {
+      if (!(e instanceof GuardrailError) || e.code !== "MEMORY_DUPLICATE") throw e;
+      const existing = (await this.store.read()).entries.find(
+        (x) => x.projectId === projectId && x.kind === "note" && x.state === "active" && titleKey(x.text) === titleKey(record.title),
+      );
+      if (!existing) throw e;
+      entry = existing;
+    }
+    await this.store.update((state) => {
+      state.screenedOut = (state.screenedOut || []).filter((o) => o.id !== id);
+      return { value: undefined, changed: true };
+    });
+    return entry;
   }
   /** The overview chips (§7.4): observing commands and guidelines learned in the last 7 days, and memory added in them, per project. */
   async counts(): Promise<Record<string, { observing: number; added: number; notes: number }>> {

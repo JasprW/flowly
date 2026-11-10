@@ -638,6 +638,8 @@ const catalog: Catalog = {
   "Restore": "Restaurar",
   "Activate": "Ativar",
   "Screened: awaiting your review": "Filtrada: aguardando sua revis\u00e3o",
+  "Screened out \u00b7 {n}": "Filtradas \u00b7 {n}",
+  "Restored.": "Restaurada.",
   "Screened: {reason}": "Filtrada: {reason}",
   "Links": "Links",
   "Add a link: link to a card or start a follow-up task": "Adicionar um link: vincular a um card ou iniciar uma tarefa de acompanhamento",

@@ -1,5 +1,14 @@
 # Implementation progress
 
+## Screened-out panel and one-click restore (card "Enable Decision Engine") — 2026-11-10
+
+- Follow-up to the decision screening (GUARDRAILS-SPEC §4.7): a wrong auto-dismiss was invisible — the record sat in `guardrails.json` with no UI, and undoing it meant re-proposing by hand. The undo path is now as visible as the action.
+- Schema (`shared/guardrails.ts`): `screenedOut` records gain `id` and the candidate's own `body`/`tags`/`keywords`, so a restore recreates the note faithfully; `guardrailsViewSchema` returns the project's records to the client.
+- Server: new `guardrails.restore` RPC (`GuardrailsService.restoreScreened`, wired in `index.server.ts`) recreates the note active through the existing `create` path (trust gates apply) and drops the record; a title that already exists is not an error — the knowledge is present, the record is dropped and the existing note returned. The restored note carries no screening provenance: the restore is the human's override.
+- Client (`client/memory.tsx`): the Memory page gains a folded "Screened out · {n}" section under Archived, each row showing the title, kind and the screening reason, with a one-click Restore. Three new strings in all 9 catalogs ("Screened out · {n}", "Restored.", plus the awaiting-review strings from the screening change).
+- Spec: GUARDRAILS-SPEC §4.7 gains the undo-path paragraph. Onboarding: none (the section is self-explanatory inside the existing Memory page; the tour does not cover screening). Telemetry: none.
+- Tests: `server/guardrails.test.ts` — restore recreates the note and drops the record, the view carries the records, the duplicate-title path drops the record, a gone record is NOT_FOUND; the seeded records and the trim test updated for the new `id` field.
+
 ## Decision screening for retro notes (card "Enable Decision Engine") — 2026-11-07
 
 - [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §0.4, §4.7 (new): the retro run's candidates are judged by a separately-configured model before they write. `task-summary.memoryScreening` (default off) + `memoryScreeningModel` (empty → the summaryModels chain) in `shared/summary.ts`. `confirm` + `high` writes the active note exactly as upstream does, with `source.screened: "auto-confirmed"` and `source.screenReason`; `dismiss` + `high` writes nothing and records `{projectId, taskId?, at, noteKind, title, reason}` in the new capped `state.screenedOut` (20 per project, §3.4), whose exact titles block re-proposals before the screener is called; `human`, non-high confidence, and any `supersedes` write the note `state: "observing"` with `observe: {reviews: 0, passed: 0}` and `source.screened: "flagged"` — the Guardrails page shows it with the observing marker, the injection and review paths ignore it (they filter `state: "active"`), and a person promotes it with Resume.

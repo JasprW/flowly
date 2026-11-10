@@ -572,7 +572,7 @@ test("a screening reason that contains a credential is redacted before it is sto
 test("screenedOut trimming is per project: another project's records survive", async () => {
   const x = await screened();
   await x.memory.store.update((s) => {
-    s.screenedOut = Array.from({ length: 20 }, (_, i) => ({ projectId: "other", at: new Date().toISOString(), noteKind: "pitfall" as const, title: `other ${i}`, reason: "r" }));
+    s.screenedOut = Array.from({ length: 20 }, (_, i) => ({ id: `other-${i}`, projectId: "other", at: new Date().toISOString(), noteKind: "pitfall" as const, title: `other ${i}`, reason: "r" }));
     return { value: undefined, changed: true };
   });
   x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "card-specific"));

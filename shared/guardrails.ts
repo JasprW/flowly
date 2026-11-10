@@ -178,6 +178,22 @@ export type CardItem = z.infer<typeof cardItemSchema>;
 export const guardrailErrorSchema = z.object({ projectId: z.string(), taskId: z.string().optional(), at: iso, message: z.string().max(500) });
 export type GuardrailError = z.infer<typeof guardrailErrorSchema>;
 
+/** A retro candidate the screener dismissed (§4.7): kept so a wrong auto-dismiss is one click to undo. */
+export const screenedOutSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  taskId: z.string().optional(),
+  at: iso,
+  noteKind: z.enum(memoryKinds),
+  title: z.string(),
+  reason: z.string().max(memoryLimits.evidence),
+  /** The candidate's own fields, so restore can recreate the note faithfully. */
+  body: z.string().max(memoryLimits.body).optional(),
+  tags: memoryTagsSchema.optional(),
+  keywords: memoryKeywordsSchema.optional(),
+});
+export type ScreenedOutRecord = z.infer<typeof screenedOutSchema>;
+
 export const guardrailsStateSchema = z.object({
   version: z.literal(1),
   revision: z.number().int().nonnegative(),
@@ -190,7 +206,7 @@ export const guardrailsStateSchema = z.object({
   /** Weekly catch-up learning (§7.3): the newest `feedback` clue already learned from, per project. */
   learnedUntil: z.record(z.string(), z.string()).optional(),
   /** §4.7: retro candidates the screener dismissed, with the reason; the title blocks re-proposals. The 20 cap is per project, enforced in server/memory.ts. */
-  screenedOut: z.array(z.object({ projectId: z.string(), taskId: z.string().optional(), at: iso, noteKind: z.enum(memoryKinds), title: z.string(), reason: z.string().max(memoryLimits.evidence) })).optional(),
+  screenedOut: z.array(screenedOutSchema).optional(),
   /** §4.7: when the screening model last failed, so a broken screener is visible, not silent. */
   screenerUnavailableAt: z.string().optional(),
 });
@@ -202,6 +218,8 @@ export const guardrailsViewSchema = z.object({
   entries: z.array(guardrailEntrySchema),
   items: z.array(cardItemSchema),
   errors: z.array(guardrailErrorSchema),
+  /** §4.7: the screener's dismissals for this project, for the Memory page's screened-out section. */
+  screenedOut: z.array(screenedOutSchema),
   /** Cards whose finished-card review is running. */
   running: z.array(z.string()),
   /** Guardrails on for this project (host and project switch, B4). */

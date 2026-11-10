@@ -503,8 +503,8 @@ test("project remove backs up and clears that project's screening dismissals, an
   const x = await setup();
   await x.guardrails.store.update((s) => {
     s.screenedOut = [
-      { projectId: "p", at: new Date().toISOString(), noteKind: "pitfall", title: "dismissed for p", reason: "card-specific" },
-      { projectId: "q", at: new Date().toISOString(), noteKind: "pitfall", title: "dismissed for q", reason: "card-specific" },
+      { id: "rec-p", projectId: "p", at: new Date().toISOString(), noteKind: "pitfall", title: "dismissed for p", reason: "card-specific" },
+      { id: "rec-q", projectId: "q", at: new Date().toISOString(), noteKind: "pitfall", title: "dismissed for q", reason: "card-specific" },
     ];
     return { value: undefined, changed: true };
   });
@@ -517,4 +517,30 @@ test("project remove backs up and clears that project's screening dismissals, an
   expect(backups.length).toBeGreaterThan(0);
   const backup = JSON.parse(await fs.readFile(join(removed, backups[0]), "utf8"));
   expect((backup.screenedOut as { title: string }[] | undefined)?.map((o) => o.title)).toEqual(["dismissed for p"]);
+});
+
+test("restoreScreened recreates the note and drops the record; a duplicate title still drops the record (§4.7)", async () => {
+  const x = await setup();
+  await x.guardrails.store.update((s) => {
+    s.screenedOut = [
+      { id: "rec-1", projectId: "p", at: new Date().toISOString(), noteKind: "pitfall", title: "Two modals freeze Paseo", reason: "too card-specific", body: "Close one first.", tags: ["ui-polish"], keywords: ["dialog"] },
+      { id: "rec-2", projectId: "p", at: new Date().toISOString(), noteKind: "decision", title: "Already present", reason: "dup" },
+    ];
+    return { value: undefined, changed: true };
+  });
+  const restored = await x.guardrails.restoreScreened("p", "rec-1");
+  expect(restored).toMatchObject({ kind: "note", text: "Two modals freeze Paseo", state: "active", body: "Close one first." });
+  expect(restored.source?.screened).toBeUndefined();
+  let state = await x.guardrails.store.read();
+  expect(state.screenedOut?.map((o) => o.id)).toEqual(["rec-2"]);
+  // The view carries the remaining records for the page's screened-out section.
+  const view = await x.guardrails.view("p");
+  expect(view.screenedOut.map((o) => o.id)).toEqual(["rec-2"]);
+  // A title that already exists is not an error: the knowledge is present, the record is dropped.
+  await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "decision", text: "Already present" });
+  const second = await x.guardrails.restoreScreened("p", "rec-2");
+  expect(second).toMatchObject({ text: "Already present", state: "active" });
+  state = await x.guardrails.store.read();
+  expect(state.screenedOut?.length ?? 0).toBe(0);
+  await expect(x.guardrails.restoreScreened("p", "rec-1")).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
