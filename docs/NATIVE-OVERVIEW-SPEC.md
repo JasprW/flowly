@@ -86,7 +86,7 @@ server 独立 OverviewDeltas 缓存最近 32 个 etag 的 collection 指纹，lo
 
 - key 详情含 host/1/taskId/workspaceId，项目索引含 host/1/projectId；独立 changed readers，Back 后晚到结果可入该 scope cache但不得导航。
 - 所有 drawer section 显式 CardDetailContext/query；不创建 full observer 再 proxy 返回。冷 link 仍 fresh CardDetail + exact session refresh；普通开卡用展示 cache先显，动作独立 fresh 校验。
-- 可见详情每 3 秒 etag，session preview 时暂停不必要详情轮询；状态 stream仍独立。原完整 board轮询、direct-card后台 full删掉。
+- 可见详情每 3 秒 etag，session preview 打开时也继续（预览的回合状态与 Next moves 读卡片事件，暂停会让 chip 直到关闭重开才出现，2026-11-11 修正）；drawer 关闭时停止；状态 stream仍独立。原完整 board轮询、direct-card后台 full删掉。
 - 详情写操作刷新详情并 invalidate overview/project index；服务端写路径仍校验当前 task/project revision、真实 workspace/session，不能通过旧详情授权。
 - 删除/重绑刷新失败为不可用，不能回退旧数据“复活”；刷新网络错误可保留过期展示，动作必须拒绝fresh失败。input key/focus/草稿/scroll不由响应替换而重置。
 - Back 只恢复 overview，冷 cache显示既有加载/错误；旧 route结果不切卡、不重开 modal、不重置输入。
@@ -123,11 +123,11 @@ server 独立 OverviewDeltas 缓存最近 32 个 etag 的 collection 指纹，lo
 | Ideas/Artifacts | detail.ideas/artifacts；relatedTasks 提供 accepted/source 标题 | 乐观状态与 editor 不因 refetch 重挂载；所有更新失效对应 scopes |
 | 项目 Ideas | 独立 projects.ideas-changed + overview.tasks | 完整项目 ideas，不限 open；加载/失败显式区分，不能空数组冒充空页 |
 | Memory/Insights | 原独立页面 query + overview metadata | 移除根 full 门控；无需完整 Board |
-| root refresh/Back | 当前 detail 或 overview | Back 恢复 overview；详情 interval 在 session preview/关闭时暂停；已发请求可只写其独立 cache |
+| root refresh/Back | 当前 detail 或 overview | Back 恢复 overview；详情 interval 只在 drawer 关闭时暂停（session preview 时继续）；已发请求可只写其独立 cache |
 
 project index 的 cards 为 taskSchema.pick 后的 CardReference（id/projectId/title/status/archivedAt/position/type/priority/workspaceId）；tags 复用 projectTagStats 的建议上限与排序。CardDetail.relatedTasks 含本卡、链接两端、origin 与已接受 idea 目标中仍存在的卡。project ideas 契约 strict `{projectId,etag?}`，输出 `{etag,value?:{version:1,projectId,revision,ideas}}`，独立 host/version/project key 和 etag 域。三个新 read 都在 store.view 当前快照上校验实体，未知 scope 拒绝；详情错误不能退回缓存授权。etag 对完整 DTO 内容哈希，分别带 detail/index/project-ideas 域，不只看 task revision；无基线 same 最多重读一次，无值报错，不退回 board。
 
-CardDetailContext 是显式详情及项目上下文；子区段不调用 useBoardQuery，不能先建立 full observer 再替换 data。根详情 observer 只负责数据，唯一 interval observer 由可见 drawer 管理；关闭或 session preview 停 interval，不取消其他读者共享请求。项目 index 同样只在消费界面启用。写后统一 invalidate 展示 scopes；fresh send/context 与所有服务端 revision/workspace/session 检查保持原路径。
+CardDetailContext 是显式详情及项目上下文；子区段不调用 useBoardQuery，不能先建立 full observer 再替换 data。根详情 observer 只负责数据，唯一 interval observer 由可见 drawer 管理；drawer 关闭时停 interval（session preview 时继续，见上），不取消其他读者共享请求。项目 index 同样只在消费界面启用。写后统一 invalidate 展示 scopes；fresh send/context 与所有服务端 revision/workspace/session 检查保持原路径。
 
 验证：focused `npx vitest run shared/card-detail.test.ts server/card-detail.test.ts client/card-detail-query.test.ts client/session-link-query.test.ts`；父方 `npm run typecheck`；Luna full-access mounted 覆盖普通/直达/各区段/LinkPicker/页面、冷 cache 同 etag、删除/重绑/晚 route/输入 identity、详情与 full in-flight 隔离；最终稳定树一次 `npm test`。同三星预定 2 对交错 baseline/candidate，记录冷首次开卡、至少 6 秒详情停留、session preview 及 Back + 5 秒空闲；请求计数/响应 JSON bytes/内部 RPC→schema→effect 与 UI ready 分开。baseline 首卡旧 full 成本单列，candidate 额外 detail/index 请求总量也单列；128KiB 是参考，不裁内容。固定源 hash 前后校验，真实业务数据变化单列，不承诺纯净固定数据或 FPS。连续 motion、fresh 与 450ms 任一回归拒绝候选。截图/IME/Reduce Motion 无真实操作时标 UNRUN。
 

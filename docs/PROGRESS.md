@@ -1,5 +1,12 @@
 # Implementation progress
 
+## Session preview Next moves appear without reopening (card "side bar session next move chip修复") — 2026-11-11
+
+- Symptom: with a session open in the card sidebar, a turn that ended with next moves sometimes showed no chips until the session was closed and reopened.
+- Cause: the card detail (the events the preview reads for its turn state and Next moves) stopped polling while a session preview was open in the compact layout (`drawerNeedsBoard`, Flowly pane narrower than 760 px, which includes the usual desktop sidebar width). The `next_moves_suggested` and `agent.turn_ended` events reached the preview only when closing the session restarted the poll.
+- Fix: the open drawer keeps its 3 s etag detail poll in every layout, session preview included (`drawerDetailPoll`); closing the drawer still stops it. An unchanged etag read returns only the etag. NATIVE-OVERVIEW-SPEC §5/§7 and PERFORMANCE-SPEC updated.
+- Checks: see the delivery note. Not run: a live UI check of the chip appearing at turn end and a phone timing comparison of the extra poll.
+
 ## Auto wrap up first-run write fixed (card "Done 卡片支持 Unwrap up", step 2) — 2026-11-10
 
 - A UI test on an isolated daemon (separate home, port 6868, empty board) showed that the first-run tour never wrote `wrap-up.json`. The host hands plugins schema output with defaults filled in, so `autoWrapup` was always `false` and `firstRunWrapup` read it as "already chosen". The unit test missed this because it passed raw objects.

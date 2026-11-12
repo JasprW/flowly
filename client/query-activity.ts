@@ -7,7 +7,10 @@ export function boardIsActive(compact: boolean, taskId: string, page: string | n
   return !compact || (!taskId && !page && !formOpen);
 }
 
-/** The open card polls its own detail in every layout (LOADING-R2-SPEC §2A); a wide drawer stays visible beside a session preview. */
-export function drawerNeedsBoard(compact: boolean, active: boolean, selected: string) {
-  return active && (!compact || !selected);
+/**
+ * The open card's detail poll (NATIVE-OVERVIEW-SPEC §5), in every layout and also while a session preview
+ * covers the card: the preview's turn state and Next moves come from the card's events. Closed: no poll.
+ */
+export function drawerDetailPoll(active: boolean): number | undefined {
+  return active ? 3000 : undefined;
 }

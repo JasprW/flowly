@@ -1,10 +1,10 @@
 import { useCardDetailQuery, useTaskDetail } from "./card-detail-query";
+import { drawerDetailPoll } from "./query-activity";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isNoMoves, nextMovesAction } from "../shared/next-moves";
 import { workpadCheckedAction, workpadUpdatedAction } from "../shared/workpad";
 import type { PaseoAgent } from "@getpaseo/client";
 import { Pressable, View } from "react-native";
-import { drawerNeedsBoard } from "./query-activity";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import {
   usePaseo,
@@ -64,6 +64,7 @@ import { workspaceSession } from "./session";
 import { TaskProgress } from "./task-progress";
 import { TaskUsage } from "./task-usage";
 import { SessionMarkdown } from "./session-content";
+import { Clamped } from "./content-card";
 import { TaskIdeas } from "./task-ideas";
 import { LinkOrigin, TaskLinks } from "./task-links";
 import { TaskArtifacts } from "./task-artifacts";
@@ -187,11 +188,11 @@ function TaskDrawerView({
       {},
     );
   // The retained compact root is paused; visible card props still need remote edits/deletions.
-  const pollBoard = drawerNeedsBoard(compact, active, selected);
+  const detailPoll = drawerDetailPoll(active);
   // Only keep the shared poll alive. The root/data readers deliver changed props;
   // fetching flags must not re-render this entire retained detail tree.
   const detailState = useTaskDetail();
-  useCardDetailQuery(hostId, task.id, task.workspaceId, pollBoard, pollBoard ? 3000 : undefined, true);
+  useCardDetailQuery(hostId, task.id, task.workspaceId, !!detailPoll, detailPoll, true);
   const lock = useRef(false);
   const order = useMemo(() => drawerSectionOrder(sectionOrder ? sectionOrder.split(",") : []), [sectionOrder]);
   // Which sections are open: the user's defaults each time the sidebar opens, then their own toggles.
@@ -1069,7 +1070,10 @@ function TaskDrawerView({
             )}
             {onOpenTask && <LinkOrigin taskId={task.id} onOpenTask={onOpenTask} />}
             {!!task.description && (
-              <SessionMarkdown text={task.description} />
+              // Long descriptions (often from an idea) start clamped so Sessions stay in view.
+              <Clamped key={task.id} background={colors.surface0} bare>
+                <SessionMarkdown text={task.description} />
+              </Clamped>
             )}
             {!!detailState.error && <Notice>{message(detailState.error)}</Notice>}
             {!detailState.detail ? <Button quiet onPress={detailState.retry}>{detailState.error ? t("Retry") : t("Loading cards…")}</Button> : order.map((id) => <Fragment key={id}>{section(id)}</Fragment>)}

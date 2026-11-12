@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { boardIsActive, drawerNeedsBoard } from "./query-activity";
+import { boardIsActive, drawerDetailPoll } from "./query-activity";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -12,16 +12,12 @@ test("compact retained board pauses for drawer, page and task form; wide remains
   expect(boardIsActive(false, "t", "memory", true)).toBe(true);
 });
 
-test("an open card polls its own detail in every layout; a compact root pauses under it, a wide root keeps its overview", () => {
-  for (const compact of [true, false]) {
-    expect(drawerNeedsBoard(compact, true, "")).toBe(true);
-    expect(drawerNeedsBoard(compact, false, "")).toBe(false);
-  }
+test("an open card polls its own detail, also under a session preview; a compact root pauses under it, a wide root keeps its overview", () => {
+  // The drawer's poll does not depend on layout or an open session: the preview's Next moves and turn state read its events.
+  expect(drawerDetailPoll(true)).toBe(3000);
+  expect(drawerDetailPoll(false)).toBeUndefined();
   expect(boardIsActive(true, "t", null, false)).toBe(false);
   expect(boardIsActive(false, "t", null, false)).toBe(true);
-  // A compact session preview covers the card; a wide one sits beside the still-visible drawer.
-  expect(drawerNeedsBoard(true, true, "session")).toBe(false);
-  expect(drawerNeedsBoard(false, true, "session")).toBe(true);
 });
 
 test("disabled observers neither start nor refetch on invalidation, but explicit fresh reads and re-enable work", async () => {
