@@ -8,6 +8,16 @@
 - PR #101 review follow-up: Unicode punctuation is now an emphasis boundary; `_` remains a word character despite its Unicode punctuation category. Six regression cases cover Chinese colon/full stop, single-sided punctuation, brackets, italic and bold.
 - Checks: see the PR delivery note. Unrun: live plugin reload, desktop/phone rendering and selection/copy.
 
+## Linear issue connector — 2026-11-12
+
+- Added Linear as the seventh read-only provider family. Each connection binds one verified Linear workspace and a personal API key held only by the daemon. GraphQL requests use a fixed API host, constant query operations and variables; no mutations or remote status writes.
+- Issue links and TEAM-123 keys resolve; the picker lists assigned open issues and searches titles. New task's From Linear and Artifacts + reuse the existing connector flows, including scoped agent reads, cached content, content unread fingerprints and revoked-token handling. Jira/Linear bare-key ambiguity requires an explicit service or URL.
+- Ported the earlier local `638a423` implementation onto current main, preserving newer onboarding content. Added workspace-address validation and required verification fields; all GraphQL errors, including partial HTTP-200 responses, fail without overwriting cached content. Request only the latest 20 comments, displayed oldest first.
+- Tests cover recognition, API-key secrecy, fixed read-only endpoint, title variables, metadata/comments/sub-issues, fingerprints, workspace mismatch, partial errors, retry-after, revoked keys, more than 100 comments, new-card inputs, existing-card linking, scoped agent reads and unread changes.
+- Onboarding: existing tour row and `jira-connect` tip updated, no new tip id; nine translation catalogs and English/Chinese README updated. What's new and version stay with the release task. Telemetry unchanged: no new feature switch or core action, and connector type/address is never reported.
+- Checks: see the PR delivery note. Unrun: authenticated live Linear workspace/API validation, plugin installation/reload, desktop/phone UI and the repository's designated independent Claude verification session.
+
+
 ## Session preview Next moves appear without reopening (card "side bar session next move chip修复") — 2026-11-11
 
 - Symptom: with a session open in the card sidebar, a turn that ended with next moves sometimes showed no chips until the session was closed and reopened.
