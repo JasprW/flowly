@@ -64,3 +64,36 @@ test("bare and <angle> URLs become links without trailing punctuation", () => {
   ]);
   expect(parseSessionInline("<https://c.io>")[0].url).toBe("https://c.io");
 });
+
+const joined = (text: string) =>
+  parseSessionInline(text)
+    .map((part) => part.text)
+    .join("");
+
+test("underscores inside words stay literal text", () => {
+  for (const text of [
+    "user_id_name",
+    "a_b_c_d",
+    "foo__bar__baz",
+    "a__b__c",
+    "描述_中的_下划线",
+    "flowly的描述中下划线_都没有展示出来，复制的话也会缺少下划线_",
+    "path/to/my_file_v2.ts",
+  ]) {
+    expect(parseSessionInline(text)).toEqual([{ kind: "text", text }]);
+  }
+});
+
+test("standalone underscore emphasis still renders", () => {
+  expect(parseSessionInline("an _italic_ word")).toEqual([
+    { kind: "text", text: "an " },
+    { kind: "italic", text: "italic" },
+    { kind: "text", text: " word" },
+  ]);
+  expect(parseSessionInline("(__bold__)")[1]).toEqual({ kind: "bold", text: "bold" });
+  expect(parseSessionInline("my_var and _em_")).toEqual([
+    { kind: "text", text: "my_var and " },
+    { kind: "italic", text: "em" },
+  ]);
+  expect(joined("snake_case **bold** x_y")).toBe("snake_case bold x_y");
+});
