@@ -169,7 +169,10 @@ export type InlinePart = {
 };
 // Keep intraword underscores literal, including beside other underscores.
 function wordChar(char: string | undefined) {
-  return !!char && !/[\s!-\/:-@[-^`{-~]/.test(char);
+  return (
+    !!char &&
+    (char === "_" || !/[\s\p{P}!-\/:-@[-^`{-~]/u.test(char))
+  );
 }
 export function parseSessionInline(text: string): InlinePart[] {
   const pattern =

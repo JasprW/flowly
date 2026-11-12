@@ -97,3 +97,21 @@ test("standalone underscore emphasis still renders", () => {
   ]);
   expect(joined("snake_case **bold** x_y")).toBe("snake_case bold x_y");
 });
+
+test.each([
+  ["说明：_强调_。", "说明：", "强调", "。", "italic"],
+  ["说明：__强调__。", "说明：", "强调", "。", "bold"],
+  ["说明: _强调_。", "说明: ", "强调", "。", "italic"],
+  ["说明：_强调_ word", "说明：", "强调", " word", "italic"],
+  ["「_强调_」", "「", "强调", "」", "italic"],
+  ["【__强调__】", "【", "强调", "】", "bold"],
+])(
+  "underscore emphasis recognizes Unicode punctuation: %s",
+  (input, before, text, after, kind) => {
+    expect(parseSessionInline(input)).toEqual([
+      { kind: "text", text: before },
+      { kind, text },
+      { kind: "text", text: after },
+    ]);
+  },
+);

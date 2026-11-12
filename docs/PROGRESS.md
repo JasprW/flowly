@@ -5,6 +5,7 @@
 - Fixed session previews and card descriptions swallowing intraword underscores, including when copied: `parseSessionInline` checks the outside characters of underscore emphasis, keeps rejected matches literal and resumes scanning one character later. Existing link parsing stays unchanged.
 - Added regression tests for snake_case, repeated underscores, CJK descriptions, file paths, standalone emphasis and a valid emphasis following a rejected match. Updated SESSION-UX-SPEC §8.
 - Onboarding, What's new and telemetry: unchanged (pure bug fix, no new capability, switch or action).
+- PR #101 review follow-up: Unicode punctuation is now an emphasis boundary; `_` remains a word character despite its Unicode punctuation category. Six regression cases cover Chinese colon/full stop, single-sided punctuation, brackets, italic and bold.
 - Checks: see the PR delivery note. Unrun: live plugin reload, desktop/phone rendering and selection/copy.
 
 ## Session preview Next moves appear without reopening (card "side bar session next move chip修复") — 2026-11-11
