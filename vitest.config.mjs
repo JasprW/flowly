@@ -5,7 +5,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     testTimeout: 15000,
-    exclude: [...configDefaults.exclude, 'docs/verification/**', '.claude/**'],
+    exclude: [...configDefaults.exclude, 'docs/verification/**', '.claude/**', '.worktrees/**'],
     // Fixture repos must not see the machine's global/system git config (hooks
     // paths, signing, identity). Set here, not in npm scripts, so `npx vitest`
     // and IDE runners get the same isolation.
