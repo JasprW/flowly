@@ -20,6 +20,7 @@ import {
   type SessionInsight,
   type SessionInsightView,
   type SessionInsightsState,
+  requireUsableInsightOutput,
 } from "../shared/session-insights";
 import { sessionSummaryRow } from "../shared/native-session";
 import { within } from "./summaries";
@@ -235,7 +236,7 @@ export class SessionInsightService {
         prompt,
         outputSchema: insightJsonSchema(parts) as unknown as Record<string, unknown>,
       }),
-      parse: (text) => parseInsightOutput(text, parts),
+      parse: (text) => requireUsableInsightOutput(parseInsightOutput(text, parts), parts),
       remove: this.remove,
       timeoutMs: this.timeoutMs,
     }).catch((error) => {

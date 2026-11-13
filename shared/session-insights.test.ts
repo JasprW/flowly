@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { insightJsonSchema, insightPrompt, parseInsightOutput, sessionIdeaInstruction } from "./session-insights";
+import { insightJsonSchema, insightPrompt, parseInsightOutput, requireUsableInsightOutput, sessionIdeaInstruction } from "./session-insights";
 
 const parts = { progress: true, nextMoves: true, ideas: true };
 
@@ -50,4 +50,12 @@ test("the prompt and schema only ask for enabled parts; open idea titles are lis
 
 test("an idea becomes the same instruction as a card idea", () => {
   expect(sessionIdeaInstruction({ title: "T", detail: "D", rationale: "R" })).toBe("Good idea — go ahead with it in this task: T\n\nD\n\nWhy: R");
+});
+
+test("requireUsableInsightOutput rejects the all-empty fallback shape but allows valid empty lists", () => {
+  const parts = { progress: true, nextMoves: true, ideas: true };
+  expect(() => requireUsableInsightOutput({ progress: null, moves: [], ideas: [] }, parts)).toThrow(/none of its enabled fields/);
+  expect(requireUsableInsightOutput({ progress: { update: false, state: "", target: "", recap: "", next: "" }, moves: [], ideas: [] }, parts)).toBeTruthy();
+  const movesOnly = { progress: false, nextMoves: false, ideas: false };
+  expect(requireUsableInsightOutput({ progress: null, moves: [], ideas: [] }, movesOnly)).toBeTruthy();
 });
