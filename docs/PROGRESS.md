@@ -12,7 +12,7 @@
 - Review start clears the marker in the same write; a skipped delivery clears it too. Plugin restart turns a still-waiting delivery into Review unavailable with Rerun. The turn-end hook queues the review before settings, model and timeline reads.
 - AUTO-REVIEW-SPEC §3.1, §8.2, §9.1/§9.2 and all nine catalogs updated. Tests cover redelivery, old-result Attention suppression, skip after leaving In review or disabling Auto review, restart/rerun, and waiting behind another card.
 - Onboarding: no tour change or new tip; this corrects the existing review status at the point users see it. Telemetry: no switch or new core action, so no new field. What's new and version unchanged.
-- Verification: see `docs/verification/auto-review-status-2026-11-13/REPORT.md`. Local plugin reload, real queued-delivery state, desktop/compact card and drawer rendering, restart recovery and the compact Rerun action passed; fixture resources were removed and both registries checked. Native windows, phone rendering, a fresh real-model delivering-turn-end/completed verdict and independent exact-commit verification remain unrun.
+- Verification: see `docs/verification/auto-review-status-2026-11-13/REPORT.md`. Local plugin reload, real queued-delivery state, desktop/compact card and drawer rendering, restart recovery and the compact Rerun action passed; fixture resources were removed and both registries checked. Independent exact-commit typecheck and 102 focused tests passed (INDEPENDENT.md); isolated full suite: 1422 passed, 6 skipped. Native windows, phone rendering and a fresh real-model delivering-turn-end/completed verdict remain unrun.
 
 
 ## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13

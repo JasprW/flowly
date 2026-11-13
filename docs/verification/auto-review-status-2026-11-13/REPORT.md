@@ -62,3 +62,9 @@ An early compact drawer screenshot was taken during its opening/loading transiti
 - Independent verification on an exact commit is unrun. Changes remain uncommitted and unpushed in the shared workspace.
 
 No new onboarding tour/tip or telemetry field is warranted for this correction to an existing status display.
+
+## Subsequent isolated delivery checks
+
+The shipping candidate `d5125ba0dff5d421c4a89ee97b2d9e3a1f77e0cb` was assembled from `origin/main` with only this card's hunks, retaining the base SDK and card-image functionality. Its own lockfile dependencies were installed with `npm ci --offline --no-audit --no-fund`. Implementer checks on that clean worktree: typecheck exit 0; full `npm test` exit 0, 1422 passed and 6 skipped (157 files passed, 1 skipped), 24.80 s. This replaces the earlier shared-worktree result as shipping evidence.
+
+Independent Codex checks on that exact source commit passed: typecheck and 102 tests in four focused files, all exit 0. The user explicitly approved Codex after the requested Haiku session hit its spend limit. See `INDEPENDENT.md`, owned by the verifier and included verbatim. The earlier UNRUN statement above records the state of the live follow-up before this independent run; the independent limits are now those in that report. The evidence-only follow-up commit changes no production source, dependency or test.
