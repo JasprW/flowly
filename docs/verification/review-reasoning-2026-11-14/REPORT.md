@@ -49,3 +49,7 @@ Independent session `4d9e69cf-5cbf-42b2-bc45-7b430ba72167` was created in the ca
 ## Independent verification completed
 
 The user selected GPT Luna after the Haiku quota failure. Independent full-access/xhigh session `74d3ab68-9f76-4802-81d1-e388945345e4` verified commit `504280666d24ad8d113749b99252f47e5a2b6763`: typecheck exit 0, 5 focused files/128 tests passed, no reproducible defects or contract mismatch. The verifier owns [independent.md](independent.md); no implementation changed after that run. Exact-commit UI remains UNRUN; shared-install live evidence is identified above.
+
+## CodeRabbit rework
+
+Fixed all three validated comments: optional reasoning metadata failures now log and retain the selected model with default reasoning (error response and thrown failure regressions); the disposable harness uses fileURLToPath and can start again after fully completed cleanup, including a missing .test-data parent. Independent full-access GPT Luna session `d32c36b9-bef5-4150-8479-0140c857d0ee` verified exact commit `12823e8a1c652ce4228370c25c06699e09bfac93`: typecheck exit 0, 6 focused files/147 tests passed, harness syntax exit 0, no defects. [Verifier-owned report](independent-rework.md). No new real fixture/UI run was needed or claimed. Both Luna test sessions and the quota-blocked Haiku session were hard-deleted after verification.
