@@ -30,8 +30,8 @@ async function action(c, args) {
 try {
   const mode = process.argv[2];
   if (mode === 'setup') {
-    if (state.projectId && !state.cleanup) throw new Error('Fixture already exists; use status/cleanup');
-    if (state.cleanup) state = freshState();
+    if (state.projectId && !state.cleanup?.verified) throw new Error('Fixture already exists; use status/cleanup');
+    if (state.cleanup?.verified) state = freshState();
     await mkdir(state.root, { recursive: false }); await save();
     await writeFile(join(state.root, 'README.md'), '# Review status disposable fixture\n');
     await run('git', ['init', state.root]);
@@ -84,6 +84,8 @@ try {
     const remains = { nativeAgents: agents.entries.map(e => e.agent?.id ?? e.id), boardProject: after.projects.some(p => p.id === state.projectId), boardCards: after.tasks.filter(t => state.cards.some(c => c.id === t.id)).map(t => t.id), nativeProject: JSON.stringify(projects).includes(state.nativeProjectId), nativeWorkspaces: workspaces.entries.filter(w => state.cards.some(c => c.workspaceId === w.id)).map(w => w.id) };
     state.cleanup = { at: new Date().toISOString(), ...remains }; await save();
     if (remains.nativeAgents.length || remains.boardProject || remains.boardCards.length || remains.nativeProject || remains.nativeWorkspaces.length) throw new Error('Fixture resources remain: ' + JSON.stringify(remains));
-    await rm(state.root, { recursive: true, force: true }); console.log('cleanup verified', JSON.stringify(remains));
+    await rm(state.root, { recursive: true, force: true });
+    state.cleanup.verified = true; await save();
+    console.log('cleanup verified', JSON.stringify(remains));
   }
 } finally { await api.dispose().catch(() => {}); await client.close().catch(() => {}); }
