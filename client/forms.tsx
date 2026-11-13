@@ -31,7 +31,9 @@ import { agentModelFromValues, type AgentModel } from "../shared/agent-defaults"
 import { modelSettings, modelSettingsValues } from "../shared/settings";
 import { launchKanbanSession } from "./session";
 import { ImageAttachments, useImageAttachments } from "./image-attach";
-import { newMessageId, rememberSentImages } from "./sent-images";
+import { makeThumbnail } from "./web-images";
+import { uploadCardImages } from "./card-image-upload";
+import { cardImageLimit } from "../shared/model";
 import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
 import { tagValues } from "../shared/tags";
@@ -464,7 +466,9 @@ export function TaskForm({
   const theme = useTheme();
   const [task] = useState(initialTask);
   const create = useRpc(rpc.createTask),
-    update = useRpc(rpc.updateTask);
+    update = useRpc(rpc.updateTask),
+    addImage = useRpc(rpc.addCardImage);
+  const toast = useToast();
   const settled = useSettled("task-form");
   const ready = settled;
   useEffect(() => perfLap("task-form.open", "task-form.open.mount"), []);
@@ -535,9 +539,10 @@ export function TaskForm({
     : lanes.filter((s) => (s !== "done" && s !== "cancelled") || s === defaultStatus);
   // The agent's first message; required, never prefilled (title and description already reach it as context).
   const [prompt, setPrompt] = useState("");
-  // Images with the agent's first message (web: paste, drop or Add images).
-  const attachments = useImageAttachments();
-  const [firstMessageId] = useState(newMessageId);
+  // Description images (web: paste, drop or Add images), uploaded once the card is saved (CARD-IMAGES-SPEC §4.2).
+  const images = useImageAttachments(cardImageLimit - (task?.images?.length || 0), () =>
+    t("At most {cardImageLimit} images per card.", { cardImageLimit }),
+  );
   const contextRead = useRpc(rpc.taskContext),
     prepare = useRpc(rpc.prepareSession),
     paseo = usePaseo();
@@ -586,6 +591,12 @@ export function TaskForm({
               ? { externals: externals.map((x) => ({ connectionId: x.item.connectionId, key: x.item.key, itemType: x.item.itemType })) }
               : {}),
           });
+      const pendingImages = images.list();
+      if (pendingImages.length) {
+        // Before the first agent starts, so its context lists them.
+        const uploaded = await uploadCardImages(addImage, result.id, result.revision, pendingImages, makeThumbnail, message);
+        if (uploaded.problems.length) toast.error(uploaded.problems.join(" "));
+      }
       if (task) return onSaved(result.id, undefined, result.status);
       if (!startChosen) return onSaved(result.id);
       try {
@@ -595,10 +606,8 @@ export function TaskForm({
           mode: choice.chosenMode,
           thinking: choice.chosenThinking,
           prompt: prompt.trim(),
-          ...(attachments.attachments.length ? { images: attachments.images(), clientMessageId: firstMessageId } : {}),
           operationId: `first-session-${operationId}`,
         });
-        if (attachments.attachments.length) rememberSentImages(firstMessageId, attachments.uris());
         onSaved(result.id, { sessionId: session.id });
       } catch (e) {
         // The card exists; report and let the user start the agent from the drawer.
@@ -633,13 +642,15 @@ export function TaskForm({
             <Label muted size={font.sm} lines={1}>{t("Follow-up of {title}", { title: seed.followUpTitle })}</Label>
           )}
           <Field title={t("Title")} value={title} onChange={setTitle} placeholder={t("What needs doing?")} onSubmit={submit} />
-          <Field
-            title={t("Description")}
-            value={description}
-            onChange={setDescription}
-            multiline
-            onSubmit={submit}
-          />
+          <ImageAttachments state={images} disabled={pending}>
+            <Field
+              title={t("Description")}
+              value={description}
+              onChange={setDescription}
+              multiline
+              onSubmit={submit}
+            />
+          </ImageAttachments>
           {ready ? <>
           {!task && byFamily.size > 0 && (
             <View style={{ gap: space[2] }}>
@@ -806,15 +817,14 @@ export function TaskForm({
               {startChosen && (
                 <>
                   <AgentPicker choice={choice} disabled={pending} />
-                  <ImageAttachments state={attachments} disabled={pending}>
-                    <Field
-                      title={t("Instruction")}
-                      value={prompt}
-                      onChange={setPrompt}
-                      multiline
-                      placeholder={t("What should the agent do first?")}
-                      onSubmit={submit}                    />
-                  </ImageAttachments>
+                  <Field
+                    title={t("Instruction")}
+                    value={prompt}
+                    onChange={setPrompt}
+                    multiline
+                    placeholder={t("What should the agent do first?")}
+                    onSubmit={submit}
+                  />
                 </>
               )}
             </View>

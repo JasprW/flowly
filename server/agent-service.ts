@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { ideaTitleKey } from "../shared/ideas";
 import { nextMovesAction, noMovesNote } from "../shared/next-moves";
 import { isResolved, linksOf } from "../shared/links";
+import { cardImagePath } from "./card-images";
 import { absoluteTarget, artifactsOf } from "../shared/artifacts";
 import { turnChecklist } from "../shared/turn-checklist";
 import { changeTags, normalizeTags, projectTagStats, tagChangeNote } from "../shared/tags";
@@ -24,6 +25,7 @@ import { mergeWorkpad, plansOf, workpadEnabled, workpadNote, workpadOf, workpadU
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
 import { autoReviewOf, autoReviewRuns, reviewContext } from "../shared/auto-review";
+import { prWorktree, resolveWorktree } from "./review-worktree";
 import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
@@ -322,7 +324,10 @@ export class AgentService {
     const built: ToolContext = {
       identity,
       turnChecklist: [...turnChecklist],
-      task: (({ review: _review, ...task }) => task)(r.task),
+      task: (({ review: _review, images, ...task }) => ({
+        ...task,
+        ...(images ? { images: images.map((image) => ({ ...image, absolutePath: cardImagePath(this.store.directory, task.id, image) })) } : {}),
+      }))(r.task),
       // The card's latest automatic review (AUTO-REVIEW-SPEC §5); state "rework" means its findings come first.
       ...(r.task.review ? { review: reviewContext(r.task.review) } : {}),
       project: r.project,
@@ -459,6 +464,7 @@ export class AgentService {
                       ? parseWorkpadInput(raw)
                       : progressInputSchema.parse(raw);
     const disputes = action === "status" ? (input as StatusInput).disputes : undefined;
+    const namedWorktree = action === "status" ? (input as StatusInput).worktree : undefined;
     const signed = this.secrets.validateRequest(
       identity,
       input.request,
@@ -504,6 +510,40 @@ export class AgentService {
         } catch (e) {
           throw new ToolError("ARTIFACT_INVALID", e instanceof Error ? e.message : String(e));
         }
+      }
+    }
+    // A named worktree (AUTO-REVIEW-SPEC §3.4) is resolved before the write; an exact replay keeps its receipt.
+    let worktree: string | undefined;
+    if (namedWorktree) {
+      if ((input as StatusInput).status !== "in_review")
+        throw new ToolError("INVALID_INPUT", "worktree is only valid when you deliver the card to In review (status in_review).");
+      const replay = (await this.store.read()).agentReceipts.some((r) => r.key === key);
+      if (!replay)
+        worktree = await resolveWorktree(namedWorktree, resources.workspace.workspaceDirectory).then(
+          (w) => w.directory,
+          (e: unknown) => {
+            throw new ToolError("INVALID_INPUT", e instanceof Error ? e.message : String(e));
+          },
+        );
+    }
+    // No worktree named, a shared workspace and a PR among the outputs: the worktree holding its head (§3.4).
+    let foundFrom: string | undefined;
+    if (
+      !namedWorktree &&
+      action === "status" &&
+      (input as StatusInput).status === "in_review" &&
+      resources.task.status !== "in_review" &&
+      resources.workspace.workspaceKind !== "worktree" &&
+      autoReviewRuns(resources.project)
+    ) {
+      const board = await this.store.read();
+      if (!board.agentReceipts.some((r) => r.key === key)) {
+        const links = [
+          ...(outputs || []).map((o) => o.target),
+          ...board.artifacts.filter((a) => a.taskId === resources.task.id && a.role === "output").map((a) => a.target),
+        ];
+        const found = links.length ? await prWorktree(links, resources.workspace.workspaceDirectory).catch(() => null) : null;
+        if (found) [worktree, foundFrom] = [found.directory, found.url];
       }
     }
     // Paths are checked before the write; the transaction only records the result.
@@ -654,6 +694,8 @@ export class AgentService {
           "A moveTo=\"done\" move is only offered together with a delivery to In review (status in_review). Leave it out, or deliver first.",
         );
       // Disputed findings ride on a delivery (GUARDRAILS-SPEC §6.1, B7): checked before anything is written.
+      if (worktree && (next !== "in_review" || next === previous))
+        throw new ToolError("INVALID_INPUT", "worktree is only valid when you deliver the card to In review (status in_review).");
       if (disputes?.length) {
         if (next !== "in_review" || next === previous)
           throw new ToolError("INVALID_INPUT", "disputes is only valid when you deliver the card to In review (status in_review).");
@@ -672,7 +714,9 @@ export class AgentService {
         task.updatedAt = new Date(this.clock()).toISOString();
       }
       let artifactId: string | undefined;
-      let notice: string | undefined;
+      let notice: string | undefined = foundFrom
+        ? `The auto review will check the worktree ${worktree}, which holds the head of ${foundFrom}. Deliver with worktree set when the change is elsewhere.`
+        : undefined;
       const artifactIds: string[] = [];
       for (const output of outputTargets) {
         try {
@@ -861,10 +905,11 @@ export class AgentService {
                 action === "progress" ? (input as ProgressInput).kind : "progress",
               ...(next !== previous ? { from: previous, to: next } : {}),
               ...(setupGap.length ? { setup: { missing: setupGap } } : {}),
+              ...(worktree ? { worktree } : {}),
             }));
       // An agent delivery starts the project's automatic review once this write commits (AUTO-REVIEW-SPEC §3.1).
       if (next === "in_review" && next !== previous && autoReviewRuns(project))
-        review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous };
+        review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous, ...(worktree ? { worktree } : {}) };
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).
       if (carried) recordMoves(carried);
       let ideaId = action === "idea_update" || action === "idea_remove" ? (input as IdeaUpdateInput).id : undefined;

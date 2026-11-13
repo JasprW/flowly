@@ -219,6 +219,8 @@ export const reviewSchema = z.preprocess(legacyReview, z.object({
   }),
   /** The workspace is not a worktree: other cards' uncommitted changes are in it too. */
   shared: z.boolean(),
+  /** The git worktree the delivery named, where the commands ran and the diff was read (AUTO-REVIEW-SPEC §3.4). */
+  worktree: z.string().max(1000).optional(),
   /** Reviews written before guardrails: the rules with their results; never written now (read as `items`). */
   rules: z.array(ruleResultSchema).max(20).optional(),
   /** What the delivery changed (GUARDRAILS-SPEC §6.2); absent on reviews written before guardrails. */
@@ -261,6 +263,19 @@ export const projectSchema = z.object({
   /** Automatic review of agent deliveries (AUTO-REVIEW-SPEC, GUARDRAILS-SPEC §8). Absent means off. */
   autoReview: autoReviewSchema.optional(),
 });
+/** An image of a card's description; the file lives in the plugin data folder (CARD-IMAGES-SPEC §2). */
+export const cardImageLimit = 8;
+export const cardImageMimeTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export const cardImageSchema = z.object({
+  id: z.string().regex(/^img-[a-z0-9-]{1,60}$/),
+  name: z.string().min(1).max(120),
+  mimeType: z.enum(cardImageMimeTypes),
+  bytes: z.number().int().positive(),
+  /** Set when a thumbnail was stored beside the image. */
+  thumbMimeType: z.enum(cardImageMimeTypes).optional(),
+  createdAt: timestamp,
+});
+export type CardImage = z.infer<typeof cardImageSchema>;
 export const taskSchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -275,6 +290,8 @@ export const taskSchema = z.object({
   type: taskTypeSchema.optional(),
   /** Absent: no tags. Unique by `tag`, in the order they were added. */
   tags: z.array(taskTagSchema).max(tagLimits.perTask).optional(),
+  /** Absent: no images. Description images, oldest first (CARD-IMAGES-SPEC). */
+  images: z.array(cardImageSchema).max(cardImageLimit).optional(),
   position: z.number(),
   revision: z.number().int().positive(),
   operationId: z.string(),
@@ -516,6 +533,8 @@ export const eventSchema = z.object({
   byUser: z.boolean().optional(),
   /** agent.permission_requested: the tool's name as the provider reports it, without its input (INSIGHTS-REDESIGN-SPEC §7.2). */
   tool: z.string().max(80).optional(),
+  /** status_changed into In review by an agent: the git worktree it named, real path (AUTO-REVIEW-SPEC §3.4). */
+  worktree: z.string().max(1000).optional(),
   /** status_changed into In review by an agent: the workpad's open items then (WORKPAD-SPEC §5.3). */
   workpad: deliverySchema.optional(),
   /** status_changed into In review by an agent that acknowledged missing card setup (CARD-SETUP-SPEC §3.4). */

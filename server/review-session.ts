@@ -54,6 +54,10 @@ export function reviewPrompt(input: LlmReviewInput): string {
           'This workspace is shared with other cards (not a worktree): changes in the diff that have nothing to do with this card may belong to another card. Do not fail "goal" for them; fail it only when something the user asked for is missing or wrong.',
         ]
       : []),
+    // §3.4: the delivery named a worktree; the session's own working directory is the card's workspace, not the code.
+    ...(input.worktree
+      ? [`The delivered code is in the git worktree ${input.worktree}, not in your working directory: read files there. The commands ran there and the diff below is its branch's change.`]
+      : []),
     // §6.3: from round 2 only the changes since the previous delivery are shown.
     ...(input.incremental
       ? [
@@ -62,7 +66,7 @@ export function reviewPrompt(input: LlmReviewInput): string {
       : []),
     `Reply only with JSON: {"items":[{"id","verdict","detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,
     "",
-    `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}`,
+    `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}${input.task.images?.length ? `\nCard images (part of the description; view each with your image tool): ${input.task.images.join(", ")}` : ""}`,
     // The built-in check's yardstick (§4.2): the user's own words, oldest first; a later one replaces an earlier one.
     ...(input.conversation !== undefined
       ? [

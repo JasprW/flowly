@@ -6,6 +6,30 @@
 
 # Implementation progress
 
+## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13
+
+- A delivery to In review without `worktree`, from a shared workspace with Auto review on, now looks at the PR/MR links among this call's outputs and the card's existing outputs. A link whose host and repository match a remote of the card's repository gives its head commit through `git ls-remote` (5 s, no prompts); the one worktree, other than the repository's own directory, whose HEAD contains it is reviewed, recorded on the delivery event like an explicit `worktree`, and named in the result's `notice`. None, several, another repository's link or a git/network failure changes nothing (`server/review-worktree.ts` `prWorktree`).
+- Purely local git: works without a GitHub/GitLab connector, and with unpushed commits on top of the PR head.
+- AUTO-REVIEW-SPEC §3.4 and the skill text updated. Onboarding, telemetry, What's new: unchanged (agent-facing, no UI).
+- Checks: see the delivery note. Unrun: a live delivery through the installed plugin.
+
+## Auto review reads the delivered worktree (card "自动验收能看到卡片在 git worktree 里的改动") — 2026-11-13
+
+- `flowly_update_status(in_review)` and the CLI take an optional `worktree` (absolute path, a folder inside it, or the branch checked out in it). The daemon resolves it before the write (`server/review-worktree.ts`) and refuses, with `INVALID_INPUT`, a path that is missing, outside git, another repository, the card's own workspace, or a branch no worktree has checked out. The resolved real path rides on the delivery event; Rerun reuses it.
+- The review resolves it again at start, then runs the commands, reads shape and diff and takes the fingerprint there; `shared` is false and `review.worktree` records the directory. The diff base is the nearer merge-base of the home repository's HEAD and its upstream (or the card's `baseRef`), so main moving on adds nothing. A worktree that is gone makes every check unavailable instead of falling back to the workspace. The review prompt says where the code is.
+- Skill text, tool description, CLI help, AUTO-REVIEW-SPEC §3.4 / §2 / §8.2 and GUARDRAILS-SPEC §6.1 updated.
+- Onboarding: no tour copy or tip (agent-facing delivery parameter, no user-visible UI). Telemetry: no new field (not a switch; deliveries are already counted). What's new: none.
+- Checks: see the delivery note. Unrun: a live auto review through the installed plugin.
+
+## Card description images (issue #99, card "Add image as description") — 2026-11-13
+
+- Spec: `docs/CARD-IMAGES-SPEC.md` (user decisions 2026-11-13: copies in `<plugin data>/card-images/<taskId>/`, phones view and remove only, thumbnails under the description).
+- Daemon: `server/card-images.ts` (`card-images.add/remove/read` RPCs, revision CAS, files written before the board and removed when its write fails, start-up cleanup of unreferenced files, card delete and project Remove move them to `removed/`). The native chip projection drops `images`.
+- Agents: the session context lists the absolute paths right after the description; `flowly_get_task` gives each image its `absolutePath`; the skill text says to view them before starting; the auto review prompt lists them.
+- Client: thumbnail row under the description in the card sidebar (thumbnails only while the sidebar is ready, full image only in the viewer, with previous/next and Remove); web paste/drop/**Add images** on the description of New task and Edit task, a 320 px canvas thumbnail (WebP, else JPEG), uploads after the save. New task's former first-message images became description images.
+- Onboarding: tip `card-images` (web, open card without images) and a More features line. README highlight. Telemetry: no heartbeat field (not a core action).
+- Live check on Tinylink (`docs/verification/card-images/`): web paste/drop/file chooser, save, thumbnails, viewer, remove, context paths, card delete moving images to `removed/`, and a Claude Haiku session reading the images by path all passed. Unrun: Codex (the `codex-aicodewith` provider failed before its turn; plain `codex` is not installed) and the phone (no device reachable over adb, AndroMeld not running).
+
 ## Preserve intraword underscores in session/card Markdown — 2026-11-12
 
 - Fixed session previews and card descriptions swallowing intraword underscores, including when copied: `parseSessionInline` checks the outside characters of underscore emphasis, keeps rejected matches literal and resumes scanning one character later. Existing link parsing stays unchanged.

@@ -90,3 +90,9 @@ test("the reviewer's model: the Review model, else the summary models, never the
   expect((await review("claude/claude-opus-5-5")).model).toBe("claude/claude-opus-5-5");
   expect(tried).toEqual(["claude/claude-haiku-5-5", "claude/claude-opus-5-5"]);
 });
+
+test("the card's images are listed by path under the description, nothing without them (CARD-IMAGES-SPEC §5)", () => {
+  expect(reviewPrompt(base)).not.toContain("Card images");
+  const prompt = reviewPrompt({ ...base, task: { ...base.task, images: ["/d/card-images/t/img-1.png"] } });
+  expect(prompt).toContain("Card images (part of the description; view each with your image tool): /d/card-images/t/img-1.png");
+});

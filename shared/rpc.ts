@@ -36,6 +36,7 @@ import {
   taskPlacement,
   projectSchema,
   taskSchema,
+  cardImageMimeTypes,
   eventSchema,
   planSnapshotSchema,
 } from "./model";
@@ -345,6 +346,28 @@ export const deleteArtifact = defineRpc({
   name: "artifacts.delete",
   input: z.strictObject({ id: z.string().min(1) }),
   output: z.object({ id: z.string() }),
+});
+/** Description images of a card (CARD-IMAGES-SPEC §3). */
+const base64 = (max: number) => z.string().min(1).max(Math.ceil((max * 4) / 3) + 4).regex(/^[A-Za-z0-9+/]+=*$/, "Image data must be base64.");
+export const addCardImage = defineRpc({
+  name: "card-images.add",
+  input: z.strictObject({
+    taskId: z.string().min(1),
+    expectedRevision: z.number().int(),
+    image: z.strictObject({ name: z.string().max(200), mimeType: z.enum(cardImageMimeTypes), data: base64(5 * 1024 * 1024) }),
+    thumb: z.strictObject({ mimeType: z.enum(cardImageMimeTypes), data: base64(1024 * 1024) }).optional(),
+  }),
+  output: z.object({ task: taskSchema }),
+});
+export const removeCardImage = defineRpc({
+  name: "card-images.remove",
+  input: z.strictObject({ taskId: z.string().min(1), expectedRevision: z.number().int(), id: z.string().min(1).max(100) }),
+  output: z.object({ task: taskSchema }),
+});
+export const readCardImage = defineRpc({
+  name: "card-images.read",
+  input: z.strictObject({ taskId: z.string().min(1), id: z.string().min(1).max(100), size: z.enum(["thumb", "full"]) }),
+  output: z.object({ dataUri: z.string() }),
 });
 /** A person ticks an acceptance criterion (WORKPAD-SPEC §6.3). */
 export const checkWorkpad = defineRpc({
