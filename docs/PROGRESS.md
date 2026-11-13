@@ -8,6 +8,8 @@
 
 ## Review reasoning selection (card "auto review模型reasoning选择") — 2026-11-14
 
+- PR follow-up: hunks separated from shared SDK 0.16/image-removal work onto main’s SDK 0.15. User-authorized GPT Luna independently verified `5042806`: typecheck exit 0, focused 128/128 tests passed, no reproducible defects. See [independent report](verification/review-reasoning-2026-11-14/independent.md).
+
 - Live follow-up: local directory already installed; reload exit 0, enabled/running. Actual desktop (1700×1000) and compact (1000×900) browser UI selected high/xhigh, fresh context and plugin reload retained xhigh. Real Flowly auto reviewer `6e42edbf-9767-44fd-9e4f-d2de56a9bcc0` persisted `thinkingOptionId=xhigh` on codex/gpt-6.1-terra and passed; auto-archived. Disposable native/board resources and directory removed with zero remaining; original review settings restored. Telemetry disabled per dev-install rules. Native windows were not touched; device UI remains UNRUN. Details and screenshots in the report below.
 
 - Settings → Models → Review model now exposes provider-advertised Reasoning options and Model default. `reviewThinking` is optional; model changes clear it. The reviewer reads the model/reasoning pair together and sends `thinkingOptionId` only while that explicit model still supports it; summary fallback gets no override. Corrected the misleading project-default label/spec to match existing summary fallback behavior.

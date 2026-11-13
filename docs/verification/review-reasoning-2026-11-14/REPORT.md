@@ -45,3 +45,7 @@ The earlier claim that strict read-only access requires a new host API was too s
 Prepared from origin/main without changing the shared checkout/index. Implementation commit `204a997ae05f3486b4da8a86ff648ea22db70a56`: implementer typecheck exit 0; full tests exit 0, 157 files passed/1 skipped, 1430 tests passed/6 skipped. Subsequent permission-assessment correction is documentation only.
 
 Independent session `4d9e69cf-5cbf-42b2-bc45-7b430ba72167` was created in the card workspace as the required claude/claude-haiku-5-5 with bypassPermissions. It errored before verification: individual spend limit. No independent checks or report were produced. That test session was hard-deleted. Independent verification remains UNRUN pending the user's model/provider decision; it is not counted as a pass.
+
+## Independent verification completed
+
+The user selected GPT Luna after the Haiku quota failure. Independent full-access/xhigh session `74d3ab68-9f76-4802-81d1-e388945345e4` verified commit `504280666d24ad8d113749b99252f47e5a2b6763`: typecheck exit 0, 5 focused files/128 tests passed, no reproducible defects or contract mismatch. The verifier owns [independent.md](independent.md); no implementation changed after that run. Exact-commit UI remains UNRUN; shared-install live evidence is identified above.
