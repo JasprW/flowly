@@ -301,3 +301,6 @@ releases from validated version tags. [Spec](CI-CD-SPEC.md),
 2026-10-29 Shortcut connector：第六个只读 provider 族，覆盖 story 与 epic，`sc-<id>` key，
 评论内联返回，epic 的 Markdown 带它的 story 列表。见 [spec](CONNECTORS-SPEC.md) §14。connector
 框架本身不变。
+
+2026-11-12 Linear connector：第七个只读 provider 族，覆盖 issue，`TEAM-123` key，GraphQL 只发常量 query
+（`queryEndpoints` 放行 `/graphql`），issue 的 Markdown 带子 issue 与评论。见 [spec](CONNECTORS-SPEC.md) §15。
