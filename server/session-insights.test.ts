@@ -39,6 +39,7 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
   const sent: { agentId: string; text: string }[] = [];
   const workspacesCreated: unknown[] = [];
   let archived = 0;
+  const refetched: string[] = [];
   const paseo = {
     providers: {
       listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
@@ -73,7 +74,13 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
       ref: (agentId: string) => ({
         refresh: async () => ({ agent: { id: agentId, archivedAt: null, workspaceId: "w1", provider: "codex", model: "gpt-6-luna", currentModeId: "full-access", thinkingOptionId: null, status: options.agentStatus ?? "idle", cwd: "/repo" } }),
         send: async (text: string) => void sent.push({ agentId, text }),
-        timeline: { append: async (row: { kind: string; id: string; data: Record<string, unknown> }) => void appended.push({ agentId, row }) },
+        timeline: {
+          append: async (row: { kind: string; id: string; data: Record<string, unknown> }) => void appended.push({ agentId, row }),
+          refetch: async () => {
+            refetched.push(agentId);
+            return { entries: turn("fix login").map((item) => ({ item })), hasOlder: false, startCursor: null };
+          },
+        },
       }),
     },
   } as unknown as PaseoApi;
@@ -81,7 +88,7 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
   const service = new SessionInsightService(store, rows, async () => settings, async () => "en", 1000, 1000, async (a) => { await a.archive(); });
   const agent: OutsideAgent = { id: "a1", workspaceId: "w1", parentAgentId: null, title: "Fix login", cwd: "/repo" };
   const json = (o: object) => JSON.stringify({ update: true, state: "S", target: "T", recap: "- r", next: "N", moves: [], ideas: [], ...o });
-  return { store, service, paseo, replies, created, appended, sent, workspacesCreated, archived: () => archived, agent, json, set: (s: Partial<InsightSettings>) => (settings = { ...settings, ...s }) };
+  return { store, service, paseo, refetched, replies, created, appended, sent, workspacesCreated, archived: () => archived, agent, json, set: (s: Partial<InsightSettings>) => (settings = { ...settings, ...s }) };
 }
 
 test("a completed turn of an outside session runs one archived child insight session and stores progress, moves and ideas", async () => {
@@ -115,6 +122,25 @@ test("off by default switch, no parts, subagents, sessions without a workspace, 
   await x.service.enqueue({ ...x.agent, labels: { flowly: "summarizer", "flowly-memory": "retro" } }, turn("x"), x.paseo);
   expect(x.created).toEqual([]);
   expect((await x.service.view()).length).toBe(0);
+});
+
+test("a turn's timeline is read only for a session that gets an insight: never for children, background agents or with insights off", async () => {
+  const x = await setup({ settings: { enabled: false } });
+  await x.service.turnEnded(x.agent, x.paseo);
+  x.set({ enabled: true, parts: { progress: false, nextMoves: false, ideas: false } });
+  await x.service.turnEnded(x.agent, x.paseo);
+  x.set({ parts: { progress: true, nextMoves: true, ideas: true } });
+  // Flowly's own insight, summarizer and review sessions are children of the session they serve.
+  await x.service.turnEnded({ ...x.agent, parentAgentId: "p" }, x.paseo);
+  await x.service.turnEnded({ ...x.agent, workspaceId: null }, x.paseo);
+  expect(x.refetched).toEqual([]);
+  expect(x.created).toEqual([]);
+  // A qualifying session reads its turn and runs the insight as before.
+  x.replies.push({ text: x.json({}) });
+  await x.service.turnEnded(x.agent, x.paseo);
+  expect(x.refetched).toEqual(["a1"]);
+  expect(x.created).toHaveLength(1);
+  expect(x.created[0].prompt).toContain("User: fix login");
 });
 
 test("each switch only asks for and stores its own part", async () => {

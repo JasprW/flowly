@@ -1223,3 +1223,10 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 端到端测出并修复：Unwrap 后侧栏仍显示 "Workspace is unavailable or archived."（工作区查询缓存的还是归档状态）；现在 Unwrap 后会像 Refresh details 那样重新读取。
 - [ ] 未跑：真机手机（只在浏览器手机宽度下验证）、独立会话复验。
 - 引导/提示/What's new：本步不加，Unwrap 只在已收尾卡片的侧栏里出现、按钮自明；第二步默认开启 Auto wrap up 时一并更新 `first-done` 提示、导览和 What's new。遥测：不加字段，第二步再定。
+
+## 2026-11-13 turn.after 钩子先过滤再读 turn timeline
+
+- 起因：PostHog 上的 `Flowly turn timeline not read`（1.8.0、1.7.2 各 1 个安装）是 SDK `fetchAgentTimeline` 抛出的普通 Error，最可能是读取时 Flowly 已硬删除了自己的临时会话（`Agent not found`）；而且每个外部会话每回合结束都会拉 200 条 timeline。
+- 改动：外部会话分支改走 `SessionInsightService.turnEnded`（先判断 `isOutsideCandidate` 和开关，再读 timeline）；workflow 钩子改走 `WorkflowInsightsService.turnEnded`（先判断未归档卡片 workspace、workflow insights 开关、非后台 agent；有 `parentAgentId` 的先查标签，summarizer 或已删除则跳过）。NATIVE-SESSION-SPEC §12.2、WORKFLOW-INSIGHTS-SPEC §3.1 已同步。
+- 用户自己在卡片 workspace 里建的子 session（无 summarizer 标签）仍照常采集命令。
+- 测试：`server/session-insights.test.ts`、`server/workflow-insights.test.ts` 各加一条，断言不合格的会话不调用 `timeline.refetch`、合格会话行为不变。

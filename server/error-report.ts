@@ -143,6 +143,17 @@ export function outsideError(error: unknown) {
 }
 
 /**
+ * File system codes that mean the user's disk or folder refuses the write: read-only volume, no
+ * permission, disk full, or the folder is gone (moved or deleted). Code cannot fix them, so a
+ * background writer to the user's own folders may log them without reporting (§11.2). Not part of
+ * `outsideError`: elsewhere (RPC, Flowly's data folder) the same codes still point at a bug.
+ */
+const environmentCodes = new Set(["EROFS", "EPERM", "EACCES", "ENOSPC", "ENOENT"]);
+export function userEnvironmentError(error: unknown) {
+  return error instanceof Error && environmentCodes.has(String((error as NodeJS.ErrnoException).code));
+}
+
+/**
  * Errors an RPC handler throws on purpose, as its answer to the caller (validation, conflicts,
  * disabled features): not reported. A plain `Error` without a system code is such a message too.
  */
@@ -171,14 +182,15 @@ export function reportError(source: string, error: unknown, handled = true) {
 
 /**
  * Logs a background failure (label, optional log-only context, message) and reports it unless it
- * is an `outsideError`. Every daemon-side error log goes through here; `server/error-report.test.ts`
- * fails on a bare `console.error` elsewhere. `context` (ids, paths) is printed but never reported.
+ * is an `outsideError` or `report` is false (the caller decided it is outside Flowly's control).
+ * Every daemon-side error log goes through here; `server/error-report.test.ts` fails on a bare
+ * `console.error` elsewhere. `context` (ids, paths) is printed but never reported.
  */
-export function logFailure(label: string, error: unknown, context?: string) {
+export function logFailure(label: string, error: unknown, context?: string, report = true) {
   const text = error instanceof Error ? error.message : String(error);
   if (context) console.error(label, context, text);
   else console.error(label, text);
-  if (!outsideError(error)) reportError(label, error);
+  if (report && !outsideError(error)) reportError(label, error);
 }
 
 /** The plugin context with every RPC handler's unexpected failures reported, then rethrown unchanged. */

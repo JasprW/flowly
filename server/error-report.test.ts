@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, logFailure, outsideError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
+import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, logFailure, outsideError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink, userEnvironmentError } from "./error-report";
 import { LocalDaemonUnavailable } from "./local-daemon";
 import { SummaryModelError } from "./summary-models";
 import { MAX_ERRORS_PER_DAY, TelemetryService } from "./telemetry";
@@ -262,6 +262,25 @@ test("logFailure: context goes to the log only, the report gets the label", () =
   logFailure("Kanban project folder not saved:", new Error("EACCES /Users/alice"), "project-123");
   expect(log).toHaveBeenCalledWith("Kanban project folder not saved:", "project-123", "EACCES /Users/alice");
   expect(reported).toEqual(["Kanban project folder not saved:"]);
+  log.mockRestore();
+});
+
+test("logFailure: a caller-marked environment failure is logged, not reported; other codes are not environment", () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
+  for (const code of ["EROFS", "EPERM", "EACCES", "ENOSPC", "ENOENT"]) {
+    const error = failure("Error", code);
+    expect(userEnvironmentError(error)).toBe(true);
+    logFailure("Kanban project folder not saved:", error, "p", !userEnvironmentError(error));
+  }
+  for (const error of [failure("TypeError"), failure("Error", "EISDIR"), failure("Error", "SQLITE_BUSY")]) {
+    expect(userEnvironmentError(error)).toBe(false);
+    logFailure("Kanban project folder not saved:", error, "p", !userEnvironmentError(error));
+  }
+  expect(userEnvironmentError("ENOENT")).toBe(false);
+  expect(log).toHaveBeenCalledTimes(8);
+  expect(reported).toHaveLength(3);
   log.mockRestore();
 });
 

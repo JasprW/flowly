@@ -255,7 +255,8 @@ Content-Type: application/json
 
 - `DaemonConnectionError`：到 Paseo daemon 的连接断开（daemon 重启时进行中的请求）。宿主的 client 是另一份代码，所以按 `name` 判断；
 - `LocalDaemonUnavailable`：本地连接（`server/local-daemon.ts`）没有地址（Paseo 的 supervisor 正在重启 daemon，`paseo.pid` 的 `listen` 为 `null`）、没有 `paseo.pid`（daemon 没在运行）、`paseo.pid` 重试后仍是空的或写了一半（Paseo 原地改写这个文件，见 WORKSPACE-RESTORE-SPEC 第 1 步）、daemon 不应答连接（超时、拒绝、连接关闭；关了自动重连的 client 这时抛普通 `Error`），或没有本地凭据。daemon 拒绝本地凭据（`DaemonAuthenticationError`）和连上之后 Paseo 版本缺少所需方法的错误照常上报（2026-11-10，卡片“近期error排查”）；
-- `SummaryModelError`：所有摘要模型都失败或没有可用模型（provider 的问题，卡片或洞察里会显示错误）。
+- `SummaryModelError`：所有摘要模型都失败或没有可用模型（provider 的问题，卡片或洞察里会显示错误）；
+- 项目文件夹快照（`Kanban project folder not saved`，`server/project-folder.ts`）写 `<项目根>/.flowly/` 时遇到用户环境的文件系统错误码：`EROFS`（只读卷）、`EPERM`/`EACCES`（无权限）、`ENOSPC`（磁盘满）、`ENOENT`（项目根目录已被删除或移动）。只记日志，原因照常留在项目的文件夹状态里供界面显示；判断函数是 `userEnvironmentError`，由调用方传给 `logFailure` 的 `report` 参数。它不并入 `outsideError`：RPC 和写 Flowly 自己数据目录时的同类错误码仍可能是 bug，照常上报；快照写入的其他错误（如 `TypeError`）也照常上报（2026-11-13，卡片“项目文件夹快照写入失败时，不再把用户环境问题上报为错误”：1.8.0 发布后 8 条 `$exception` 里 5 条是这一类，且 daemon 每次重启会再报一次）。
 
 ### 11.3 事件内容（白名单）
 
@@ -293,4 +294,4 @@ Content-Type: application/json
 7. `paseo_version`：取到时随事件发出并缓存；第一次取不到时发 `""`，之后再取到就用新值；取值抛错不影响上报（`server/error-report.test.ts`）。
 5. RPC 包装：同步和异步 handler 的程序错误被上报并原样抛出；`ToolError` 只抛出不上报；正常返回值不变。
 6. `properties` 的键集合与 11.3 节完全一致，`distinct_id` 与 `telemetry.json` 的 `installId` 相同；全新安装时同时上报的多个错误使用同一个 `installId`。
-8. Flowly 之外的失败（`DaemonConnectionError`、`LocalDaemonUnavailable`、`SummaryModelError`）经 RPC 包装和 `logFailure` 都不上报，日志照常；其他后台失败照常上报（`server/error-report.test.ts`）。
+8. Flowly 之外的失败（`DaemonConnectionError`、`LocalDaemonUnavailable`、`SummaryModelError`）经 RPC 包装和 `logFailure` 都不上报，日志照常；其他后台失败照常上报（`server/error-report.test.ts`）。项目文件夹快照写入因 `EROFS`/`EPERM`/`EACCES`/`ENOSPC`/`ENOENT` 失败时不上报、文件夹状态保留错误，`TypeError` 照常上报（`server/project-folder.test.ts`）。
