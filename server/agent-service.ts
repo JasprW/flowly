@@ -24,6 +24,7 @@ import { mergeWorkpad, plansOf, workpadEnabled, workpadNote, workpadOf, workpadU
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
 import { autoReviewOf, autoReviewRuns, reviewContext } from "../shared/auto-review";
+import { resolveWorktree } from "./review-worktree";
 import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
@@ -459,6 +460,7 @@ export class AgentService {
                       ? parseWorkpadInput(raw)
                       : progressInputSchema.parse(raw);
     const disputes = action === "status" ? (input as StatusInput).disputes : undefined;
+    const namedWorktree = action === "status" ? (input as StatusInput).worktree : undefined;
     const signed = this.secrets.validateRequest(
       identity,
       input.request,
@@ -505,6 +507,20 @@ export class AgentService {
           throw new ToolError("ARTIFACT_INVALID", e instanceof Error ? e.message : String(e));
         }
       }
+    }
+    // A named worktree (AUTO-REVIEW-SPEC §3.4) is resolved before the write; an exact replay keeps its receipt.
+    let worktree: string | undefined;
+    if (namedWorktree) {
+      if ((input as StatusInput).status !== "in_review")
+        throw new ToolError("INVALID_INPUT", "worktree is only valid when you deliver the card to In review (status in_review).");
+      const replay = (await this.store.read()).agentReceipts.some((r) => r.key === key);
+      if (!replay)
+        worktree = await resolveWorktree(namedWorktree, resources.workspace.workspaceDirectory).then(
+          (w) => w.directory,
+          (e: unknown) => {
+            throw new ToolError("INVALID_INPUT", e instanceof Error ? e.message : String(e));
+          },
+        );
     }
     // Paths are checked before the write; the transaction only records the result.
     // An item link or key of a configured connection becomes an external input (CONNECTORS-SPEC §3.1).
@@ -654,6 +670,8 @@ export class AgentService {
           "A moveTo=\"done\" move is only offered together with a delivery to In review (status in_review). Leave it out, or deliver first.",
         );
       // Disputed findings ride on a delivery (GUARDRAILS-SPEC §6.1, B7): checked before anything is written.
+      if (worktree && (next !== "in_review" || next === previous))
+        throw new ToolError("INVALID_INPUT", "worktree is only valid when you deliver the card to In review (status in_review).");
       if (disputes?.length) {
         if (next !== "in_review" || next === previous)
           throw new ToolError("INVALID_INPUT", "disputes is only valid when you deliver the card to In review (status in_review).");
@@ -861,10 +879,11 @@ export class AgentService {
                 action === "progress" ? (input as ProgressInput).kind : "progress",
               ...(next !== previous ? { from: previous, to: next } : {}),
               ...(setupGap.length ? { setup: { missing: setupGap } } : {}),
+              ...(worktree ? { worktree } : {}),
             }));
       // An agent delivery starts the project's automatic review once this write commits (AUTO-REVIEW-SPEC §3.1).
       if (next === "in_review" && next !== previous && autoReviewRuns(project))
-        review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous };
+        review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous, ...(worktree ? { worktree } : {}) };
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).
       if (carried) recordMoves(carried);
       let ideaId = action === "idea_update" || action === "idea_remove" ? (input as IdeaUpdateInput).id : undefined;

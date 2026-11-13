@@ -54,6 +54,10 @@ export function reviewPrompt(input: LlmReviewInput): string {
           'This workspace is shared with other cards (not a worktree): changes in the diff that have nothing to do with this card may belong to another card. Do not fail "goal" for them; fail it only when something the user asked for is missing or wrong.',
         ]
       : []),
+    // §3.4: the delivery named a worktree; the session's own working directory is the card's workspace, not the code.
+    ...(input.worktree
+      ? [`The delivered code is in the git worktree ${input.worktree}, not in your working directory: read files there. The commands ran there and the diff below is its branch's change.`]
+      : []),
     // §6.3: from round 2 only the changes since the previous delivery are shown.
     ...(input.incremental
       ? [
