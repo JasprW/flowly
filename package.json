@@ -43,8 +43,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --testTimeout=15000 --exclude 'docs/verification/**' --exclude '.claude/**'",
-    "dev": "vitest --exclude 'docs/verification/**' --exclude '.claude/**'",
+    "test": "vitest run",
+    "dev": "vitest",
     "test:ci": "node --test server/ci/release.checks.mjs",
     "ci:package": "node server/ci/package.mjs"
   },

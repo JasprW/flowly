@@ -219,6 +219,8 @@ export const reviewSchema = z.preprocess(legacyReview, z.object({
   }),
   /** The workspace is not a worktree: other cards' uncommitted changes are in it too. */
   shared: z.boolean(),
+  /** The git worktree the delivery named, where the commands ran and the diff was read (AUTO-REVIEW-SPEC §3.4). */
+  worktree: z.string().max(1000).optional(),
   /** Reviews written before guardrails: the rules with their results; never written now (read as `items`). */
   rules: z.array(ruleResultSchema).max(20).optional(),
   /** What the delivery changed (GUARDRAILS-SPEC §6.2); absent on reviews written before guardrails. */
@@ -531,6 +533,8 @@ export const eventSchema = z.object({
   byUser: z.boolean().optional(),
   /** agent.permission_requested: the tool's name as the provider reports it, without its input (INSIGHTS-REDESIGN-SPEC §7.2). */
   tool: z.string().max(80).optional(),
+  /** status_changed into In review by an agent: the git worktree it named, real path (AUTO-REVIEW-SPEC §3.4). */
+  worktree: z.string().max(1000).optional(),
   /** status_changed into In review by an agent: the workpad's open items then (WORKPAD-SPEC §5.3). */
   workpad: deliverySchema.optional(),
   /** status_changed into In review by an agent that acknowledged missing card setup (CARD-SETUP-SPEC §3.4). */

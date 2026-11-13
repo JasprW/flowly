@@ -251,3 +251,30 @@ describe("Shortcut keys and links", () => {
     expect(externalTarget("sc-1042", [sc])).toMatchObject({ connectionId: "sc", key: "sc-1042" });
   });
 });
+
+describe("Linear keys and links", () => {
+  const lin = { id: "lin", provider: "linear" as const, baseUrl: "https://linear.app/acme" };
+  test("issue links, with title slugs, and other workspaces", () => {
+    expect(recognizeUrl("https://linear.app/acme/issue/ENG-123", lin)).toEqual({ itemType: "issue", key: "ENG-123" });
+    expect(recognizeUrl("https://linear.app/acme/issue/eng-123/fix-the-retry-backoff", lin)).toEqual({ itemType: "issue", key: "ENG-123" });
+    expect(recognizeUrl("https://linear.app/other-org/issue/ENG-123", lin)).toBeNull();
+    expect(recognizeUrl("https://linear.app/acme/project/roadmap-abc123", lin)).toBeNull();
+    expect(recognizeUrl("https://linear.app/acme/issue/not-a-key", lin)).toBeNull();
+  });
+  test("TEAM-123 keys, picker queries, urls and labels", () => {
+    expect(parseKey("eng-123", "linear")).toEqual({ itemType: "issue", key: "ENG-123" });
+    expect(parseKey("123", "linear")).toBeNull();
+    // A bare number names no issue without its team key, so the picker searches it as text.
+    expect(classifyQuery("123", lin)).toEqual({ kind: "text", text: "123" });
+    expect(classifyQuery("ENG-123", lin)).toEqual({ kind: "key", itemType: "issue", key: "ENG-123" });
+    expect(classifyQuery("retry backoff", lin)).toEqual({ kind: "text", text: "retry backoff" });
+    expect(itemUrl(lin, "issue", "ENG-123")).toBe("https://linear.app/acme/issue/ENG-123");
+    expect(faceKey({ key: "ENG-123", itemType: "issue" })).toBe("ENG-123");
+    expect(itemLabel("linear", "issue")).toBe("Linear issue");
+    expect(externalTarget("ENG-123", [lin])).toMatchObject({ connectionId: "lin", key: "ENG-123" });
+    // The same key fits a Jira connection too: a bare key with both connected is ambiguous, a link is not.
+    const jira = { id: "j", provider: "jira-cloud" as const, baseUrl: "https://acme.atlassian.net" };
+    expect(externalTarget("ENG-123", [lin, jira])).toBeNull();
+    expect(externalTarget("https://linear.app/acme/issue/ENG-123", [lin, jira])).toMatchObject({ connectionId: "lin" });
+  });
+});

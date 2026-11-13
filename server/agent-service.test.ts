@@ -22,7 +22,7 @@ async function setup(seed?: Parameters<typeof agentFixture>[0]) {
 }
 afterEach(async () => {
   await Promise.all(
-    roots.splice(0).map((p) => rm(p, { recursive: true, force: true })),
+    roots.splice(0).map((p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })),
   );
 });
 const input = (

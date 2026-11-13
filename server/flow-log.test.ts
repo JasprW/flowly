@@ -78,7 +78,7 @@ test("board writes append their events to the flow log after commit, including e
     board.tasks.push({ id: "a", projectId: "p1", workspaceId: "w", sourcePath: root, repoPaths: [root], title: "A", description: "", status: "todo", priority: "normal", position: 0, revision: 1, operationId: "o", createdAt: "", updatedAt: "", archivedAt: null });
     for (let i = 0; i < 105; i++) store.event(board, { taskId: "a", actor: "system", action: "agent.turn_started" });
   });
-  await new Promise((r) => setTimeout(r, 30));
+  // flow.read waits for the queued append, so no sleep is needed.
   expect((await store.read()).events.length).toBe(100);
   expect((await flow.read("p1")).length).toBe(105);
   // A failed transaction writes nothing.
@@ -89,6 +89,5 @@ test("board writes append their events to the flow log after commit, including e
     }),
   ).rejects.toThrow("nope");
   await store.mutate(() => undefined);
-  await new Promise((r) => setTimeout(r, 30));
   expect((await flow.read("p1")).length).toBe(105);
 });

@@ -46,7 +46,7 @@
 
 1. **Paseo 原生提醒拦不住。** 交付那一轮结束时 Paseo 会提醒 “agent 完成了”，这时评审还没开始；Flowly 只控制自己的 Attention，在卡片上标注评审状态（D4）。
 2. **Paseo 脚本拿不到退出码。** 命令检查由 daemon 用参数数组直接起子进程。
-3. **共享工作区会互相干扰。** 多张卡共用项目根目录时，命令测到的是所有卡的改动合在一起的状态。不隔离（D6），结果标注“共享工作区”，记录 sha 和 dirty。
+3. **共享工作区会互相干扰。** 多张卡共用项目根目录时，命令测到的是所有卡的改动合在一起的状态。不隔离（D6），结果标注“共享工作区”，记录 sha 和 dirty。agent 把改动放在另一个 worktree 时，交付带上 `worktree`，评审就在那里跑（§3.4）。
 4. **workpad 里的命令不自动执行。** 那是被评审的 agent 写的，照着执行等于让它绕过 Paseo 的权限确认。daemon 只执行项目规则里的命令，规则只能由用户写入或确认（§6）。
 
 ## 3. 流程与状态
@@ -91,6 +91,21 @@ stateDiagram-v2
 
 - `round` 从 1 开始，每次 Rework 后再交付 +1；已返工次数 = `round - 1`。`maxRounds = 2` 表示最多自动返工 2 次、最多评审 3 次；`maxRounds = 0` 表示第一次不通过就进 Blocked。
 - 重置为 1：上一次评审结束后人移动了卡片；该卡开始了不止一个回合（返工消息本身开始一个回合，多出来的是人发的消息）；上一次评审是 Passed/Failed/Unavailable/Cancelled；人按 Rerun。
+
+### 3.4 交付指定的 worktree（2026-11-13）
+
+卡片工作区是共享目录（例如项目主目录，里面有别的会话未提交的改动）时，agent 常把实现放进同一仓库的另一个 git worktree（如 `.worktrees/<name>`）。评审只看工作区就看不到这些改动，还会把主目录里无关的改动算到这张卡上。
+
+- **交付参数**：`flowly_update_status(in_review)` 可选 `worktree`（≤1000 字符；CLI `--worktree`）：worktree 的绝对路径（或其中任一子目录），或其中检出的分支名（`feat/x` 或 `refs/heads/feat/x`，按 `git worktree list --porcelain` 找）。只在交付到 In review 时有效，否则 `INVALID_INPUT`。
+- **校验**（交付时，写入前）：解析成 worktree 顶层目录的真实路径；它的 `git-common-dir` 必须等于卡片仓库的（工作区本身是仓库时就是它；linked root 时是其中任一仓库）。路径不存在、不在 git 里、属于别的仓库、就是卡片工作区本身、没有 worktree 检出该分支、linked root 里不止一个仓库检出了同名分支（这时要给路径）、卡片工作区不是 git 仓库时 `INVALID_INPUT`，卡片不动，错误信息说明原因。精确重放沿用原回执，不再校验。
+- **记录**：解析后的真实路径写在交付的 `status_changed` 事件上（`worktree`），Rerun 沿用最近一次交付的；评审记录 `review.worktree` 记下交付指定的目录（解析失败时也记），交付事件被裁剪后 Rerun 仍能用它。
+- **评审**：评审开始时重新解析一次；然后命令检查在该 worktree 里跑，形状和 diff 从那里读，指纹（`sha`、`dirty`）用它的 HEAD，`shared = false`（不再加共享工作区那句提示）。linked root 只看这个 worktree，不再逐个仓库读。返工轮（§6.3）只在上一轮评审的是同一个 worktree（或都没有）时按增量读；目录换了就从头读全量 diff，因为上一轮的 sha 不属于这个目录。
+- **基准**：卡片有 `baseRef` 时用它；否则在 worktree 所属仓库的 HEAD 和它的 upstream（如 `origin/main`）里，取与 worktree HEAD 的 merge-base 离 HEAD 最近的那个（`rev-list --count` 最小），diff 是 `git diff <merge-base>` 加未跟踪的新文件，所以未提交的改动也在内，主分支之后的提交不算进来。
+- **评审 session** 仍建在卡片工作区里，提示词加一句：交付的代码在该 worktree 里，读文件去那里。
+- **worktree 不在了**（评审开始时解析失败，例如已删除）：所有检查 `unavailable`，原因 “The delivered worktree is unavailable: …”。不退回去看工作区，免得又把别的改动当成这张卡的。
+- worktree 里要能跑项目命令（依赖已装好），否则命令检查按失败计；skill 和工具说明里写明。
+- **从 PR 自动找**（2026-11-13）：交付没带 `worktree`、卡片工作区不是 worktree、项目开着 Auto review、卡片这次是进入 In review（不是精确重放）时，取本次 `outputs` 和卡片已有的输出里的 PR/MR 链接（GitHub `…/owner/repo/pull/N`，GitLab `…/group/repo/-/merge_requests/N`）。链接的 host 和仓库路径要对上卡片仓库某个 remote 的 URL（读 `remote.*.url` 原值，scp/ssh/https 都认）；用 `git ls-remote <remote> refs/pull/N/head`（GitLab `refs/merge-requests/N/head`，5 秒超时，不弹凭据）取 head 提交，再找 HEAD 包含它（`merge-base --is-ancestor`）的 worktree，仓库自己的目录不算。所有链接加起来正好一个 worktree 时就按它评审（和显式带 `worktree` 一样记在交付事件上），交付结果的 `notice` 写明用了哪个 worktree、来自哪个链接；没有、不止一个、链接不是本仓库的、git 或网络失败时什么都不做，交付和评审照旧，不报错。显式的 `worktree` 总是优先。
+- 不带 `worktree` 也没找到的交付行为不变。Flowly 不创建 worktree（D6 不变），只用 agent 已有的。
 
 ## 4. 检查
 
@@ -347,6 +362,7 @@ Review {
   reason?: string,                         // ≤ 500
   fingerprint: { taskRevision, workpadRevision, sha?, dirty },
   shared: boolean,                         // 非 worktree
+  worktree?: string,                       // 交付指定的 worktree，评审实际用的目录（§3.4）
   rules: [{ id, kind: "command" | "llm", name,
             state: "queued" | "running" | "passed" | "failed" | "na" | "skipped" | "unavailable",
             ms?, argv?, exitCode?, timedOut?, tail?,   // tail ≤ 4 KiB，只在 failed/unavailable 时

@@ -42,7 +42,7 @@ export function useConnections(enabled = true) {
 }
 
 /** Service names are brands: shown as written in every language. */
-export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps", shortcut: "Shortcut" };
+export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps", shortcut: "Shortcut", linear: "Linear" };
 
 /** The row icon of an item: its kind, not its service. */
 export function itemIcon(provider: ConnectorProvider, itemType: ItemType) {
@@ -60,6 +60,7 @@ export function itemKindLabel(provider: ConnectorProvider, itemType: ItemType) {
   if (family === "confluence") return t("Confluence page");
   if (family === "azure") return t("Azure DevOps work item");
   if (family === "shortcut") return itemType === "epic" ? t("Shortcut epic") : t("Shortcut story");
+  if (family === "linear") return t("Linear issue");
   const service = familyNames[family];
   if (itemType === "pull") return t("{service} pull request", { service });
   if (itemType === "merge_request") return t("{service} merge request", { service });
@@ -74,6 +75,7 @@ export const linkTitles: Record<ConnectorFamily, string> = {
   gitlab: msg("GitLab issue or merge request"),
   azure: msg("Azure DevOps work item"),
   shortcut: msg("Shortcut story or epic"),
+  linear: msg("Linear issue"),
 };
 
 const searchHints: Record<ConnectorFamily, string> = {
@@ -83,6 +85,7 @@ const searchHints: Record<ConnectorFamily, string> = {
   gitlab: msg("group/project!34, #12, !34, a link or words from the title"),
   azure: msg("Work item number, AB#123, a link or words from the title"),
   shortcut: msg("Story number, sc-123, a link or words from the title"),
+  linear: msg("ENG-123, a link or words from the title"),
 };
 
 const recentTitles: Record<ConnectorFamily, string> = {
@@ -92,6 +95,7 @@ const recentTitles: Record<ConnectorFamily, string> = {
   gitlab: msg("Open issues and merge requests assigned to me or awaiting my review"),
   azure: msg("Open work items assigned to me"),
   shortcut: msg("My open stories"),
+  linear: msg("Open issues assigned to me"),
 };
 
 const emptyRecent: Record<ConnectorFamily, string> = {
@@ -101,6 +105,7 @@ const emptyRecent: Record<ConnectorFamily, string> = {
   gitlab: msg("Nothing open is assigned to you or awaiting your review."),
   azure: msg("No open work items are assigned to you."),
   shortcut: msg("You have no open stories."),
+  linear: msg("No open issues are assigned to you."),
 };
 
 /** Identity of an item across connections of one service: keys repeat between services (team/app#12 on GitHub and GitLab). */
@@ -439,6 +444,7 @@ const providerLabels: Record<ConnectorProvider, string> = {
   gitlab: "GitLab",
   "azure-devops": "Azure DevOps",
   shortcut: "Shortcut",
+  linear: "Linear",
 };
 
 const addTitles: Record<ConnectorFamily, string> = {
@@ -448,6 +454,7 @@ const addTitles: Record<ConnectorFamily, string> = {
   gitlab: msg("Add a GitLab connection"),
   azure: msg("Add an Azure DevOps connection"),
   shortcut: msg("Add a Shortcut connection"),
+  linear: msg("Add a Linear connection"),
 };
 
 /**
@@ -504,6 +511,8 @@ function tokenHint(provider: ConnectorProvider, hosted: boolean) {
       return t("Create one in Azure DevOps → User settings → Personal access tokens, with the Work Items (Read) scope.");
     case "shortcut":
       return t("Create one in Shortcut → Settings → API Tokens.");
+    case "linear":
+      return t("Create a personal API key in Linear → Settings → Security & access, with read access.");
     default:
       return t("Create one in GitLab → Preferences → Access tokens with the read_api scope.");
   }
@@ -518,6 +527,7 @@ const addressPlaceholders: Record<ConnectorProvider, string> = {
   gitlab: "https://gitlab.example.com",
   "azure-devops": "https://dev.azure.com/your-organization",
   shortcut: "https://app.shortcut.com/your-workspace",
+  linear: "https://linear.app/your-workspace",
 };
 
 function ConnectionEditor({ family, connection, onClose }: { family: ConnectorFamily; connection: Connection | null; onClose(): void }) {

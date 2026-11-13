@@ -1,5 +1,20 @@
 # Implementation progress
 
+## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13
+
+- A delivery to In review without `worktree`, from a shared workspace with Auto review on, now looks at the PR/MR links among this call's outputs and the card's existing outputs. A link whose host and repository match a remote of the card's repository gives its head commit through `git ls-remote` (5 s, no prompts); the one worktree, other than the repository's own directory, whose HEAD contains it is reviewed, recorded on the delivery event like an explicit `worktree`, and named in the result's `notice`. None, several, another repository's link or a git/network failure changes nothing (`server/review-worktree.ts` `prWorktree`).
+- Purely local git: works without a GitHub/GitLab connector, and with unpushed commits on top of the PR head.
+- AUTO-REVIEW-SPEC §3.4 and the skill text updated. Onboarding, telemetry, What's new: unchanged (agent-facing, no UI).
+- Checks: see the delivery note. Unrun: a live delivery through the installed plugin.
+
+## Auto review reads the delivered worktree (card "自动验收能看到卡片在 git worktree 里的改动") — 2026-11-13
+
+- `flowly_update_status(in_review)` and the CLI take an optional `worktree` (absolute path, a folder inside it, or the branch checked out in it). The daemon resolves it before the write (`server/review-worktree.ts`) and refuses, with `INVALID_INPUT`, a path that is missing, outside git, another repository, the card's own workspace, or a branch no worktree has checked out. The resolved real path rides on the delivery event; Rerun reuses it.
+- The review resolves it again at start, then runs the commands, reads shape and diff and takes the fingerprint there; `shared` is false and `review.worktree` records the directory. The diff base is the nearer merge-base of the home repository's HEAD and its upstream (or the card's `baseRef`), so main moving on adds nothing. A worktree that is gone makes every check unavailable instead of falling back to the workspace. The review prompt says where the code is.
+- Skill text, tool description, CLI help, AUTO-REVIEW-SPEC §3.4 / §2 / §8.2 and GUARDRAILS-SPEC §6.1 updated.
+- Onboarding: no tour copy or tip (agent-facing delivery parameter, no user-visible UI). Telemetry: no new field (not a switch; deliveries are already counted). What's new: none.
+- Checks: see the delivery note. Unrun: a live auto review through the installed plugin.
+
 ## Card description images (issue #99, card "Add image as description") — 2026-11-13
 
 - Spec: `docs/CARD-IMAGES-SPEC.md` (user decisions 2026-11-13: copies in `<plugin data>/card-images/<taskId>/`, phones view and remove only, thumbnails under the description).
@@ -16,6 +31,16 @@
 - Onboarding, What's new and telemetry: unchanged (pure bug fix, no new capability, switch or action).
 - PR #101 review follow-up: Unicode punctuation is now an emphasis boundary; `_` remains a word character despite its Unicode punctuation category. Six regression cases cover Chinese colon/full stop, single-sided punctuation, brackets, italic and bold.
 - Checks: see the PR delivery note. Unrun: live plugin reload, desktop/phone rendering and selection/copy.
+
+## Linear issue connector — 2026-11-12
+
+- Added Linear as the seventh read-only provider family. Each connection binds one verified Linear workspace and a personal API key held only by the daemon. GraphQL requests use a fixed API host, constant query operations and variables; no mutations or remote status writes.
+- Issue links and TEAM-123 keys resolve; the picker lists assigned open issues and searches titles. New task's From Linear and Artifacts + reuse the existing connector flows, including scoped agent reads, cached content, content unread fingerprints and revoked-token handling. Jira/Linear bare-key ambiguity requires an explicit service or URL.
+- Ported the earlier local `638a423` implementation onto current main, preserving newer onboarding content. Added workspace-address validation and required verification fields; all GraphQL errors, including partial HTTP-200 responses, fail without overwriting cached content. Request only the latest 20 comments, displayed oldest first.
+- Tests cover recognition, API-key secrecy, fixed read-only endpoint, title variables, metadata/comments/sub-issues, fingerprints, workspace mismatch, partial errors, retry-after, revoked keys, more than 100 comments, new-card inputs, existing-card linking, scoped agent reads and unread changes.
+- Onboarding: existing tour row and `jira-connect` tip updated, no new tip id; nine translation catalogs and English/Chinese README updated. What's new and version stay with the release task. Telemetry unchanged: no new feature switch or core action, and connector type/address is never reported.
+- Checks: see the PR delivery note. Unrun: authenticated live Linear workspace/API validation, plugin installation/reload, desktop/phone UI and the repository's designated independent Claude verification session.
+
 
 ## Session preview Next moves appear without reopening (card "side bar session next move chip修复") — 2026-11-11
 
@@ -53,6 +78,13 @@
 - Independent check of eb62c81 (before the two items above): [verification/telemetry-errors-2026-11-10-verify.md](verification/telemetry-errors-2026-11-10-verify.md), pass with notes; its Medium finding (auth failures hidden) is fixed, the timing-dependent retry test now waits within a 200 ms retry.
 - Open, proposed as an idea: Windows linked roots (`symlink` EPERM without Developer Mode).
 - Onboarding and heartbeat fields: none (internal fixes; nothing new to learn or count).
+
+## Test suite: git is hermetic (test-hygiene fix) — 2026-11-10
+
+- Bug (found while verifying PR #95 on this machine): the fixtures' own `git commit` calls inherited the machine's global git config, whose hooks path carries a pre-commit guard — any fixture commit on a branch named `main` was blocked. `server/repos.test.ts` ("matches canonical subdirectories…"), `server/wrapup.test.ts` ("real git: uncommitted and local-only commits are detected") and the six linked-root tests in `server/auto-review.test.ts` failed on a machine with such a hook and passed on machines without one; the suite was machine-dependent.
+- `vitest.config.mjs` sets `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_SYSTEM=/dev/null` through `test.env` (and keeps `testTimeout` 15000 and the `docs/verification/**`, `.claude/**` and `.worktrees/**` excludes), so git subprocesses see no global or system config however vitest is started: `npm test`, `npm run dev`, `npx vitest run <file>` or an IDE runner. It is a plain `.mjs` because `tsconfig.json` only includes `.ts`/`.tsx`; a `vitest.config.ts` importing `vitest/config` adds errors to `tsc --noEmit`. The `npm test` and `npm run dev` scripts are plain `vitest run` / `vitest` again. Tests needing a git identity already pass `-c user.name/-c user.email` per command, so nothing else changes.
+- Checks: `npm run typecheck` exit 0; `npm test` 1354 passed, 0 failed, 6 skipped; with a simulated global hook (`core.hooksPath` pre-commit that blocks commits on `main`, via `GIT_CONFIG_GLOBAL`), `npx vitest run server/repos.test.ts server/wrapup.test.ts server/auto-review.test.ts` passes 46/46, and fails 8 of 46 without `vitest.config.mjs`.
+- Onboarding and telemetry: none (test hygiene, nothing user-visible).
 
 ## Auto review reads every repository of a linked root — 2026-11-07
 
