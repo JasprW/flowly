@@ -39,6 +39,7 @@ import { runSummaryModels } from "./summary-models";
 import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { logFailure } from "./error-report";
+import { BackgroundJobs } from "./background-jobs";
 import { displaceNotes, guardrailsStore, memoryOn, pruneArchived, removeProjectGuardrails, removeTaskGuardrails, type GuardrailsStore } from "./guardrails";
 
 export { memoryOn, setMemoryEverywhere } from "./guardrails";
@@ -124,6 +125,8 @@ export class MemoryService {
   private running = new Set<string>();
   /** One review at a time per project (§4.2). */
   private queues = new Map<string, Promise<unknown>>();
+  /** Reviews and recall counts started without awaiting them; idle() lets tests wait for them. */
+  private jobs = new BackgroundJobs();
   private paseo?: PaseoApi;
   constructor(
     readonly board: BoardStore,
@@ -141,6 +144,10 @@ export class MemoryService {
     private background: BackgroundWorkspaces = backgroundWorkspaces(board.directory),
   ) {
     this.store = guardrailsStore(board.directory);
+  }
+  /** Resolves once no started review or recall count is left; for tests and shutdown. */
+  idle() {
+    return this.jobs.idle();
   }
   attach(paseo: PaseoApi) {
     this.paseo = paseo;
@@ -174,7 +181,7 @@ export class MemoryService {
     const found = recallMemory(notesOf(state, project.id).map(toMemoryEntry), input);
     // Guidelines too (GUARDRAILS-SPEC §5.3); only notes count as used.
     const guidelines = recallGuidelines(state.entries, project.id, input);
-    void this.recordRecall(project.id, taskId, found.entries.map((e) => e.id), guidelines.length > 0).catch((e) => logFailure("Flowly recall stats not recorded:", e, taskId));
+    this.jobs.track(this.recordRecall(project.id, taskId, found.entries.map((e) => e.id), guidelines.length > 0).catch((e) => logFailure("Flowly recall stats not recorded:", e, taskId)));
     return { entries: found.entries.map(agentEntry), total: found.total, ...(guidelines.length ? { guidelines } : {}) };
   }
   private recordRecall(projectId: string, taskId: string, ids: string[], other = false) {
@@ -345,7 +352,7 @@ export class MemoryService {
   /** A card moved into Done: review it after a short wait, once its summary has settled. */
   afterDone(taskId: string, paseo: PaseoApi) {
     this.attach(paseo);
-    void (async () => {
+    this.jobs.track((async () => {
       const settings = await this.summarySettings();
       if (!settings.retroEnabled) return;
       const board = await this.board.read();
@@ -361,7 +368,7 @@ export class MemoryService {
       } finally {
         this.running.delete(taskId);
       }
-    })().catch(logError("review"));
+    })().catch(logError("review")));
   }
   /** Find memories / guardrails.retro (§4.2): ignores the skip rules. */
   async manual(taskId: string, paseo: PaseoApi) {
@@ -373,9 +380,11 @@ export class MemoryService {
     if (!memoryOn(project)) throw new Error("Project memory is turned off for this project.");
     if (task.status !== "done" && task.status !== "cancelled") throw new Error("Only finished cards are reviewed for memories.");
     this.running.add(taskId);
-    void this.review(taskId, paseo, true)
-      .catch(logError("review"))
-      .finally(() => this.running.delete(taskId));
+    this.jobs.track(
+      this.review(taskId, paseo, true)
+        .catch(logError("review"))
+        .finally(() => this.running.delete(taskId)),
+    );
     return { queued: true };
   }
   /** Reviews run one at a time per project; a failure is recorded on the card (§8). */

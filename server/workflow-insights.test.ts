@@ -396,7 +396,6 @@ test("a busy project with two cards is analyzed on schedule, one interval after 
   // The first check starts collecting (and reads the last week); no run yet (INSIGHTS-REDESIGN-SPEC §3.1).
   await x.service.tick();
   await settle(x.service);
-  await new Promise((r) => setTimeout(r, 20));
   expect((await x.state.read()).collectingSince.p).toBe(new Date(NOW).toISOString());
   await x.service.tick();
   await settle(x.service);
