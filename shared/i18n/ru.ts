@@ -2,7 +2,6 @@ import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
   "Command": "Команда",
-  "Project default model": "Модель проекта по умолчанию",
   "Review model": "Модель проверки",
   "{n} s": "{n} с",
   "Not applicable": "Не применимо",
@@ -1342,7 +1341,7 @@ const catalog: Catalog = {
   "Previous day": "Предыдущий день",
   "Next day": "Следующий день",
   "agent {time}": "агент {time}",
-  "Auto review checked this card after the agent delivered; open it to see each check's result.": "Auto review проверил эту карточку после сдачи агентом; откройте её, чтобы увидеть результат каждой проверки.",
+  "Open the card for review results; choose the review model and reasoning in Settings → Models.": "Откройте карточку для результатов; выберите модель и уровень рассуждений в Настройки → Модели.",
   "Deliveries are checked before they reach you, and go back to the agent when they fall short.": "Сданная работа проверяется до того, как попадёт к вам, и возвращается агенту, если не дотягивает.",
   "Does what you asked": "Делает то, что вы просили",
   "Resume": "Возобновить",

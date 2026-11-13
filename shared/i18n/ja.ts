@@ -2,7 +2,6 @@ import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
   "Command": "コマンド",
-  "Project default model": "プロジェクトの既定モデル",
   "Review model": "レビューモデル",
   "{n} s": "{n} 秒",
   "Not applicable": "該当なし",
@@ -1342,7 +1341,7 @@ const catalog: Catalog = {
   "Previous day": "前の日",
   "Next day": "次の日",
   "agent {time}": "エージェント {time}",
-  "Auto review checked this card after the agent delivered; open it to see each check's result.": "エージェントの納品後、Auto review がこのカードをチェックしました。開くと各チェックの結果を確認できます。",
+  "Open the card for review results; choose the review model and reasoning in Settings → Models.": "カードでレビュー結果を確認できます。設定 → モデルでレビューモデルと推論レベルを選択できます。",
   "Deliveries are checked before they reach you, and go back to the agent when they fall short.": "納品はあなたに届く前にチェックされ、基準に届かなければエージェントに差し戻されます。",
   "Does what you asked": "依頼どおりに実装されているか",
   "Resume": "再開",

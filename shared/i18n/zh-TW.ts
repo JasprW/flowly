@@ -2,7 +2,6 @@ import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
   "Command": "命令",
-  "Project default model": "專案預設模型",
   "Review model": "驗收模型",
   "{n} s": "{n} 秒",
   "Not applicable": "不適用",
@@ -1342,7 +1341,7 @@ const catalog: Catalog = {
   "Previous day": "前一天",
   "Next day": "後一天",
   "agent {time}": "agent {time}",
-  "Auto review checked this card after the agent delivered; open it to see each check's result.": "Agent 交付後，Auto review 檢查了這張卡片；打開它查看每項檢查的結果。",
+  "Open the card for review results; choose the review model and reasoning in Settings → Models.": "開啟卡片查看審查結果；在設定 → 模型中選擇審查模型和推理等級。",
   "Deliveries are checked before they reach you, and go back to the agent when they fall short.": "交付在到你手上之前先經過檢查，沒達到要求就退回給 agent。",
   "Does what you asked": "做到了你要求的事",
   "Resume": "恢復",

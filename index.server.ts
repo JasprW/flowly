@@ -524,7 +524,7 @@ export default function contribute(host: PluginServerContext) {
     guardrails,
     // A temporary session judges the built-in check, guidelines and card items, hard-deleted after like the summarizer.
     llm: llmReviewer({
-      reviewModel: async () => (await summaries.settings()).reviewModel ?? "",
+      reviewSettings: () => summaries.settings(),
       summaryModels: async () => summaryModelsOf(await summaries.settings()),
     }),
   });
