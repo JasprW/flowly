@@ -547,13 +547,13 @@ export class AutoReviewService {
   }
 
   /** A session's turn ended: start the review of its delivery, if one waits. */
-  turnEnded(agentId: string, paseo: PaseoApi) {
+  turnEnded(agentId: string, paseo: PaseoApi, lifecycleRecorded?: Promise<boolean>) {
     const delivery = this.pending.get(agentId);
     if (!delivery) return Promise.resolve();
     this.pending.delete(agentId);
     return this.enqueue(delivery.projectId, delivery.taskId, async () => {
       try {
-        await this.review(delivery, false, paseo);
+        await this.review(delivery, false, paseo, lifecycleRecorded);
       } finally {
         // A review that started cleared it already; one that was skipped or failed early must not leave the card waiting.
         await this.clearWaiting(delivery.taskId, delivery.eventId);
@@ -605,6 +605,7 @@ export class AutoReviewService {
             const now = this.now();
             t.review = {
               trigger: { eventId: waiting.eventId, agentId: waiting.agentId, from: waiting.from },
+              ...(waiting.worktree ? { worktree: waiting.worktree } : {}),
               round: 1,
               maxRounds: autoReviewOf(project).maxRounds,
               state: "unavailable",
@@ -653,7 +654,7 @@ export class AutoReviewService {
     return new Date(this.clock()).toISOString();
   }
 
-  private async review(delivery: DeliveredReview, manual: boolean, paseo: PaseoApi) {
+  private async review(delivery: DeliveredReview, manual: boolean, paseo: PaseoApi, lifecycleRecorded?: Promise<boolean>) {
     const board = await this.store.read();
     const task = board.tasks.find((t) => t.id === delivery.taskId);
     const project = task && board.projects.find((p) => p.id === task.projectId);
@@ -783,6 +784,11 @@ export class AutoReviewService {
         .reviewed({ projectId: outcome.task.projectId, taskId: outcome.task.id, items: outcome.review.items, previous: started.previous?.items, disputed: (outcome.task.disputes || []).map((d) => d.id) })
         .catch((e) => logFailure("Flowly guardrail counts not updated:", e, outcome.task.id));
     if (!outcome.rework) return;
+    // Compute the review immediately, but never start a rework turn before its predecessor is recorded.
+    if (lifecycleRecorded && !(await lifecycleRecorded)) {
+      await this.markUnavailable(delivery.taskId, startedAt, "The delivering turn could not be recorded, so the rework message was not sent.");
+      return;
+    }
     const live = await this.deps.sessionLive(outcome.review.trigger.agentId, outcome.task, paseo).catch(() => false);
     const sent = live
       ? await this.deps.send({ taskId: outcome.task.id, agentId: outcome.review.trigger.agentId, text: reworkMessage(outcome.review, words) }, paseo).then(

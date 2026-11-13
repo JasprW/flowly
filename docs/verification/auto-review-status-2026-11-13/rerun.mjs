@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { launch, openCard, shot, pageText } from '../../promo/shot-lib.mjs';
 import { open016 } from './ui-lib.mjs';
 const out = new URL('./', import.meta.url).pathname;
-const state = JSON.parse(await readFile(out + 'live-ids.json', 'utf8'));
+const state = JSON.parse(await readFile(new URL('../../../.test-data/auto-review-status-live-state.json', import.meta.url), 'utf8'));
 const browser = await launch();
 try {
   const s = await open016(browser, { w: 1000, h: 1000, project: state.title });

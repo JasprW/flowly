@@ -497,6 +497,51 @@ test("turning Auto review off before the delivering turn ends clears the waiting
   expect((await card(x)).reviewWaiting).toBeUndefined();
 });
 
+test("a fast review computes immediately but sends rework only after the delivering turn is recorded", async () => {
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  let release!: (ready: boolean) => void;
+  const recorded = new Promise<boolean>((resolve) => { release = resolve; });
+  let computed!: () => void;
+  const reworked = new Promise<void>((resolve) => { computed = resolve; });
+  x.store.onCommit = () => {
+    void x.store.read().then((b) => { if (b.tasks[0]!.review?.state === "rework") computed(); });
+  };
+  x.reviews.deps.send = async (message) => {
+    await x.store.mutate((b) => { x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" }); });
+    x.sent.push({ agentId: message.agentId, text: message.text });
+  };
+  const review = x.reviews.turnEnded("actor", x.paseo, recorded);
+  try {
+    await reworked;
+    expect(x.runs).toEqual(["npm test"]);
+    expect(x.sent).toEqual([]);
+    await x.store.mutate((b) => {
+      x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_ended", agentId: "actor", model: "codex/test", pick: 0, byUser: true });
+    });
+    release(true);
+    await review;
+    expect(x.sent).toHaveLength(1);
+    const facts = (await x.store.read()).events.filter((e) => e.action === "agent.turn_started" || e.action === "agent.turn_ended");
+    expect(facts.slice(-2).map((e) => e.action)).toEqual(["agent.turn_ended", "agent.turn_started"]);
+    expect(facts.at(-2)).toMatchObject({ model: "codex/test", pick: 0, byUser: true });
+  } finally {
+    x.store.onCommit = null;
+    release(true);
+    await x.reviews.idle();
+  }
+});
+
+test("a lifecycle write failure does not start a rework turn", async () => {
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  await x.reviews.turnEnded("actor", x.paseo, Promise.resolve(false));
+  expect(x.sent).toEqual([]);
+  expect((await card(x)).review).toMatchObject({ state: "unavailable", reason: "The delivering turn could not be recorded, so the rework message was not sent." });
+});
+
 test("a second card keeps waiting while the project's first review runs; reviews remain serial", async () => {
   const x = await setup();
   x.actors.actor!.status = "running";
@@ -1073,6 +1118,26 @@ test("a delivery that names a worktree is reviewed there: commands, diff since t
   // Kept on the review, so a later Rerun still names it even after the delivery event is trimmed.
   expect(again.worktree).toBe(worktree);
   expect(cwds).toEqual([worktree]);
+}, 20_000);
+
+test("restart recovery keeps the waiting worktree after its delivery event is trimmed; Rerun checks that worktree", async () => {
+  const cwds: string[] = [];
+  const x = await setup({ real: true, run: async (_argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 1, output: "" }) });
+  const { worktree } = await workspaceWithWorktree(x.a, x.root);
+  x.actors.actor!.status = "running";
+  await x.deliver("development", { worktree: "feat/wt" });
+  expect((await card(x)).reviewWaiting?.worktree).toBe(worktree);
+  await x.store.mutate((b) => {
+    for (let i = 0; i < 100; i++) x.store.event(b, { taskId: "t", actor: "agent", action: "progress", note: `checkpoint ${i}` });
+  });
+  expect((await x.store.read()).events.some((e) => e.to === "in_review")).toBe(false);
+  await x.reviews.recover();
+  expect((await card(x)).review).toMatchObject({ state: "unavailable", worktree });
+  x.actors.actor!.status = "idle";
+  await x.reviews.rerun("t", x.paseo);
+  await x.reviews.idle();
+  expect(cwds).toEqual([worktree]);
+  expect((await card(x)).review).toMatchObject({ state: "passed", worktree, shared: false });
 }, 20_000);
 
 test("a worktree that is not this card's repository, or named outside a delivery, is refused and the card stays (§3.4)", async () => {

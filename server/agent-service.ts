@@ -911,7 +911,7 @@ export class AgentService {
       if (next === "in_review" && next !== previous && autoReviewRuns(project) && this.onDelivered) {
         review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous, ...(worktree ? { worktree } : {}) };
         // From now until that review starts, the card shows it is waiting, not the previous result (§3.1).
-        task.reviewWaiting = { eventId: event.id, agentId: identity.agentId, from: previous, since: event.at };
+        task.reviewWaiting = { eventId: event.id, agentId: identity.agentId, from: previous, since: event.at, ...(worktree ? { worktree } : {}) };
       }
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).
       if (carried) recordMoves(carried);

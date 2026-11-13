@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { launch, openCard, closeCard, shot, pageText } from '../../promo/shot-lib.mjs';
 import { open016 } from './ui-lib.mjs';
 const out = new URL('./', import.meta.url).pathname;
-const state = JSON.parse(await readFile(out + 'live-ids.json', 'utf8'));
+const state = JSON.parse(await readFile(new URL('../../../.test-data/auto-review-status-live-state.json', import.meta.url), 'utf8'));
 const phase = process.argv[2], expected = { waiting: 'Waiting for review', running: 'Reviewing', recovered: 'Review unavailable' }[phase];
 if (!expected) throw new Error('Expected waiting/running/recovered');
 const results = [];

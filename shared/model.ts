@@ -311,7 +311,7 @@ export const taskSchema = z.object({
    * that review starts or is skipped. While set and the card is in In review, `review` is the previous one and is not shown.
    * Written without a task revision.
    */
-  reviewWaiting: z.object({ eventId: z.string(), agentId: z.string(), from: historyStatusSchema, since: timestamp }).optional(),
+  reviewWaiting: z.object({ eventId: z.string(), agentId: z.string(), from: historyStatusSchema, since: timestamp, worktree: z.string().max(1000).optional() }).optional(),
   /** Review findings the agent disputed (GUARDRAILS-SPEC §6.1); written without a task revision, cleared at Done/Cancelled. */
   disputes: z.array(disputeSchema).max(disputeLimits.perTask).optional(),
 });

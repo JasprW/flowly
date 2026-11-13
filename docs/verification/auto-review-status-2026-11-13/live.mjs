@@ -4,13 +4,14 @@ import { execFile as exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { DaemonClient } from '@getpaseo/client/internal/daemon-client';
 import { createPaseoApi } from '@getpaseo/client';
 const run = promisify(exec), out = new URL('./', import.meta.url).pathname;
-const file = join(out, 'live-ids.json');
-let state = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : { title: 'Review status QA 20261113-503c', root: join(process.cwd(), '.auto-review-status-fixture-503c'), cards: [] };
-const save = () => writeFile(file, JSON.stringify(state, null, 2));
+const file = new URL('../../../.test-data/auto-review-status-live-state.json', import.meta.url).pathname;
+const freshState = () => ({ title: 'Review status QA 20261113-503c', root: join(process.cwd(), '.auto-review-status-fixture-503c'), cards: [] });
+let state = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : freshState();
+const save = async () => { await mkdir(dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(state, null, 2), { mode: 0o600 }); };
 const credential = (await readFile(join(homedir(), '.paseo/local-credential'), 'utf8')).trim();
 const client = new DaemonClient({ url: 'ws://127.0.0.1:6767/ws', localCredential: () => credential, clientId: `review-status-qa-${randomUUID()}`, clientType: 'cli', reconnect: { enabled: false }, connectTimeoutMs: 10000 });
 await client.connect();
@@ -29,7 +30,8 @@ async function action(c, args) {
 try {
   const mode = process.argv[2];
   if (mode === 'setup') {
-    if (state.projectId) throw new Error('Fixture already exists; use status/cleanup');
+    if (state.projectId && !state.cleanup) throw new Error('Fixture already exists; use status/cleanup');
+    if (state.cleanup) state = freshState();
     await mkdir(state.root, { recursive: false }); await save();
     await writeFile(join(state.root, 'README.md'), '# Review status disposable fixture\n');
     await run('git', ['init', state.root]);

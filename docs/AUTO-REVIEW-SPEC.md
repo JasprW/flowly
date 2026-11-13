@@ -55,7 +55,7 @@
 
 **agent** 调用 `flowly_update_status(in_review)`，通过 L1 并成功提交，项目开启了 Auto review，卡片未归档、不是设置卡片（§6.3），且有对这张卡生效的检查（§4.2）。人拖进 In review 不触发。
 
-评审在**交付的那个 session 这一轮结束后**才开始（`agent.turn_ended`）；交付时该 session 已空闲则立即开始。交付之后同一轮里 agent 还可能提交、改 workpad，这些会改变指纹让评审作废。回合结束的 hook 先把评审入队，再做设置、模型、timeline 等读取（2026-11-13）。
+评审在**交付的那个 session 这一轮结束后**才开始（`agent.turn_ended`）；交付时该 session 已空闲则立即开始。交付之后同一轮里 agent 还可能提交、改 workpad，这些会改变指纹让评审作废。回合结束的 hook 先把评审入队，再做设置、模型、timeline 等读取（2026-11-13）。检查计算不等待这些读取；只有返工消息等待本轮 `agent.turn_ended` 记录提交后才发送，防止返工的新回合开始后被旧回合的结束记录覆盖。记录失败则不发送返工，并把评审记为 Unavailable。
 
 **等待评审**（2026-11-13）：交付的同一次写入里记下 `task.reviewWaiting`。从交付到评审开始（等回合结束、项目内排队），卡片在 In review 时显示 “Waiting for review”，上一次评审的结果不显示、不进 Attention、不能 Rerun；这期间卡片的未读同 Reviewing 一样暂不计入。评审开始的那次写入清除它；这次交付没被评审（卡片已离开 In review、项目关了 Auto review 等）时也清除。等待中的交付只记在内存里：等待期间插件重启，启动时清除标记，卡片仍在 In review 时评审记为 Unavailable（“Flowly restarted before the review started.”），人可以按 Rerun。
 
@@ -357,7 +357,7 @@ project.reviewDraft?: {
 
 - `task.reviewSetup?: true`：设置卡片。
 - `task.review`：最近一次评审，新的覆盖旧的；写入不改 task revision。
-- `task.reviewWaiting?: { eventId, agentId, from, since }`：已交付、评审还没开始（§3.1）；写入不改 task revision。只清除 `eventId` 与自己相同的标记。
+- `task.reviewWaiting?: { eventId, agentId, from, since, worktree? }`：已交付、评审还没开始（§3.1）；写入不改 task revision。只清除 `eventId` 与自己相同的标记；交付指定的 worktree 一并保存，重启恢复时复制到 review，避免交付事件被裁剪后 Rerun 回退到共享工作区。
 
 ```
 Review {
