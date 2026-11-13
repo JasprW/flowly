@@ -203,6 +203,7 @@ export class SessionInsightService {
     // Paseo removes a merged/archived workspace's directory (autoArchiveAfterMerge) right after the turn
     // ends: the child cannot be created and the session is gone with it, so skip instead of failing.
     const result = await runSummaryModels(paseo, settings.model, {
+      prompt,
       create: (model) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
         parent: agent.id,
         config: { provider: model },

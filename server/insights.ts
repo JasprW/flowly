@@ -373,6 +373,7 @@ export class InsightsService {
     const settings = await this.settings();
     const prompt = digestPrompt({ project: project.title, day: input.day, today: input.day === dayKey(this.now(), tz), material: text, language: await this.language() });
     const { model, output } = await this.background.use(project, paseo, (workspaceId) => runSummaryModels(paseo, summaryModelsOf(settings), {
+      prompt,
       create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
         config: { provider: model },
         title: `Kanban digest · ${project.title} · ${input.day}`.slice(0, 120),

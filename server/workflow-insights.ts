@@ -51,6 +51,7 @@ import {
   type WorkflowView,
 } from "../shared/workflow-insights";
 import { logFailure } from "./error-report";
+import { OUTPUT_SCHEMA_ERROR } from "./summary-models";
 
 const DAY_MS = 86_400_000;
 const TICK_MS = 15 * 60_000;
@@ -493,18 +494,23 @@ export class WorkflowInsightsService {
         skills: skills.material,
       });
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
+        const prompt = workflowPrompt(days, material, await this.language());
         const agent = await paseo.workspaces.ref(workspaceId).agents.create({
           config: { provider: model },
           title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
-          prompt: workflowPrompt(days, material, await this.language()),
+          prompt,
           outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
         });
         this.summarizer.set(agent.id, true);
         let usage: RunUsage | undefined;
         let parsed;
         try {
-          const result = await agent.waitForFinish(this.timeoutMs);
+          let result = await agent.waitForFinish(this.timeoutMs);
+          // Providers without `prompt.output_schema` fail the first structured turn at start; re-run
+          // the same prompt once without the constraint on the already-open handle (see summary-models).
+          if (result.status === "error" && result.error && OUTPUT_SCHEMA_ERROR.test(result.error))
+            result = await agent.run(prompt, { timeoutMs: this.timeoutMs });
           if (result.status !== "idle")
             throw new Error(
               result.status === "timeout"

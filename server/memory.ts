@@ -693,6 +693,7 @@ export class MemoryService {
     const models = summaryModelsOf(await this.summarySettings());
     const prompt = retroPrompt(m.text, await this.language());
     const { output } = await this.background.use(m.project, paseo, (workspaceId) => runSummaryModels(paseo, models, {
+      prompt,
       create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
         config: { provider: model },
         title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
