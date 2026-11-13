@@ -59,15 +59,21 @@ export async function resolveWorktree(value: string, workspace: string, git: Git
 /** The worktree that has `branch` checked out, from `git worktree list --porcelain` of each repository. */
 async function branchWorktree(branch: string, repos: readonly string[], git: Git): Promise<string | null> {
   const ref = `refs/heads/${branch.replace(/^refs\/heads\//, "")}`;
+  const found: string[] = [];
   for (const repo of repos) {
     const list = await git(repo, ["worktree", "list", "--porcelain"]).catch(() => "");
     let path = "";
     for (const line of list.split("\n")) {
       if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
-      else if (line === `branch ${ref}` && path) return realpath(path).catch(() => null);
+      else if (line === `branch ${ref}` && path) {
+        const real = await realpath(path).catch(() => null);
+        if (real) found.push(real);
+      }
     }
   }
-  return null;
+  // A linked root can have the same branch checked out in two of its repositories: the path tells them apart.
+  if (found.length > 1) throw new Error(`Branch ${branch} is checked out in more than one repository of this card (${found.join(", ")}); pass the worktree's absolute path instead.`);
+  return found[0] ?? null;
 }
 
 /**

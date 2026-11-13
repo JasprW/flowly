@@ -40,6 +40,17 @@ test("resolves a worktree by its path, a folder inside it, or its branch; a link
   await symlink(repo, join(root, "Repo"), "dir");
   expect((await resolveWorktree("feat/wt", root)).directory).toBe(worktree);
   expect((await resolveWorktree(worktree, root)).directory).toBe(worktree);
+  // The same branch in a second linked repository: ambiguous by name, the path still works.
+  const second = join(base, "second");
+  await mkdir(second);
+  await git(second, "init", "-q", "-b", "main");
+  await writeFile(join(second, "x"), "x\n");
+  await git(second, "add", ".");
+  await git(second, "commit", "-q", "-m", "init");
+  await git(second, "worktree", "add", "-q", "-b", "feat/wt", join(second, ".worktrees/wt"));
+  await symlink(second, join(root, "Second"), "dir");
+  await expect(resolveWorktree("feat/wt", root)).rejects.toThrow("more than one repository");
+  expect((await resolveWorktree(worktree, root)).directory).toBe(worktree);
 });
 
 test("refuses a missing path, another repository, the workspace itself, an unknown branch and a workspace without git", async () => {

@@ -684,7 +684,7 @@ export class AutoReviewService {
           dirty: !!head?.dirty,
         },
         shared: !where?.worktree,
-        ...(where && delivery.worktree ? { worktree: where.directory } : {}),
+        ...(delivery.worktree ? { worktree: delivery.worktree } : {}),
         ...(measured ? { shape: measured.shape } : {}),
         items,
         startedAt,
@@ -725,7 +725,7 @@ export class AutoReviewService {
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
         });
       }
-      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo);
+      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual && started.previous?.worktree === delivery.worktree ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo);
     }
     const after = !where ? null : linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now());
     const outcome = await this.finish(delivery.taskId, startedAt, where ? after : undefined);

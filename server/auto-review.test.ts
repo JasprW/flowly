@@ -955,6 +955,8 @@ test("a delivery that names a worktree is reviewed there: commands, diff since t
   const again = (await card(x)).review!;
   expect(again.state).toBe("unavailable");
   expect(again.reason).toContain("The delivered worktree is unavailable");
+  // Kept on the review, so a later Rerun still names it even after the delivery event is trimmed.
+  expect(again.worktree).toBe(worktree);
   expect(cwds).toEqual([worktree]);
 }, 20_000);
 

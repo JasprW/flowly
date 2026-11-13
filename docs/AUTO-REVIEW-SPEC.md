@@ -97,9 +97,9 @@ stateDiagram-v2
 卡片工作区是共享目录（例如项目主目录，里面有别的会话未提交的改动）时，agent 常把实现放进同一仓库的另一个 git worktree（如 `.worktrees/<name>`）。评审只看工作区就看不到这些改动，还会把主目录里无关的改动算到这张卡上。
 
 - **交付参数**：`flowly_update_status(in_review)` 可选 `worktree`（≤1000 字符；CLI `--worktree`）：worktree 的绝对路径（或其中任一子目录），或其中检出的分支名（`feat/x` 或 `refs/heads/feat/x`，按 `git worktree list --porcelain` 找）。只在交付到 In review 时有效，否则 `INVALID_INPUT`。
-- **校验**（交付时，写入前）：解析成 worktree 顶层目录的真实路径；它的 `git-common-dir` 必须等于卡片仓库的（工作区本身是仓库时就是它；linked root 时是其中任一仓库）。路径不存在、不在 git 里、属于别的仓库、就是卡片工作区本身、没有 worktree 检出该分支、卡片工作区不是 git 仓库时 `INVALID_INPUT`，卡片不动，错误信息说明原因。精确重放沿用原回执，不再校验。
-- **记录**：解析后的真实路径写在交付的 `status_changed` 事件上（`worktree`），Rerun 沿用最近一次交付的；评审记录 `review.worktree` 记下评审实际用的目录。
-- **评审**：评审开始时重新解析一次；然后命令检查在该 worktree 里跑，形状和 diff 从那里读，指纹（`sha`、`dirty`）用它的 HEAD，`shared = false`（不再加共享工作区那句提示）。linked root 只看这个 worktree，不再逐个仓库读。
+- **校验**（交付时，写入前）：解析成 worktree 顶层目录的真实路径；它的 `git-common-dir` 必须等于卡片仓库的（工作区本身是仓库时就是它；linked root 时是其中任一仓库）。路径不存在、不在 git 里、属于别的仓库、就是卡片工作区本身、没有 worktree 检出该分支、linked root 里不止一个仓库检出了同名分支（这时要给路径）、卡片工作区不是 git 仓库时 `INVALID_INPUT`，卡片不动，错误信息说明原因。精确重放沿用原回执，不再校验。
+- **记录**：解析后的真实路径写在交付的 `status_changed` 事件上（`worktree`），Rerun 沿用最近一次交付的；评审记录 `review.worktree` 记下交付指定的目录（解析失败时也记），交付事件被裁剪后 Rerun 仍能用它。
+- **评审**：评审开始时重新解析一次；然后命令检查在该 worktree 里跑，形状和 diff 从那里读，指纹（`sha`、`dirty`）用它的 HEAD，`shared = false`（不再加共享工作区那句提示）。linked root 只看这个 worktree，不再逐个仓库读。返工轮（§6.3）只在上一轮评审的是同一个 worktree（或都没有）时按增量读；目录换了就从头读全量 diff，因为上一轮的 sha 不属于这个目录。
 - **基准**：卡片有 `baseRef` 时用它；否则在 worktree 所属仓库的 HEAD 和它的 upstream（如 `origin/main`）里，取与 worktree HEAD 的 merge-base 离 HEAD 最近的那个（`rev-list --count` 最小），diff 是 `git diff <merge-base>` 加未跟踪的新文件，所以未提交的改动也在内，主分支之后的提交不算进来。
 - **评审 session** 仍建在卡片工作区里，提示词加一句：交付的代码在该 worktree 里，读文件去那里。
 - **worktree 不在了**（评审开始时解析失败，例如已删除）：所有检查 `unavailable`，原因 “The delivered worktree is unavailable: …”。不退回去看工作区，免得又把别的改动当成这张卡的。
