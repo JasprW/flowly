@@ -1437,5 +1437,11 @@ const catalog: Catalog = {
   "Memory could not be read": "メモリを読み込めませんでした",
   "Find memory in finished cards": "完了したカードからメモリを見つける",
   "Back from session, then close sidebar, then leave a project page": "セッションから戻る → サイドバーを閉じる → プロジェクトページを離れる",
+  "Previous image": "前の画像",
+  "Next image": "次の画像",
+  "At most {cardImageLimit} images per card.": "1 枚のカードに追加できる画像は最大 {cardImageLimit} 枚です。",
+  "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "カードに画像を付けられます。「タスクを編集」で説明欄に画像を貼り付けるかドロップしてください。エージェントは説明の一部として画像を見ます。",
+  "Images in descriptions": "説明の画像",
+  "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "Web ではカードの説明欄に画像を貼り付けるかドロップできます。エージェントは説明と一緒に画像を見ます。スマートフォンでは表示できます。",
 };
 export default catalog;

@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { ideaTitleKey } from "../shared/ideas";
 import { nextMovesAction, noMovesNote } from "../shared/next-moves";
 import { isResolved, linksOf } from "../shared/links";
+import { cardImagePath } from "./card-images";
 import { absoluteTarget, artifactsOf } from "../shared/artifacts";
 import { turnChecklist } from "../shared/turn-checklist";
 import { changeTags, normalizeTags, projectTagStats, tagChangeNote } from "../shared/tags";
@@ -322,7 +323,10 @@ export class AgentService {
     const built: ToolContext = {
       identity,
       turnChecklist: [...turnChecklist],
-      task: (({ review: _review, ...task }) => task)(r.task),
+      task: (({ review: _review, images, ...task }) => ({
+        ...task,
+        ...(images ? { images: images.map((image) => ({ ...image, absolutePath: cardImagePath(this.store.directory, task.id, image) })) } : {}),
+      }))(r.task),
       // The card's latest automatic review (AUTO-REVIEW-SPEC §5); state "rework" means its findings come first.
       ...(r.task.review ? { review: reviewContext(r.task.review) } : {}),
       project: r.project,

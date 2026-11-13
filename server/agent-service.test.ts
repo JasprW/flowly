@@ -9,6 +9,7 @@ import { openNextMoves } from "../shared/next-moves";
 import { answersReminder, ideasReminder, movesReminder, outputsReminder } from "./reminders";
 import { setupReminder } from "../shared/card-setup";
 import { putArtifact } from "./artifacts";
+import { CardImageService } from "./card-images";
 import { ExternalError } from "./connectors/http";
 import { turnChecklist } from "../shared/turn-checklist";
 import { toolContextSchema } from "../shared/tools";
@@ -1162,4 +1163,15 @@ test("proposal replay reads legacy receipts without an idea ID while the idea is
   const before = await readFile(x.store.path, "utf8");
   expect(await restored.write(x.identity, "idea", call)).toMatchObject({ replayed: true, ideaId: first.ideaId });
   expect(await readFile(x.store.path, "utf8")).toBe(before);
+});
+
+test("get_task gives each card image its absolute path, and the context names them (CARD-IMAGES-SPEC §5)", async () => {
+  const x = await setup();
+  const images = new CardImageService(x.store);
+  const data = Buffer.from("png-bytes").toString("base64");
+  const { task } = await images.add({ taskId: "t", expectedRevision: 1, image: { name: "screen.png", mimeType: "image/png", data } });
+  const ctx = await x.service.get(x.identity);
+  const path = images.pathOf("t", task.images![0]);
+  expect(ctx.task.images).toEqual([{ ...task.images![0], absolutePath: path }]);
+  expect(toolContextSchema.parse(ctx).task.images![0].absolutePath).toBe(path);
 });

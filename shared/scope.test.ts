@@ -29,3 +29,10 @@ test("session context names missing card setup, and only what is missing (CARD-S
   expect(setupContextLine([])).toBe("");
   expect(sessionContext(typed, project, paths, "/r", [], [], "")).not.toContain("Card setup missing");
 });
+
+test("session context puts the card images line right after the description (CARD-IMAGES-SPEC §5)", () => {
+  const paths = [{ repo: "/r", directory: "/r" }];
+  const line = "Card images (part of the description; view each with your image tool): /d/card-images/t/img-1.png";
+  expect(sessionContext(task, project, paths, "/r", [], ["Input: spec.md"], "", [], line)).toContain(`Steps\n${line}\nInput: spec.md\n`);
+  expect(sessionContext(task, project, paths, "/r")).not.toContain("Card images");
+});

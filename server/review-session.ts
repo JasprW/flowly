@@ -62,7 +62,7 @@ export function reviewPrompt(input: LlmReviewInput): string {
       : []),
     `Reply only with JSON: {"items":[{"id","verdict","detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,
     "",
-    `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}`,
+    `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}${input.task.images?.length ? `\nCard images (part of the description; view each with your image tool): ${input.task.images.join(", ")}` : ""}`,
     // The built-in check's yardstick (§4.2): the user's own words, oldest first; a later one replaces an earlier one.
     ...(input.conversation !== undefined
       ? [

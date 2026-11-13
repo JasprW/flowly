@@ -1437,5 +1437,11 @@ const catalog: Catalog = {
   "Memory could not be read": "Не удалось прочитать память",
   "Find memory in finished cards": "Искать что запомнить в завершённых карточках",
   "Back from session, then close sidebar, then leave a project page": "Назад из сессии, затем закрыть боковую панель, затем выйти со страницы проекта",
+  "Previous image": "Предыдущее изображение",
+  "Next image": "Следующее изображение",
+  "At most {cardImageLimit} images per card.": "Не больше {cardImageLimit} изображений на карточку.",
+  "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "В карточки можно добавлять изображения: вставьте или перетащите их в описание в окне «Изменить задачу». Агенты видят их как часть описания.",
+  "Images in descriptions": "Изображения в описаниях",
+  "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "В веб-версии вставьте или перетащите изображения в описание карточки. Агенты видят их вместе с описанием; на телефоне их можно посмотреть.",
 };
 export default catalog;

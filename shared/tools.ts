@@ -7,6 +7,7 @@ import { guardrailScopeSchema } from "./guardrails";
 import { agentSearchSources, searchLimits } from "./search";
 import {
   taskSchema,
+  cardImageSchema,
   projectSchema,
   eventSchema,
   receiptSchema,
@@ -387,7 +388,8 @@ export const toolContextSchema = z.object({
       missing: z.array(z.enum(setupItems)),
     })
     .optional(),
-  task: taskSchema,
+  /** Card images carry the absolute path of their file (CARD-IMAGES-SPEC §5). */
+  task: taskSchema.extend({ images: z.array(cardImageSchema.extend({ absolutePath: z.string() })).optional() }),
   project: projectSchema,
   revision: revisionSchema,
   request: requestSchema,
