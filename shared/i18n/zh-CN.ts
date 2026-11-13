@@ -1443,5 +1443,11 @@ const catalog: Catalog = {
   "Memory could not be read": "无法读取记忆",
   "Find memory in finished cards": "从完成的卡片里找记忆",
   "Back from session, then close sidebar, then leave a project page": "退出会话，再关闭侧栏，再离开项目页面",
+  "Previous image": "上一张",
+  "Next image": "下一张",
+  "At most {cardImageLimit} images per card.": "每张卡片最多 {cardImageLimit} 张图片。",
+  "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "卡片可以带图片：在“编辑任务”里把图片粘贴或拖到描述中。智能体会把它们当作描述的一部分。",
+  "Images in descriptions": "描述中的图片",
+  "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "在网页端把图片粘贴或拖到卡片描述里。智能体随描述一起看到它们；手机上可以查看。",
 };
 export default catalog;

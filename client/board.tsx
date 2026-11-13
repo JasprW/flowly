@@ -1,4 +1,5 @@
 import type { BoardOverview } from "../shared/overview";
+import { imageInputSupported } from "./web-images";
 import { CardDetailProvider, detailQueryOptions, detailUnavailable, invalidateCardViews, useCardDetailQuery, useProjectIdeasQuery } from "./card-detail-query";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Animated, Platform, Pressable, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
@@ -166,6 +167,7 @@ const tipText: Record<TipId, (compact?: boolean) => string> = {
   search: () => t("Find past cards, notes, workpads and deliverables with the search button or S."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
   "lane-swipe": () => t("Swipe left or right to switch lanes."),
+  "card-images": () => t("Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description."),
   "card-display": (compact) => compact
     // Compact puts the Sort choices and Card display… in the Filters dialog.
     ? t("Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.")
@@ -1252,6 +1254,7 @@ function BoardContent(
           reviewShown: !task && projectTasks.some((x) => !!visibleReview(x)),
           learnedGuideline: !task && !!projectGuardrails?.added,
           laneSwipe: touch && !task && !page && shownStatuses.length > 1 && projectTasks.some((x) => !x.archivedAt),
+          imageInput: imageInputSupported && !!task && !task.archivedAt && !task.images?.length,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
       });

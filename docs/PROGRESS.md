@@ -15,6 +15,15 @@
 - Onboarding: no tour copy or tip (agent-facing delivery parameter, no user-visible UI). Telemetry: no new field (not a switch; deliveries are already counted). What's new: none.
 - Checks: see the delivery note. Unrun: a live auto review through the installed plugin.
 
+## Card description images (issue #99, card "Add image as description") — 2026-11-13
+
+- Spec: `docs/CARD-IMAGES-SPEC.md` (user decisions 2026-11-13: copies in `<plugin data>/card-images/<taskId>/`, phones view and remove only, thumbnails under the description).
+- Daemon: `server/card-images.ts` (`card-images.add/remove/read` RPCs, revision CAS, files written before the board and removed when its write fails, start-up cleanup of unreferenced files, card delete and project Remove move them to `removed/`). The native chip projection drops `images`.
+- Agents: the session context lists the absolute paths right after the description; `flowly_get_task` gives each image its `absolutePath`; the skill text says to view them before starting; the auto review prompt lists them.
+- Client: thumbnail row under the description in the card sidebar (thumbnails only while the sidebar is ready, full image only in the viewer, with previous/next and Remove); web paste/drop/**Add images** on the description of New task and Edit task, a 320 px canvas thumbnail (WebP, else JPEG), uploads after the save. New task's former first-message images became description images.
+- Onboarding: tip `card-images` (web, open card without images) and a More features line. README highlight. Telemetry: no heartbeat field (not a core action).
+- Live check on Tinylink (`docs/verification/card-images/`): web paste/drop/file chooser, save, thumbnails, viewer, remove, context paths, card delete moving images to `removed/`, and a Claude Haiku session reading the images by path all passed. Unrun: Codex (the `codex-aicodewith` provider failed before its turn; plain `codex` is not installed) and the phone (no device reachable over adb, AndroMeld not running).
+
 ## Preserve intraword underscores in session/card Markdown — 2026-11-12
 
 - Fixed session previews and card descriptions swallowing intraword underscores, including when copied: `parseSessionInline` checks the outside characters of underscore emphasis, keeps rejected matches literal and resumes scanning one character later. Existing link parsing stays unchanged.

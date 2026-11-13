@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { cardImagePath } from "./card-images";
 import { promisify } from "node:util";
 import type { PaseoApi } from "@getpaseo/client";
 import { laneEnabled } from "../shared/lanes";
@@ -69,7 +70,7 @@ export type JudgedCheck = {
 };
 /** What the review session reads (GUARDRAILS-SPEC §6.3). */
 export type LlmReviewInput = {
-  task: { id: string; title: string; description: string; type?: TaskType; workspaceId: string };
+  task: { id: string; title: string; description: string; type?: TaskType; workspaceId: string; /** Absolute paths of the card's images (CARD-IMAGES-SPEC §5). */ images?: string[] };
   checks: JudgedCheck[];
   /** The user's messages in the card's sessions, oldest first (§4.2); null when they could not be read. */
   conversation?: string[] | null;
@@ -796,7 +797,14 @@ export class AutoReviewService {
     const text = (i: ReviewItem) =>
       i.kind === "goal" ? goalPrompt : i.kind === "guideline" ? [guard?.guidelines.find((g) => g.id === i.id)?.text ?? i.name, guard?.guidelines.find((g) => g.id === i.id)?.body].filter(Boolean).join("\n") : i.name;
     const input: LlmReviewInput = {
-      task: { id: task.id, title: task.title, description: task.description, type: task.type, workspaceId: task.workspaceId },
+      task: {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        type: task.type,
+        workspaceId: task.workspaceId,
+        ...(task.images?.length ? { images: task.images.map((image) => cardImagePath(this.store.directory, task.id, image)) } : {}),
+      },
       checks: judged.map((i) => {
         const quote = guard?.words.get(i.id);
         const prior = incremental ? before.get(i.id) : undefined;

@@ -20,7 +20,7 @@ export function chipBoard(board: z.infer<typeof boardSchema>): z.infer<typeof bo
   return {
     ...board,
     projects: board.projects.map((project) => ({ ...project, description: "" })),
-    tasks: board.tasks.map((task) => ({ ...task, description: "" })),
+    tasks: board.tasks.map(({ images: _images, ...task }) => ({ ...task, description: "" })),
     events: events.reverse(),
     ideas: board.ideas.filter((idea) => idea.status === "open"),
     links: [], artifacts: [], workpads: [], plans: [], attentionDismissals: [],

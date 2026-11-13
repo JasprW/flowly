@@ -29,6 +29,7 @@ import { ComposerService, ComposerStore } from "./server/composer";
 import { adoptIdea } from "./server/ideas";
 import { createLink, deleteLink } from "./server/links";
 import { ArtifactService } from "./server/artifacts";
+import { CardImageService } from "./server/card-images";
 import { WorkpadService } from "./server/workpad";
 import { ConnectorService, migrateTicketDirectory, refKey } from "./server/connectors/service";
 import { projectRepos } from "./server/connectors/repos";
@@ -476,6 +477,7 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.removeProject, async (input, { paseo }) => {
     const taskIds = new Set((await store.read()).tasks.filter((t) => t.projectId === input.id).map((t) => t.id));
     const removed = await service.removeProject(input, paseo);
+    await cardImages.removeTasks(taskIds).catch((e) => logFailure("Card images not moved to removed:", e));
     await summaries.store.removeTasks(input.id, taskIds).catch((e) =>
       logFailure("Kanban summaries not removed:", e),
     );
@@ -499,6 +501,9 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.createLink, (input) => createLink(store, input));
   server.handle(rpc.deleteLink, (input) => deleteLink(store, input));
   const artifacts = new ArtifactService(store, connectors);
+  // Description images (CARD-IMAGES-SPEC); files no card refers to go at start.
+  const cardImages = new CardImageService(store);
+  void cardImages.cleanup().catch((e) => logFailure("Card images not cleaned:", e));
   const workpads = new WorkpadService(store);
   // Automatic review of agent deliveries (AUTO-REVIEW-SPEC); rework goes out through the composer queue.
   const reviews = new AutoReviewService(store, {
@@ -562,12 +567,16 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.artifactStatus, (input, { paseo }) => artifacts.status(input, paseo));
   server.handle(rpc.previewArtifact, (input, { paseo }) => artifacts.preview(input, paseo));
   server.handle(rpc.checkWorkpad, (input) => workpads.check(input));
+  server.handle(rpc.addCardImage, (input) => cardImages.add(input));
+  server.handle(rpc.removeCardImage, (input) => cardImages.remove(input));
+  server.handle(rpc.readCardImage, (input) => cardImages.read(input));
   server.handle(rpc.deleteTask, async (input, { paseo }) => {
     const archived = input.archive
       ? await wrapups.run({ ...input, keepCard: true, purpose: "delete" }, paseo)
       : null;
     const projectId = (await store.read()).tasks.find((t) => t.id === input.id)?.projectId;
     const deleted = await store.deleteTask(input);
+    await cardImages.removeTasks([deleted.id]).catch((e) => logFailure("Card images not moved to removed:", e));
     if (projectId)
       await flow.removeTask(projectId, deleted.id).catch((e) =>
         logFailure("Kanban flow log not cleaned:", e),

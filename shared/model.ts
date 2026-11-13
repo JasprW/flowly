@@ -263,6 +263,19 @@ export const projectSchema = z.object({
   /** Automatic review of agent deliveries (AUTO-REVIEW-SPEC, GUARDRAILS-SPEC §8). Absent means off. */
   autoReview: autoReviewSchema.optional(),
 });
+/** An image of a card's description; the file lives in the plugin data folder (CARD-IMAGES-SPEC §2). */
+export const cardImageLimit = 8;
+export const cardImageMimeTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export const cardImageSchema = z.object({
+  id: z.string().regex(/^img-[a-z0-9-]{1,60}$/),
+  name: z.string().min(1).max(120),
+  mimeType: z.enum(cardImageMimeTypes),
+  bytes: z.number().int().positive(),
+  /** Set when a thumbnail was stored beside the image. */
+  thumbMimeType: z.enum(cardImageMimeTypes).optional(),
+  createdAt: timestamp,
+});
+export type CardImage = z.infer<typeof cardImageSchema>;
 export const taskSchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -277,6 +290,8 @@ export const taskSchema = z.object({
   type: taskTypeSchema.optional(),
   /** Absent: no tags. Unique by `tag`, in the order they were added. */
   tags: z.array(taskTagSchema).max(tagLimits.perTask).optional(),
+  /** Absent: no images. Description images, oldest first (CARD-IMAGES-SPEC). */
+  images: z.array(cardImageSchema).max(cardImageLimit).optional(),
   position: z.number(),
   revision: z.number().int().positive(),
   operationId: z.string(),

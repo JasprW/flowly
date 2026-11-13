@@ -17,6 +17,7 @@ import { readSnapshot, SnapshotInvalidError, type ProjectSnapshot } from "./proj
 import { linkLimits } from "../shared/model";
 import type { ProjectInput, TaskInput, Board, LinkedProjectInput, ProjectLinksEdit, Project, ProjectRemoval } from "../shared/model";
 import { effectiveRepos, sessionContext } from "../shared/scope";
+import { cardImageContextLine } from "./card-images";
 import { setupContextLine, setupMissing } from "../shared/card-setup";
 import { workpadEnabled, workpadOf } from "../shared/workpad";
 import { normalizeTags } from "../shared/tags";
@@ -695,6 +696,7 @@ export class BoardService {
         artifactContextLines(artifactsOf(board.artifacts, task.id), 10, await this.unreadableExternals(board, task.id)),
         setupContextLine(setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project))),
         memory.lines,
+        cardImageContextLine(this.store.directory, task),
       ),
       memoryIds: memory.ids,
       directories,

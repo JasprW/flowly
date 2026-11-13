@@ -1443,5 +1443,11 @@ const catalog: Catalog = {
   "Memory could not be read": "Impossible de lire la mémoire",
   "Find memory in finished cards": "Trouver des souvenirs dans les cartes terminées",
   "Back from session, then close sidebar, then leave a project page": "Revenir de la session, puis fermer la barre latérale, puis quitter la page du projet",
+  "Previous image": "Image précédente",
+  "Next image": "Image suivante",
+  "At most {cardImageLimit} images per card.": "Au plus {cardImageLimit} images par carte.",
+  "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "Les cartes peuvent contenir des images : collez-les ou déposez-les dans la description depuis Modifier la tâche. Les agents les voient comme une partie de la description.",
+  "Images in descriptions": "Images dans les descriptions",
+  "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "Sur le web, collez ou déposez des images dans la description d’une carte. Les agents les voient avec la description ; les téléphones les affichent.",
 };
 export default catalog;

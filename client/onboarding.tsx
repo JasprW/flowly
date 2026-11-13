@@ -426,6 +426,7 @@ function MoreFeatures() {
     { icon: "ListChecks", title: t("Workpad"), text: t("Agents set the card's type and tags and write an acceptance list before they start; the card shows how many items are met, next to the latest review.") },
     { icon: "ShieldCheck", title: t("Auto review"), text: t("Deliveries are checked before they reach you, and go back to the agent when they fall short.") },
     { icon: "PackageCheck", title: t("Auto wrap up"), text: t("Cards moved to Done or Cancelled have their sessions and workspace archived when nothing is left unsaved. Unwrap in the card brings them back.") },
+    { icon: "Image", title: t("Images in descriptions"), text: t("Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.") },
     { icon: "Package", title: t("Inputs and outputs"), text: t("Each card lists the files and links it worked from and delivered, added by agents or by you.") },
     { icon: "Ticket", title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, GitHub/GitLab issue or pull request, Azure DevOps work item, Shortcut story or epic, or Linear issue, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
     { icon: "BookMarked", title: t("Memory"), text: t("Agents remember the project's decisions, pitfalls and conventions; new sessions see them. Open Memory to pin, edit or archive them.") },
