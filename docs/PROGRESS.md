@@ -55,6 +55,13 @@
 - Open, proposed as an idea: Windows linked roots (`symlink` EPERM without Developer Mode).
 - Onboarding and heartbeat fields: none (internal fixes; nothing new to learn or count).
 
+## Test suite: git is hermetic (test-hygiene fix) — 2026-11-10
+
+- Bug (found while verifying PR #95 on this machine): the fixtures' own `git commit` calls inherited the machine's global git config, whose hooks path carries a pre-commit guard — any fixture commit on a branch named `main` was blocked. `server/repos.test.ts` ("matches canonical subdirectories…"), `server/wrapup.test.ts` ("real git: uncommitted and local-only commits are detected") and the six linked-root tests in `server/auto-review.test.ts` failed on a machine with such a hook and passed on machines without one; the suite was machine-dependent.
+- `npm test` and `npm run dev` now set `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_SYSTEM=/dev/null` for the vitest process, so git subprocesses see no global or system config. Tests needing a git identity already pass `-c user.name/-c user.email` per command, so nothing else changes.
+- Checks: `npm run typecheck` exit 0; `npm test` 1339 passed, 0 failed (the same run previously carried the 8 environment-dependent failures); each of the two named tests and the six linked-root tests verified passing in isolation on this machine.
+- Onboarding and telemetry: none (test hygiene, nothing user-visible).
+
 ## Auto review reads every repository of a linked root — 2026-11-07
 
 - Bug: in a linked root (PROJECT-PICKER-SPEC) the workspace directory is not a Git repository, so the review's `git diff`, HEAD and `ls-files` were empty, the shape was 0 and the commands ran in a folder without code (Admin+SMITH, 2026-10-30: "diff is empty, this workspace is not a git repository").
