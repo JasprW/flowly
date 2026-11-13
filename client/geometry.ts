@@ -63,6 +63,21 @@ export function laneRevealOffset(
   return next === offset ? null : next;
 }
 
+/**
+ * The lane list's scroll offset that brings a card (`y`, `height` in the list's content) into view, `inset` from the
+ * nearest edge; null when it is already fully visible. Never negative.
+ */
+export function cardRevealOffset(
+  card: { y: number; height: number },
+  offset: number,
+  listHeight: number,
+  inset = 0,
+): number | null {
+  if (card.y >= offset && card.y + card.height <= offset + listHeight) return null;
+  const next = Math.max(0, card.y < offset ? card.y - inset : card.y + card.height + inset - listHeight);
+  return next === offset ? null : next;
+}
+
 export function drawerWidth(preferred: number, surfaceWidth: number): number {
   const max = Math.min(720, Math.max(340, surfaceWidth - 312));
   return Math.max(340, Math.min(max, preferred));

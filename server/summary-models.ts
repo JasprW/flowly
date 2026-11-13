@@ -29,15 +29,45 @@ export function isWorkspaceGone(error: unknown): boolean {
   return segments.length > 0 && segments.every((segment) => WORKSPACE_GONE.test(segment));
 }
 
-type ModelAgentTurn = { status: string; error?: string | null; lastMessage?: string | null };
+type ModelAgentTurn = {
+  status: string;
+  error?: string | null;
+  lastMessage?: string | null;
+  final?: { pendingPermissions?: readonly { id: string }[] } | null;
+};
 
 type ModelAgent = RemovableAgent & {
   waitForFinish(timeout: number): Promise<ModelAgentTurn>;
-  run(text: string, options?: { timeoutMs: number }): Promise<ModelAgentTurn>;
+  run?(text: string, options?: { timeoutMs: number }): Promise<ModelAgentTurn>;
+  respondToPermission?(options: { requestId: string; response: { behavior: "deny"; message?: string } }): Promise<void>;
 };
 
 /** Providers without `prompt.output_schema` (dsh-web, observed 2026-11-13) fail the first structured turn before it starts. */
 export const OUTPUT_SCHEMA_ERROR = /prompt\.output_schema/;
+
+/** Times a temporary session may be refused a permission before the run counts as failed. */
+const MAX_PERMISSION_DENIALS = 20;
+const DENIED = "Read-only review: this tool is not available. Continue without it and answer from what you already have.";
+
+/**
+ * A temporary session is read-only by design and nobody is there to approve a prompt, so a permission request is refused
+ * and the turn carries on; the model then answers without that tool. Without this a Codex session (no read-only mode)
+ * stopped on its first tool call and the whole run failed. Gives up when the request cannot be refused.
+ */
+export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: number) {
+  // One deadline for the whole run: refusing a permission does not restart the clock.
+  const deadline = Date.now() + timeoutMs;
+  let result = await agent.waitForFinish(timeoutMs);
+  for (let denied = 0; result.status === "permission" && denied < MAX_PERMISSION_DENIALS; denied++) {
+    const pending = result.final?.pendingPermissions ?? [];
+    if (!pending.length || !agent.respondToPermission) break;
+    for (const request of pending) await agent.respondToPermission({ requestId: request.id, response: { behavior: "deny", message: DENIED } });
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return { ...result, status: "timeout" };
+    result = await agent.waitForFinish(remaining);
+  }
+  return result;
+}
 
 /** Only model create/wait/parse/cleanup are retried; the caller persists after this returns. */
 export async function runSummaryModels<T>(
@@ -58,12 +88,13 @@ export async function runSummaryModels<T>(
       const agent = await options.create(model);
       let output: T;
       try {
-        let result = await agent.waitForFinish(options.timeoutMs);
+        let result = await finishRefusingPermissions(agent, options.timeoutMs);
         // Providers without `prompt.output_schema` fail the first structured turn at start. The
         // prompt carries the JSON shape in prose, so re-run it once without the constraint on the
         // already-open handle; one dead turn per job until the provider gains the capability.
-        if (result.status === "error" && result.error && OUTPUT_SCHEMA_ERROR.test(result.error)) {
-          result = await agent.run(options.prompt, { timeoutMs: options.timeoutMs });
+        if (result.status === "error" && result.error && OUTPUT_SCHEMA_ERROR.test(result.error) && agent.run) {
+          await agent.run(options.prompt, { timeoutMs: options.timeoutMs });
+          result = await finishRefusingPermissions(agent, options.timeoutMs);
         }
         if (result.status !== "idle" || result.error) throw new Error(
           result.status === "timeout" ? "The summary model timed out."

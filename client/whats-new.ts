@@ -6,7 +6,8 @@ export interface WhatsNewItem {
   icon: string;
   /** One sentence, msg()-marked; translated at render. */
   text: string;
-  action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" };
+  /** `auto-review`: the current project's Edit project with Auto review switched on (GUARDRAILS-SPEC §10). */
+  action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" } | { label: string; to: "auto-review" };
 }
 
 export interface WhatsNewRelease {
@@ -21,6 +22,29 @@ export interface WhatsNewRelease {
  * telling existing users about (§9); a release without items is left out.
  */
 export const whatsNew: WhatsNewRelease[] = [
+  {
+    // SEARCH-SPEC §8, GUARDRAILS-SPEC §10, CONNECTORS-SPEC §14.
+    version: "1.8.0",
+    items: [
+      { icon: "Search", text: msg("Search past cards, summaries, notes, workpads, ideas and deliverables. Agents can search them too.") },
+      // GUARDRAILS-SPEC §10 (D1): on for new projects; existing ones turn it on here.
+      {
+        icon: "ShieldCheck",
+        text: msg("Auto review checks every delivery before it reaches you and sends it back to the agent when it falls short. On for new projects."),
+        action: { label: msg("Turn on for this project"), to: "auto-review" },
+      },
+      {
+        icon: "Undo2",
+        text: msg("Flowly learns from what you send cards back for: the second card with the same problem turns it into a project guideline, checked on every delivery it applies to."),
+      },
+      { icon: "BookMarked", text: msg("Memory no longer needs confirming; what agents remember takes effect at once and retires by itself when unused.") },
+      {
+        icon: "PlugZap",
+        text: msg("Shortcut stories and epics can now be card inputs, next to Jira, Confluence, GitHub, GitLab and Azure DevOps."),
+        action: { label: msg("Open settings"), to: "settings", section: "connections" },
+      },
+    ],
+  },
   {
     // INSIGHTS-REDESIGN-SPEC §5: Skills turn on for everyone who never touched the switch.
     version: "1.7.0",

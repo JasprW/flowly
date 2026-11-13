@@ -5,6 +5,11 @@ import { priorities, statusSchema, taskTypes } from "./model";
 import { languageChoices, localeCodes } from "./i18n";
 import { aiLanguageChoices } from "./ai-language";
 import { cardActivityModes } from "./card-display";
+import { memoryKinds } from "./memory";
+
+/** The Memory page's sort orders (GUARDRAILS-SPEC §7.4). */
+export const memorySorts = ["newest", "used", "recent"] as const;
+export type MemorySort = (typeof memorySorts)[number];
 
 /** Host-scoped board view preferences (not board data). */
 export const boardViewSettings = defineSettings({
@@ -44,6 +49,12 @@ export const boardViewSettings = defineSettings({
     drawerOrder: z.array(z.string().max(40)).max(20).catch([]).default([]),
     /** Card sidebar sections that start open (true) or closed (false) unlike their default (DRAWER-SPEC, Section order). */
     drawerOpen: z.record(z.string().max(40), z.boolean()).catch({}).default({}),
+    /** Card sidebar width in points as last dragged; 0 = never resized (UI-UX-SPEC, drawer width). */
+    drawerWidth: z.number().int().min(0).max(2000).catch(0).default(0),
+    /** The Memory page's kind filter, sort and wide-screen layout (GUARDRAILS-SPEC §7.4). */
+    memoryKind: z.enum(["all", ...memoryKinds]).catch("all").default("all"),
+    memorySort: z.enum(memorySorts).catch("newest").default("newest"),
+    memoryLayout: z.enum(["list", "grid"]).catch("list").default("list"),
   }),
 });
 
@@ -63,16 +74,22 @@ export const wrapupSettings = defineSettings({
   scope: "host",
   version: 1,
   schema: z.object({
-    /** Off: ask whether to wrap up. On: archive the workspace automatically when the preflight is clean. */
-    autoWrapup: z.boolean().default(false),
+    /**
+     * Off: ask whether to wrap up. On: archive the workspace automatically when the preflight is clean.
+     * Optional, not default(false): the host fills schema defaults into the values it hands out, so
+     * only an optional field lets the first-run tour tell "never set" from "turned off". Readers go
+     * through wrapupSettingsValues, which treats unset as off.
+     */
+    autoWrapup: z.boolean().optional(),
     /** Off: deleting a card asks whether to archive its sessions/workspace. On: archive without asking when the preflight is clean. */
     archiveOnDelete: z.boolean().default(false),
   }),
 });
-export type WrapupSettings = z.infer<typeof wrapupSettings.schema>;
+export type WrapupSettings = { autoWrapup: boolean; archiveOnDelete: boolean };
 export function wrapupSettingsValues(values: unknown): WrapupSettings {
   const parsed = wrapupSettings.schema.safeParse(values ?? {});
-  return parsed.success ? parsed.data : wrapupSettings.schema.parse({});
+  const data = parsed.success ? parsed.data : wrapupSettings.schema.parse({});
+  return { autoWrapup: data.autoWrapup ?? false, archiveOnDelete: data.archiveOnDelete };
 }
 
 /** Whether session lifecycle rules may move cards between lanes (AUTO-STATUS-SPEC). */

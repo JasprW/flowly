@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
 import type { LocaleCode } from "../shared/i18n";
-import { SUMMARIZER_LABELS, isSummarizer, type SummaryModelChoice, truncateTranscript, turnText } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig, isSummarizer, type SummaryModelChoice, truncateTranscript, turnText } from "../shared/summary";
 import {
   SESSION_IDEAS_MAX,
   SESSION_INSIGHTS_MAX,
@@ -27,6 +27,8 @@ import { runSummaryModels, isWorkspaceGone } from "./summary-models";
 import type { NextMoveRows } from "./next-move-rows";
 import { generatedBranchName, resolveWorktreeBaseRef } from "./service";
 import { logFailure } from "./error-report";
+import { BackgroundJobs } from "./background-jobs";
+import { turnTimeline } from "./turn-timeline";
 
 /** `session-insights.json`: serialized writes, backup, atomic replacement; invalid data is preserved, never reset. */
 export class SessionInsightStore {
@@ -104,6 +106,7 @@ function emptyInsight(agent: OutsideAgent, now: string): SessionInsight {
  */
 export class SessionInsightService {
   private queues = new Map<string, Batch[]>();
+  private jobs = new BackgroundJobs();
   private drains = new Map<string, Promise<void>>();
   /** When each session's latest turn started (in memory): rows for an older turn are not appended. */
   private started = new Map<string, string>();
@@ -121,6 +124,11 @@ export class SessionInsightService {
     return [...this.queues.keys()];
   }
 
+  /** Resolves once no background row append is left. */
+  idle() {
+    return this.jobs.idle();
+  }
+
   async turnStarted(agentId: string, paseo: PaseoApi) {
     this.started.set(agentId, new Date().toISOString());
     await this.rows.turnStarted(agentId, paseo);
@@ -134,11 +142,26 @@ export class SessionInsightService {
       .catch((e) => logFailure("Flowly session insight not updated:", e));
   }
 
+  /** Whether a turn of this session gets an insight at all; needs no timeline. */
+  private async wants(agent: OutsideAgent) {
+    if (!isOutsideCandidate(agent)) return false;
+    const settings = await this.settings();
+    return settings.enabled && (settings.parts.progress || settings.parts.nextMoves || settings.parts.ideas);
+  }
+
+  /**
+   * A completed turn of an outside session (the hook's entry). The turn's timeline is read only after the checks
+   * that need none: Flowly's own temporary sessions are deleted as soon as they finish, so reading theirs fails
+   * ("Agent not found"), and a session with insights off has nothing to read it for.
+   */
+  async turnEnded(agent: OutsideAgent, paseo: PaseoApi, endedAt = new Date().toISOString()): Promise<void> {
+    if (!(await this.wants(agent))) return;
+    return this.enqueue(agent, await turnTimeline(paseo, agent.id), paseo, endedAt);
+  }
+
   /** Resolves when this session's queue is drained (tests); the hook does not wait. */
   async enqueue(agent: OutsideAgent, timeline: readonly { type: string }[], paseo: PaseoApi, endedAt = new Date().toISOString()): Promise<void> {
-    if (!isOutsideCandidate(agent)) return;
-    const settings = await this.settings();
-    if (!settings.enabled || !(settings.parts.progress || settings.parts.nextMoves || settings.parts.ideas)) return;
+    if (!(await this.wants(agent))) return;
     const text = turnText(timeline);
     if (!text.trim()) return;
     const batch = { text, endedAt, agent };
@@ -206,7 +229,7 @@ export class SessionInsightService {
       prompt,
       create: (model) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
         parent: agent.id,
-        config: { provider: model },
+        config: readOnlyConfig(model),
         title: `Flowly insights · ${agent.title || "session"}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-session": agent.id },
         prompt,
@@ -256,7 +279,7 @@ export class SessionInsightService {
     });
     if (stale) return;
     // Rows in Paseo's timeline: best effort, never holding up the next run.
-    void this.appendRows(agent, written.summary, written.suggestion, paseo);
+    this.jobs.track(this.appendRows(agent, written.summary, written.suggestion, paseo));
   }
 
   private async appendRows(

@@ -11,6 +11,7 @@ import {
   isCompactLayout,
   keyboardOverlap,
   laneRevealOffset,
+  cardRevealOffset,
 } from "./geometry";
 
 const viewport = { x: 100, y: 80, width: 600, height: 500 };
@@ -157,5 +158,18 @@ describe("keyboard overlap", () => {
     expect(keyboardOverlap(480, 500)).toBe(0);
     // A taller IME (candidate bar) raises the inset.
     expect(keyboardOverlap(800, 456.4)).toBe(344);
+  });
+});
+
+describe("cardRevealOffset", () => {
+  test("leaves a visible card alone", () => {
+    expect(cardRevealOffset({ y: 100, height: 80 }, 50, 400, 8)).toBeNull();
+  });
+  test("scrolls a card below the list into view", () => {
+    expect(cardRevealOffset({ y: 2000, height: 80 }, 0, 400, 8)).toBe(1688);
+  });
+  test("scrolls a card above the list into view", () => {
+    expect(cardRevealOffset({ y: 100, height: 80 }, 500, 400, 8)).toBe(92);
+    expect(cardRevealOffset({ y: 2, height: 80 }, 500, 400, 8)).toBe(0);
   });
 });

@@ -1,5 +1,17 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-11-13 卡片描述图片（已设计，未实现；issue #99）：描述下方一排缩略图，原图与缩略图存到插件数据目录 `card-images/<taskId>/`（存副本，不算产物，CARD-ARTIFACTS“只存引用”不变）；web 粘贴、拖放或 Add images 添加，手机只能看和删；agent 从 session 上下文和 `get_task` 拿到绝对路径自己查看。手机仍不加图片选择器（SDK 0.16 仍没有，维持 2026-10-21 决定），session 发图走 Open in Paseo，向 getpaseo 提 SDK 需求。[CARD-IMAGES-SPEC](CARD-IMAGES-SPEC.md)。
+
+2026-11-11 Paseo 0.16 插件能力（已设计，未实现）：重点是后台任务（摘要、记忆复盘、Insights、自动验收改用后台 agent；自动验收和 Wrap up 考虑 agent 仍在跑的后台任务）和 composer（Next moves 用 `setPrompt`/`focus` 填入，手机也可用；卡片 session 的输入框上放阶段选择与 Next moves 控件）；插件订阅、实体元数据、客户端状态 hook 作配套；侧栏视图、New workspace 项、按设备设置暂缓（用户决定 2026-11-11）。探测方式：贡献函数存在 / 调用识别 `Update the host…` 拒绝 / 宿主版本兜底（插件读不到 `server_info.features`），0.15 回退；列出对 AGENTS.md 例外的影响。等 0.16.0 正式版后分三个任务做：composer（含 SDK 升级）、后台任务、其余配套。[PASEO-0.16-SPEC](PASEO-0.16-SPEC.md)。
+
+2026-10-28 项目护栏闭环（已设计，用户批准，实现中，分支 feat/guardrails）：把项目记忆、Workpad、交付自动验收和 Insights 的建议部分改成一条线。你退卡时说的话由卡片总结顺便归纳成卡片专属项，第二张卡再出现就自动升为项目准则（范围等于来源卡的类型与大小之并，只扩不缩）；agent 交付时 daemon 跑项目命令、评审 session 判内置检查、范围内准则和本卡专属项，不过退回返工；抓到、漏掉、误判三个计数由退卡、不退、移到 Done 自动算出，误判 2 次暂停、20 次没抓到归档，准则 20 条、命令 10 条、备忘 100 条满了挤出；记忆写入即生效，没有收件箱；命令每周重识别加观察期；workpad 只剩验收清单，自报验证与软门槛去掉；Insights 顶部换成 14 天交付数、首次通过率、误判率；Memory 页改为 Guardrails 页；新项目 Auto review 默认开。[GUARDRAILS-SPEC](GUARDRAILS-SPEC.md)。
+
+2026-10-28 交付自动验收（P1、P2 已实现未提交，P3 已设计）：项目开启后，agent 交付时 workpad 有失败或过期验证项当场拒绝；交付后 daemon 跑项目的检查命令，再由独立评审 session 判定内置检查“做到了用户要求的事”（对照卡片和用户在会话里的原话）与项目的 LLM 检查；不通过退回交付前的工作阶段并给原 session 发返工消息，达到上限移到 Blocked；通过才进入 Attention。打开开关时从仓库识别检查命令；老用户从 What's new、新用户在交付后返工多时从 Insights，用过往卡片生成门禁总结和预选检查；Insights 定期推荐增量检查；Adjust with AI 设置卡片为次要入口。[AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md)。
+
+2026-11-06 Paseo 0.14 插件工具接入（已实现）：最低 Paseo 升到 0.14.0。`agent.session_open` hook 在每次启动时给 Flowly 管理的 session 注入 `flowly` MCP server（只在启动时生效，不写进 agent 配置），新建 session 不再把 MCP URL 和凭据存进 agent 配置；“Send Kanban work instructions” 加入的空闲 session 重开后也有 MCP。保存配置里已带 `flowly` 的旧 session、不支持 MCP 的 provider 不注入。不接 `defineAgentTool`（并入 Paseo 自己的 MCP，Paseo tools 关闭时会静默消失）。[PASEO-SESSION-TOOLS-SPEC](PASEO-SESSION-TOOLS-SPEC.md)。
+
+2026-10-27 搜索（已实现）：daemon 内存扫描卡片、最新摘要、agent 笔记、workpad、ideas、交付物和项目记忆；`search.query` RPC + 看板 Search 页（默认当前项目，可切全部）；agent 工具 `flowly_search`（本项目、不含自己的卡和记忆）。FTS5 留第二期。[SEARCH-SPEC](SEARCH-SPEC.md)。
+
 2026-10-26 匿名使用数据（已实现，待随 1.7.0 发布）：daemon 每天最多向 PostHog Cloud US 发一条 `flowly_heartbeat`（不用 SDK），字段按白名单：版本、平台、界面实际语言（`ui_locale`，替代 GeoIP）、功能开关、窗口内计数、模型计数表；数量分桶，不发任何内容、路径或 ID。默认开启，Settings → General 与导览最后一页可关闭；`DO_NOT_TRACK` / `FLOWLY_TELEMETRY=0` 强制关闭；告知前也发送，关闭后不再发送。[spec](TELEMETRY-SPEC.md)。
 
 2026-10-26 加载优化 R2（已实现，PR #67）：所有布局都读总览加单卡详情，客户端不再读完整看板；表单、连接编辑器、Next moves 和 Ideas 的动作只读自己的卡或项目；不留切回开关。[LOADING-R2-SPEC](LOADING-R2-SPEC.md)。
@@ -287,3 +299,10 @@ releases from validated version tags. [Spec](CI-CD-SPEC.md),
 2026-10-24：统一紧凑布局性能路径，保留独立Overview/CardDetail、fresh授权、连续动画与450ms交接；按可用宽度760分界，移除性能门控的平台特化，清理旧CardBoardContext/Proxy。见[统一规范](RESPONSIVE-PERFORMANCE-SPEC.md)、[两阶段读模型](NATIVE-OVERVIEW-SPEC.md)和[瘦身规范](CARD-QUERY-SLIM-SPEC.md)。验证结果见[交付记录](verification/responsive-ship-2026-10-24/README.md)。
 
 - [Motion smoothness](MOBILE-SMOOTHNESS-SPEC.md): fixed Samsung baseline/static-dot/candidate/reverse windows; shared sweep clock yields to existing height lease, no visual geometry/fresh/modal rewrite. Scoped frame observations and remaining long frames are reported separately.
+
+2026-10-29 Shortcut connector：第六个只读 provider 族，覆盖 story 与 epic，`sc-<id>` key，
+评论内联返回，epic 的 Markdown 带它的 story 列表。见 [spec](CONNECTORS-SPEC.md) §14。connector
+框架本身不变。
+
+2026-11-12 Linear connector：第七个只读 provider 族，覆盖 issue，`TEAM-123` key，GraphQL 只发常量 query
+（`queryEndpoints` 放行 `/graphql`），issue 的 Markdown 带子 issue 与评论。见 [spec](CONNECTORS-SPEC.md) §15。

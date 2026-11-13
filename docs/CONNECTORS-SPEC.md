@@ -26,7 +26,7 @@
 | Artifacts 统一 + 菜单；New task 的 From Jira 泛化为 From…；设置 Connections 页四个分组 | 后台轮询、webhook、OAuth、读取 `gh`/`glab`/sra 等其他工具的凭据 |
 | agent 通过 `flowly_read_external` 读任意 connector 条目；内容变化标 unread | agent 访问卡片未引用的条目，或执行任意搜索 |
 
-Linear 仍是 EXTERNAL-TRACKER-SPEC 的 P2，可以作为本框架的第五个 provider 后续接入，本卡不做。
+Linear issue 的只读关联现按 §15 接入（第七个 provider 族），沿用本框架。
 
 ## 2. 条目类型
 
@@ -316,3 +316,50 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 - **界面**：品牌图标按 §8.3 的做法，用 Simple Icons 的 Azure DevOps 路径（CC0）渲染成 48 px PNG，颜色 #0078D4，以 data URI 打包（约 0.8 KB）。设置 → Connections 增加第五个分组。
 - **测试**：`server/connectors/azure.test.ts`（mock fetch：Basic 头、登录页、链接/AB# 识别、WIQL 与引号转义、Markdown、指纹、403、只有 WIQL 一个 POST）、`shared/connectors.test.ts`（链接、Server/旧域名、key、查询分类）。**未做**：真实组织联调（需要用户的组织地址和 PAT）。
 - onboarding：更新欢迎页功能行、`jira-connect` tip 文案和 README；不新增 tip id（连接与使用方式没有变化，已有 tip 覆盖）。
+
+## 14. Shortcut（2026-10-29，卡片“Shortcut connector”）
+
+第六个 provider 族 `shortcut`（provider id `shortcut`），沿用本 spec 的全部规则：只读、外部状态不驱动卡片、默认 input、令牌只在 daemon。范围是 **story 与 epic**；Shortcut 的 document、iteration、objective、milestone 不做。目标是“从 Shortcut story 建卡，并让 agent 读到它所属的 epic”：New task 的 **From Shortcut** 与 Artifacts 的 + 菜单都会出现这个服务。
+
+- **连接**：Shortcut 只有云端，所以只有一个 provider，没有自建变体。一个连接 = 一个 workspace，`baseUrl` 为 `https://app.shortcut.com/<workspace-slug>`，与 Azure DevOps 的组织地址同理（§13）；**没有 `defaultBaseUrl`**，设置页要求填写地址。**API 根是另一个域名** `https://api.app.shortcut.com/api/v3`，由 adapter 以常量持有，`baseUrl` 不参与拼接。API token，请求头 `Shortcut-Token`，无邮箱字段。校验 `GET /api/v3/member`：账户显示 `名字 (@mention_name)`，login 取 `mention_name`，并把响应里的 `workspace2.url_slug` 与配置的 slug 比对——令牌属于别的 workspace 时，报错同时给出两个名字，而不是悄悄读错看板。
+- **条目类型**：`itemTypes` 增加 `story` 与 `epic`。agent 上下文里 story 写作 “Shortcut story”，epic 写作 “Shortcut epic”。
+- **key**：story 是 `sc-<id>`（Shortcut 自己的分支命名写法），epic 是 `epic-<id>`。两者都必须能被 `parseKey` 解析，因为 `ConnectorService.resolve` 会把链接产生的每个 key 再过一遍 `parseKey`。选择器里裸 `<id>` 读作 **story**，因为人手输的就是它；epic 通过链接、`epic-<id>` 或搜索进入。
+- **识别**：workspace 地址之下的 `(story|epic)/<id>`，带不带标题 slug、子路径或锚点都可以。slug 是 `baseUrl` 的一部分，所以别的 workspace 的链接不会匹配。document、iteration、objective 的链接不识别。
+- **我的最近**：`GET /api/v3/search/stories?query=owner:<login> !is:done`，在客户端按 `updated_at` 排序（搜索接口没有排序参数），取前 10 个。
+- **文字搜索**：同一个接口传用户的词。Shortcut 的查询语言用 `field:value` 操作符，所以含 `:` 或双引号的文字整体加引号、内部引号翻倍；查询串绝不由未转义的词拼接而成。epic 用 `GET /api/v3/search/epics`，规则相同。
+- **读取**：`GET /api/v3/stories/{id}` 与 `GET /api/v3/epics/{id}`。两者都**内联返回评论**，所以读全文是一次请求而不是两次。epic 另外读 `GET /api/v3/epics/{id}/stories` 拿它的 story 列表。
+- **workspace 名称查询**：story 只带 `workflow_state_id` 与 `owner_ids`，不带名字。adapter 用 `GET /api/v3/workflows` 与 `GET /api/v3/members` 解析，按连接缓存 10 分钟。任一失败只让 Markdown 少一行（状态或负责人），不会让读取失败。
+- **Markdown**：标题，然后元数据（类型、状态、负责人、标签、epic、iteration、估点、截止日、分支），然后描述，然后最近 20 条评论。Shortcut 的描述本身就是 Markdown，不需要做存储格式转换（与 Jira、Azure DevOps 不同）。epic 追加它的 story 列表，形如 `sc-<id> — 标题（状态）`。
+- **指纹**：标题、描述、每条评论的 id 加 `updated_at`。状态、负责人、标签、排序不算，依 §3.2。新评论是否推进 story 自身的 `updated_at` 不确定，所以 `updatedCoversContent: false`（与 Confluence、Azure DevOps 相同）：指纹每次重新读取全文。
+- **批量摘要**：Shortcut 没有按 id 批量读取的接口，`getMany` 逐个 GET，并发 4，与 §5 给 GitLab 定的规则一致。
+- **错误**：401/403 → AUTH；404 → NOT_FOUND；429 → UNAVAILABLE 并读 `Retry-After`（Shortcut 按分钟限流）；5xx → UNAVAILABLE。
+- **白名单**：`/api/v3/member`、`/api/v3/members`、`/api/v3/workflows`、`/api/v3/search/(stories|epics)`、`/api/v3/stories/:id`、`/api/v3/epics/:id`、`/api/v3/epics/:id/stories`。只发 GET，本族不新增 `queryEndpoints`。
+- **界面**：品牌图标按 §8.3 的做法，用 Simple Icons 的 Shortcut 路径（CC0）渲染成 48 px PNG，颜色 #58B1E4，以 data URI 打包。设置 → Connections 增加第六个分组。
+- **验收**：连接能校验并显示账户；粘贴 story 链接与手输 `sc-<id>` 都能解析；**From Shortcut** 列出当前用户的未完成 story；agent 能用 `flowly_read_external` 读 story 与 epic，且 epic 的 Markdown 列出它的 story；改描述会让指纹变化，只改状态不会；令牌被吊销时连接标记 `authFailed` 且不丢缓存内容。
+- **测试**：`server/connectors/shortcut.test.ts`（mock fetch：`Shortcut-Token` 头、派生的 API 域名、登录页、搜索转义、story 与 epic 读取、Markdown、状态变化时指纹不变、404 与 429、所有请求都在白名单内）、`shared/connectors.test.ts`（链接识别、`sc-` 与 `epic-` key、查询分类）、`server/connectors/shortcut.live.test.ts`（真实 workspace 联调，未设 `SHORTCUT_API_TOKEN` 时自动跳过）。2026-10-29 在真实 workspace 联调通过（[证据](verification/shortcut-connector.md)）。
+- onboarding：更新欢迎页功能行、`jira-connect` tip 文案、README 与 1.8.0 的 What's new；不新增 tip id（连接与使用方式没有变化，已有 tip 覆盖）。
+- 遥测：不加心跳字段。TELEMETRY-SPEC §4.6 把“connector 的类型或地址”列为绝不发送，统计 Shortcut 连接数会与之冲突；已有的按回合、按卡片计数已经覆盖从 Shortcut 卡片做的工作。
+
+## 15. Linear（2026-11-12，用户确认的功能扩展）
+
+第七个 provider 族 `linear`（provider id `linear`），沿用本 spec 的全部规则：只读、外部状态不驱动卡片、默认 input、令牌只在 daemon。范围是 **issue**；Linear 的 project、cycle、initiative、document 不做（issue 的 Markdown 会写出它所属的 project 与 cycle 名称）。New task 的 **From Linear** 与 Artifacts 的 + 菜单都会出现这个服务。
+
+- **连接**：Linear 只有云端，一个 provider，无自建变体。一个连接 = 一个 workspace，`baseUrl` 为 `https://linear.app/<workspace url key>`，与 Shortcut 同理（§14）；**没有 `defaultBaseUrl`**。API 是另一个域名上的 GraphQL：`https://api.linear.app/graphql`，由 adapter 以常量持有，`baseUrl` 不参与拼接。连接前要求地址为 `https://linear.app/<workspace url key>`（仅一个路径段、默认 HTTPS 端口），拒绝其他 host、缺少 workspace 或多余路径；账户和 workspace 缺失的响应也必须拒绝。个人 API key 原样放在 `Authorization` 头（不加 `Bearer`），无邮箱字段。校验查询 `viewer { name displayName }` 与 `organization { urlKey }`：账户显示 `名字 (@displayName)`，login 取 `displayName`；`organization.urlKey` 与配置的 url key 不一致时报错并给出两者，不会悄悄读错 workspace。
+- **只读**：GraphQL 只有一个端点且必须 POST，所以 `/graphql` 进 `queryEndpoints`（与 Azure DevOps WIQL 同一机制），`endpoints`（GET）为空。adapter 只发送文件里的常量查询，发送前再检查请求体以 `query` 开头，mutation 不可能出门。用户输入只通过 GraphQL variables 传入，绝不拼进查询串。
+- **条目类型**：沿用 `issue`。agent 上下文写作 “Linear issue”。
+- **key**：Linear 自己的标识 `TEAM-123`（团队 key 以字母开头、字母数字，统一大写）。`parseKey` 识别它；裸数字没有团队 key 无法定位 issue，所以选择器把它当文字搜索。Jira 与 Linear 同时连接时，裸 `ENG-123` 两边都匹配，`externalTarget` 返回 null（需要贴链接或在选择器里选服务），链接永远只认自己的 workspace。
+- **链接**：`https://linear.app/<url key>/issue/<TEAM-123>[/<标题 slug>]`。其他路径（project、view 等）不识别。
+- **读取**：`issue(id: "TEAM-123")`（Linear 接受标识或 UUID），`remoteId` 存 UUID。完整读取同一个请求内带回描述、标签、project、cycle、parent、子 issue（最多 50）与评论（`first: 20, orderBy: createdAt` 取得最近 20 条，再按 createdAt 升序显示；Linear 的 first 从最新开始）。
+- **我的条目**：`viewer.assignedIssues`，过滤掉 state type 为 `completed`/`canceled` 的，按 updatedAt 新到旧。**文字搜索**：`issues(filter: { title: { containsIgnoreCase: $term } })`。
+- **状态类别**：state type `triage`/`backlog`/`unstarted` → new，`started` → indeterminate，`completed`/`canceled` → done。`priority` 取 `priorityLabel`，“No priority” 记为空；`container` 为团队名。
+- **指纹**：标题 + 描述 + 子 issue（标识:标题）+ 评论（id:updatedAt），评论单独作为 discussion 部分；只改状态（包括子 issue 的状态）、负责人、标签不变。`updatedCoversContent=false`（未确认新评论是否推进 issue 的 updatedAt）。
+- **Markdown**：标题、链接，然后元数据（状态、团队、优先级、负责人、标签、project、cycle、parent、估点、截止日、分支、更新时间），然后描述，然后子 issue 列表 `TEAM-n 标题（状态）`，然后最近 20 条评论。Linear 的描述与评论本身是 Markdown，不做转换。
+- **批量摘要**：id 过滤只接受 UUID，`getMany` 逐个查询，并发 4（§5）。
+- **错误**：Linear 把 GraphQL 问题（包括被拒的 key 与限流）以 HTTP 400 + `errors` 返回，也会以 HTTP 200 返回（包括 data 部分成功）。任何 `errors` 都按失败处理，不把缺失的评论或列表当作有效内容覆盖缓存。`AUTHENTICATION_ERROR`/“not authenticated” → AUTH；`RATELIMITED` 或 429 → UNAVAILABLE 并读 `Retry-After`；“Entity not found” → NOT_FOUND；其他 → INVALID（带第一条错误信息）。
+- **界面**：品牌图标用 Simple Icons 的 Linear 路径（CC0）渲染成 48 px PNG，颜色 #5E6AD2，以 data URI 打包。设置 → Connections 增加第七个分组；地址占位 `https://linear.app/your-workspace`。
+- **验收**：连接能校验并显示账户，错 workspace 的 key 被拒；粘贴 issue 链接与手输 `TEAM-123` 都能解析；**From Linear** 列出分配给我的未完成 issue；agent 能用 `flowly_read_external` 读 issue（描述、元数据、子 issue、评论）；改描述、增改子 issue 或加评论会让指纹变化，只改状态不会；key 被吊销时连接标记 `authFailed` 且不丢缓存内容。
+- **测试**：`server/connectors/linear.test.ts`（mock GraphQL：`Authorization` 头、API 域名、错 workspace、链接与 key、我的 issue、搜索词走 variables、完整读取与 Markdown、指纹、所有请求都是 POST 到 `/graphql` 的 query、限流）、`shared/connectors.test.ts`（链接识别、`TEAM-123` key、裸数字当文字、与 Jira 同时连接时的歧义）。`server/connectors/fake.ts` 的路由多收一个可选的请求体参数，供 GraphQL 路由使用。
+- onboarding：更新欢迎页功能行、`jira-connect` tip 文案与 README；不新增 tip id（已有 tip 覆盖）。
+- 遥测：不加心跳字段，理由同 §14。What's new：由 release 任务维护，本功能 PR 不加条目。
+
+官方 API 契约：[GraphQL 与 API key](https://linear.app/developers/graphql)、[分页](https://linear.app/developers/pagination)、[过滤](https://linear.app/developers/filtering)。`Issue.comments.orderBy` 的公开 introspection 描述确认 first 按最新在前返回。

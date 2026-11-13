@@ -20,7 +20,7 @@ The project chooser (All projects / `P`) has one **Remove “<name>”…** row 
 `projects.remove({ id, revision, alsoPaseo=false })`, serialized with other provisioning:
 
 1. If `alsoPaseo`: recheck running sessions; refuse with nothing changed when any run.
-2. Board removal (CAS on project revision, one write): project, its cards, their events and agent receipts. Before writing, the removed records go to `<plugin data>/removed/<projectId>-<time>.json` (exclusive create, 0600).
+2. Board removal (CAS on project revision, one write): project, its cards, their events and agent receipts. Before writing, the removed records go to `<plugin data>/removed/<projectId>-<time>.json` (exclusive create, 0600). Each removed card's description images move to `removed/task-<id>-images-<time>/` afterwards (CARD-IMAGES-SPEC §2.2); a failure is logged only.
 3. If `alsoPaseo` and the native project exists: `paseo project delete <id> --home <PASEO_HOME> --json` (argument array). Result `paseo: { removed, workspaces, error }`. A failure here leaves the board removal in place and is reported (error toast: Paseo kept the project).
 
 Board-first ordering means a failed Paseo step never leaves cards pointing at a missing project. Freed bindings (native project ID, workspace IDs) can be linked again. A linked multi-repo root (PROJECT-PICKER-SPEC) stays on disk either way. Composer data for removed cards is pruned by the existing dead-task cleanup; tool calls for removed cards fail with “Task not found”.

@@ -3,10 +3,10 @@ import { Animated, Modal as RNModal, Pressable, StyleSheet, View, useWindowDimen
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useSettings } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
-import { nativeSessionSettings, nativeSessionSettingsValues } from "../shared/settings";
+import { nativeSessionSettings, nativeSessionSettingsValues, wrapupSettings, wrapupSettingsValues } from "../shared/settings";
 import { FlowlyMark } from "./brand-icons";
 import { Enter, MotionReveal, motionDuration, useMotionValue } from "./motion";
-import { firstRunOutside, outsidePatch, outsideShown, stepPage, tourKey, welcomePageCount, type OutsideChoice } from "./onboarding-logic";
+import { firstRunOutside, firstRunWrapup, outsidePatch, outsideShown, stepPage, tourKey, welcomePageCount, type OutsideChoice } from "./onboarding-logic";
 import { AiLanguageRow, InsightsFeatureGroup, InterfaceLanguageRow, MemoryFeatureGroup, SummaryModelGroup, UsageDataGroup, aiCostText, summaryModelOf } from "./settings-pages";
 import { summarySettings, summarySettingsValues } from "../shared/summary";
 import { SettingSwitch, SettingsGroup } from "./settings-ui";
@@ -14,7 +14,7 @@ import { useStored } from "./stored-settings";
 export { useOnboarding } from "./onboarding-state";
 import { Button, IconButton, Label, Theme, font, noFocusRing, radius, space, tint, touch, useTheme } from "./ui";
 import { useShortcutBlock } from "./shortcuts";
-import { AttentionDemo, DemoControls, DemoFrame, LoopDemo, MemoryDemo, SideTitle } from "./tour-demos";
+import { AttentionDemo, DemoControls, DemoFrame, LoopDemo, SideTitle } from "./tour-demos";
 import { formatLocale, t, tn } from "../shared/i18n";
 
 /** The three Kanban objects and the Paseo object each one is (page 1 and the empty-board strip). */
@@ -156,6 +156,7 @@ function BuiltInPage({ active, outside, onOutside }: { active: boolean; outside:
           <Legend key="i" title={t("Ideas")} text={t("Follow-ups the agent found, yours to decide.")} />,
         ]}
       </Columns>
+      <Legend title={t("Auto review")} text={t("Deliveries are checked before they reach you and go back to the agent when they fall short. Each review uses tokens; turn it off per project.")} />
       <SummaryModelGroup active={active} bare extra={<AiLanguageRow />} />
       <SettingsGroup
         title={t("Also in sessions outside Flowly")}
@@ -169,21 +170,44 @@ function BuiltInPage({ active, outside, onOutside }: { active: boolean; outside:
   );
 }
 
-/** Page 3: Project memory. */
-function MemoryPage() {
+/** Page 3: Guardrails (GUARDRAILS-SPEC §10). */
+function GuardrailsPage() {
   return (
     <View style={{ gap: space[5] }}>
-      <PageTitle title={t("Project memory")} detail={t("Later cards start knowing what earlier ones learned.")} />
+      <PageTitle title={t("Guardrails")} detail={t("What you send a card back for is checked on the next ones.")} />
       <MemoryFeatureGroup bare />
-      <MemoryDemo />
+      <GuardrailsExample />
       <Columns>
         {[
-          <Legend key="s" title={t("Agents suggest")} text={t("Agents, and a review of each finished card, propose what is worth keeping.")} />,
-          <Legend key="c" title={t("You confirm")} text={t("Nothing reaches a session until you confirm it.")} />,
-          <Legend key="u" title={t("Later cards use it")} text={t("New sessions on the project start with what you confirmed.")} />,
+          <Legend key="s" title={t("You send it back")} text={t("Say what is wrong, as you would anyway.")} />,
+          <Legend key="l" title={t("Flowly learns")} text={t("The second card with the same problem makes it a project guideline.")} />,
+          <Legend key="c" title={t("Later cards are checked")} text={t("Checked does not mean right: Done is still yours.")} />,
         ]}
       </Columns>
     </View>
+  );
+}
+
+/** The two-line example: your words on one card become a check on the next. */
+function GuardrailsExample() {
+  const { colors } = useTheme();
+  const quote = `“${t("New text needs every language too.")}”`;
+  const line = (icon: string, color: string, title: string, text: string) => (
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space[2] }}>
+      <View style={{ paddingTop: 2 }}>
+        <Icon name={icon} size={15} color={color} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Label bold size={font.md} selectable={false}>{title}</Label>
+        <Label size={font.sm}>{text}</Label>
+      </View>
+    </View>
+  );
+  return (
+    <Panel>
+      {line("RotateCcw", colors.foregroundMuted, t("You send card A back"), quote)}
+      {line("ShieldAlert", colors.statusDanger, t("Card B is sent back before it reaches you"), `✗ ${quote} ${t("zh-TW has no entry for “Rerun”.")}`)}
+    </Panel>
   );
 }
 
@@ -399,9 +423,14 @@ function Hint({ icon, text }: { icon: string; text: string }) {
 function MoreFeatures() {
   const { colors } = useTheme();
   const more = [
-    { icon: "ListChecks", title: t("Workpad"), text: t("Agents set the card's type and tags and write a workpad before they start: acceptance criteria, checks marked passed, failed or not run on a named commit, and what confused them. Delivering without them needs a note.") },
+    { icon: "ListChecks", title: t("Workpad"), text: t("Agents set the card's type and tags and write an acceptance list before they start; the card shows how many items are met, next to the latest review.") },
+    { icon: "ShieldCheck", title: t("Auto review"), text: t("Deliveries are checked before they reach you, and go back to the agent when they fall short.") },
+    { icon: "PackageCheck", title: t("Auto wrap up"), text: t("Cards moved to Done or Cancelled have their sessions and workspace archived when nothing is left unsaved. Unwrap in the card brings them back.") },
+    { icon: "Image", title: t("Images in descriptions"), text: t("Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.") },
     { icon: "Package", title: t("Inputs and outputs"), text: t("Each card lists the files and links it worked from and delivered, added by agents or by you.") },
-    { icon: "Ticket", title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, GitHub/GitLab issue or pull request, or Azure DevOps work item, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
+    { icon: "Ticket", title: t("Tickets, docs and PRs as inputs"), text: t("Start a card from a Jira ticket, Confluence page, GitHub/GitLab issue or pull request, Azure DevOps work item, Shortcut story or epic, or Linear issue, or add one with the Artifacts +. Agents read it every turn; Flowly never changes it.") },
+    { icon: "BookMarked", title: t("Memory"), text: t("Agents remember the project's decisions, pitfalls and conventions; new sessions see them. Open Memory to pin, edit or archive them.") },
+    { icon: "Search", title: t("Search"), text: t("Search past cards, summaries, notes and deliverables.") },
     { icon: "Tags", title: t("Tags"), text: t("Tag cards by module or direction. Agents tag their own cards too; filter and search by #tag.") },
     { icon: "FolderGit2", title: t("Saved with your project"), text: t("Each project's board is also kept in its folder (.flowly, ignored by git). Add the folder again to restore it.") },
     { icon: "Database", title: t("Backups"), text: t("Settings → Storage shows where the board is kept and its daily backups, and can restore one or export the board to JSON.") },
@@ -547,13 +576,14 @@ export function WelcomeTour({
   theme: PluginTheme;
   /** There is no project yet: the last page offers Create project. */
   canCreate: boolean;
-  /** Opened by itself for a new user: the outside-session switches are a draft stored when it closes. */
+  /** Opened by itself for a new user: the outside-session switches are a draft stored when it closes, and Auto wrap up is turned on unless already set. */
   firstRun: boolean;
   onClose(): void;
   onCreate(): void;
 }) {
   useShortcutBlock(open);
   const native = useStored(useSettings(nativeSessionSettings), nativeSessionSettingsValues);
+  const wrapup = useStored(useSettings(wrapupSettings), wrapupSettingsValues);
   // First run: nothing outside Flowly changes until the tour closes (ONBOARDING-SETUP-SPEC §4).
   const [draft, setDraft] = useState<OutsideChoice>(firstRunOutside);
   useEffect(() => {
@@ -562,7 +592,10 @@ export function WelcomeTour({
   const outside = firstRun ? draft : native.values ? outsideShown(native.values) : firstRunOutside;
   const changeOutside = (next: OutsideChoice) => (firstRun ? setDraft(next) : native.save(outsidePatch(next)));
   const finish = (then: () => void) => {
-    if (firstRun) void native.saveSure(outsidePatch(draft));
+    if (firstRun) {
+      void native.saveSure(outsidePatch(draft));
+      void wrapup.saveSure(firstRunWrapup);
+    }
     then();
   };
   const close = () => finish(onClose);
@@ -694,7 +727,7 @@ function TourWindow({
             ) : page === 1 ? (
               <BuiltInPage active={open} outside={outside} onOutside={onOutside} />
             ) : page === 2 ? (
-              <MemoryPage />
+              <GuardrailsPage />
             ) : page === 3 ? (
               <InsightsPage />
             ) : (

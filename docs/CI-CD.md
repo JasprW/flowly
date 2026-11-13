@@ -3,7 +3,8 @@
 CI is in `.github/workflows/ci.yml`. PRs and main pushes run Node
 22 and 24 typecheck + Vitest + release guard tests on Ubuntu. Node 24 also packs,
 inspects and installs the actual npm tarball with the plugin manifest commands.
-`CI gate` is the required branch check. Artifacts expire after 7 days.
+`CI gate` and `CodeRabbit` (the CodeRabbit app's review check) are the required
+branch checks. Artifacts expire after 7 days.
 
 No separate application compilation is shipped: Paseo compiles the TypeScript
 plugin entry points on install/load. This CI verifies types and package install;
@@ -18,7 +19,7 @@ package two-factor authentication enabled. The publishing job uses Node 24 and
 npm >=11.5.1; other jobs have neither OIDC nor release write permission.
 
 The `npm` GitHub environment permits main and v* release tags. Main is
-protected with `CI gate`; force pushes and branch deletion are disabled.
+protected with `CI gate` and `CodeRabbit`; force pushes and branch deletion are disabled.
 Changes go through a PR; no second human review is required for this solo repo.
 
 References: [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/),
@@ -28,7 +29,13 @@ References: [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/)
 
 1. Merge reviewed changes and green CI into main. Work from a clean checkout
    synchronized with origin/main.
-2. On a release branch run `make bump VERSION=1.5.0` (or `1.5.0-rc.1`; it also sets `shared/version.ts`),
+2. For a minor or major release, first summarize the main user-visible changes
+   from the previous release tag to the current main: write the release notes
+   and, when existing users would otherwise miss something, the What's new entry
+   in `client/whats-new.ts` (feature PRs never add it; `docs/WHATS-NEW-SPEC.md`).
+   The version is bumped only here, never in feature, fix or docs PRs (a bumped
+   `main` makes unreleased dev builds report the new version in telemetry).
+   On a release branch run `make bump VERSION=1.5.0` (or `1.5.0-rc.1`; it also sets `shared/version.ts`),
    commit package.json/package-lock.json and merge that PR after CI passes. Then
    on synchronized main run `make release VERSION=1.5.0`: it typechecks/tests,
    verifies the already merged version, creates an annotated v* tag, asks before

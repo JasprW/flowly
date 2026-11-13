@@ -17,6 +17,7 @@ import { readSnapshot, SnapshotInvalidError, type ProjectSnapshot } from "./proj
 import { linkLimits } from "../shared/model";
 import type { ProjectInput, TaskInput, Board, LinkedProjectInput, ProjectLinksEdit, Project, ProjectRemoval } from "../shared/model";
 import { effectiveRepos, sessionContext } from "../shared/scope";
+import { cardImageContextLine } from "./card-images";
 import { setupContextLine, setupMissing } from "../shared/card-setup";
 import { workpadEnabled, workpadOf } from "../shared/workpad";
 import { normalizeTags } from "../shared/tags";
@@ -442,6 +443,8 @@ export class BoardService {
           primaryPath,
           repos: [primaryPath],
           ...(links ? { links } : {}),
+          // Auto review is on for new projects (GUARDRAILS-SPEC D1); existing projects keep what they stored.
+          autoReview: { enabled: true, maxRounds: 2 },
           revision: 1,
           createdAt: now,
           updatedAt: now,
@@ -510,6 +513,7 @@ export class BoardService {
       const repoPaths = [project.primaryPath];
       const sourcePath = project.primaryPath;
       let workspaceId = input.workspaceId;
+      let baseRef: string | undefined;
       if (input.mode === "existing") {
         if (!workspaceId) throw new Error("Select a workspace.");
         const workspace = await paseo.workspaces.ref(workspaceId).refresh();
@@ -529,7 +533,7 @@ export class BoardService {
           input.mode === "worktree"
             ? input.branchName?.trim() || generatedBranchName(input.title, input.operationId)
             : undefined;
-        const baseRef =
+        baseRef =
           input.mode === "worktree"
             ? await resolveWorktreeBaseRef(sourcePath, input.baseRef)
             : undefined;
@@ -606,6 +610,7 @@ export class BoardService {
             updatedAt: now,
             archivedAt: null,
             ownsWorkspace: input.mode !== "existing",
+            ...(baseRef ? { baseRef } : {}),
             ...(idea ? { origin: { taskId: idea.taskId, ideaId: idea.id } } : {}),
           };
           current.tasks.push(task);
@@ -691,6 +696,7 @@ export class BoardService {
         artifactContextLines(artifactsOf(board.artifacts, task.id), 10, await this.unreadableExternals(board, task.id)),
         setupContextLine(setupMissing(task, workpadOf(board.workpads, task.id), workpadEnabled(project))),
         memory.lines,
+        cardImageContextLine(this.store.directory, task),
       ),
       memoryIds: memory.ids,
       directories,

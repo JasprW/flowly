@@ -1,5 +1,7 @@
 # Workflow insights：从 agent 的命令里找出可复用的脚本、工具与流程
 
+> 2026-10-28：本文部分内容被 [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) 取代（§12）。被取代：无被取代的部分；§3.2 的命令记录多了一个消费者（GUARDRAILS-SPEC §4.5 的每周重识别）。
+
 状态：**已实现，待用户验收**（2026-10-19，卡片 `3df1723e` “paseo project settings互通”；用户当天确认本 spec 及 §11 的全部决定）。用户确认方向：“这个洞见功能做成开关，也增加模型配置和洞察周期设置，token 充裕可以设置为每天定时，不充足可以拉长周期”。本 spec 是 [PROJECT-INSIGHTS-SPEC](PROJECT-INSIGHTS-SPEC.md) 的扩展，不改变其已有行为。
 
 > 2026-10-25：[INSIGHTS-REDESIGN-SPEC](INSIGHTS-REDESIGN-SPEC.md) 第三版取代本文的以下部分：§2 的默认开关（改为默认开启）与设置名称（改为 Skills）、§4.1 的安静期与首次运行时机、§4.2 的素材（新增卡片、用户原话、记忆、已有 skill）、§4.3 中 skill 一类的 prompt、§4.4 的 skill 校验、§5.2 的区块摆放（skill 草稿进 Skills 区块，其余进“其它建议”）、§5.3 的替换（按类别）、§8 的提示和 §11.1。
@@ -71,7 +73,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 ### 3.1 来源
 
 - `agent.turn_ended` hook 提供本轮 timeline（`index.server.ts` 已把它交给 workpad 与 summary）。取其中 `type: "tool_call"` 且 `detail.type === "shell"` 的条目，采集在 hook 返回后异步进行，不阻塞 hook。
-- 范围：本项目卡片 workspace 中的所有 session（与探针一致）。summarizer session（`flowly=summarizer`（兼容既有旧标签） 标签）不采集：hook 里按需查一次 agent 的标签并缓存。
+- 范围：本项目卡片 workspace 中的所有 session（与探针一致）。summarizer session（`flowly=summarizer`（兼容既有旧标签） 标签）不采集：hook 里按需查一次 agent 的标签并缓存。顺序：先判断 workspace 属于未归档卡片且该项目开着 workflow insights、session 不是后台 agent；有 `parentAgentId` 的子 session 先查一次标签，是 summarizer（卡片 summary、自动评审）或已查不到（已删除）就跳过。都通过后才读本轮 timeline（最新一页 200 条），与卡片无关的 session 和 Flowly 用完即删的临时 session 不读（2026-11-13）。
 - 时间：hook 给出的本轮 timeline 条目没有时间戳，记为本轮结束的时间；回填用条目自带的 timestamp。
 - 粒度：每次 shell 调用一条记录，id 为 `<agentId>:<callId>`，hook 与回填得到的同一次调用只记一次。
 - 列：记录**命令发生时**卡片所在的列，即 hook 执行时的 `task.status`；回填时按流转日志回放取当时的列。

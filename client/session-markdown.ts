@@ -1,3 +1,16 @@
+/** Column width from the longest cell, so short columns stay narrow and long ones wrap. */
+export function columnWidth(cells: string[]) {
+  // Approximate East Asian wide/fullwidth glyphs as two Latin character widths.
+  const wide = /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff01-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u;
+  let longest = 1;
+  for (const cell of cells) {
+    let width = 0;
+    for (const char of cell) width += wide.test(char) ? 2 : 1;
+    longest = Math.max(longest, width);
+  }
+  return Math.min(Math.max(longest * 8 + 24, 64), 260);
+}
+
 export type MarkdownBlock =
   | { kind: "paragraph" | "quote"; text: string }
   | { kind: "heading"; text: string; level: number }
@@ -16,6 +29,17 @@ export type MarkdownBlock =
       rows: string[][];
       align: ("left" | "center" | "right")[];
     };
+
+/**
+ * A ui/app fence is inline UI that a plugin (genui) renders live in the host
+ * session view; timeline transformers never run inside flowly's preview, so
+ * SessionMarkdown shows a notice instead of the code. Matching follows genui's
+ * rule: the fence's first language word, case-insensitive.
+ */
+export function isInlineUiFence(language: string): boolean {
+  const first = language.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  return first === "ui" || first === "app";
+}
 
 function tableCells(line: string) {
   let trimmed = line.trim().replace(/^\|/, "");
@@ -156,21 +180,42 @@ export type InlinePart = {
   kind: "text" | "bold" | "italic" | "code" | "link";
   url?: string;
 };
+// Keep intraword underscores literal, including beside other underscores.
+function wordChar(char: string | undefined) {
+  return (
+    !!char &&
+    (char === "_" || !/[\s\p{P}!-\/:-@[-^`{-~]/u.test(char))
+  );
+}
 export function parseSessionInline(text: string): InlinePart[] {
   const pattern =
-    /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\[([^\]\n]+)\]\(([^\s)]+)\)|\*([^*\n]+)\*|_([^_\n]+)_/g;
+    /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\[([^\]\n]+)\]\((?:<([^>\n]+)>|((?:[^\s()]|\([^\s()]*\))+))(?:\s+"[^"\n]*")?\)|<(https?:\/\/[^\s<>]+)>|(https?:\/\/[^\s<>]*[^\s<>.,;:!?)\]'"*_])|\*([^*\n]+)\*|_([^_\n]+)_/g;
   const parts: InlinePart[] = [];
   let from = 0;
-  for (const match of text.matchAll(pattern)) {
-    if (match.index! > from)
-      parts.push({ kind: "text", text: text.slice(from, match.index) });
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text))) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (
+      (match[3] || match[10]) &&
+      (wordChar(text[start - 1]) || wordChar(text[end]))
+    ) {
+      // Retry one character later so a following standalone emphasis still matches.
+      pattern.lastIndex = start + 1;
+      continue;
+    }
+    if (start > from)
+      parts.push({ kind: "text", text: text.slice(from, start) });
     if (match[1]) parts.push({ kind: "code", text: match[1] });
     else if (match[2] || match[3])
       parts.push({ kind: "bold", text: match[2] || match[3] });
     else if (match[4])
-      parts.push({ kind: "link", text: match[4], url: match[5] });
-    else parts.push({ kind: "italic", text: match[6] || match[7] });
-    from = match.index! + match[0].length;
+      parts.push({ kind: "link", text: match[4], url: match[5] || match[6] });
+    else if (match[7] || match[8]) {
+      const url = match[7] || match[8];
+      parts.push({ kind: "link", text: url, url });
+    } else parts.push({ kind: "italic", text: match[9] || match[10] });
+    from = end;
   }
   if (from < text.length) parts.push({ kind: "text", text: text.slice(from) });
   return parts;

@@ -71,11 +71,14 @@ test("a workspace Paseo cannot bring back is replaced by a new one", async () =>
 test("overlapping runs share one workspace; it is archived only after the last one ends", async () => {
   const x = await setup();
   let releaseFirst!: () => void;
+  let markStarted!: () => void;
+  const started = new Promise<void>((r) => (markStarted = r));
   const first = x.bg.use(project, x.paseo, (id) => new Promise<void>((r) => {
     x.log.push(`start A ${id}`);
     releaseFirst = r;
+    markStarted();
   }));
-  await new Promise((r) => setTimeout(r, 10));
+  await started;
   await x.bg.use(project, x.paseo, async (id) => void x.log.push(`run B ${id}`));
   expect(x.log).not.toContain("archive bg-1");
   releaseFirst();

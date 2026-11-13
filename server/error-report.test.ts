@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, logFailure, outsideError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink } from "./error-report";
+import { BUNDLE, BUNDLE_FILE, exceptionReport, expectedRpcError, logFailure, outsideError, ownFrames, pluginRoot, reportRpcErrors, setErrorSink, userEnvironmentError } from "./error-report";
 import { LocalDaemonUnavailable } from "./local-daemon";
 import { SummaryModelError } from "./summary-models";
 import { MAX_ERRORS_PER_DAY, TelemetryService } from "./telemetry";
@@ -82,6 +82,22 @@ test("report: class and safe code only, never the message", () => {
   const elsewhere = failure();
   elsewhere.stack = elsewhere.stack!.replace("service.ts:120", "service.ts:121");
   expect(exceptionReport(elsewhere, "x", true, ROOT).fingerprint).not.toBe(exceptionReport(failure(), "x", true, ROOT).fingerprint);
+});
+
+test("a Paseo RPC error reports which request failed and Paseo's code, never its message", () => {
+  // Shaped like @getpaseo/client's DaemonRpcError: the message repeats the server's error text.
+  const rpc = (requestType: unknown, code?: unknown) =>
+    Object.assign(failure("DaemonRpcError", undefined, `Agent /Users/alice/secret not found requestType=${String(requestType)} code=${String(code)}`), { requestType, code, requestId: "req-1" });
+  const report = exceptionReport(rpc("fetch_agent_timeline_request", "agent_refresh_failed"), "Flowly session insight rows not added", true, ROOT);
+  expect(report).toMatchObject({ type: "DaemonRpcError", value: "fetch_agent_timeline_request:agent_refresh_failed" });
+  expect(JSON.stringify(report)).not.toMatch(/alice|secret|not found|req-1/);
+  expect(exceptionReport(rpc("project.list.request", "WORKTREE_BUSY"), "x", true, ROOT).value).toBe("project.list.request:worktree_busy");
+  expect(exceptionReport(rpc("send_agent_message_request"), "x", true, ROOT).value).toBe("send_agent_message_request");
+  // Anything that is not wholly an identifier is dropped, not trimmed into one.
+  expect(exceptionReport(rpc("fetch /Users/alice", "bad code!"), "x", true, ROOT).value).toBe("");
+  expect(exceptionReport(rpc("x".repeat(61), "handler_error"), "x", true, ROOT).value).toBe(":handler_error");
+  // Another kind of report: requestType grouping splits the fingerprint.
+  expect(exceptionReport(rpc("a_request", "c"), "x", true, ROOT).fingerprint).not.toBe(exceptionReport(rpc("b_request", "c"), "x", true, ROOT).fingerprint);
 });
 
 test("expected RPC errors are not reported: tool errors and plain messages; bugs and system errors are", () => {
@@ -246,6 +262,25 @@ test("logFailure: context goes to the log only, the report gets the label", () =
   logFailure("Kanban project folder not saved:", new Error("EACCES /Users/alice"), "project-123");
   expect(log).toHaveBeenCalledWith("Kanban project folder not saved:", "project-123", "EACCES /Users/alice");
   expect(reported).toEqual(["Kanban project folder not saved:"]);
+  log.mockRestore();
+});
+
+test("logFailure: a caller-marked environment failure is logged, not reported; other codes are not environment", () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
+  for (const code of ["EROFS", "EPERM", "EACCES", "ENOSPC", "ENOENT"]) {
+    const error = failure("Error", code);
+    expect(userEnvironmentError(error)).toBe(true);
+    logFailure("Kanban project folder not saved:", error, "p", !userEnvironmentError(error));
+  }
+  for (const error of [failure("TypeError"), failure("Error", "EISDIR"), failure("Error", "SQLITE_BUSY")]) {
+    expect(userEnvironmentError(error)).toBe(false);
+    logFailure("Kanban project folder not saved:", error, "p", !userEnvironmentError(error));
+  }
+  expect(userEnvironmentError("ENOENT")).toBe(false);
+  expect(log).toHaveBeenCalledTimes(8);
+  expect(reported).toHaveLength(3);
   log.mockRestore();
 });
 

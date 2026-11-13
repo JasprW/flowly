@@ -198,6 +198,10 @@ export const IdeasPage = memo(function IdeasPage({
                 value={search}
                 onChangeText={setSearch}
                 commitDelay={200}
+                // Shortcuts are blocked while typing, so Esc is handled here to leave the page.
+                onKeyPress={(event) => {
+                  if (event.nativeEvent.key === "Escape") onBack();
+                }}
                 placeholder={t("Search ideas and cards")}
                 accessibilityLabel={t("Search ideas")}
                 style={{
@@ -317,7 +321,7 @@ function GroupHeader({ task, count, nameOf, onOpenTask }: { task: Task | undefin
   );
 }
 
-function FilterChip({ on, icon, label, hint, onPress }: { on: boolean; icon: string; label: string; hint?: string; onPress(): void }): ReactNode {
+export function FilterChip({ on, icon, label, hint, onPress }: { on: boolean; icon: string; label: string; hint?: string; onPress(): void }): ReactNode {
   const { colors } = useTheme();
   return (
     <Pressable

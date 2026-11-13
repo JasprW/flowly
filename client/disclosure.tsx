@@ -3,6 +3,7 @@ import { Animated, Pressable, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useMotionPresence, lerp } from "./motion";
 import { Label, SectionHeader, font, space, touch, useTheme, noFocusRing } from "./ui";
+import { FocusTarget } from "./drawer-focus";
 import { t, tn } from "../shared/i18n";
 
 export function Disclosure({ title, summary, titleMinWidth, open, disabled, flush, onChange, children }: {
@@ -37,7 +38,7 @@ export function Disclosure({ title, summary, titleMinWidth, open, disabled, flus
           <Label bold size={font.md} selectable={false}>{title}</Label>
         </View>
         {!!summary && (
-          <View style={titleMinWidth ? { flex: 1, minWidth: 0 } : { flexGrow: 1, flexShrink: 1, minWidth: 0, maxWidth: "50%", alignItems: "flex-end" }}>
+          <View style={titleMinWidth ? { flex: 1, minWidth: 0 } : { flexShrink: 1, minWidth: 0, maxWidth: "50%", marginLeft: "auto" }}>
             <Label muted size={font.sm} lines={1} selectable={false}>{summary}</Label>
           </View>
         )}
@@ -105,7 +106,7 @@ function HeightCollapse({ open, id, style, children }: CollapseProps) {
  * the body revealed by `Collapse`. The drawer owns `open`, so the user's
  * defaults apply each time the sidebar opens.
  */
-export function Section({ id, title, count, ai, summary, open, onToggle, actions, empty, children }: {
+export function Section({ id, title, count, ai, summary, open, onToggle, actions, empty, focusId, children }: {
   id: string;
   title: string;
   count?: number;
@@ -116,9 +117,11 @@ export function Section({ id, title, count, ai, summary, open, onToggle, actions
   actions?: ReactNode;
   /** Nothing to show yet: a plain header (with its actions), no chevron and no body. */
   empty?: boolean;
+  /** The drawer section this is, so a search hit can land on it (DRAWER-SPEC "Focus from search"). */
+  focusId?: string;
   children?: ReactNode;
 }) {
-  return (
+  const body = (
     <View style={{ gap: space[2] }}>
       <SectionHeader title={title} count={count} ai={ai} open={open || empty} onToggle={empty ? undefined : onToggle} summary={summary}>
         {actions}
@@ -130,6 +133,7 @@ export function Section({ id, title, count, ai, summary, open, onToggle, actions
       )}
     </View>
   );
+  return focusId ? <FocusTarget id={`section:${focusId}`}>{body}</FocusTarget> : body;
 }
 
 /** "Show N more": adds the next rows to the same list, lined up with the rows' icons. There is no Show less. */

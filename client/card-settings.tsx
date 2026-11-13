@@ -161,7 +161,7 @@ function SidebarLayout({ busy, order: storedOrder, open: storedOpen, onChange }:
                   <View
                     {...handleProps}
                     accessibilityLabel={t("Drag to reorder {section}", { section: name })}
-                    style={{ width: 16, alignItems: "center", ...({ cursor: "grab" } as object) }}
+                    style={{ width: 24, alignSelf: "stretch", alignItems: "center", justifyContent: "center", ...({ cursor: "grab", userSelect: "none" } as object) }}
                   >
                     <Icon name="GripVertical" size={14} color={colors.foregroundMuted} />
                   </View>
@@ -252,7 +252,7 @@ function CardPreview({ display }: { display: ReturnType<typeof cardDisplay> }) {
           progress={sample.progress}
           ideas={1}
           externalKey="SHOP-142"
-          workpad={{ kind: "checks", done: 2, total: 3, count: 0 }}
+          workpad={{ kind: "acceptance", done: 2, total: 3 }}
           display={display}
           onOpen={noop}
           onActions={noop}

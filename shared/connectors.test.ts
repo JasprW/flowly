@@ -224,3 +224,57 @@ test("linkedCardCounts counts each card once per connection, by connection id or
     { taskId: "c", target: "https://github.com/o/r/pull/4" },
   ])).toEqual({ gh: 2, jira: 0 });
 });
+
+describe("Shortcut keys and links", () => {
+  const sc = { id: "sc", provider: "shortcut" as const, baseUrl: "https://app.shortcut.com/acme" };
+  test("story and epic links, with title slugs, and other workspaces", () => {
+    expect(recognizeUrl("https://app.shortcut.com/acme/story/1042", sc)).toEqual({ itemType: "story", key: "sc-1042" });
+    expect(recognizeUrl("https://app.shortcut.com/acme/story/1042/fix-the-retry-backoff", sc)).toEqual({ itemType: "story", key: "sc-1042" });
+    expect(recognizeUrl("https://app.shortcut.com/acme/epic/2007", sc)).toEqual({ itemType: "epic", key: "epic-2007" });
+    expect(recognizeUrl("https://app.shortcut.com/other-org/story/1042", sc)).toBeNull();
+    expect(recognizeUrl("https://app.shortcut.com/acme/write/doc/123", sc)).toBeNull();
+  });
+  test("sc- and epic- keys, picker queries, urls and labels", () => {
+    expect(parseKey("SC-1042", "shortcut")).toEqual({ itemType: "story", key: "sc-1042" });
+    expect(parseKey("epic-2007", "shortcut")).toEqual({ itemType: "epic", key: "epic-2007" });
+    expect(parseKey("1042", "shortcut")).toBeNull();
+    expect(parseKey("sc-1042", "gitlab")).toBeNull();
+    // A bare number is the story, because that is what a person types into the picker.
+    expect(classifyQuery("1042", sc)).toEqual({ kind: "key", itemType: "story", key: "sc-1042" });
+    expect(classifyQuery("sc-1042", sc)).toEqual({ kind: "key", itemType: "story", key: "sc-1042" });
+    expect(classifyQuery("retry backoff", sc)).toEqual({ kind: "text", text: "retry backoff" });
+    expect(itemUrl(sc, "story", "sc-1042")).toBe("https://app.shortcut.com/acme/story/1042");
+    expect(itemUrl(sc, "epic", "epic-2007")).toBe("https://app.shortcut.com/acme/epic/2007");
+    expect(faceKey({ key: "sc-1042", itemType: "story" })).toBe("sc-1042");
+    expect(itemLabel("shortcut", "story")).toBe("Shortcut story");
+    expect(itemLabel("shortcut", "epic")).toBe("Shortcut epic");
+    expect(externalTarget("sc-1042", [sc])).toMatchObject({ connectionId: "sc", key: "sc-1042" });
+  });
+});
+
+describe("Linear keys and links", () => {
+  const lin = { id: "lin", provider: "linear" as const, baseUrl: "https://linear.app/acme" };
+  test("issue links, with title slugs, and other workspaces", () => {
+    expect(recognizeUrl("https://linear.app/acme/issue/ENG-123", lin)).toEqual({ itemType: "issue", key: "ENG-123" });
+    expect(recognizeUrl("https://linear.app/acme/issue/eng-123/fix-the-retry-backoff", lin)).toEqual({ itemType: "issue", key: "ENG-123" });
+    expect(recognizeUrl("https://linear.app/other-org/issue/ENG-123", lin)).toBeNull();
+    expect(recognizeUrl("https://linear.app/acme/project/roadmap-abc123", lin)).toBeNull();
+    expect(recognizeUrl("https://linear.app/acme/issue/not-a-key", lin)).toBeNull();
+  });
+  test("TEAM-123 keys, picker queries, urls and labels", () => {
+    expect(parseKey("eng-123", "linear")).toEqual({ itemType: "issue", key: "ENG-123" });
+    expect(parseKey("123", "linear")).toBeNull();
+    // A bare number names no issue without its team key, so the picker searches it as text.
+    expect(classifyQuery("123", lin)).toEqual({ kind: "text", text: "123" });
+    expect(classifyQuery("ENG-123", lin)).toEqual({ kind: "key", itemType: "issue", key: "ENG-123" });
+    expect(classifyQuery("retry backoff", lin)).toEqual({ kind: "text", text: "retry backoff" });
+    expect(itemUrl(lin, "issue", "ENG-123")).toBe("https://linear.app/acme/issue/ENG-123");
+    expect(faceKey({ key: "ENG-123", itemType: "issue" })).toBe("ENG-123");
+    expect(itemLabel("linear", "issue")).toBe("Linear issue");
+    expect(externalTarget("ENG-123", [lin])).toMatchObject({ connectionId: "lin", key: "ENG-123" });
+    // The same key fits a Jira connection too: a bare key with both connected is ambiguous, a link is not.
+    const jira = { id: "j", provider: "jira-cloud" as const, baseUrl: "https://acme.atlassian.net" };
+    expect(externalTarget("ENG-123", [lin, jira])).toBeNull();
+    expect(externalTarget("https://linear.app/acme/issue/ENG-123", [lin, jira])).toMatchObject({ connectionId: "lin" });
+  });
+});

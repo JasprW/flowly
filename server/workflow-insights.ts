@@ -11,8 +11,10 @@ import { availableModels } from "./summaries";
 import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { validZone } from "../shared/insights";
-import { SUMMARIZER_LABELS, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import type { Board, Project } from "../shared/model";
+import { catchUpJsonSchema, catchUpPrompt, parseCatchUp, type Correction } from "../shared/guardrails";
+import { finishRefusingPermissions, runSummaryModels } from "./summary-models";
 import { readSkillBody, scanSkills, skillPath, writeSkill, type InstallResult } from "./project-skills";
 import {
   BACKFILL_DAYS,
@@ -43,6 +45,7 @@ import {
   type CommandRecord,
   type ExistingConfig,
   type RawFinding,
+  type RawMerge,
   type RunUsage,
   type SkillMaterial,
   type WorkflowRun,
@@ -52,7 +55,8 @@ import {
 } from "../shared/workflow-insights";
 import { logFailure } from "./error-report";
 import { OUTPUT_SCHEMA_ERROR } from "./summary-models";
-
+import { BackgroundJobs } from "./background-jobs";
+import { turnTimeline } from "./turn-timeline";
 const DAY_MS = 86_400_000;
 const TICK_MS = 15 * 60_000;
 const COMMANDS_LIMIT = 4000;
@@ -106,7 +110,7 @@ export class WorkflowStore {
   }
 }
 
-async function readText(path: string): Promise<string | null> {
+export async function readText(path: string): Promise<string | null> {
   try {
     return await readFile(path, "utf8");
   } catch {
@@ -115,7 +119,7 @@ async function readText(path: string): Promise<string | null> {
 }
 
 /** The Commands section of AGENTS.md or CLAUDE.md at the project root (§4.2). */
-function commandsSection(text: string): string {
+export function commandsSection(text: string): string {
   const match = /^#{1,3}\s*(?:commands|常用命令|命令)\b.*$/im.exec(text);
   if (!match) return "";
   const rest = text.slice(match.index + match[0].length);
@@ -174,6 +178,19 @@ export class WorkflowInsightsService {
     private removeAgent: RemoveAgent = daemonRemoveAgent(),
   ) {}
 
+  /**
+   * The project's guardrails in the weekly run (GUARDRAILS-SPEC §7.3); set by the daemon. Step 1 runs before the
+   * model call: commands re-detected with usage evidence, retirement, and the catch-up learning when card summaries are
+   * off. The material gets a `# Guardrails` section; the model's merges are applied after it.
+   */
+  guardrails: {
+    weekly(projectId: string, input: { records: readonly CommandRecord[]; commands: boolean }): Promise<unknown>;
+    catchUpInput(projectId: string): Promise<{ clues: { taskId: string; text: string; at: string }[]; section: string[] } | null>;
+    catchUp(projectId: string, clues: readonly { taskId: string; text: string; at: string }[], corrections: readonly Correction[]): Promise<void>;
+    material(projectId: string, flow: Awaited<ReturnType<FlowLog["read"]>>): Promise<string>;
+    merge(projectId: string, merges: readonly RawMerge[]): Promise<unknown>;
+  } | null = null;
+
   /** Card summaries and project memory for the skill material (INSIGHTS-REDESIGN-SPEC §3.2); set by the daemon. */
   skillSources: {
     summaries(): Promise<readonly { taskId: string; target?: string; recap?: string; at: string }[]>;
@@ -182,16 +199,23 @@ export class WorkflowInsightsService {
   } | null = null;
 
   private pendingBackfill = false;
+  /** Backfills and analyses started without being awaited. */
+  private jobs = new BackgroundJobs();
+  /** Resolves once no background backfill or queued analysis is left, including ones they started. */
+  idle() {
+    return this.jobs.idle();
+  }
+
   attach(paseo: PaseoApi) {
     this.paseo = paseo;
     if (this.pendingBackfill) {
       this.pendingBackfill = false;
-      void this.backfillAll(paseo).catch(log("backfill"));
+      this.jobs.track(this.backfillAll(paseo).catch(log("backfill")));
     }
   }
   /** The switch was turned on: backfill now, or as soon as a Paseo connection is known. */
   requestBackfillAll() {
-    if (this.paseo) void this.backfillAll(this.paseo).catch(log("backfill"));
+    if (this.paseo) this.jobs.track(this.backfillAll(this.paseo).catch(log("backfill")));
     else this.pendingBackfill = true;
   }
 
@@ -224,6 +248,29 @@ export class WorkflowInsightsService {
     const value = snapshot ? isSummarizer(snapshot.agent as { labels?: Record<string, string> | null }) : false;
     this.summarizer.set(agentId, value);
     return value;
+  }
+
+  /**
+   * A finished turn of any session (the hook's entry, §3.1). The turn's timeline is read only after the checks that
+   * need none: the session's workspace is an unarchived card's and the project has workflow insights on, and the
+   * session is not one of Flowly's own temporary ones (a background agent, or a child labelled as a summarizer:
+   * the card summarizer and the auto review run in the card's workspace and are deleted as soon as they finish,
+   * so reading their timeline fails). A child that is already gone is skipped for the same reason.
+   */
+  async turnEnded(agent: { id: string; workspaceId: string | null; provider: string; parentAgentId?: string | null; background?: boolean }, paseo: PaseoApi) {
+    this.attach(paseo);
+    if (!agent.workspaceId || agent.background || this.summarizer.get(agent.id)) return 0;
+    const board = await this.board.read();
+    const task = board.tasks.find((t) => t.workspaceId === agent.workspaceId && !t.archivedAt);
+    const project = board.projects.find((p) => p.id === task?.projectId);
+    if (!task || !project || !(await this.enabledFor(project))) return 0;
+    if (agent.parentAgentId && this.summarizer.get(agent.id) === undefined) {
+      const snapshot = await paseo.agents.ref(agent.id).refresh().catch(() => null);
+      if (!snapshot) return 0;
+      this.summarizer.set(agent.id, isSummarizer(snapshot.agent as { labels?: Record<string, string> | null }));
+      if (this.summarizer.get(agent.id)) return 0;
+    }
+    return this.recordTurn(agent, await turnTimeline(paseo, agent.id), paseo);
   }
 
   /** A finished turn's shell calls (§3.1); never throws into the hook. */
@@ -358,7 +405,7 @@ export class WorkflowInsightsService {
     // A project that never ran nor collected (a new install, or on by default after an update):
     // start collecting now and read the last week once; its first run waits one interval (INSIGHTS-REDESIGN-SPEC §3.1).
     for (const p of board.projects.filter(projectIncluded))
-      if (!this.lastRun(state, p.id) && !state.collectingSince[p.id] && !this.backfilling.has(p.id)) void this.backfill(p.id, paseo).catch(log("backfill"));
+      if (!this.lastRun(state, p.id) && !state.collectingSince[p.id] && !this.backfilling.has(p.id)) this.jobs.track(this.backfill(p.id, paseo).catch(log("backfill")));
     const due = board.projects
       .filter(projectIncluded)
       .map((p) => ({ p, last: this.lastRun(state, p.id), since: state.collectingSince[p.id] ?? null }))
@@ -377,7 +424,7 @@ export class WorkflowInsightsService {
       () => undefined,
       () => undefined,
     );
-    void job.catch(log("run")).finally(() => this.running.delete(projectId));
+    this.jobs.track(job.catch(log("run")).finally(() => this.running.delete(projectId)));
     return { queued: true };
   }
 
@@ -425,12 +472,23 @@ export class WorkflowInsightsService {
    */
   private async record(
     run: Omit<WorkflowRun, "id" | "findings" | "replaced">,
-    result?: { findings: RawFinding[]; cardIds: readonly string[]; skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> }; redact?: { repo: string; home: string } },
+    result?: {
+      findings: RawFinding[];
+      cardIds: readonly string[];
+      skills?: { names: readonly string[]; installed: ReadonlyMap<string, string> };
+      redact?: { repo: string; home: string };
+    },
   ) {
     const id = randomUUID();
     return this.state.update((state) => {
       const drafts = result
-        ? validateFindings(result.findings, { cardIds: result.cardIds, existing: state.findings.filter((f) => f.projectId === run.projectId), now: Date.parse(run.at), skills: result.skills, redact: result.redact })
+        ? validateFindings(result.findings, {
+            cardIds: result.cardIds,
+            existing: state.findings.filter((f) => f.projectId === run.projectId),
+            now: Date.parse(run.at),
+            skills: result.skills,
+            redact: result.redact,
+          })
         : [];
       // A run without valid suggestions keeps the previous ones rather than emptying the list.
       const replaced = drafts.length
@@ -451,6 +509,8 @@ export class WorkflowInsightsService {
     if (!project || project.archivedAt) return;
     const days = windowDays(settings.intervalDays);
     const now = this.now();
+    // Guardrails step 1 (GUARDRAILS-SPEC §7.3): deterministic upkeep and the catch-up; never stops the run.
+    await this.guardrailUpkeep(project, paseo, now).catch(log("guardrails"));
     const from = new Date(now - days * DAY_MS).toISOString(),
       to = new Date(now).toISOString();
     let records = await this.log.read(projectId, now - days * DAY_MS);
@@ -477,6 +537,8 @@ export class WorkflowInsightsService {
       const state = await this.state.read();
       const existing = state.findings.filter((f) => f.projectId === projectId);
       const skills = await this.skillContext(project, board, state, recent, now);
+      // The project's guardrails (GUARDRAILS-SPEC §7.3 step 2); empty while Guardrails is off for it.
+      const guardrails = this.guardrails ? await this.guardrails.material(project.id, entries).catch(() => "") : "";
       // Card ids the model may cite: the command window's and the last 30 days' (INSIGHTS-REDESIGN-SPEC §3.1).
       const cardIds = [...new Set([...records.map((r) => r.taskId), ...recent])];
       const cards: CardInfo[] = [...new Set(records.map((r) => r.taskId))]
@@ -492,11 +554,11 @@ export class WorkflowInsightsService {
           .filter((f) => f.status === "accepted" || (f.status === "dismissed" && now - Date.parse(f.updatedAt) < 30 * DAY_MS))
           .map((f) => ({ target: f.target, title: f.title, status: f.status, proposal: f.proposal })),
         skills: skills.material,
-      });
+      }) + (guardrails ? `\n\n${guardrails}` : "");
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
-        const prompt = workflowPrompt(days, material, await this.language());
+        const prompt = workflowPrompt(days, material, await this.language(), !!guardrails);
         const agent = await paseo.workspaces.ref(workspaceId).agents.create({
-          config: { provider: model },
+          config: readOnlyConfig(model),
           title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
           prompt,
@@ -506,11 +568,13 @@ export class WorkflowInsightsService {
         let usage: RunUsage | undefined;
         let parsed;
         try {
-          let result = await agent.waitForFinish(this.timeoutMs);
+          let result = await finishRefusingPermissions(agent, this.timeoutMs);
           // Providers without `prompt.output_schema` fail the first structured turn at start; re-run
           // the same prompt once without the constraint on the already-open handle (see summary-models).
-          if (result.status === "error" && result.error && OUTPUT_SCHEMA_ERROR.test(result.error))
-            result = await agent.run(prompt, { timeoutMs: this.timeoutMs });
+          if (result.status === "error" && result.error && OUTPUT_SCHEMA_ERROR.test(result.error)) {
+            await agent.run(prompt, { timeoutMs: this.timeoutMs });
+            result = await finishRefusingPermissions(agent, this.timeoutMs);
+          }
           if (result.status !== "idle")
             throw new Error(
               result.status === "timeout"
@@ -533,6 +597,8 @@ export class WorkflowInsightsService {
       });
       if (!parsed) throw new Error("The workflow insights model returned no JSON.");
       await this.record({ ...base, model, status: "ok", usage }, { findings: parsed.findings, cardIds, skills: skills.check, redact: { repo: project.primaryPath, home: this.home } });
+      // Merges of two guidelines or two notes (§7.3); the run never creates a guideline or a command.
+      if (guardrails && parsed.merges.length) await this.guardrails!.merge(project.id, parsed.merges).catch(log("merge"));
     } catch (e) {
       await this.record({ ...base, model, status: "error", reason: (e instanceof Error ? e.message : String(e)).slice(0, 500) });
     }
@@ -561,6 +627,43 @@ export class WorkflowInsightsService {
       ...(await this.installedView(project, state, findings)),
       revision: state.revision,
     };
+  }
+
+  /**
+   * Guardrails step 1 (GUARDRAILS-SPEC §7.3): commands re-detected against the last 30 days of the command log (with
+   * Auto review on), retirement, and, when card summaries are off, one Summary-model call over the week's rework words
+   * in the project's background workspace, its session hard-deleted after.
+   */
+  private async guardrailUpkeep(project: Project, paseo: PaseoApi, now: number) {
+    const guardrails = this.guardrails;
+    if (!guardrails) return;
+    const records = await this.log.read(project.id, now - 30 * DAY_MS).catch(() => []);
+    await guardrails.weekly(project.id, { records, commands: !!project.autoReview?.enabled });
+    const summary = await this.summarySettings();
+    if (summary.summaryEnabled) return;
+    const input = await guardrails.catchUpInput(project.id);
+    if (!input) return;
+    const corrections = await this.background.use(project, paseo, async (workspaceId) => {
+      const { output } = await runSummaryModels(paseo, summaryModelsOf(summary), {
+        prompt: catchUpPrompt(input.clues, input.section),
+        create: async (model) => {
+          const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+            config: readOnlyConfig(model),
+            title: `Flowly guardrails · ${project.title}`.slice(0, 120),
+            labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
+            prompt: catchUpPrompt(input.clues, input.section),
+            outputSchema: catchUpJsonSchema as unknown as Record<string, unknown>,
+          });
+          this.summarizer.set(agent.id, true);
+          return agent;
+        },
+        parse: (text) => parseCatchUp(text, input.clues.length),
+        remove: this.removeAgent,
+        timeoutMs: this.timeoutMs,
+      });
+      return output;
+    });
+    await guardrails.catchUp(project.id, input.clues, corrections);
   }
 
   /** Flowly's skills in the project with their current text, and the bodies open updates would change (§4.6). */

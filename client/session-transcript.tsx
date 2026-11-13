@@ -15,6 +15,8 @@ import { SessionMarkdown } from "./session-content";
 import { Collapse } from "./disclosure";
 import { Enter, PulseDot, motionDuration, useMotionPresence, useMotionValue, lerp } from "./motion";
 import { useStableCallback } from "./stable";
+import { PendingRequests } from "./session-question";
+import type { PendingRequest, PermissionReply } from "../shared/permission-question";
 import { t } from "../shared/i18n";
 
 export type TranscriptNotice = { key: string; text: string; tone?: Tone };
@@ -55,6 +57,10 @@ type TranscriptProps = {
   starting: boolean;
   loadingSession: boolean;
   notices: TranscriptNotice[];
+  /** Open agent questions and approvals: they scroll with the output, below the newest of it. */
+  requests: readonly PendingRequest[];
+  requestsDisabled: boolean;
+  onRespond(request: PendingRequest, reply: PermissionReply): void;
   /** The composer's keyboard lift (native driver, negative = up); the transcript moves with it. */
   lift: Animated.AnimatedInterpolation<number> | Animated.AnimatedMultiplication<number>;
   /** The settled lift, for reaching the oldest output while the keyboard is up. */
@@ -88,6 +94,9 @@ function SessionTranscriptView({
   starting,
   loadingSession,
   notices,
+  requests,
+  requestsDisabled,
+  onRespond,
   lift,
   inset,
   onStreamError,
@@ -238,7 +247,7 @@ function SessionTranscriptView({
     </View>
   );
   // The running state: below the newest output.
-  const bottom =
+  const running =
     showOutput && live && blocks.at(-1)?.kind !== "activity" ? (
       <View testID="session-running-tail" style={{ flexDirection: "row", gap: space[2], alignItems: "center", minHeight: 24, paddingTop: blocks.length ? space[4] : 0 }}>
         <ActivityIndicator size="small" color={colors.accent} />
@@ -246,6 +255,19 @@ function SessionTranscriptView({
           {starting ? t("Starting session…") : t("Agent is working…")}
         </Label>
       </View>
+    ) : null;
+  const asking =
+    showOutput && requests.length ? (
+      <View style={{ paddingTop: blocks.length ? space[4] : 0 }}>
+        <PendingRequests requests={requests} disabled={requestsDisabled} onRespond={onRespond} />
+      </View>
+    ) : null;
+  const bottom =
+    running || asking ? (
+      <>
+        {asking}
+        {running}
+      </>
     ) : null;
   const shown = showOutput && settled ? data : [];
   const scrollProps = {

@@ -22,16 +22,19 @@ export function useStored<T extends object>(settings: unknown, parse: (values: u
     },
     /**
      * A save that must not be dropped (the welcome tour's first-run defaults): waits for the
-     * settings to load, merges into the latest stored values and retries a stale revision.
+     * settings to load, merges into the latest stored values and retries a stale revision. A
+     * function patch is built from the raw stored values at save time; null saves nothing.
      */
-    async saveSure(patch: Partial<T>): Promise<boolean> {
+    async saveSure(patch: Partial<T> | ((stored: unknown) => Partial<T> | null)): Promise<boolean> {
       for (let attempt = 0; attempt < 6; attempt++) {
         const current = latest.current;
         if (current.status !== "ready" || current.revision === undefined || current.saving) {
           await wait(150);
           continue;
         }
-        const next = { ...parse(current.values), ...patch };
+        const change = typeof patch === "function" ? patch(current.values) : patch;
+        if (!change) return true;
+        const next = { ...parse(current.values), ...change };
         if (await (current.save as (v: T, r: unknown) => Promise<unknown>)(next, current.revision)) return true;
         await current.reload();
         await wait(50 * (attempt + 1));

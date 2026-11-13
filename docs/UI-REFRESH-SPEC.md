@@ -209,7 +209,7 @@ Status: authorized by the user's 2026-10-14 request to redesign the whole Kanban
 
 ## 7t. Project lanes (workflow), finished lanes no longer a filter, lane motion (2026-10-15, user request)
 
-**Lanes are a project setting** (Edit project → Lanes). The 7 built-in statuses can be reordered (drag the grip on desktop, arrows on touch), turned on/off, and renamed (blank = built-in name). Stored as optional `project.lanes` (`[{status, enabled, name?}]`, all 7, unique, at least one on). Absent means the default workflow, so existing projects and cards need no migration. The user chose this over fully custom lanes.
+**Lanes are a project setting** (Edit project → Lanes). The 7 built-in statuses can be reordered (drag the grip on desktop, arrows on touch; the grip spans the row's height and takes the mouse press at once, so a fast drag that leaves it keeps going, and the row moves only after 6 pt so a click alone reorders nothing), turned on/off, and renamed (blank = built-in name). Stored as optional `project.lanes` (`[{status, enabled, name?}]`, all 7, unique, at least one on). Absent means the default workflow, so existing projects and cards need no migration. The user chose this over fully custom lanes.
 
 Lanes define the workflow everywhere:
 - Board columns, compact lane tabs, card "Move to", drawer status chip/menu, the task form, toasts and activity text use the enabled lanes, in order, by name (`shared/lanes.ts`).
@@ -278,7 +278,7 @@ Verified live: collapse widths 280→141→89→48→44 and expand 44→111→18
 
 ## 7ac. Prominent card priority (2026-10-15, user request)
 
-- Urgent and High cards have a 4 px stripe down the card's left edge (danger red / warning amber) and a tinted pill at the start of the card's signal row (icon + bold label in the same colour). Low shows a muted icon and the word "Low". Normal shows nothing.
+- Urgent and High cards have a 4 px stripe down the card's left edge (danger red / warning amber) and a tinted pill at the start of the card's signal row (icon + bold label in the same colour). Low shows a muted down arrow and the word "Low"; where Normal is shown explicitly (the drawer's priority chip) it is a muted dash. Normal shows nothing.
 - The High glyph is now an amber up arrow (`ArrowUp`, `statusWarning`) instead of a grey signal icon, everywhere `PriorityIcon` is used (card and drawer property chip). `priorityAccent()` in `client/status.tsx` defines which priorities are emphasized.
 - Verified on the live board (`docs/verification/card-priority.png`).
 

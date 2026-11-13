@@ -7,6 +7,7 @@ import { StoreInvalidError } from "./board-file";
 import { ExternalError } from "./connectors/http";
 import { LocalDaemonUnavailable } from "./local-daemon";
 import { MemoryError } from "./memory";
+import { GuardrailError } from "./guardrails";
 import { SummaryModelError } from "./summary-models";
 import { ToolError } from "./tool-error";
 
@@ -19,6 +20,8 @@ import { ToolError } from "./tool-error";
 const MAX_FRAMES = 20;
 const identifier = /^[A-Za-z_$][\w$]{0,60}$/;
 const safeCode = /^[A-Z][A-Z0-9_]{1,40}$/;
+/** A Paseo request type or RPC error code (`fetch_agent_timeline_request`, `project.list.request`). */
+const rpcIdentifier = /^[a-z][a-z0-9_.]{0,59}$/;
 const safeFunction = /^[\w$.<> ]{1,80}$/;
 const safeSource = /^[\w .,;:'/-]{1,80}$/;
 
@@ -103,12 +106,25 @@ export function ownFrames(stack: string, base = root): ExceptionFrame[] {
   return frames.reverse();
 }
 
+/**
+ * A Paseo RPC error (`DaemonRpcError` of @getpaseo/client, matched by name because the host's
+ * client is another copy) as `requestType:code`, each part only when the whole of it is an
+ * identifier, lowercased: which call failed and Paseo's reason, never its message.
+ */
+function rpcValue(error: { requestType?: unknown; code?: unknown }): string {
+  const part = (v: unknown) => (typeof v === "string" && rpcIdentifier.test(v.toLowerCase()) ? v.toLowerCase() : "");
+  const requestType = part(error.requestType);
+  const code = part(error.code);
+  return code ? `${requestType}:${code}` : requestType;
+}
+
 export function exceptionReport(error: unknown, source: string, handled: boolean, base = root): ExceptionReport {
   const isError = error instanceof Error;
   const name = isError ? error.name : "";
   const type = !isError ? "NonError" : identifier.test(name) ? name : "Error";
   const code = isError ? (error as NodeJS.ErrnoException).code : undefined;
-  const value = typeof code === "string" && safeCode.test(code) ? code : "";
+  const value = name === "DaemonRpcError" ? rpcValue(error as Error & { requestType?: unknown; code?: unknown })
+    : typeof code === "string" && safeCode.test(code) ? code : "";
   const frames = isError ? ownFrames(error.stack ?? "", base) : [];
   const label = source.replace(/:$/, "").trim();
   const safe = safeSource.test(label) ? label : "other";
@@ -127,12 +143,23 @@ export function outsideError(error: unknown) {
 }
 
 /**
+ * File system codes that mean the user's disk or folder refuses the write: read-only volume, no
+ * permission, disk full, or the folder is gone (moved or deleted). Code cannot fix them, so a
+ * background writer to the user's own folders may log them without reporting (§11.2). Not part of
+ * `outsideError`: elsewhere (RPC, Flowly's data folder) the same codes still point at a bug.
+ */
+const environmentCodes = new Set(["EROFS", "EPERM", "EACCES", "ENOSPC", "ENOENT"]);
+export function userEnvironmentError(error: unknown) {
+  return error instanceof Error && environmentCodes.has(String((error as NodeJS.ErrnoException).code));
+}
+
+/**
  * Errors an RPC handler throws on purpose, as its answer to the caller (validation, conflicts,
  * disabled features): not reported. A plain `Error` without a system code is such a message too.
  */
 export function expectedRpcError(error: unknown) {
   if (!(error instanceof Error)) return false;
-  if (error instanceof ToolError || error instanceof MemoryError || error instanceof StoreInvalidError || error instanceof ExternalError || error instanceof ZodError || outsideError(error))
+  if (error instanceof ToolError || error instanceof MemoryError || error instanceof GuardrailError || error instanceof StoreInvalidError || error instanceof ExternalError || error instanceof ZodError || outsideError(error))
     return true;
   return error.constructor === Error && typeof (error as NodeJS.ErrnoException).code !== "string";
 }
@@ -155,14 +182,15 @@ export function reportError(source: string, error: unknown, handled = true) {
 
 /**
  * Logs a background failure (label, optional log-only context, message) and reports it unless it
- * is an `outsideError`. Every daemon-side error log goes through here; `server/error-report.test.ts`
- * fails on a bare `console.error` elsewhere. `context` (ids, paths) is printed but never reported.
+ * is an `outsideError` or `report` is false (the caller decided it is outside Flowly's control).
+ * Every daemon-side error log goes through here; `server/error-report.test.ts` fails on a bare
+ * `console.error` elsewhere. `context` (ids, paths) is printed but never reported.
  */
-export function logFailure(label: string, error: unknown, context?: string) {
+export function logFailure(label: string, error: unknown, context?: string, report = true) {
   const text = error instanceof Error ? error.message : String(error);
   if (context) console.error(label, context, text);
   else console.error(label, text);
-  if (!outsideError(error)) reportError(label, error);
+  if (report && !outsideError(error)) reportError(label, error);
 }
 
 /** The plugin context with every RPC handler's unexpected failures reported, then rethrown unchanged. */

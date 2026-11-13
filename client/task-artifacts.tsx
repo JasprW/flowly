@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { Image, Linking, Pressable, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
-import { useRpc } from "@getpaseo/plugin/client";
+import { openExternalUrl, useRpc } from "@getpaseo/plugin/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import type { Artifact, ArtifactRole, Task } from "../shared/model";
@@ -11,6 +11,7 @@ import { IdeaRow, useExitList } from "./task-ideas";
 import { useTaskDetail, invalidateCardViews } from "./card-detail-query";
 import { SessionMarkdown } from "./session-content";
 import { PagedRows, Section, ShowMore, pageSize, type SectionState } from "./disclosure";
+import { FocusTarget, Marked, limitFor, useFocusTarget, useMark } from "./drawer-focus";
 import { AiMark, Actions, Button, Choices, Field, IconButton, Label, Notice, Theme, font, message, space, touch, useTheme, noFocusRing } from "./ui";
 import { t, tn } from "../shared/i18n";
 import { BrandIcon } from "./brand-icons";
@@ -51,6 +52,15 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
     () => (detail ? artifactsOf(detail.artifacts, task.id).filter((a) => !removing.has(a.id)) : []),
     [detail, task.id, removing],
   );
+  // A search hit on an artifact past the first page shows the pages up to it (DRAWER-SPEC "Focus from search").
+  const focusTarget = useFocusTarget();
+  useEffect(() => {
+    if (!focusTarget.startsWith("artifact:")) return;
+    const target = list.find((a) => a.id === focusTarget.slice("artifact:".length));
+    if (!target) return;
+    const at = list.filter((a) => a.role === target.role).indexOf(target);
+    setLimit((current) => ({ ...current, [target.role]: limitFor(at, current[target.role], pageSize) }));
+  }, [focusTarget, list]);
   const fileKey = list.filter((a) => a.kind === "file").map((a) => `${a.id}:${a.target}`).join("|");
   // One batched check when the drawer shows the card or its files change (CARD-ARTIFACTS-SPEC §9).
   const status = useQuery({
@@ -111,13 +121,14 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
   const openArtifact = (artifact: Artifact) => {
     if (artifact.external) return setPreviewing(artifact);
     if (artifact.kind === "url")
-      return void Linking.openURL(artifact.target).catch(() => toast.show(t("Could not open the link."), { variant: "error" }));
+      return void openExternalUrl(artifact.target).catch(() => toast.show(t("Could not open the link."), { variant: "error" }));
     setPreviewing(artifact);
   };
   return (
     <>
     <Section
       id={task.id}
+      focusId="artifacts"
       title={t("Artifacts")}
       count={list.length}
       empty={!rows.length}
@@ -148,6 +159,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
             <Label muted size={font.xs} bold selectable={false}>{t(group.title)}</Label>
             <PagedRows items={own} limit={limit[group.role]} render={(row) => (
               <IdeaRow key={row.item.id} leaving={row.leaving} entering={row.entering} spacing={0}>
+                <FocusTarget id={`artifact:${row.item.id}`}>
                 <ArtifactRow
                   artifact={row.item}
                   missing={missing.has(row.item.id)}
@@ -157,6 +169,7 @@ export function TaskArtifacts({ task, active, disabled, section }: { task: Task;
                   onEdit={setEditing}
                   onRemove={remove}
                 />
+                </FocusTarget>
               </IdeaRow>
             )} />
             {rest > 0 && (
@@ -209,6 +222,8 @@ const ArtifactRow = memo(function ArtifactRow({
   onRemove(artifact: Artifact): void;
 }) {
   const { colors } = useTheme();
+  // A search hit on this row unclips it and adds the full link or path (DRAWER-SPEC "Focus from search" 7).
+  const mark = useMark(`artifact:${artifact.id}`);
   const agent = artifact.createdBy === "agent";
   const source = agent ? t("Added by an agent") : t("Added by you");
   const role = artifact.role === "input" ? t("Input") : t("Output");
@@ -227,8 +242,14 @@ const ArtifactRow = memo(function ArtifactRow({
       >
         {external ? <BrandIcon family={familyOf(external.provider)} size={14} /> : <Icon name={icon} size={14} color={missing ? colors.foregroundMuted : colors.foreground} />}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Label size={font.md} muted={missing} lines={1} selectable={false}>{artifact.title}</Label>
-          <Label size={font.sm} muted lines={1} selectable={false}>{missing ? `${t("Missing")} · ${detail}` : detail}</Label>
+          <Label size={font.md} muted={missing} lines={mark ? undefined : 1} selectable={false}><Marked text={artifact.title} terms={mark?.terms} /></Label>
+          <Label size={font.sm} muted lines={mark ? undefined : 1} selectable={false}>
+            {missing && `${t("Missing")} · `}
+            <Marked text={detail} terms={mark?.terms} />
+          </Label>
+          {!!mark && detail !== artifact.target && (
+            <Label size={font.sm} muted mono selectable={false}><Marked text={artifact.target} terms={mark.terms} /></Label>
+          )}
         </View>
         {agent ? <AiMark size={12} /> : <Icon name="User" size={12} color={colors.foregroundMuted} />}
       </Pressable>

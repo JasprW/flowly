@@ -19,7 +19,13 @@ const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
-const settle = () => new Promise((r) => setTimeout(r, 30));
+// A reply held at waitForFinish until release(); reached resolves once the run is waiting there.
+const gated = () => {
+  let release!: () => void, arrive!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const reached = new Promise<void>((r) => (arrive = r));
+  return { gate, arrive, reached, release: () => release() };
+};
 const turn = (text: string) => [{ type: "user_message", text }, { type: "assistant_message", text: "ok " + text }];
 
 async function setup(options: { settings?: Partial<InsightSettings>; agentStatus?: string; directory?: string } = {}) {
@@ -27,12 +33,13 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
   roots.push(root);
   const store = new SessionInsightStore(join(root, "data"));
   const rows = new NextMoveRows(new BoardStore(join(root, "data")));
-  const replies: { text?: string; status?: string; gate?: Promise<void>; createError?: string }[] = [];
+  const replies: { text?: string; status?: string; gate?: Promise<void>; arrive?: () => void; createError?: string }[] = [];
   const created: { workspaceId: string; parent?: string; prompt: string; labels?: Record<string, string>; config: { provider: string } }[] = [];
   const appended: { agentId: string; row: { kind: string; id: string; data: Record<string, unknown> } }[] = [];
   const sent: { agentId: string; text: string }[] = [];
   const workspacesCreated: unknown[] = [];
   let archived = 0;
+  const refetched: string[] = [];
   const paseo = {
     providers: {
       listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
@@ -49,6 +56,7 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
             if (!o.parent) return { id: `new-${created.length}` };
             return {
               waitForFinish: async () => {
+                reply.arrive?.();
                 await reply.gate;
                 return { status: reply.status || "idle", error: null, lastMessage: reply.text ?? null };
               },
@@ -66,7 +74,13 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
       ref: (agentId: string) => ({
         refresh: async () => ({ agent: { id: agentId, archivedAt: null, workspaceId: "w1", provider: "codex", model: "gpt-6-luna", currentModeId: "full-access", thinkingOptionId: null, status: options.agentStatus ?? "idle", cwd: "/repo" } }),
         send: async (text: string) => void sent.push({ agentId, text }),
-        timeline: { append: async (row: { kind: string; id: string; data: Record<string, unknown> }) => void appended.push({ agentId, row }) },
+        timeline: {
+          append: async (row: { kind: string; id: string; data: Record<string, unknown> }) => void appended.push({ agentId, row }),
+          refetch: async () => {
+            refetched.push(agentId);
+            return { entries: turn("fix login").map((item) => ({ item })), hasOlder: false, startCursor: null };
+          },
+        },
       }),
     },
   } as unknown as PaseoApi;
@@ -74,7 +88,7 @@ async function setup(options: { settings?: Partial<InsightSettings>; agentStatus
   const service = new SessionInsightService(store, rows, async () => settings, async () => "en", 1000, 1000, async (a) => { await a.archive(); });
   const agent: OutsideAgent = { id: "a1", workspaceId: "w1", parentAgentId: null, title: "Fix login", cwd: "/repo" };
   const json = (o: object) => JSON.stringify({ update: true, state: "S", target: "T", recap: "- r", next: "N", moves: [], ideas: [], ...o });
-  return { store, service, paseo, replies, created, appended, sent, workspacesCreated, archived: () => archived, agent, json, set: (s: Partial<InsightSettings>) => (settings = { ...settings, ...s }) };
+  return { store, service, paseo, refetched, replies, created, appended, sent, workspacesCreated, archived: () => archived, agent, json, set: (s: Partial<InsightSettings>) => (settings = { ...settings, ...s }) };
 }
 
 test("a completed turn of an outside session runs one archived child insight session and stores progress, moves and ideas", async () => {
@@ -87,7 +101,7 @@ test("a completed turn of an outside session runs one archived child insight ses
   const [s] = (await x.store.read()).sessions;
   expect(s).toMatchObject({ agentId: "a1", workspaceId: "w1", title: "Fix login", summary: { state: "S", model: "claude/claude-haiku-5-5" }, suggestion: { current: true, moves: [{ label: "Verify", prompt: "Verify it" }] }, error: null });
   expect(s.ideas.map((i) => [i.title, i.status])).toEqual([["Add rate limit", "open"]]);
-  await settle();
+  await x.service.idle();
   // Rows: Progress (no card fields) and the Next moves card for this suggestion.
   expect(x.appended.map((a) => a.row.kind)).toEqual(["flowly-summary", "flowly-next-moves"]);
   expect(x.appended[0].row.data.taskId).toBeUndefined();
@@ -110,6 +124,25 @@ test("off by default switch, no parts, subagents, sessions without a workspace, 
   expect((await x.service.view()).length).toBe(0);
 });
 
+test("a turn's timeline is read only for a session that gets an insight: never for children, background agents or with insights off", async () => {
+  const x = await setup({ settings: { enabled: false } });
+  await x.service.turnEnded(x.agent, x.paseo);
+  x.set({ enabled: true, parts: { progress: false, nextMoves: false, ideas: false } });
+  await x.service.turnEnded(x.agent, x.paseo);
+  x.set({ parts: { progress: true, nextMoves: true, ideas: true } });
+  // Flowly's own insight, summarizer and review sessions are children of the session they serve.
+  await x.service.turnEnded({ ...x.agent, parentAgentId: "p" }, x.paseo);
+  await x.service.turnEnded({ ...x.agent, workspaceId: null }, x.paseo);
+  expect(x.refetched).toEqual([]);
+  expect(x.created).toEqual([]);
+  // A qualifying session reads its turn and runs the insight as before.
+  x.replies.push({ text: x.json({}) });
+  await x.service.turnEnded(x.agent, x.paseo);
+  expect(x.refetched).toEqual(["a1"]);
+  expect(x.created).toHaveLength(1);
+  expect(x.created[0].prompt).toContain("User: fix login");
+});
+
 test("each switch only asks for and stores its own part", async () => {
   const x = await setup({ settings: { parts: { progress: false, nextMoves: true, ideas: false } } });
   x.replies.push({ text: x.json({ moves: [{ label: "Go", prompt: "Go on" }], ideas: [{ title: "I", detail: "", rationale: "", scope: "new" }] }) });
@@ -123,13 +156,13 @@ test("each switch only asks for and stores its own part", async () => {
 
 test("one run per session; turns ending meanwhile merge into one follow-up run", async () => {
   const x = await setup();
-  let release!: () => void;
-  x.replies.push({ text: x.json({}), gate: new Promise<void>((r) => (release = r)) }, { text: x.json({}) });
+  const g = gated();
+  x.replies.push({ text: x.json({}), gate: g.gate, arrive: g.arrive }, { text: x.json({}) });
   const first = x.service.enqueue(x.agent, turn("first"), x.paseo);
-  await settle();
+  await g.reached;
   await x.service.enqueue(x.agent, turn("second"), x.paseo);
   await x.service.enqueue(x.agent, turn("third"), x.paseo);
-  release();
+  g.release();
   await first;
   expect(x.created).toHaveLength(2);
   expect(x.created[1].prompt).toContain("User: second");
@@ -140,7 +173,7 @@ test("the next turn ends the suggestion; a run that finishes after a newer turn 
   const x = await setup();
   x.replies.push({ text: x.json({ moves: [{ label: "A", prompt: "a" }] }) });
   await x.service.enqueue(x.agent, turn("x"), x.paseo);
-  await settle();
+  await x.service.idle();
   await x.service.turnStarted("a1", x.paseo);
   expect((await x.store.read()).sessions[0].suggestion?.current).toBe(false);
   expect(await x.service.view()).toEqual([]);
@@ -148,7 +181,7 @@ test("the next turn ends the suggestion; a run that finishes after a newer turn 
   const rowsBefore = x.appended.length;
   x.replies.push({ text: x.json({ state: "Later", moves: [{ label: "B", prompt: "b" }] }) });
   await x.service.enqueue(x.agent, turn("y"), x.paseo, new Date(Date.now() - 60_000).toISOString());
-  await settle();
+  await x.service.idle();
   const [s] = (await x.store.read()).sessions;
   expect(s.summary?.state).toBe("Later");
   expect(s.suggestion?.current).toBe(false);

@@ -161,8 +161,10 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
   - **Continue here**：发往**当前这个 session**，原样复用 `ideas.adopt`（IDEAS-SPEC §6.2：daemon 生成指令文字、走发送队列、记录 `idea_adopted`、发送失败回滚）。与 Flowly 内一致，**不提供编辑**；按钮旁说明“Sends this idea to this session.”，点后需在弹层内再确认一次。（设计者的决定：保持 RPC 契约不变。）
   - **New card**：打开 Flowly，进入该 idea 预填的新建卡表单（与侧栏 Create task 同一表单）。新增 board screen 参数 `{ ideaId, requestId }`，按 SESSION-CHIP-SPEC 的方式一次性消费、严格校验，idea 不存在或不再 open 时报错，不替换成别的卡。
   - **Dismiss**：`ideas.update` 置为 dismissed（可在 Flowly 内 Restore）。
+  - 默认按钮跟随 agent 建议（2026-11-10）：`scope=new`（或缺省）时 **New card** 用常规按钮排在最右、Continue here 用次要（quiet）按钮；`scope=here` 时 Continue here 用常规按钮排在最右、New card 用次要按钮。Dismiss 始终在最左。
 - 卡片在 Done/Cancelled 或已归档时，与 IDEAS-INBOX-SPEC 一致只提供 New card 与 Dismiss。
 - 弹层任何时候只有一层在滚（2026-10-26）：宽屏锚定弹层里标题行固定在顶部，只有下面的 ideas 列表滚动；Flowly 内容的总高度不超过 host 弹层的可滚高度（`min(440, 窗口高 − 16)` 减去 host 上下共 32 的内边距：menu page 各 4、插件内容各 12），所以 host 外层从不溢出。手机底部 sheet（`layout.compact`）由 sheet 整体滚动，Flowly 不再嵌套 `ScrollView`。两层同时可滚会抢鼠标滚轮：内层到底后外层才动，看起来像滚不动或乱跳。
+- 弹层只有 host 一层（2026-10-28）：底色、外框和内边距都由 host 画，Flowly 的内容不再自带底色和内边距（否则宽屏看得出“外框里再套一个框”）。标题行（`AiMark` + 标题）只在宽屏弹层出现；手机 sheet 的头部已经显示按钮标题，Flowly 不再重复。
 
 ## 8. 注册、数据与性能
 
@@ -230,7 +232,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 
 ### 12.2 生成（daemon，`server/session-insights.ts`）
 
-- 触发：外部 session 的 `agent.turn_ended`，`outcome=completed`，且设置总开关开、三项中至少一项开。回合文本同 TASK-SUMMARY-SPEC §2（`turnText`，忽略插件行），为空则跳过。
+- 触发：外部 session 的 `agent.turn_ended`，`outcome=completed`，且设置总开关开、三项中至少一项开。回合文本同 TASK-SUMMARY-SPEC §2（`turnText`，忽略插件行），为空则跳过。先判断 §12.1 的范围和开关，都满足才读该回合的 timeline（`server/turn-timeline.ts`，最新一页 200 条）：Flowly 自己的子 session 用完即删，读它们的 timeline 会失败（`Agent not found`），开关关着时也无需读（2026-11-13）。
 - 单飞与合并：每个 session 同时最多一个生成；运行中又结束的回合合并为下一次（同卡片 summary）。
 - 运行：在该 session 的 workspace 里创建它的**子 session**（`parent` = 该 session），模型 = Summary model 设置（Auto 同卡片），标题 `Flowly insights · <session 标题>`，标签 `{flowly: "summarizer", "flowly-session": <agentId>}`，`outputSchema`，`waitForFinish(120 s)`，`finally` 中**硬删除**（`server/summarizer-remove.ts`，本地 `DaemonClient.deleteAgent`，用户 2026-10-22 批准，见 AGENTS.md 例外；只删本次刚创建的 id）；删除失败则回退归档并记日志。运行的几十秒内子 session 仍短暂可见，结束后列表与归档都不留痕。
 - 一次调用同时产出三项（关掉的项不在提示里要求、输出被忽略）：
@@ -270,6 +272,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
   - **Continue here**：确认后把 idea 指令发到当前 session（与 `ideas.adopt` 相同的指令文字），记为 adopted(here)。
   - **New session**：在同一 workspace 新建 session（与当前 session 同 provider/model），首条消息为 idea 指令，记为 adopted(session)。
   - **New workspace**：从当前 session 的 workspace 目录 branch-off 一个 worktree workspace（与卡片新建 worktree 相同的方式），在其中新建 session 并发送 idea 指令，记为 adopted(workspace)。目录不是 git 仓库时报错并提示用 New session。
+  - 默认按钮跟随 scope（2026-11-10）：`scope=here` 时 Continue here 用常规按钮排在最右；`scope=new` 时 New session 用常规按钮排在最右、Continue here 用次要按钮。顺序为 Dismiss、New workspace、其余两项（建议项在后）。
   - **Dismiss**。
 - 不出现在任何 project 的 Ideas 页；没有 “Start a new task”。
 

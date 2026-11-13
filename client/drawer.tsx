@@ -1,10 +1,11 @@
 import { useCardDetailQuery, useTaskDetail } from "./card-detail-query";
+import { CardImageRow } from "./card-images";
+import { drawerDetailPoll } from "./query-activity";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isNoMoves, nextMovesAction } from "../shared/next-moves";
-import { workpadCheckedAction, workpadEnabled, workpadUpdatedAction } from "../shared/workpad";
+import { workpadCheckedAction, workpadUpdatedAction } from "../shared/workpad";
 import type { PaseoAgent } from "@getpaseo/client";
 import { Pressable, View } from "react-native";
-import { drawerNeedsBoard } from "./query-activity";
 import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import {
   usePaseo,
@@ -47,7 +48,8 @@ import { SessionPreview } from "./session-preview";
 import { useSessionReads } from "./session-reads";
 import { sessionAttention } from "../shared/session-attention";
 import type { SessionEntry } from "./session-link";
-import { Enter, MotionReveal, useSettled } from "./motion";
+import { Enter, MotionReveal, useReducedMotion, useSettled } from "./motion";
+import { DrawerFocusProvider, FOCUS_FALLBACK_MS, FOCUS_RING_MS, FocusTarget, Marked, activityStart, useMark, type DrawerFocus } from "./drawer-focus";
 import { perfLap, perfStart, perfEnd, usePerfRender } from "./perf";
 import { TaskMetadata } from "./task-metadata";
 import { Chevron, Collapse, Disclosure, Section, useSectionStates } from "./disclosure";
@@ -63,8 +65,8 @@ import { workspaceSession } from "./session";
 import { TaskProgress } from "./task-progress";
 import { TaskUsage } from "./task-usage";
 import { SessionMarkdown } from "./session-content";
+import { Clamped } from "./content-card";
 import { TaskIdeas } from "./task-ideas";
-import { TaskMemorySection } from "./memory";
 import { LinkOrigin, TaskLinks } from "./task-links";
 import { TaskArtifacts } from "./task-artifacts";
 import { TaskWorkpad } from "./task-workpad";
@@ -101,13 +103,14 @@ function TaskDrawerView({
   startRequest,
   startIdea,
   onAllIdeas,
-  onMemoryPage,
+  guardrails = false,
   onFilterTag,
   escapeRequest,
   attention,
   onAttention,
   sectionOrder,
   sectionOpen,
+  focus,
 }: {
   task: Task;
   project: Project;
@@ -141,8 +144,8 @@ function TaskDrawerView({
   startIdea?: Idea;
   /** Opens the project Ideas page showing only this card (IDEAS-INBOX-SPEC §5). */
   onAllIdeas?(taskId: string): void;
-  /** Opens the project Memory page (PROJECT-MEMORY-SPEC §8.2). */
-  onMemoryPage?(): void;
+  /** Guardrails on (Settings and the project switch): the Workpad shows what this card was sent back for (GUARDRAILS-SPEC §7.1). */
+  guardrails?: boolean;
   /** Adds a tag to the board filter (CARD-TAGS-SPEC §6.3). */
   onFilterTag?(tag: string): void;
   /** Changes on each board Esc shortcut: leave the session preview, else close. */
@@ -155,6 +158,8 @@ function TaskDrawerView({
   sectionOrder?: string;
   /** The stored open/closed choices as JSON, compared by value (DRAWER-SPEC, Section order). */
   sectionOpen?: string;
+  /** A search hit to land on (DRAWER-SPEC "Focus from search"); each key is handled once. */
+  focus?: DrawerFocus;
 }) {
   usePerfRender("switch.drawer.commit");
   const switchStart = perfStart();
@@ -165,7 +170,8 @@ function TaskDrawerView({
     update = useRpc(rpc.updateTask),
     adoptIdea = useRpc(rpc.adoptIdea),
     contextRead = useRpc(rpc.taskContext),
-    configure = useRpc(rpc.configureSession);
+    configure = useRpc(rpc.configureSession),
+    unwrap = useRpc(rpc.unwrap);
   const { query: readState, receipts, markRead, markUnread } = useSessionReads();
   const [selected, setSelected] = useState(sessionEntry?.sessionId || ""),
     [highlighted, setHighlighted] = useState(""),
@@ -183,11 +189,11 @@ function TaskDrawerView({
       {},
     );
   // The retained compact root is paused; visible card props still need remote edits/deletions.
-  const pollBoard = drawerNeedsBoard(compact, active, selected);
+  const detailPoll = drawerDetailPoll(active);
   // Only keep the shared poll alive. The root/data readers deliver changed props;
   // fetching flags must not re-render this entire retained detail tree.
   const detailState = useTaskDetail();
-  useCardDetailQuery(hostId, task.id, task.workspaceId, pollBoard, pollBoard ? 3000 : undefined, true);
+  useCardDetailQuery(hostId, task.id, task.workspaceId, !!detailPoll, detailPoll, true);
   const lock = useRef(false);
   const order = useMemo(() => drawerSectionOrder(sectionOrder ? sectionOrder.split(",") : []), [sectionOrder]);
   // Which sections are open: the user's defaults each time the sidebar opens, then their own toggles.
@@ -198,6 +204,56 @@ function TaskDrawerView({
     if (active) setOpened(openDefaults);
   }, [active, openDefaults]);
   const sectionStates = useSectionStates(opened, setOpened);
+  // Focus from search: open the section for this opening only (never the stored choice), let it render the
+  // target, scroll there and ring it; without a rendered target in time, the section itself is the target.
+  const reduced = useReducedMotion();
+  const scroller = useRef<{ scrollTo(to: { y: number; animated?: boolean }): void } | null>(null);
+  const content = useRef<View>(null);
+  const [focusTarget, setFocusTarget] = useState<{ key: string; target: string } | null>(null);
+  // An older event a hit pointed at stays listed until the sidebar closes, after its ring is gone.
+  const [keptEvent, setKeptEvent] = useState("");
+  useEffect(() => {
+    if (!active) setKeptEvent("");
+  }, [active]);
+  const handledFocus = useRef("");
+  const foundFocus = useRef("");
+  const focusTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => focusTimers.current.forEach(clearTimeout), []);
+  useEffect(() => {
+    if (!active || !focus || handledFocus.current === focus.key) return;
+    handledFocus.current = focus.key;
+    foundFocus.current = "";
+    focusTimers.current.forEach(clearTimeout);
+    setOpened((current) => ({ ...current, [focus.section]: true }));
+    setFocusTarget({ key: focus.key, target: focus.target || `section:${focus.section}` });
+    setKeptEvent(focus.target?.startsWith("event:") ? focus.target : "");
+    focusTimers.current = [
+      setTimeout(() => {
+        if (foundFocus.current !== focus.key) setFocusTarget({ key: focus.key, target: `section:${focus.section}` });
+      }, FOCUS_FALLBACK_MS),
+      // Once shown, the request is over: reopening or toggling a section later never applies it again.
+      setTimeout(() => setFocusTarget((current) => (current?.key === focus.key ? null : current)), FOCUS_FALLBACK_MS + FOCUS_RING_MS + 600),
+    ];
+  }, [active, focus]);
+  const focusFound = useStableCallback((key: string, node: View) => {
+    if (!focusTarget || key !== focusTarget.key || !content.current) return;
+    foundFocus.current = key;
+    node.measureLayout(
+      content.current as never,
+      (_x: number, y: number) => scroller.current?.scrollTo({ y: Math.max(0, y - space[3]), animated: !reduced }),
+      () => undefined,
+    );
+  });
+  // The highlight follows the focus prop itself: the board clears it when the sidebar closes or another card opens,
+  // and a new hit replaces it (DRAWER-SPEC "Focus from search" 6).
+  const mark = useMemo(
+    () => (focus?.terms?.length ? { target: focus.target || `section:${focus.section}`, terms: focus.terms, field: focus.field } : null),
+    [focus],
+  );
+  const focusState = useMemo(
+    () => (focusTarget || mark ? { key: focusTarget?.key ?? "", target: focusTarget?.target ?? "", found: focusFound, mark } : null),
+    [focusTarget, focusFound, mark],
+  );
   // Heavy sections and their reads start once the open transition is over.
   const settled = useSettled(task.id);
   const ready = active && settled;
@@ -680,9 +736,7 @@ function TaskDrawerView({
         );
       case "workpad":
         return (
-          workpadEnabled(project) && (
-            <TaskWorkpad task={task} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
-          )
+          <TaskWorkpad task={task} project={project} guardrails={guardrails} active={active} disabled={!active || !!task.archivedAt || !!project.archivedAt} section={sectionStates.workpad} />
         );
       case "artifacts":
         return (
@@ -776,8 +830,6 @@ function TaskDrawerView({
               section={sectionStates.ideas}
             />
           )}
-          {/* Project memory proposed from this card, right after its ideas (PROJECT-MEMORY-SPEC §8.2). */}
-          {onMemoryPage && <TaskMemorySection task={task} project={project} onOpenPage={onMemoryPage} />}
           </>
         );
       case "links":
@@ -875,15 +927,19 @@ function TaskDrawerView({
             {!compact && heading}
           </View>
           <Divider />
+          <DrawerFocusProvider value={focusState}>
           <ScrollView
+            ref={scroller as never}
             {...verticalScroll}
             // Avoid recording offscreen section views on compact surfaces.
             removeClippedSubviews={compact}
             style={{ flex: 1, minHeight: 0 }}
             nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ ...verticalContent, padding: space[4], paddingBottom: space[6] + space[2], gap: space[5] }}
+            contentContainerStyle={{ ...verticalContent, padding: space[4], paddingBottom: space[6] + space[2] }}
           >
+            {/* One measured node for search focus (DRAWER-SPEC "Focus from search"). */}
+            <View ref={content} collapsable={false} style={{ gap: space[5] }}>
             {compact && <View style={{ gap: space[2] }}>{heading}</View>}
             {!!resourceIssue && !wrapped && (
               <View style={{ gap: space[2] }}>
@@ -984,20 +1040,30 @@ function TaskDrawerView({
                   </Label>
                   <Label muted size={font.sm}>
                     {wrapped
-                      ? t(
-                          /(^|; )workspace kept(;|$)/.test(wrapped.note || "")
-                            ? task.status === "done"
-                              ? "Sessions archived {time}. Move the card out of Done to bring them back."
-                              : "Sessions archived {time}. Move the card out of Cancelled to bring them back."
-                            : task.status === "done"
-                              ? "Workspace and sessions archived {time}. Move the card out of Done to bring them back."
-                              : "Workspace and sessions archived {time}. Move the card out of Cancelled to bring them back.",
-                          { time: relativeTime(wrapped.at) },
-                        )
+                      ? /(^|; )workspace kept(;|$)/.test(wrapped.note || "")
+                        ? t("Sessions archived {time}.", { time: relativeTime(wrapped.at) })
+                        : t("Workspace and sessions archived {time}.", { time: relativeTime(wrapped.at) })
                       : t("Wrap up to archive its sessions, worktree and the card.")}
                   </Label>
                 </View>
-                {!wrapped && (
+                {wrapped ? (
+                  <Button
+                    icon="ArchiveRestore"
+                    disabled={!active || sending}
+                    onPress={() =>
+                      void perform(async () => {
+                        const result = await unwrap({ id: task.id });
+                        // The workspace query still holds the archived state; reread it like Refresh details.
+                        refreshAll();
+                        void workspace.refetch();
+                        void scope.refetch();
+                        if (result.failed.length)
+                          throw new Error(t("Not restored: {sessions}", { sessions: result.failed.join("; ") }));
+                      }, t("Unwrapped"))
+                    }
+                  >
+                    {t("Unwrap")}</Button>
+                ) : (
                   <Button icon="Archive" disabled={!active || sending} onPress={() => setShowWrapup(true)}>
                     {t("Wrap up")}</Button>
                 )}
@@ -1005,7 +1071,19 @@ function TaskDrawerView({
             )}
             {onOpenTask && <LinkOrigin taskId={task.id} onOpenTask={onOpenTask} />}
             {!!task.description && (
-              <SessionMarkdown text={task.description} />
+              // Long descriptions (often from an idea) start clamped so Sessions stay in view.
+              <Clamped key={task.id} background={colors.surface0} bare>
+                <SessionMarkdown text={task.description} />
+              </Clamped>
+            )}
+            {!!task.images?.length && (
+              <CardImageRow
+                taskId={task.id}
+                revision={task.revision}
+                images={task.images}
+                visible={ready}
+                disabled={!!task.archivedAt || !!project.archivedAt}
+              />
             )}
             {!!detailState.error && <Notice>{message(detailState.error)}</Notice>}
             {!detailState.detail ? <Button quiet onPress={detailState.retry}>{detailState.error ? t("Retry") : t("Loading cards…")}</Button> : order.map((id) => <Fragment key={id}>{section(id)}</Fragment>)}
@@ -1029,18 +1107,20 @@ function TaskDrawerView({
             {meaningful.length > 0 && (
               <Section
                 id={task.id}
+                focusId="activity"
                 title={t("Activity")}
                 count={meaningful.length}
                 open={sectionStates.activity.open}
                 onToggle={sectionStates.activity.onToggle}
               >
                 <View>
+                  {/* The last 12, widened back to an older event a search hit points at. */}
                   {meaningful
-                    .slice(-12)
+                    .slice(activityStart(meaningful.map((e) => e.id), keptEvent))
                     .reverse()
                     .map((e, index, list) => (
+                      <FocusTarget key={e.id} id={`event:${e.id}`}>
                       <ActivityItem
-                        key={e.id}
                         event={e}
                         nameOf={(status) => laneName(project, status)}
                         last={index === list.length - 1}
@@ -1054,13 +1134,16 @@ function TaskDrawerView({
                                 : t("Agent")
                         }
                       />
+                      </FocusTarget>
                     ))}
                 </View>
               </Section>
             )}
             </Enter>
             )}
+            </View>
           </ScrollView>
+          </DrawerFocusProvider>
         </>
       )}
       </MotionReveal>
@@ -1140,7 +1223,7 @@ const CardRequests = memo(function CardRequests({
         </View>
         <Button quiet icon="MessageSquare" onPress={() => onOpen(agentId)}>{t("Open")}</Button>
       </View>
-      <PendingRequests requests={requests} disabled={disabled} compact={compact} bounded={false} onRespond={respond} />
+      <PendingRequests requests={requests} disabled={disabled} onRespond={respond} />
     </View>
   );
 });
@@ -1256,6 +1339,8 @@ const activityText: Record<string, string> = localizedLabels({
   progress_reported: msg("Reported progress"),
   idea_edited: msg("Edited the idea"),
   idea_removed: msg("Removed the idea"),
+  review_started: msg("Started the auto review"),
+  review_finished: msg("Finished the auto review"),
   "agent.turn_started": msg("Started a turn"),
   "agent.turn_ended": msg("Finished a turn"),
 });
@@ -1272,6 +1357,7 @@ function ActivityItem({
   last: boolean;
 }) {
   const { colors } = useTheme();
+  const mark = useMark(`event:${event.id}`);
   const question = event.reportKind === "question";
   const verb = question
     ? t("Asked")
@@ -1301,12 +1387,12 @@ function ActivityItem({
         </Label>
         {!!event.rule && (
           <View style={{ flexDirection: "row" }}>
-            <Badge>{t("Auto")}</Badge>
+            <Badge>{event.rule === "R1" || event.rule === "R2" ? t("Auto review") : t("Auto")}</Badge>
           </View>
         )}
         {!!event.note && !isNoMoves(event) && (
-          <Label muted={!question} size={font.sm} lines={question ? 8 : 4}>
-            {event.action === "type_set" && (taskTypes as readonly string[]).includes(event.note) ? taskTypeLabels[event.note as Task["type"] & string] : event.note}
+          <Label muted={!question} size={font.sm} lines={mark ? undefined : question ? 8 : 4}>
+            {event.action === "type_set" && (taskTypes as readonly string[]).includes(event.note) ? taskTypeLabels[event.note as Task["type"] & string] : <Marked text={event.note} terms={mark?.terms} />}
           </Label>
         )}
         <Label muted size={font.xs}>

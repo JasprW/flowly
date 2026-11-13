@@ -1,9 +1,9 @@
-<h1>
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo/flowly-lockup-dark.svg">
-    <img src="docs/brand/logo/flowly-lockup-light.svg" alt="Flowly" height="56">
+    <img src="docs/brand/logo/flowly-lockup-light.svg" alt="Flowly" height="96">
   </picture>
-</h1>
+</p>
 
 **Flowly**——给 Paseo 的 agent 原生工作流。
 
@@ -11,7 +11,7 @@
 
 **Flowly 是一个 Paseo 插件：把 agent session 变成会自己运转的工作流，看板是它的界面。** 你只管派活、拍板、验收；进度、提醒、总结、后续想法和数据复盘由看板自动维护。
 
-> 插件 ID `flowly` · 需要 Paseo `>=0.11.2` · 支持桌面、平板和手机客户端。
+> 插件 ID `flowly` · 需要 Paseo `>=0.15.0` · 支持桌面、平板和手机客户端。
 
 ![看板：卡片随 agent 工作在 Design、Development、Test、In review 之间流转](docs/promo/screenshots/01-board-auto-status.png)
 
@@ -56,7 +56,9 @@ agent 需要你拍板时，会提出一个明确的问题并停下。卡片亮�
 
 ![卡片 summary：状态、目标、已完成、下一步](docs/promo/screenshots/03-card-summary.png)
 
-agent 还会在卡片上维护一份 **Workpad**：验收标准、它跑的验证项（通过、失败或未运行，各自标明在哪个 commit 上跑、用的什么命令），以及卡片里让它困惑的地方。计划直接取自 agent 自己的待办列表。卡片上显示 **验证 3/5**；在比当前 HEAD 更旧的 commit 上跑的验证会标为*已过期*。你也可以自己勾选验收标准、改验证状态。agent 开工前会先设好卡片的类型和标签并写好 Workpad；没设好之前，每次调用 Flowly 工具的结果都会提醒它。带着未完成项、或缺类型/标签/Workpad 交付到 In review 时，agent 必须明确确认并附上说明；有未完成项时卡片随后标出 **交付时 N 项未完成**。可在项目设置的 *Card workpad* 里按项目关闭。
+agent 还会在卡片上维护一份 **Workpad**：开工前写下的验收清单（达成一项勾一项，你也可以勾）、这张卡因为什么被退回、最近一次验收，以及取自 agent 自己待办列表的计划。卡片上显示 **验收标准 3/5**。agent 开工前会先设好卡片的类型和标签并写好验收清单；没设好之前，每次调用 Flowly 工具的结果都会提醒它，缺这些交付要附说明。可在项目设置的 *Card workpad* 里按项目关闭验收清单。
+
+**自动验收**（新项目默认开启；老项目在项目设置或 What's new 里打开）：agent 把卡片交付到 In review 时，Flowly 先查一遍再交给你。先跑项目的检查命令（从仓库识别，例如 `npm test`；新识别的命令前三次评审只报告结果），再由一个独立的评审判断改动是否做到了你在卡片和 session 里要求的事，以及是否符合项目准则。不通过就退回原来的工作阶段，并用你自己的原话说明哪里不够；超过返工上限进 Blocked。卡片显示 **已查过** 或 **已退回**，评审进行时卡片底部有一条指示条。查过不代表做对了：Done 还是你定。每次评审都消耗 token。
 
 ### 4. 任务延伸 ideas
 
@@ -65,13 +67,17 @@ agent 工作时发现的后续事项（顺带发现的 bug、现有方案的局�
 ![Ideas 收件箱，标明来源卡片](docs/promo/screenshots/04-ideas-inbox.png)
 ![Good idea：新建任务、在原 session 继续，或开新 session](docs/promo/screenshots/04b-good-idea-two-paths.png)
 
-需要比卡片活得更久的东西进入**项目记忆**：你做的决策（包括否决的方案）、踩过的坑和走不通的路、你希望怎么做事，以及相关的人和系统。agent 用 `flowly_remember` 提出候选；卡片移入 Done 时，一个便宜的模型还会复盘它，最多再提 1 条，而且只提跨卡通用的。所有条目都要你在项目的 **Memory** 页（快捷键 `M`）确认后才生效。确认过的条目会进入这个项目新 session 的初始指令（放得下就全部给，放不下就给置顶的和最相关的，其余由 agent 用 `flowly_recall` 查）。每条都可以修改、置顶、归档或删除，也可以复制成 `AGENTS.md` 规则；可以按项目关闭。记忆只存在本机，不进仓库。
+**护栏**（快捷键 `G`）是这个项目查什么，从你退回的卡片里长出来。你退回一张卡，Flowly 在这张卡上记下哪里不对；第二张卡因为同一件事被退回，它就成为项目准则，之后每次适用的交付都按它检查。每条准则显示你的原话、抓到、漏掉、误判各几次，以及适用于哪类改动；老是误判或从没抓到过的会自动退休，问题再出现时又会回来。同一页还有项目的检查命令。每条都可以修改、暂停、归档或删除；可以按项目关闭护栏。
+
+**记忆**（快捷键 `M`）是项目的决策、坑、约定和联系人：agent 用 `flowly_remember` 记下的、完成卡片的复盘找到的，以及你自己加的。记忆立即进入新 session 的初始指令（其余由 agent 用 `flowly_recall` 查）。可以按类型筛选、按最新或最常用排序、在列表和网格之间切换，可以置顶、修改、归档，或复制成 `AGENTS.md` 规则。护栏和记忆只存在本机，不进仓库。
+
+**搜索**（快捷键 `S` 或搜索按钮）查找过去的卡片：标题、摘要、进度说明、Workpad、想法和交付物，粘贴 PR 链接或 Jira 编号就能找到对应的卡。可以搜当前项目或全部项目，完全在本机进行。agent 开始做某个方向时也能用 `flowly_search` 查同样的历史。
 
 ### 5. 输入与产出
 
 每张卡有一个 **Artifacts** 列表：它依据的文档、链接（输入）和产出的交付物（输出）。agent 工作时通过看板工具登记，你也可以在卡片上添加、编辑或删除自己的条目。只保存引用，文件留在原处，以只读预览打开。每条都标明是你还是 agent 添加的，agent 不能删除你添加的条目。
 
-**工单、文档和 PR** 也可以作为输入：Jira 工单、Confluence 页面，GitHub、GitLab 的 issue、pull request 和 merge request，以及 Azure DevOps 工作项。在 Settings → Connections 连接服务（自建或云服务，使用个人访问令牌或 API token），然后用 **From Jira / From GitLab / …** 新建卡片，或用卡片 Artifacts 里唯一的 **+** 添加条目。选择器列出你最近的条目（指派给你的、等你审查的、你编辑过的页面），可按编号、链接、数字或标题关键词搜索；GitHub 和 GitLab 会先搜索项目自己的仓库（从 git remote 识别）。agent 用 `flowly_read_external` 读取条目（描述或页面内容、评论，PR/MR 还有分支、head commit 和改动文件名），并能发现条目的变化。Flowly 只读：不评论、不 approve、不合并、不修改任何内容，条目状态也不会移动卡片。令牌只保存在 daemon 所在机器上。
+**工单、文档和 PR** 也可以作为输入：Jira 工单、Confluence 页面，GitHub、GitLab 的 issue、pull request 和 merge request，Azure DevOps 工作项、Shortcut story/epic，以及 Linear issue。在 Settings → Connections 连接服务（自建或云服务，使用个人访问令牌或 API token），然后用 **From Jira / From GitLab / From Linear / …** 新建卡片，或用卡片 Artifacts 里唯一的 **+** 添加条目。选择器列出你最近的条目（指派给你的、等你审查的、你编辑过的页面），可按编号、链接、数字或标题关键词搜索；GitHub 和 GitLab 会先搜索项目自己的仓库（从 git remote 识别）。agent 用 `flowly_read_external` 读取条目（描述或页面内容、评论，PR/MR 还有分支、head commit 和改动文件名），并能发现条目的变化。Flowly 只读：不评论、不 approve、不合并、不修改任何内容，条目状态也不会移动卡片。令牌只保存在 daemon 所在机器上。
 
 agent 理解任务后会自己补全卡片元数据：卡片没有**任务类型**时设置类型（feature、bugfix、research、refactor、docs、chore），不会覆盖你已选的类型；同时添加描述所涉模块和方向的**标签**（`drawer`、`performance`、`a11y`），与固定的任务类型分开。agent 会复用项目已有标签而不是另造同义词；你可在卡片或表单里添加、删除标签。可按标签筛选看板，或搜索 `#tag`（`#module/` 匹配前缀）。agent 不能删除你添加的标签。
 
@@ -89,7 +95,7 @@ Insights 用 GitHub 式的热力图显示项目一年的活跃度：每天一格
 </details>
 
 
-**Skills**（默认开启，可在欢迎导览或 设置 → AI 功能 里关闭）：每周由你选的模型阅读项目的卡片（总结、验收条目、项目记忆记下的你的纠正）、确认过的记忆和 agent 执行过的 shell 命令（已脱敏），写出完整的 skill 草稿：agent 每次做法都不一样的流程（例如走 PR 合入、等评审），或同一类卡积累下来的经验（例如插件性能优化）。点 **加入项目** 会写入 `.agents/skills/<name>/SKILL.md`（Codex 读取），并在 `.claude/skills/<name>` 建软链接（Claude Code 读取），不会替你提交。之后的运行会对 Flowly 加入的 skill 提出更新，以 diff 显示。同一次运行仍会建议 `paseo.json` 脚本、worktree setup、仓库工具和 AGENTS.md 规则，每条一键生成卡片。每次运行替换没人处理的草稿；没有新活动的周期直接跳过，不调用模型；第一次定时运行要等满一个周期。agent 的任务上下文会列出项目 `paseo.json` 中的脚本。
+**Skills**（默认开启，可在欢迎导览或 设置 → AI 功能 里关闭）：每周由你选的模型阅读项目的卡片（总结、验收条目、你的纠正）、项目的备忘和准则，以及 agent 执行过的 shell 命令（已脱敏），写出完整的 skill 草稿：agent 每次做法都不一样的流程（例如走 PR 合入、等评审），或同一类卡积累下来的经验（例如插件性能优化）。点 **加入项目** 会写入 `.agents/skills/<name>/SKILL.md`（Codex 读取），并在 `.claude/skills/<name>` 建软链接（Claude Code 读取），不会替你提交。之后的运行会对 Flowly 加入的 skill 提出更新，以 diff 显示。同一次运行仍会建议 `paseo.json` 脚本、worktree setup、仓库工具和 AGENTS.md 规则，每条一键生成卡片。每次运行替换没人处理的草稿；没有新活动的周期直接跳过，不调用模型；第一次定时运行要等满一个周期。agent 的任务上下文会列出项目 `paseo.json` 中的脚本。
 
 ## 界面语言
 
@@ -101,7 +107,7 @@ Insights 用 GitHub 式的热力图显示项目一年的活跃度：每天一格
 
 ## 快速上手
 
-第一次打开 Flowly 时，一个简短的欢迎导览会讲清 project、卡片和 session，并完成基础设置：界面语言和 AI 输出语言、进展模型、进展 / 下一步 / 想法是否也用于 Flowly 之外的 session（默认开；这些 session 每完成一轮会运行一次摘要模型），以及项目记忆和 Insights 是否开启。Skip 即保留默认值。之后可以在左下角的齿轮里随时修改。
+第一次打开 Flowly 时，一个简短的欢迎导览会讲清 project、卡片和 session，并完成基础设置：界面语言和 AI 输出语言、进展模型、进展 / 下一步 / 想法是否也用于 Flowly 之外的 session（默认开；这些 session 每完成一轮会运行一次摘要模型），以及护栏和 Insights 是否开启。Skip 即保留默认值。之后可以在左下角的齿轮里随时修改。
 
 1. **New project**：选择一个目录（或多个仓库），把它注册为原生 Paseo project。
 2. **New task**：描述要做的事，可以同时启动第一个 agent。
@@ -111,7 +117,7 @@ Insights 用 GitHub 式的热力图显示项目一年的活跃度：每天一格
 
 - **一个看板 project 对应一个原生 Paseo project 根目录。** 要跨多个仓库工作，可以把它们放进同一个父目录并注册该目录；也可以让插件建一个“链接根目录”，里面为每个仓库放一个软链接（移除链接不会动目标目录）。
 - **一张卡对应一个 workspace**，workspace 里可以有多个 session。由你选择哪个 session 接收指令；普通追问只发送你输入的原文。
-- **Agent 工具。** 从卡片创建的 session 会获得受限 MCP 工具：`flowly_get_task`、`flowly_update_status`、`flowly_report_progress`、`flowly_propose_idea`、`flowly_suggest_next_moves`、`flowly_set_tags`、`flowly_set_type`、`flowly_add_artifact`、`flowly_remove_artifact`、`flowly_update_workpad` 和 `flowly_read_external`（`flowly_read_ticket` 作为旧 session 的别名保留），以及说明它们用法的 `flowly` skill。agent 可以在工作阶段之间和 In review 之间移动自己的卡片；Done 与 Cancelled 由人决定。交付或提问的那次调用（`flowly_update_status`、`flowly_report_progress`）还可以带上 `nextMoves`，即显示在输入框上方的建议下一步；没有需要用户做的事就传 `[]`。没有 MCP 的 session 可使用 CLI 兜底。
+- **Agent 工具。** 从卡片创建的 session 会获得受限 MCP 工具：`flowly_get_task`、`flowly_update_status`、`flowly_report_progress`、`flowly_propose_idea`、`flowly_suggest_next_moves`、`flowly_set_tags`、`flowly_set_type`、`flowly_add_artifact`、`flowly_remove_artifact`、`flowly_update_workpad`、`flowly_search` 和 `flowly_read_external`（`flowly_read_ticket` 作为旧 session 的别名保留），以及说明它们用法的 `flowly` skill。agent 可以在工作阶段之间和 In review 之间移动自己的卡片；Done 与 Cancelled 由人决定。交付或提问的那次调用（`flowly_update_status`、`flowly_report_progress`）还可以带上 `nextMoves`，即显示在输入框上方的建议下一步；没有需要用户做的事就传 `[]`。没有 MCP 的 session 可使用 CLI 兜底。
 - **卡片业务状态与 session 执行状态相互独立。** 一轮结束不代表卡片完成。
 - **其他能力：** 拖拽（含列内排序）、卡片关联（follow-up、blocks、related）、任务类型与优先级、Done 卡片收尾（预检后归档其 session 和自有 workspace）、键盘快捷键（`?`）、按卡片统计 token、手机紧凑布局，以及在 *设置 → 卡片* 中自选看板卡片显示哪些信息（带实时预览）。
 

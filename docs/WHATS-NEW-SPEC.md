@@ -39,7 +39,7 @@ ONBOARDING-SETUP-SPEC D7 决定老用户不自动弹新导览，所以老用户�
 - 自动弹出只看**最新一个有条目的版本**（`latestRelease`）：它比 `whatsNewSeen` 新才弹；关闭时记下它的版本号。旧版本的页不会让窗口再弹。
 - 窗口总是打开在最新版本那一页。版本号两侧各一个箭头：‹ 翻到更老的版本，› 翻到更新的版本，到头时对应箭头变灰（W5）。翻页不改变 `whatsNewSeen`。
 - 跳版本升级（1.5 → 1.8）：自动打开在 1.8 那页，用户可往回翻看 1.7、1.6……。
-- 发布新版本时在列表最前面加一项；旧版本条目保留（不再“新的覆盖老的”）。每版最多 7 条（`WHATS_NEW_MAX_ITEMS`），保证一页不太长。
+- 发布 minor 或 major 版本（x.Y.0、X.0.0）时在列表最前面加一项；patch 版本（x.y.Z）不加（用户决定 2026-10-27）；旧版本条目保留（不再“新的覆盖老的”）。每版最多 7 条（`WHATS_NEW_MAX_ITEMS`），保证一页不太长。
 
 ## 5. 窗口
 
@@ -65,11 +65,20 @@ Settings → General → Welcome tour 组里加一行 **What's new**（有条目
 纯数据放 `client/whats-new.ts`（不含 React），文案用 `msg()` 标记、渲染时 `t()`，进全部 9 个语言目录：
 
 ```ts
-export interface WhatsNewItem { icon: string; text: string; action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" } }
+export interface WhatsNewItem { icon: string; text: string; action?: { label: string; to: "settings"; section: SettingsSection } | { label: string; to: "tour" } | { label: string; to: "auto-review" } }
 export const whatsNew: { version: string; items: WhatsNewItem[] }[] = [ /* 新的在前，最早 1.5.0 */ ];
 ```
 
 版本号写**带上这些变化发布的那个版本**。条目写这个版本里用户可见的新功能和变化，每条一句话；能在设置里开关或调整的给 **Open settings**（落在对应设置页），导览相关的给 **Take the tour**。
+
+### 1.8.0
+
+| 图标 | 文案 | 按钮 |
+| --- | --- | --- |
+| `Search` | 搜索过去的卡片、总结、笔记、Workpad、想法和交付物；agent 也能搜（[SEARCH-SPEC](SEARCH-SPEC.md) §8） | — |
+| `ShieldCheck` | Auto review checks every delivery before it reaches you and sends it back to the agent when it falls short. On for new projects.（[GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §10） | **Turn on for this project**（`to: "auto-review"`：当前项目的 Edit project，Auto review 区块置顶、开关已打开；保存后由 daemon 识别命令；取代 AUTO-REVIEW-SPEC 的 `review-analysis`） |
+| `Undo2` | Flowly learns from what you send cards back for: the second card with the same problem turns it into a project guideline, checked on every delivery it applies to. | — |
+| `BookMarked` | Memory no longer needs confirming; what agents remember takes effect at once and retires by itself when unused. | — |
 
 ### 1.7.0（v1.6.0..v1.7.0，全部更新见 [release-notes/v1.7.0](release-notes/v1.7.0.md)）
 
@@ -118,7 +127,7 @@ export const whatsNew: { version: string; items: WhatsNewItem[] }[] = [ /* 新�
 
 ## 9. 上手维护规则（AGENTS.md “Onboarding upkeep” 补一条）
 
-发布含用户可见变化、且**老用户在使用中不会自己遇到**的版本（新设置、对老用户默认不同的开关、换了位置的入口）时，在 `client/whats-new.ts` 加一个该版本的条目（≤ 7 条，每条一句话），加在列表最前面（旧版本保留，最早到 1.5.0）。在某个场景里能自然遇到的功能仍用一次性 tip，不进 What's new。都不需要时在交付说明里写明。
+功能、修复和文档改动不改 `client/whats-new.ts`，只交付功能本身；What's new 由发版任务统一写（用户决定 2026-11-10）：minor 或 major 版本的 bump PR 之前，总结上一个发布 tag 到当前 `main` 的主要用户可见变化（发版说明和 What's new）。发布含用户可见变化、且**老用户在使用中不会自己遇到**的 minor 或 major 版本（新设置、对老用户默认不同的开关、换了位置的入口）时，在 `client/whats-new.ts` 加一个该版本的条目（≤ 7 条，每条一句话），加在列表最前面（旧版本保留，最早到 1.5.0）。在某个场景里能自然遇到的功能仍用一次性 tip，不进 What's new。patch 版本（x.y.Z）从不加条目（用户决定 2026-10-27）。都不需要时在交付说明里写明。
 
 ## 10. 验收
 

@@ -1,0 +1,13 @@
+Summary: hit row found: true
+Summary: target visible: true
+Note: hit row found: true
+Note: target visible: true
+Workpad: hit row found: true
+Workpad: target visible: true
+Idea: hit row found: true
+Idea: target visible: true
+normal open: old note hidden (Activity back to its default): true
+desktop page errors: []
+Compact note: hit row found: true
+Compact note: target visible: true
+compact page errors: []

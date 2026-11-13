@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Marked } from "./drawer-focus";
 import { Animated, Pressable, View } from "react-native";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useMotionHeight, useMotionValue } from "./motion";
@@ -23,19 +24,25 @@ export function ContentCard({
   footer,
   after,
   defaultOpen = false,
+  openWhen,
+  stripe,
   children,
 }: {
   footer?: ReactNode;
   after?: ReactNode;
   /** Start expanded (the welcome tour shows every field); Show less still collapses it. */
   defaultOpen?: boolean;
+  /** Expands whenever this changes to a value (a search hit on the card); Show less still collapses it. */
+  openWhen?: unknown;
+  /** A 3 pt left edge in this color (the Memory page's kind). */
+  stripe?: string;
   children: ReactNode;
 }) {
   const { colors } = useTheme();
   return (
-    <View style={cardFrameStyle(colors)}>
+    <View style={stripe ? [cardFrameStyle(colors), { borderLeftWidth: 3, borderLeftColor: stripe }] : cardFrameStyle(colors)}>
       <View style={{ padding: space[3], paddingBottom: space[3] }}>
-        <Clamped background={colors.surface1} footer={footer} defaultOpen={defaultOpen}>
+        <Clamped background={colors.surface1} footer={footer} defaultOpen={defaultOpen} openWhen={openWhen}>
           {children}
         </Clamped>
       </View>
@@ -67,15 +74,17 @@ export function CardText({ children }: { children: ReactNode }) {
   );
 }
 
-/** A titled block (Target, Recap, What to do…). Renders nothing for empty text. */
-export function CardField({ title, text }: { title: string; text: string }) {
+/** A titled block (Target, Recap, What to do…). Renders nothing for empty text. `terms` are marked (search). */
+export function CardField({ title, text, terms }: { title: string; text: string; terms?: readonly string[] | null }) {
   if (!text.trim()) return null;
   return (
     <View style={{ gap: 2 }}>
       <Label muted size={font.xs} selectable={false}>
         {title}
       </Label>
-      <CardText>{text}</CardText>
+      <CardText>
+        <Marked text={text} terms={terms} />
+      </CardText>
     </View>
   );
 }
@@ -112,11 +121,29 @@ const CLAMP_HEIGHT = 104;
  * Show more / Show less with an animated height (TASK-SUMMARY-SPEC §7).
  * Content that fits shows in full without a toggle. The toggle sits in the
  * bottom-left corner and `footer` on the right of the same row.
- * `background` is the surface the fade blends into.
+ * `background` is the surface the fade blends into. With `bare`, the footer
+ * row is left out when there is nothing to put in it (the drawer's description).
  */
-function Clamped({ background, footer, defaultOpen = false, children }: { background: string; footer?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
+export function Clamped({
+  background,
+  footer,
+  defaultOpen = false,
+  openWhen,
+  bare = false,
+  children,
+}: {
+  background: string;
+  footer?: ReactNode;
+  defaultOpen?: boolean;
+  openWhen?: unknown;
+  bare?: boolean;
+  children: ReactNode;
+}) {
   const [natural, setNatural] = useState(0);
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (openWhen) setOpen(true);
+  }, [openWhen]);
   const overflows = natural > CLAMP_HEIGHT + 8;
   const target = natural ? (open || !overflows ? natural : CLAMP_HEIGHT) : null;
   const height = useMotionHeight(target);
@@ -140,10 +167,12 @@ function Clamped({ background, footer, defaultOpen = false, children }: { backgr
         )}
       </Animated.View>
       {/* Footer row: the toggle in the bottom-left corner, `footer` on the right. */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: 24 }}>
-        {overflows && <Toggle open={open} onPress={() => setOpen(!open)} />}
-        <View style={{ flex: 1, minWidth: 0, alignItems: "flex-end" }}>{footer}</View>
-      </View>
+      {(!bare || overflows || footer != null) && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: 24 }}>
+          {overflows && <Toggle open={open} onPress={() => setOpen(!open)} />}
+          <View style={{ flex: 1, minWidth: 0, alignItems: "flex-end" }}>{footer}</View>
+        </View>
+      )}
     </View>
   );
 }
@@ -215,7 +244,9 @@ export function SourceLine({ task, nameOf, onOpenTask }: { task: Task | undefine
       <View style={{ flexShrink: 1, minWidth: 0 }}>
         <Label size={font.sm} lines={1} selectable={false}>{task.title}</Label>
       </View>
-      <Label muted size={font.xs} selectable={false}>· {task.archivedAt ? t("Archived") : nameOf(task.status)}</Label>
+      <View style={{ flexShrink: 0 }}>
+        <Label muted size={font.xs} lines={1} selectable={false}>· {task.archivedAt ? t("Archived") : nameOf(task.status)}</Label>
+      </View>
       <View style={{ flex: 1 }} />
       <Icon name="ChevronRight" size={13} color={colors.foregroundMuted} />
     </Pressable>
