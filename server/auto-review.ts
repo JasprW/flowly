@@ -43,9 +43,18 @@ import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
 import { logFailure } from "./error-report";
+import { resolveWorktree, worktreeBase } from "./review-worktree";
 
 /** An agent delivery to In review that starts a review (AUTO-REVIEW-SPEC §3.1). */
-export type DeliveredReview = { taskId: string; projectId: string; eventId: string; agentId: string; from: HistoryStatus };
+export type DeliveredReview = {
+  taskId: string;
+  projectId: string;
+  eventId: string;
+  agentId: string;
+  from: HistoryStatus;
+  /** The git worktree the delivery named (§3.4): the review runs and reads there instead of the workspace. */
+  worktree?: string;
+};
 
 /** One check the review session judges (GUARDRAILS-SPEC §6.3): the built-in goal, a guideline or a card item. */
 export type JudgedCheck = {
@@ -74,6 +83,8 @@ export type LlmReviewInput = {
   diff: string;
   /** Round ≥ 2 of a rework: `diff` holds only what changed since the previous delivery (§6.3). */
   incremental?: boolean;
+  /** The git worktree the delivery named (§3.4): where the delivered code is, outside the session's working directory. */
+  worktree?: string;
   /** The delivering session, as the review session's parent. */
   parentAgentId: string;
 };
@@ -602,17 +613,31 @@ export class AutoReviewService {
     const task = board.tasks.find((t) => t.id === delivery.taskId);
     const project = task && board.projects.find((p) => p.id === task.projectId);
     if (!task || !project || task.archivedAt || project.archivedAt || task.status !== "in_review" || !autoReviewRuns(project)) return;
-    const where = await this.deps.workspace(task, paseo).catch(() => null);
+    const workspace = await this.deps.workspace(task, paseo).catch(() => null);
+    let where = workspace;
+    let baseRef = task.baseRef;
+    let whereUnavailable = "The card's workspace directory is unavailable.";
+    // A delivery that named a worktree is reviewed there (§3.4); one that is gone is not replaced by the workspace.
+    if (workspace && delivery.worktree) {
+      try {
+        const worktree = await resolveWorktree(delivery.worktree, workspace.directory, this.git);
+        where = { directory: worktree.directory, worktree: true };
+        baseRef = task.baseRef ?? (await worktreeBase(worktree, this.git)) ?? undefined;
+      } catch (e) {
+        where = null;
+        whereUnavailable = `The delivered worktree is unavailable: ${e instanceof Error ? e.message : String(e)}`.slice(0, autoReviewLimits.reason);
+      }
+    }
     let head = where ? await readHead(where.directory, this.git, this.now()) : null;
     // A workspace that is not a Git repository itself reads the repositories in it (a linked root, §6.2).
-    const linked = where && !head ? await linkedRepos(where.directory) : [];
+    const linked = where && !head && !delivery.worktree ? await linkedRepos(where.directory) : [];
     let repoShas: Record<string, string> | undefined;
     if (linked.length) ({ head, repos: repoShas } = await linkedHead(linked, this.git, this.now()));
     const measured = !where
       ? null
       : linked.length
-        ? await linkedShape(linked, task.baseRef, this.git).catch(() => null)
-        : await (this.deps.shape ?? ((d: string, base?: string) => reviewShape(d, base, this.git)))(where.directory, task.baseRef).catch(() => null);
+        ? await linkedShape(linked, baseRef, this.git).catch(() => null)
+        : await (this.deps.shape ?? ((d: string, base?: string) => reviewShape(d, base, this.git)))(where.directory, baseRef).catch(() => null);
     const config = autoReviewOf(project);
     // What is checked is fixed when it starts; editing the guardrails meanwhile does not change this review (§4.3).
     const guard = this.deps.guardrails
@@ -659,6 +684,7 @@ export class AutoReviewService {
           dirty: !!head?.dirty,
         },
         shared: !where?.worktree,
+        ...(delivery.worktree ? { worktree: delivery.worktree } : {}),
         ...(measured ? { shape: measured.shape } : {}),
         items,
         startedAt,
@@ -670,7 +696,7 @@ export class AutoReviewService {
     const items = (await this.current(delivery.taskId, startedAt))?.items ?? [];
     const set = (id: string, patch: Partial<ReviewItem>) => this.updateItems(delivery.taskId, startedAt, [id], patch);
     if (!where) {
-      await this.updateItems(delivery.taskId, startedAt, items.filter((i) => i.state === "queued").map((i) => i.id), { state: "unavailable", reason: "The card's workspace directory is unavailable." });
+      await this.updateItems(delivery.taskId, startedAt, items.filter((i) => i.state === "queued").map((i) => i.id), { state: "unavailable", reason: whereUnavailable });
     } else {
       // Every active and observing command runs, in list order; each result shows as soon as it is in (§6.3 step 1).
       const runIn = linked.length ? await changedRepos(linked, task.createdAt, this.git) : [];
@@ -699,7 +725,7 @@ export class AutoReviewService {
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
         });
       }
-      await this.judge(delivery, startedAt, task, started.round > 1 && !manual ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo);
+      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual && started.previous?.worktree === delivery.worktree ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo);
     }
     const after = !where ? null : linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now());
     const outcome = await this.finish(delivery.taskId, startedAt, where ? after : undefined);
@@ -796,6 +822,7 @@ export class AutoReviewService {
             task.baseRef,
           ),
       ...(incremental ? { incremental: true } : {}),
+      ...(delivery.worktree ? { worktree: where.directory } : {}),
       parentAgentId: delivery.agentId,
     };
     const started = this.clock();
@@ -941,8 +968,16 @@ function latestDelivery(board: Board, task: Task): DeliveredReview | null {
   for (let i = board.events.length - 1; i >= 0; i--) {
     const e = board.events[i];
     if (e.taskId === task.id && e.action === "status_changed" && e.to === "in_review" && e.actor === "agent" && e.agentId && e.from)
-      return { taskId: task.id, projectId: task.projectId, eventId: e.id, agentId: e.agentId, from: e.from };
+      return { taskId: task.id, projectId: task.projectId, eventId: e.id, agentId: e.agentId, from: e.from, ...(e.worktree ? { worktree: e.worktree } : {}) };
   }
-  if (task.review) return { taskId: task.id, projectId: task.projectId, eventId: task.review.trigger.eventId, agentId: task.review.trigger.agentId, from: task.review.trigger.from };
+  if (task.review)
+    return {
+      taskId: task.id,
+      projectId: task.projectId,
+      eventId: task.review.trigger.eventId,
+      agentId: task.review.trigger.agentId,
+      from: task.review.trigger.from,
+      ...(task.review.worktree ? { worktree: task.review.worktree } : {}),
+    };
   return null;
 }
