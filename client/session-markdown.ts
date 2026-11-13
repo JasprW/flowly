@@ -1,3 +1,16 @@
+/** Column width from the longest cell, so short columns stay narrow and long ones wrap. */
+export function columnWidth(cells: string[]) {
+  // Approximate East Asian wide/fullwidth glyphs as two Latin character widths.
+  const wide = /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff01-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u;
+  let longest = 1;
+  for (const cell of cells) {
+    let width = 0;
+    for (const char of cell) width += wide.test(char) ? 2 : 1;
+    longest = Math.max(longest, width);
+  }
+  return Math.min(Math.max(longest * 8 + 24, 64), 260);
+}
+
 export type MarkdownBlock =
   | { kind: "paragraph" | "quote"; text: string }
   | { kind: "heading"; text: string; level: number }

@@ -1,3 +1,9 @@
+## 2026-11-13 PR #103 table wrapping review
+
+- Removed `wordBreak: "break-all"` from web table cells. `overflowWrap: "anywhere"` preserves normal word-boundary wrapping while allowing overlong identifiers and numbers to break within their columns. Contract updated in SESSION-UX-SPEC §8.
+- Verification results are recorded on PR #103. Desktop and physical-phone visual acceptance remain UNRUN.
+- Onboarding and telemetry need no changes for this existing table-rendering refinement.
+
 # Implementation progress
 
 ## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13
