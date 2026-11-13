@@ -1,4 +1,7 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { logFailure } from "./error-report";
+
+vi.mock("./error-report", () => ({ logFailure: vi.fn() }));
 import { llmReviewer, parseReviewOutput, reviewPrompt } from "./review-session";
 import type { LlmReviewInput } from "./auto-review";
 
@@ -120,4 +123,33 @@ test.each([
     remove: async () => undefined,
   })(base, paseo as never);
   expect(configs).toEqual([{ provider: "claude/claude-opus-5-5", modeId: "plan", ...(expected ? { thinkingOptionId: expected } : {}) }]);
+});
+
+
+test.each(["error response", "exception"])("review still runs with default reasoning after metadata %s", async (failure) => {
+  vi.mocked(logFailure).mockClear();
+  let calls = 0;
+  const configs: Record<string, unknown>[] = [];
+  const paseo = {
+    providers: {
+      listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
+      listModels: async () => {
+        if (++calls === 1) return { models: [{ id: "claude-opus-5-5" }] };
+        if (failure === "exception") throw new Error("Metadata unavailable");
+        return { error: "Metadata unavailable", models: [] };
+      },
+    },
+    workspaces: { ref: () => ({ agents: { create: async (input: { config: Record<string, unknown> }) => {
+      configs.push(input.config);
+      return { id: "review", waitForFinish: async () => ({ status: "idle", lastMessage: '{"items":[]}' }) };
+    } } }) },
+  };
+  const result = await llmReviewer({
+    reviewSettings: async () => ({ reviewModel: "claude/claude-opus-5-5", reviewThinking: "high" }),
+    summaryModels: async () => [],
+    remove: async () => undefined,
+  })(base, paseo as never);
+  expect(result.model).toBe("claude/claude-opus-5-5");
+  expect(configs).toEqual([{ provider: "claude/claude-opus-5-5", modeId: "plan" }]);
+  expect(logFailure).toHaveBeenCalledOnce();
 });

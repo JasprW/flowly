@@ -4,7 +4,8 @@ import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { DaemonClient } from '@getpaseo/client/internal/daemon-client';
 import { createPaseoApi } from '@getpaseo/client';
@@ -15,9 +16,10 @@ async function open() {
   const paseo = createPaseoApi(dc);
   return {dc,paseo,rpc:(method,input)=>dc.invokePluginRpc('flowly',method,input),close:async()=>{await paseo.dispose();await dc.close();}};
 }
-const run = promisify(execFile), dir = new URL('./', import.meta.url).pathname;
+const run = promisify(execFile), dir = fileURLToPath(new URL('./', import.meta.url));
 const manifest = join(dir, 'fixture.json');
-let x = existsSync(manifest) ? JSON.parse(await readFile(manifest, 'utf8')) : { root: join(process.cwd(), '.test-data/review-reasoning-dc766582'), owner: 'dc766582-reasoning-live', children: [] };
+const freshState = () => ({ root: join(process.cwd(), '.test-data/review-reasoning-dc766582'), owner: 'dc766582-reasoning-live', children: [] });
+let x = existsSync(manifest) ? JSON.parse(await readFile(manifest, 'utf8')) : freshState();
 const save = () => writeFile(manifest, JSON.stringify(x, null, 2));
 const { dc, paseo, rpc, close } = await open();
 const action = async (args) => {
@@ -30,8 +32,9 @@ const action = async (args) => {
 try {
   const mode = process.argv[2];
   if (mode === 'setup') {
+    if (x.cleanup?.directoryRemoved === true) { x = freshState(); await save(); }
     if (x.projectId || existsSync(x.root)) throw new Error('Fixture already exists');
-    await save(); await mkdir(x.root, { recursive: false });
+    await save(); await mkdir(dirname(x.root), { recursive: true }); await mkdir(x.root, { recursive: false });
     await writeFile(join(x.root, 'README.md'), '# Review reasoning fixture\nThe fixture is ready.\n');
     for (const args of [['init','-q','-b','main'], ['add','README.md'], ['-c','core.hooksPath=/dev/null','-c','user.name=Flowly QA','-c','user.email=qa@example.invalid','-c','commit.gpgsign=false','commit','-q','-m','fixture']]) await run('git',args,{cwd:x.root});
     const p = await rpc('projects.create',{title:'Review reasoning QA dc766582',primaryPath:x.root});

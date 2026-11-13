@@ -4,6 +4,7 @@ import { autoReviewLimits } from "../shared/model";
 import { GOAL_ID } from "../shared/auto-review";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { runSummaryModels } from "./summary-models";
+import { logFailure } from "./error-report";
 import type { LlmReview, LlmReviewInput, LlmVerdict } from "./auto-review";
 
 /**
@@ -142,11 +143,16 @@ export function llmReviewer(options: {
       create: async (model) => {
         let thinkingOptionId: string | undefined;
         if (chosen === model && settings.reviewThinking) {
-          const slash = model.indexOf("/");
-          const result = await paseo.providers.listModels(model.slice(0, slash));
-          if (result.error) throw new Error(result.error);
-          const info = result.models?.find((m) => m.id === model.slice(slash + 1));
-          if (info?.thinkingOptions?.some((o) => o.id === settings.reviewThinking)) thinkingOptionId = settings.reviewThinking;
+          try {
+            const slash = model.indexOf("/");
+            const result = await paseo.providers.listModels(model.slice(0, slash));
+            if (result.error) throw new Error(result.error);
+            const info = result.models?.find((m) => m.id === model.slice(slash + 1));
+            if (info?.thinkingOptions?.some((o) => o.id === settings.reviewThinking)) thinkingOptionId = settings.reviewThinking;
+          } catch (error) {
+            // The optional reasoning lookup must not prevent review with the model's default.
+            logFailure("Flowly review reasoning lookup failed:", error);
+          }
         }
         return paseo.workspaces.ref(input.task.workspaceId).agents.create({
           parent: input.parentAgentId,
