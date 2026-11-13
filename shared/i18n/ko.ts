@@ -11,6 +11,7 @@ const catalog: Catalog = {
   "Finished the auto review": "자동 검토를 마침",
   "Auto review": "자동 검토",
   "Max rework rounds": "최대 재작업 횟수",
+  "Waiting for review": "검토 대기 중",
   "Reviewing": "검토 중",
   "Review failed": "검토 실패",
   "Review unavailable": "검토할 수 없음",

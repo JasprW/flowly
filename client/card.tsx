@@ -16,7 +16,7 @@ import type { WorkpadSignal } from "../shared/workpad";
 import { activityLines, defaultCardDisplay, type CardDisplay } from "../shared/card-display";
 import { taskCardLabel, workpadText } from "./card-label";
 import { BrandIcon } from "./brand-icons";
-import { reviewing, visibleReview } from "../shared/auto-review";
+import { reviewWaiting, visibleReview } from "../shared/auto-review";
 import { Collapse } from "./disclosure";
 import { reviewIcon, reviewLabel } from "./task-review";
 import { reviewProgress } from "../shared/auto-review";
@@ -278,7 +278,7 @@ export function TaskCard({
           waitingTitles,
           progress: progress ?? null,
           workpad: workpad ?? null,
-          review: task.review && visibleReview(task) ? reviewLabel(task.review) : "",
+          review: reviewWaiting(task) ? t("Waiting for review") : task.review && visibleReview(task) ? reviewLabel(task.review) : "",
           attentionDismissed,
           priority: task.priority,
           type: task.type,
@@ -334,7 +334,7 @@ export function TaskCard({
           display={display}
         />
       </Pressable>
-      <ReviewStrip taskId={task.id} review={task.review} running={reviewing(task)} />
+      <ReviewStrip taskId={task.id} review={task.review} running={visibleReview(task)?.state === "running"} waiting={reviewWaiting(task)} />
       {accent && (
         // Urgent/High: a stripe down the left edge, readable from across the board.
         <View
@@ -449,9 +449,10 @@ function Signal({ color, icon, text, pulse = false }: { color?: string; icon?: s
 /**
  * While an automatic review runs, a strip opens under the card with the dot sweep (GUARDRAILS-SPEC §7.1.1): one line,
  * "Reviewing · 3/7 passed · running npm test". `Collapse` expands it when the review starts; when it ends the last
- * frame stays 600 ms (none under Reduce Motion) before it folds. A card mounted mid-review shows it at once.
+ * frame stays 600 ms (none under Reduce Motion) before it folds. A card mounted mid-review shows it at once. From the
+ * delivery until the review starts it reads "Waiting for review", so the previous result is never shown as current.
  */
-function ReviewStrip({ taskId, review, running }: { taskId: string; review: Review | undefined; running: boolean }) {
+function ReviewStrip({ taskId, review, running, waiting }: { taskId: string; review: Review | undefined; running: boolean; waiting: boolean }) {
   const { colors } = useTheme();
   const reduced = useReducedMotion();
   const [held, setHeld] = useState(false);
@@ -467,8 +468,8 @@ function ReviewStrip({ taskId, review, running }: { taskId: string; review: Revi
     const timer = setTimeout(() => setHeld(false), 600);
     return () => clearTimeout(timer);
   }, [running, reduced]);
-  const open = running || held;
-  const progress = review ? reviewProgress(review) : null;
+  const open = running || waiting || held;
+  const progress = review && !waiting ? reviewProgress(review) : null;
   const passed = progress && progress.total ? t("{passed}/{total} passed", { passed: progress.passed, total: progress.total }) : "";
   const failed = progress?.failed ? tn(progress.failed, "{n} failed", "{n} failed") : "";
   const now =
@@ -479,7 +480,7 @@ function ReviewStrip({ taskId, review, running }: { taskId: string; review: Revi
         : progress?.phase === "starting"
           ? t("starting…")
           : "";
-  const label = [
+  const label = waiting ? t("Waiting for review") : [
     t("Auto review running"),
     progress?.total ? t("{passed} of {total} passed", { passed: progress.passed, total: progress.total }) : "",
     failed,
@@ -505,10 +506,10 @@ function ReviewStrip({ taskId, review, running }: { taskId: string; review: Revi
           overflow: "hidden",
         }}
       >
-        <RunningDots color={colors.accent} seed={`${taskId}:review`} />
-        <Icon name="Loader" size={13} color={colors.accent} />
+        {!waiting && <RunningDots color={colors.accent} seed={`${taskId}:review`} />}
+        <Icon name={waiting ? "Clock" : "Loader"} size={13} color={colors.accent} />
         <Label size={font.sm} color={colors.accent} selectable={false}>
-          {t("Reviewing")}
+          {waiting ? t("Waiting for review") : t("Reviewing")}
         </Label>
         {!!passed && <StripPart text={passed} color={colors.accent} />}
         {!!failed && <StripPart text={failed} color={colors.statusDanger} />}

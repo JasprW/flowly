@@ -11,6 +11,7 @@ const catalog: Catalog = {
   "Finished the auto review": "Завершил автоматическую проверку",
   "Auto review": "Автоматическая проверка",
   "Max rework rounds": "Макс. число доработок",
+  "Waiting for review": "Ожидает проверки",
   "Reviewing": "Проверяется",
   "Review failed": "Проверка не пройдена",
   "Review unavailable": "Проверка недоступна",

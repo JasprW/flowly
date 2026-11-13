@@ -1,0 +1,75 @@
+Flowly
+Review status QA 20261113-503c
+Attention
+1
+Recent activity
+Filter
+New task
+2
+tasks
+· 0 done
+Idle
+In review
+2
+Ideas
+Insights
+Development
+0
+No tasks
+Test
+0
+No tasks
+In review
+2
+Chore
+Waiting review
+1
+Waiting for review
+Chore
+Queue blocker
+1
+Reviewing
+· 0/2 passed
+· running QA controlled check
+0
+Blocked
+Done
+0
+No tasks
+Cancelled
+0
+No tasks
+Review status QA 20261113-503c
+Waiting review
+In review
+Normal
+Chore
+#testing
+Add
+Disposable UI verification card. No implementation work.
+Progress
+Refresh
+Updates after each agent turn.
+Sessions
+1
+Start session
+QA Waiting review
+Ready
+· claude · claude-haiku-5-5
+3m ago
+Workpad
+Acceptance
+Updated 3m ago by QA Waiting review
+Disposable status verification fixture
+Review
+Waiting for review
+Artifacts
+0
+Links
+0
+Details & workspace
+Waiting review
+Usage
+No token data
+Activity
+7

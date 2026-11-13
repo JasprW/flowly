@@ -394,6 +394,9 @@ test("attention: a running review holds back unread sessions; a pass only releas
     expect(item.signals).toEqual([`review:${state}:${task.review.startedAt}`]);
     expect(item.updatedAt).toBe(task.review.finishedAt);
   }
+  // A new delivery hides the old failure and holds unread until its review starts.
+  task.reviewWaiting = { eventId: "next", agentId: "actor", from: "development", since: stamp };
+  expect(attentionItems(board, agents as never, [], false)).toEqual([]);
 });
 
 test("the review starts when the delivering session's turn ends, not while it is still running", async () => {
@@ -402,6 +405,8 @@ test("the review starts when the delivering session's turn ends, not while it is
   let board = await x.deliver("development");
   expect(x.runs).toEqual([]);
   expect(board.tasks[0]!.review).toBeUndefined();
+  // Waiting is recorded in the delivery's own write (§3.1).
+  expect(board.tasks[0]!.reviewWaiting).toMatchObject({ agentId: "actor", from: "development" });
   // Another session's turn ending does not start it.
   await x.reviews.turnEnded("second", x.paseo);
   expect(x.runs).toEqual([]);
@@ -410,11 +415,121 @@ test("the review starts when the delivering session's turn ends, not while it is
   await x.reviews.idle();
   board = await x.store.read();
   expect(board.tasks[0]!.review).toMatchObject({ state: "passed" });
+  expect(board.tasks[0]!.reviewWaiting).toBeUndefined();
   expect(x.runs).toEqual(["npm test"]);
   // Once only.
   await x.reviews.turnEnded("actor", x.paseo);
   await x.reviews.idle();
   expect(x.runs).toEqual(["npm test"]);
+});
+
+test("while a delivery waits for its review the previous result is hidden; the wait ends when the review starts (§3.1, §9)", async () => {
+  const { visibleReview, reviewing, reviewSignal } = await import("../shared/auto-review");
+  const x = await setup();
+  await x.deliver("development");
+  expect((await card(x)).review).toMatchObject({ state: "passed" });
+  // The user sends it back; the agent delivers again while its turn is still running.
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  x.actors.actor!.status = "running";
+  await x.deliver();
+  let task = await card(x);
+  expect(task.review).toMatchObject({ state: "passed" });
+  expect(task.reviewWaiting).toBeTruthy();
+  expect(visibleReview(task)).toBeNull();
+  expect(reviewing(task)).toBe(true);
+  expect(reviewSignal(task)).toBeNull();
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(/waiting to start/);
+  // The review's start clears it in the same write.
+  let seen: unknown = "unset";
+  x.setDuring(async () => {
+    seen = (await card(x)).reviewWaiting;
+  });
+  x.actors.actor!.status = "idle";
+  await x.reviews.turnEnded("actor", x.paseo);
+  await x.reviews.idle();
+  expect(seen).toBeUndefined();
+  task = await card(x);
+  expect(task.reviewWaiting).toBeUndefined();
+  expect(visibleReview(task)).toMatchObject({ state: "passed" });
+});
+
+test("a waiting delivery that is not reviewed (card moved out of In review) does not leave the card waiting", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  expect((await card(x)).reviewWaiting).toBeTruthy();
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  await x.reviews.turnEnded("actor", x.paseo);
+  await x.reviews.idle();
+  expect(x.runs).toEqual([]);
+  expect((await card(x)).reviewWaiting).toBeUndefined();
+});
+
+test("recover: a delivery still waiting for its review at a restart becomes unavailable and can be rerun", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  expect(await x.reviews.recover()).toBe(true);
+  const task = await card(x);
+  expect(task.reviewWaiting).toBeUndefined();
+  expect(task.review).toMatchObject({ state: "unavailable", reason: "Flowly restarted before the review started.", trigger: { agentId: "actor", from: "development" }, items: [] });
+  expect(await x.reviews.recover()).toBe(false);
+  x.actors.actor!.status = "idle";
+  await x.reviews.rerun("t", x.paseo);
+  await x.reviews.idle();
+  expect((await card(x)).review).toMatchObject({ state: "passed" });
+});
+
+test("turning Auto review off before the delivering turn ends clears the waiting marker without running checks", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  await x.store.mutate((b) => {
+    b.projects[0]!.autoReview!.enabled = false;
+  });
+  await x.reviews.turnEnded("actor", x.paseo);
+  await x.reviews.idle();
+  expect(x.runs).toEqual([]);
+  expect((await card(x)).reviewWaiting).toBeUndefined();
+});
+
+test("a second card keeps waiting while the project's first review runs; reviews remain serial", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  x.setDuring(async () => { entered(); await gate; });
+  const first = x.reviews.turnEnded("actor", x.paseo);
+  try {
+    await started;
+    await x.store.mutate((b) => {
+      b.tasks.push({ ...b.tasks[0]!, id: "second-card", workspaceId: "second-workspace", operationId: "second-create", review: undefined,
+        reviewWaiting: { eventId: "second-delivery", agentId: "second", from: "development", since: stamp } });
+    });
+    x.actors.second!.status = "running";
+    await x.reviews.delivered({ taskId: "second-card", projectId: "p", eventId: "second-delivery", agentId: "second", from: "development" }, x.paseo);
+    const second = x.reviews.turnEnded("second", x.paseo);
+    const queued = (await x.store.read()).tasks.find((t) => t.id === "second-card")!;
+    expect(queued.reviewWaiting).toBeTruthy();
+    expect(queued.review).toBeUndefined();
+    expect(x.runs).toEqual(["npm test"]);
+    release();
+    await Promise.all([first, second]);
+    const finished = (await x.store.read()).tasks.find((t) => t.id === "second-card")!;
+    expect(finished.reviewWaiting).toBeUndefined();
+    expect(finished.review?.state).toBe("passed");
+    expect(x.runs).toEqual(["npm test", "npm test"]);
+  } finally {
+    release();
+    await x.reviews.idle();
+  }
 });
 
 test("runCheck runs an argument array without a shell: exit code, output tail, timeout and a missing command", async () => {

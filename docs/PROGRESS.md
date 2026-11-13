@@ -6,6 +6,15 @@
 
 # Implementation progress
 
+## Auto review waiting state (card "auto review状态显示") — 2026-11-13
+
+- Agent delivery writes `task.reviewWaiting` atomically. Until its review starts, the card strip and drawer Review group show **Waiting for review**, hide the previous result, hold unread Attention signals and disable Rerun. The queue remains serial per project.
+- Review start clears the marker in the same write; a skipped delivery clears it too. Plugin restart turns a still-waiting delivery into Review unavailable with Rerun. The turn-end hook queues the review before settings, model and timeline reads.
+- AUTO-REVIEW-SPEC §3.1, §8.2, §9.1/§9.2 and all nine catalogs updated. Tests cover redelivery, old-result Attention suppression, skip after leaving In review or disabling Auto review, restart/rerun, and waiting behind another card.
+- Onboarding: no tour change or new tip; this corrects the existing review status at the point users see it. Telemetry: no switch or new core action, so no new field. What's new and version unchanged.
+- Verification: see `docs/verification/auto-review-status-2026-11-13/REPORT.md`. Local plugin reload, real queued-delivery state, desktop/compact card and drawer rendering, restart recovery and the compact Rerun action passed; fixture resources were removed and both registries checked. Native windows, phone rendering, a fresh real-model delivering-turn-end/completed verdict and independent exact-commit verification remain unrun.
+
+
 ## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13
 
 - A delivery to In review without `worktree`, from a shared workspace with Auto review on, now looks at the PR/MR links among this call's outputs and the card's existing outputs. A link whose host and repository match a remote of the card's repository gives its head commit through `git ls-remote` (5 s, no prompts); the one worktree, other than the repository's own directory, whose HEAD contains it is reviewed, recorded on the delivery event like an explicit `worktree`, and named in the result's `notice`. None, several, another repository's link or a git/network failure changes nothing (`server/review-worktree.ts` `prWorktree`).

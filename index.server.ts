@@ -673,6 +673,9 @@ export default function contribute(host: PluginServerContext) {
           .catch((e) => logFailure("Flowly session insight failed:", e));
       return;
     }
+    // A delivery made in this turn is reviewed now that the turn is over (AUTO-REVIEW-SPEC §3.1). First, before the
+    // settings, model and timeline reads below (seconds), none of which the review needs; never blocks the hook.
+    void reviews.turnEnded(identity.agentId, paseo);
     // This turn's suggested next steps as a card under the reply in Paseo's timeline. First thing, before the
     // settings read, the model lookup (up to 2 s) and the board write: the suggestion is already in the board's
     // events and none of those steps changes it, so the card waits for nothing. Never blocks the hook.
@@ -691,8 +694,6 @@ export default function contribute(host: PluginServerContext) {
       if (auto) applyTurnEnded(store, board, identity, event.outcome);
       rework = memory.reworkQuote(identity, timeline, board);
     });
-    // A delivery made in this turn is reviewed now that the turn is over (AUTO-REVIEW-SPEC §3.1); never blocks the hook.
-    void reviews.turnEnded(identity.agentId, paseo);
     // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
     void store
       .read()

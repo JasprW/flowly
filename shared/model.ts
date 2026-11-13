@@ -306,6 +306,12 @@ export const taskSchema = z.object({
   origin: z.object({ taskId: z.string(), ideaId: z.string() }).optional(),
   /** The latest automatic review (AUTO-REVIEW-SPEC §6); written without a task revision. */
   review: reviewSchema.optional(),
+  /**
+   * An agent delivery whose review has not started yet (AUTO-REVIEW-SPEC §3.1): set in the delivery's write, cleared when
+   * that review starts or is skipped. While set and the card is in In review, `review` is the previous one and is not shown.
+   * Written without a task revision.
+   */
+  reviewWaiting: z.object({ eventId: z.string(), agentId: z.string(), from: historyStatusSchema, since: timestamp }).optional(),
   /** Review findings the agent disputed (GUARDRAILS-SPEC §6.1); written without a task revision, cleared at Done/Cancelled. */
   disputes: z.array(disputeSchema).max(disputeLimits.perTask).optional(),
 });

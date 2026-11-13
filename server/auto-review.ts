@@ -551,7 +551,24 @@ export class AutoReviewService {
     const delivery = this.pending.get(agentId);
     if (!delivery) return Promise.resolve();
     this.pending.delete(agentId);
-    return this.enqueue(delivery.projectId, delivery.taskId, () => this.review(delivery, false, paseo));
+    return this.enqueue(delivery.projectId, delivery.taskId, async () => {
+      try {
+        await this.review(delivery, false, paseo);
+      } finally {
+        // A review that started cleared it already; one that was skipped or failed early must not leave the card waiting.
+        await this.clearWaiting(delivery.taskId, delivery.eventId);
+      }
+    });
+  }
+
+  /** Clears the card's waiting marker (§3.1) if it is still the one this delivery set. */
+  private clearWaiting(taskId: string, eventId: string) {
+    return this.store.transaction((b) => {
+      const t = b.tasks.find((x) => x.id === taskId);
+      if (t?.reviewWaiting?.eventId !== eventId) return { value: false, changed: false };
+      delete t.reviewWaiting;
+      return { value: true, changed: true };
+    });
   }
 
   /** A person's Rerun from the drawer (§7): the card is in In review, round starts at 1. */
@@ -563,17 +580,44 @@ export class AutoReviewService {
     if (task.status !== "in_review") throw new Error("Only a card in In review can be reviewed again.");
     if (!autoReviewRuns(project)) throw new Error("Turn on Auto review in the project settings first.");
     if (task.review?.state === "running") throw new Error("A review of this card is already running.");
+    if (task.reviewWaiting) throw new Error("A review of this card is waiting to start.");
     const delivery = latestDelivery(board, task);
     if (!delivery) throw new Error("No agent delivered this card to In review, so there is no session to send rework to.");
     void this.enqueue(project.id, task.id, () => this.review(delivery, true, paseo));
     return { ok: true as const };
   }
 
-  /** At plugin start: a review that was running when Flowly stopped never finishes, so it becomes Unavailable (§3.2). */
+  /**
+   * At plugin start: a review that was running when Flowly stopped never finishes, so it becomes Unavailable (§3.2);
+   * a delivery still waiting for its review is never reviewed (the wait is only in memory), so it becomes Unavailable too.
+   */
   recover() {
     return this.store.transaction((b) => {
       let changed = false;
       for (const t of b.tasks) {
+        const waiting = t.reviewWaiting;
+        if (waiting) {
+          delete t.reviewWaiting;
+          changed = true;
+          const project = b.projects.find((p) => p.id === t.projectId);
+          if (t.status === "in_review" && !t.archivedAt && project && t.review?.state !== "running") {
+            const reason = "Flowly restarted before the review started.";
+            const now = this.now();
+            t.review = {
+              trigger: { eventId: waiting.eventId, agentId: waiting.agentId, from: waiting.from },
+              round: 1,
+              maxRounds: autoReviewOf(project).maxRounds,
+              state: "unavailable",
+              reason,
+              fingerprint: { taskRevision: t.revision, workpadRevision: b.workpads.find((w) => w.taskId === t.id)?.revision ?? 0, dirty: false },
+              shared: true,
+              items: [],
+              startedAt: now,
+              finishedAt: now,
+            };
+            this.store.event(b, { taskId: t.id, actor: "system", action: reviewFinishedAction, agentId: waiting.agentId, note: `Auto review unavailable: ${reason}` });
+          }
+        }
         if (t.review?.state !== "running") continue;
         const reason = "Flowly restarted during the review.";
         t.review = {
@@ -652,6 +696,8 @@ export class AutoReviewService {
     const started = await this.store.transaction<{ previous?: Task["review"]; round: number } | null>((b) => {
       const t = b.tasks.find((x) => x.id === delivery.taskId);
       if (!t || t.archivedAt || t.status !== "in_review") return { value: null, changed: false };
+      // Waiting ends in the same write the review starts in, so the card never shows the previous result meanwhile.
+      if (!manual && t.reviewWaiting?.eventId === delivery.eventId) delete t.reviewWaiting;
       const previous = t.review;
       const round = !manual && continuesRound(b.events, t.id, previous) ? previous!.round + 1 : 1;
       const disputes = new Map((t.disputes || []).map((d) => [d.id, d.reason]));
