@@ -30,8 +30,11 @@ import { projectLanes } from "../shared/lanes";
 import { attentionItems } from "../shared/attention";
 
 const roots: string[] = [];
+/** Waits for each setup's review (started by a delivery) to finish, so it is not still writing when the data dir is removed. */
+const settles: (() => Promise<void>)[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
+  await Promise.all(settles.splice(0).map((settle) => settle()));
+  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
 });
 
 type Ctx = Awaited<ReturnType<AgentService["get"]>>;
@@ -176,6 +179,10 @@ async function setup(
     await reviews.idle();
     return x.store.read();
   };
+  settles.push(async () => {
+    await delivering;
+    await reviews.idle();
+  });
   const turnStarted = () =>
     x.store.mutate((b) => {
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" });

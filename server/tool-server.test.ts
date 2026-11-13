@@ -17,7 +17,7 @@ async function setup() {
     server = new ToolServer(fixture.store);
   cleanups.push(async () => {
     await server.stop();
-    await rm(fixture.root, { recursive: true, force: true });
+    await rm(fixture.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
   await server.start();
   const { url } = JSON.parse(

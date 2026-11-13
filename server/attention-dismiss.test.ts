@@ -11,7 +11,7 @@ async function setup() {
   return f;
 }
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
 });
 
 test("dismiss records the card's signals without touching revisions or Activity; repeats are idempotent", async () => {
