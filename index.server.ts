@@ -287,6 +287,7 @@ export default function contribute(host: PluginServerContext) {
   tools.agents.memory = memory;
   tools.agents.guardrails = guardrails;
   server.handle(rpc.readGuardrails, async ({ projectId, etag }) => ifChanged(await guardrails.view(projectId), etag));
+  server.handle(rpc.restoreGuardrail, ({ projectId, id }) => guardrails.restoreScreened(projectId, id));
   server.handle(rpc.guardrailCounts, async ({ etag }) => ifChanged(await guardrails.counts(), etag));
   server.handle(rpc.createGuardrail, (input) => guardrails.create(input));
   server.handle(rpc.updateGuardrail, (input) => guardrails.update(input));

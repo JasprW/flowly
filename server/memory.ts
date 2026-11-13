@@ -19,20 +19,24 @@ import {
   memoryLimits,
   noteUse,
   parseRetroOutput,
+  parseScreenOutput,
   questionAnswers,
   recallMemory,
   retroJsonSchema,
   retroMaterial,
   retroPrompt,
+  screenJsonSchema,
+  screenPrompt,
   titleKey,
   trimClues,
   type MemoryClue,
   type MemoryEntry,
   type MemoryKind,
   type MemoryState,
+  type ScreenDecision,
   type TurnItem,
 } from "../shared/memory";
-import { emptyCounts, guardrailContext, memoryStateOf, recallGuidelines, setState, toMemoryEntry, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
+import { emptyCounts, guardrailContext, guardrailLimits, memoryStateOf, recallGuidelines, setState, toMemoryEntry, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import type { SummaryStore } from "./summaries";
 import { runSummaryModels } from "./summary-models";
@@ -85,6 +89,10 @@ export type Proposal = {
   keywords: string[];
   supersedes?: string;
   evidence?: string;
+  /** GUARDRAILS-SPEC §4.7: the screening outcome on a retro note. */
+  state?: "active" | "observing";
+  screened?: "auto-confirmed" | "auto-dismissed" | "flagged";
+  screenReason?: string;
 };
 
 const notesOf = (state: GuardrailsState, projectId: string) => state.entries.filter((e) => e.projectId === projectId && e.kind === "note");
@@ -94,7 +102,8 @@ const notesOf = (state: GuardrailsState, projectId: string) => state.entries.fil
  * once, so one card may add at most five: MEMORY_LIMIT past that.
  */
 export function checkProposal(state: GuardrailsState, p: Omit<Proposal, "by" | "eventId" | "agentId">) {
-  if (containsSecret(`${p.title}\n${p.body}\n${p.keywords.join(" ")}`))
+  // The evidence quote reaches the screener prompt, so it is scanned too (CodeRabbit 4502246749).
+  if (containsSecret(`${p.title}\n${p.body}\n${p.keywords.join(" ")}\n${p.evidence || ""}`))
     throw new MemoryError("MEMORY_SECRET", "This looks like it contains a secret (token, key or password). Memory never stores credentials: describe where it is kept instead.");
   const own = notesOf(state, p.projectId);
   const same = own.find((e) => e.state === "active" && titleKey(e.text) === titleKey(p.title));
@@ -230,12 +239,14 @@ export class MemoryService {
         ...(p.body.trim() ? { body: p.body.trim() } : {}),
         tags: p.tags,
         keywords: p.keywords,
-        state: "active",
+        state: p.state ?? "active",
         stateAt: at,
         counts: emptyCounts(),
+        // A flagged (observing) note renders the page's observing marker; its counters never advance.
+        ...(p.state === "observing" ? { observe: { reviews: 0, passed: 0 } } : {}),
         sources: p.taskId ? [{ taskId: p.taskId, at, ...(p.evidence ? { quote: p.evidence.slice(0, 300) } : {}) }] : [],
-        ...(p.taskId || p.agentId || p.eventId
-          ? { source: { ...(p.taskId ? { taskId: p.taskId } : {}), ...(p.agentId ? { agentId: p.agentId } : {}), ...(p.eventId ? { eventId: p.eventId } : {}) } }
+        ...(p.taskId || p.agentId || p.eventId || p.screened
+          ? { source: { ...(p.taskId ? { taskId: p.taskId } : {}), ...(p.agentId ? { agentId: p.agentId } : {}), ...(p.eventId ? { eventId: p.eventId } : {}), ...(p.screened ? { screened: p.screened } : {}), ...(p.screenReason ? { screenReason: p.screenReason } : {}) } }
           : {}),
         by: p.by,
         ...(p.supersedes ? { supersedes: p.supersedes } : {}),
@@ -244,7 +255,8 @@ export class MemoryService {
         updatedAt: at,
       };
       state.entries.push(entry);
-      const replaced = p.supersedes ? state.entries.find((e) => e.id === p.supersedes && e.kind === "note" && e.state === "active") : undefined;
+      // A flagged (observing) replacement must not displace the active note; the human promotes and archives (§4.7).
+      const replaced = p.supersedes && (p.state ?? "active") === "active" ? state.entries.find((e) => e.id === p.supersedes && e.kind === "note" && e.state === "active") : undefined;
       if (replaced) {
         setState(replaced, "archived", "superseded", at);
         replaced.supersededBy = entry.id;
@@ -452,28 +464,161 @@ export class MemoryService {
     if (!manual && last && last.summaryId === m.latestId && last.clueAt === m.clueAt) return;
     const models = summaryModelsOf(await this.summarySettings());
     const prompt = retroPrompt(m.text, await this.language());
-    const { output } = await this.background.use(m.project, paseo, (workspaceId) => runSummaryModels(paseo, models, {
-      create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
-        config: readOnlyConfig(model),
-        title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
-        labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, ...RETRO_LABEL },
-        prompt,
-        outputSchema: retroJsonSchema as unknown as Record<string, unknown>,
-      }),
-      parse: (text) => parseRetroOutput(text).map(fitCandidate),
-      remove: this.removeAgent,
-      timeoutMs: this.timeoutMs,
-    }));
-    await this.recordRetro(m, taskId, output);
+    const { output } = await this.background.use(m.project, paseo, async (workspaceId) => {
+      const retro = await runSummaryModels(paseo, models, {
+        create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
+          config: readOnlyConfig(model),
+          title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
+          labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, ...RETRO_LABEL },
+          prompt,
+          outputSchema: retroJsonSchema as unknown as Record<string, unknown>,
+        }),
+        parse: (text) => parseRetroOutput(text).map(fitCandidate),
+        remove: this.removeAgent,
+        timeoutMs: this.timeoutMs,
+      });
+      return { output: await this.screen(m, taskId, retro.output, paseo, workspaceId) };
+    });
+    await this.recordRetro(m, taskId, output.candidates, output.preDropped);
   }
 
-  private async recordRetro(m: Awaited<ReturnType<MemoryService["material"]>>, taskId: string, candidates: ReturnType<typeof fitCandidate>[]) {
+  /**
+   * GUARDRAILS-SPEC §4.7: a separately-configured model judges each retro candidate
+   * before it writes. Two failure boundaries: a screener failure (model error, timeout,
+   * bad JSON) fails open — candidates write exactly as with screening off, the failure
+   * is recorded in the guardrails store; a write failure during the apply stays in
+   * recordRetro's per-candidate catch and never aborts the run.
+   */
+  private async screen(
+    m: NonNullable<Awaited<ReturnType<MemoryService["material"]>>>,
+    taskId: string,
+    candidates: ReturnType<typeof fitCandidate>[],
+    paseo: PaseoApi,
+    workspaceId: string,
+  ): Promise<{ candidates: (ReturnType<typeof fitCandidate> & { proposeState?: "active" | "observing"; screened?: "auto-confirmed" | "auto-dismissed" | "flagged"; screenReason?: string })[]; preDropped: string[] }> {
+    const settings = await this.summarySettings();
+    if (!settings.memoryScreening || !candidates.length) return { candidates, preDropped: [] };
+    const state = await this.store.read();
+    const own = state.entries.filter((e) => e.projectId === m.project.id && e.kind === "note");
+    // The trust gates and the churn guards run before the model: a doomed candidate never costs a screener call.
+    const survivors: ReturnType<typeof fitCandidate>[] = [];
+    const preDropped: string[] = [];
+    for (const c of candidates) {
+      if (own.some((e) => titleKey(e.text) === titleKey(c.title) && (e.state === "active" || e.state === "observing")) ||
+          (state.screenedOut || []).some((o) => o.projectId === m.project.id && titleKey(o.title) === titleKey(c.title))) {
+        preDropped.push("dismissed or already present");
+        continue;
+      }
+      try {
+        checkProposal(state, { ...c, projectId: m.project.id, taskId, evidence: c.evidence || undefined });
+      } catch (e) {
+        preDropped.push(e instanceof Error ? e.message : String(e));
+        continue;
+      }
+      survivors.push(c);
+    }
+    if (!survivors.length) return { candidates: [], preDropped };
+    const language = await this.language();
+    const context = {
+      active: own.filter((e) => e.state === "active").slice(-100).map((e) => ({ noteKind: e.noteKind || "convention", text: e.text })),
+      instructions: await instructionFiles(m.project.primaryPath),
+    };
+    const decisions = new Map<ReturnType<typeof fitCandidate>, ScreenDecision>();
+    try {
+      for (const c of survivors) {
+        const { output } = await runSummaryModels(paseo, settings.memoryScreeningModel || summaryModelsOf(settings), {
+          create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
+            config: readOnlyConfig(model),
+            title: `Flowly memory screening · ${m.task.title}`.slice(0, 120),
+            labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, "flowly-memory": "screen" },
+            prompt: screenPrompt(c, context, m.task.title, language),
+            outputSchema: screenJsonSchema as unknown as Record<string, unknown>,
+          }),
+          parse: parseScreenOutput,
+          remove: this.removeAgent,
+          timeoutMs: this.timeoutMs,
+        });
+        // Replacing an active note is always a human decision, whatever the screener says.
+        decisions.set(c, c.supersedes ? { ...output, verdict: "human" } : output);
+      }
+      await this.store.update((s) => {
+        const stale = s.errors.some((x) => x.message.startsWith("Decision screening is unavailable"));
+        if (!s.screenerUnavailableAt && !stale) return { value: undefined, changed: false };
+        delete s.screenerUnavailableAt;
+        s.errors = s.errors.filter((x) => !x.message.startsWith("Decision screening is unavailable"));
+        return { value: undefined, changed: true };
+      });
+    } catch (e) {
+      // Screener failure: fail open (write as with screening off) and make the failure visible.
+      const message = e instanceof Error ? e.message : String(e);
+      await this.store
+        .update((s) => {
+          s.screenerUnavailableAt = this.iso();
+          s.errors = s.errors.filter((x) => !x.message.startsWith("Decision screening is unavailable"));
+          s.errors.push({ projectId: m.project.id, taskId, at: this.iso(), message: `Decision screening is unavailable: ${message}`.slice(0, 500) });
+          return { value: undefined, changed: true };
+        })
+        .catch(() => undefined);
+      return { candidates, preDropped };
+    }
+    // A model-generated reason is stored in provenance and screenedOut: never persist one that carries a credential (CodeRabbit 4502246754).
+    const safeReason = (d: ScreenDecision) => (containsSecret(d.reason) ? "[redacted: the screening reason contained a credential]" : d.reason);
+    const screened = survivors.map((c) => {
+      const d = decisions.get(c);
+      if (!d) return c;
+      if (d.verdict === "dismiss" && d.confidence === "high") return { ...c, dropped: safeReason(d) } as const;
+      // confirm+high writes active as upstream does; everything else writes flagged.
+      const uncertain = d.verdict !== "confirm" || d.confidence !== "high" || !!c.supersedes;
+      return {
+        ...c,
+        proposeState: (uncertain ? "observing" : "active") as "observing" | "active",
+        screened: (uncertain ? "flagged" : "auto-confirmed") as "flagged" | "auto-confirmed",
+        screenReason: safeReason(d),
+      };
+    });
+    const written = screened.filter((c) => !("dropped" in c));
+    const dismissed = screened.filter((c) => "dropped" in c) as (ReturnType<typeof fitCandidate> & { dropped: string })[];
+    if (dismissed.length)
+      await this.store
+        .update((s) => {
+          // The 20-record cap is per project: other projects' dismissal records are untouched (CodeRabbit 4502246757).
+          s.screenedOut = s.screenedOut || [];
+          for (const d of dismissed)
+            s.screenedOut.push({
+              id: randomUUID(),
+              projectId: m.project.id,
+              taskId,
+              at: this.iso(),
+              noteKind: d.kind,
+              title: d.title.trim(),
+              reason: d.dropped,
+              // The candidate's own fields, so a restore can recreate the note faithfully (§4.7).
+              ...(d.body ? { body: d.body } : {}),
+              ...(d.tags.length ? { tags: d.tags } : {}),
+              ...(d.keywords.length ? { keywords: d.keywords } : {}),
+            });
+          const mine = s.screenedOut.filter((o) => o.projectId === m.project.id);
+          const other = s.screenedOut.filter((o) => o.projectId !== m.project.id);
+          const over = mine.length - guardrailLimits.screenedOut;
+          s.screenedOut = over > 0 ? [...other, ...mine.slice(over)] : s.screenedOut;
+          return { value: undefined, changed: true };
+        })
+        .catch(() => undefined);
+    return { candidates: written, preDropped };
+  }
+
+  private async recordRetro(
+    m: Awaited<ReturnType<MemoryService["material"]>>,
+    taskId: string,
+    candidates: (ReturnType<typeof fitCandidate> & { proposeState?: "active" | "observing"; screened?: "auto-confirmed" | "auto-dismissed" | "flagged"; screenReason?: string })[],
+    preDropped: string[] = [],
+  ) {
     const added: MemoryEntry[] = [];
-    const dropped: string[] = [];
+    const dropped: string[] = [...preDropped];
     for (const c of candidates) {
       if (!m) break;
       try {
-        added.push(await this.propose({ ...c, projectId: m.project.id, taskId, by: "retro", evidence: c.evidence || undefined }));
+        added.push(await this.propose({ ...c, projectId: m.project.id, taskId, by: "retro", evidence: c.evidence || undefined, ...(c.proposeState ? { state: c.proposeState } : {}), ...(c.screened ? { screened: c.screened } : {}), ...(c.screenReason ? { screenReason: c.screenReason } : {}) }));
       } catch (e) {
         if (e instanceof MemoryError && e.code === "MEMORY_DUPLICATE") continue;
         dropped.push(e instanceof Error ? e.message : String(e));
@@ -482,7 +627,10 @@ export class MemoryService {
     await this.store.update((state) => {
       state.retros = state.retros.filter((r) => r.taskId !== taskId);
       state.retros.push({ taskId, at: this.iso(), ...(m?.latestId ? { summaryId: m.latestId } : {}), ...(m?.clueAt ? { clueAt: m.clueAt } : {}) });
+      // The screening-unavailable error is not a dropped suggestion: keep it across the per-task wipe (§4.7).
+      const screeningUnavailable = state.errors.find((e) => e.taskId === taskId && e.message.startsWith("Decision screening is unavailable"));
       state.errors = state.errors.filter((e) => e.taskId !== taskId);
+      if (screeningUnavailable) state.errors.push(screeningUnavailable);
       if (dropped.length && m) state.errors.push({ taskId, projectId: m.project.id, at: this.iso(), message: `${dropped.length} suggestion(s) not kept: ${dropped[0]}`.slice(0, 500) });
       // Clues stay 30 days after a review, for a rerun.
       const cutoff = this.now() - memoryLimits.clueDays * DAY_MS;

@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import { taskTypeLabels, type ChangeSize, type Project, type Status, type Task } from "../shared/model";
 import { agentsRule, memoryLimits, type MemoryKind } from "../shared/memory";
-import { guardrailLimits, type GuardrailEntry, type GuardrailKind, type GuardrailState } from "../shared/guardrails";
+import { guardrailLimits, type GuardrailEntry, type GuardrailKind, type GuardrailState, type ScreenedOutRecord } from "../shared/guardrails";
 import { joinCommand, splitCommand } from "../shared/auto-review";
 import { ContentCard, CardBody, CardHeadline, CardMeta, CardMetaRow, CardText, SourceLine } from "./content-card";
 import { eventPoint, useMenuOpener, type MenuEntry } from "./context-menu";
@@ -52,7 +52,8 @@ export function useGuardrailActions(projectId: string) {
   const toast = useToast();
   const createRpc = useRpc(rpc.createGuardrail),
     updateRpc = useRpc(rpc.updateGuardrail),
-    deleteRpc = useRpc(rpc.deleteGuardrail);
+    deleteRpc = useRpc(rpc.deleteGuardrail),
+    restoreRpc = useRpc(rpc.restoreGuardrail);
   const [busy, setBusy] = useState("");
   const refresh = () => {
     void client.invalidateQueries({ queryKey: guardrailsKey(projectId) });
@@ -88,6 +89,7 @@ export function useGuardrailActions(projectId: string) {
     pin: (e: GuardrailEntry, pinned: boolean) => update(e, { pinned }),
     setState: (e: GuardrailEntry, state: GuardrailState, stateReason?: string) => update(e, { state, ...(stateReason ? { stateReason } : {}) }),
     remove: (e: GuardrailEntry) => run(e.id, () => deleteRpc({ id: e.id, revision: e.revision }), t("Deleted.")),
+    restoreScreened: (record: ScreenedOutRecord) => run(record.id, () => restoreRpc({ projectId, id: record.id }), t("Restored.")),
     copyRule: async (e: GuardrailEntry) => {
       try {
         await copyText(agentsRule({ title: e.text, body: e.body || "" }));

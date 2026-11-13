@@ -53,6 +53,8 @@ export const guardrailLimits = {
   pinned: memoryLimits.pinnedPerProject,
   openItemsPerTask: 5,
   archivedPerProject: 300,
+  /** §4.7: recorded dismissals per project. */
+  screenedOut: 20,
   /** §4.2: the summarizer's Guardrails section. */
   sectionLines: 60,
   sectionLine: 120,
@@ -133,7 +135,15 @@ export const guardrailEntrySchema = z
     /** Source cards and the user's words; a note's retro evidence is its source's quote. */
     sources: z.array(guardrailSourceSchema).max(guardrailLimits.sources),
     /** A note's provenance, as the former MemoryEntry.source; `eventId` makes an agent's write idempotent. */
-    source: z.object({ taskId: z.string().optional(), agentId: z.string().optional(), eventId: z.string().optional() }).optional(),
+    source: z.object({
+      taskId: z.string().optional(),
+      agentId: z.string().optional(),
+      eventId: z.string().optional(),
+      /** §4.7: the decision screener's verdict on a retro note; declared here because the store parses on every write. */
+      screened: z.enum(["auto-confirmed", "auto-dismissed", "flagged"]).optional(),
+      /** Why the screener decided; a note's evidence stays its source quote. Same 300 cap as the screening schema. */
+      screenReason: z.string().max(memoryLimits.evidence).optional(),
+    }).optional(),
     by: z.enum(guardrailBy),
     supersedes: z.string().optional(),
     supersededBy: z.string().optional(),
@@ -146,7 +156,7 @@ export const guardrailEntrySchema = z
     if (e.text.length > max) ctx.addIssue({ code: "custom", path: ["text"], message: `At most ${max} characters.` });
     if (e.kind === "command" && !e.argv) ctx.addIssue({ code: "custom", path: ["argv"], message: "A command needs argv." });
     if (e.kind === "note" && !e.noteKind) ctx.addIssue({ code: "custom", path: ["noteKind"], message: "A note needs a kind." });
-    if (e.state === "observing" && e.kind !== "command") ctx.addIssue({ code: "custom", path: ["state"], message: "Only commands observe." });
+    if (e.state === "observing" && e.kind === "guideline") ctx.addIssue({ code: "custom", path: ["state"], message: "Only commands and notes observe (a note observes when §4.7 screening is unsure)." });
   });
 export type GuardrailEntry = z.infer<typeof guardrailEntrySchema>;
 
@@ -168,6 +178,22 @@ export type CardItem = z.infer<typeof cardItemSchema>;
 export const guardrailErrorSchema = z.object({ projectId: z.string(), taskId: z.string().optional(), at: iso, message: z.string().max(500) });
 export type GuardrailError = z.infer<typeof guardrailErrorSchema>;
 
+/** A retro candidate the screener dismissed (§4.7): kept so a wrong auto-dismiss is one click to undo. */
+export const screenedOutSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  taskId: z.string().optional(),
+  at: iso,
+  noteKind: z.enum(memoryKinds),
+  title: z.string(),
+  reason: z.string().max(memoryLimits.evidence),
+  /** The candidate's own fields, so restore can recreate the note faithfully. */
+  body: z.string().max(memoryLimits.body).optional(),
+  tags: memoryTagsSchema.optional(),
+  keywords: memoryKeywordsSchema.optional(),
+});
+export type ScreenedOutRecord = z.infer<typeof screenedOutSchema>;
+
 export const guardrailsStateSchema = z.object({
   version: z.literal(1),
   revision: z.number().int().nonnegative(),
@@ -179,6 +205,10 @@ export const guardrailsStateSchema = z.object({
   recallStats: z.record(z.string(), z.object({ days: z.record(z.string(), z.object({ queries: z.number(), empty: z.number() })) })),
   /** Weekly catch-up learning (§7.3): the newest `feedback` clue already learned from, per project. */
   learnedUntil: z.record(z.string(), z.string()).optional(),
+  /** §4.7: retro candidates the screener dismissed, with the reason; the title blocks re-proposals. The 20 cap is per project, enforced in server/memory.ts. */
+  screenedOut: z.array(screenedOutSchema).optional(),
+  /** §4.7: when the screening model last failed, so a broken screener is visible, not silent. */
+  screenerUnavailableAt: z.string().optional(),
 });
 export type GuardrailsState = z.infer<typeof guardrailsStateSchema>;
 export const emptyGuardrailsState = (): GuardrailsState => ({ version: 1, revision: 0, entries: [], items: [], clues: [], retros: [], errors: [], recallStats: {} });
@@ -188,6 +218,8 @@ export const guardrailsViewSchema = z.object({
   entries: z.array(guardrailEntrySchema),
   items: z.array(cardItemSchema),
   errors: z.array(guardrailErrorSchema),
+  /** §4.7: the screener's dismissals for this project, for the Memory page's screened-out section. */
+  screenedOut: z.array(screenedOutSchema),
   /** Cards whose finished-card review is running. */
   running: z.array(z.string()),
   /** Guardrails on for this project (host and project switch, B4). */
@@ -790,6 +822,8 @@ export function toMemoryEntry(e: GuardrailEntry): MemoryEntry {
       ...(taskId ? { taskId } : {}),
       ...(e.source?.agentId ? { agentId: e.source.agentId } : {}),
       ...(e.source?.eventId ? { eventId: e.source.eventId } : {}),
+      ...(e.source?.screened ? { screened: e.source.screened } : {}),
+      ...(e.source?.screenReason ? { screenReason: e.source.screenReason } : {}),
     },
     revision: e.revision,
     createdAt: e.createdAt,

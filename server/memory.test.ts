@@ -20,7 +20,7 @@ type Created = { workspaceId: string; labels: Record<string, string>; prompt: st
 async function setup() {
   const f = await agentFixture();
   roots.push(f.root);
-  const settings: SummarySettings = { summaryEnabled: true, summaryModel: "claude/claude-haiku-5-5", digestEnabled: true, retroEnabled: true };
+  const settings: SummarySettings = { summaryEnabled: true, summaryModel: "claude/claude-haiku-5-5", digestEnabled: true, retroEnabled: true, memoryScreening: false, memoryScreeningModel: "" };
   const summaries = new SummaryStore(f.store.directory);
   // The review session is hard-deleted over the local daemon in production; the test records who was removed.
   const removed: string[] = [];
@@ -376,8 +376,7 @@ test("the Settings switch turns memory off in every project; on, each project's 
   expect(memoryOn({ memory: true })).toBe(true);
 });
 
-test("finished-card review tries the ordered summary list and cleans both children", async () => {
-  const x = await setup();
+test("finished-card review tries the ordered summary list and cleans both children", async () => {  const x = await setup();
   x.settings.summaryModels = ["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"];
   x.memory.attach(x.model);
   await x.store.mutate((board) => {
@@ -390,4 +389,196 @@ test("finished-card review tries the ordered summary list and cleans both childr
   expect(x.created.map((a) => a.config?.provider)).toEqual(["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"]);
   expect(x.removed).toEqual(["review-1", "review-2"]);
   expect((await x.memory.store.read()).errors).toEqual([]);
+});
+
+// ---- Decision screening (GUARDRAILS-SPEC §4.7) --------------------------------------
+
+const retroReply = (title: string, extra: Record<string, unknown> = {}) =>
+  JSON.stringify({ candidates: [{ kind: "pitfall", title, body: "Close one first.", tags: ["ui-polish"], keywords: ["dialog"], evidence: "Root cause: two modals in one frame", reuse: "any card that opens a dialog from another", ...extra }] });
+const screenReply = (verdict: string, confidence: string, reason = "because") => JSON.stringify({ verdict, confidence, reason });
+const screened = async () => {
+  const x = await setup();
+  x.memory.attach(x.model);
+  x.settings.memoryScreening = true;
+  await x.summaries.update((state) => {
+    state.entries.push({ id: "s1", taskId: "t", at: new Date().toISOString(), model: "m", agentIds: [], state: "Done", target: "Goal", recap: "- Root cause: two modals in one frame", next: "-" });
+    return { value: undefined, changed: true };
+  });
+  await x.store.mutate((board) => {
+    board.tasks[0].status = "done";
+  });
+  return x;
+};
+
+test("screener confirm+high writes the active note with provenance; evidence stays the source quote", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("confirm", "high", "general lesson for dialog cards"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created).toHaveLength(2);
+  expect(x.created[1].labels).toMatchObject({ "flowly-memory": "screen" });
+  expect(x.created[1].prompt).toContain("The candidate");
+  const list = await x.entries();
+  expect(list).toHaveLength(1);
+  expect(list[0]).toMatchObject({ status: "active" });
+  expect(list[0].source).toMatchObject({ screened: "auto-confirmed", screenReason: "general lesson for dialog cards" });
+  expect(list[0].evidence).toBe("Root cause: two modals in one frame");
+});
+
+test("screener dismiss+high writes nothing; the reason is recorded in the guardrails store and blocks re-proposals", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "this card's own results"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(await x.entries()).toEqual([]);
+  const state = await x.memory.store.read();
+  expect(state.screenedOut).toEqual([expect.objectContaining({ title: "Two modals in one frame freeze Paseo", reason: "this card's own results", noteKind: "pitfall" })]);
+  // The recorded title blocks the next proposal before the screener is called.
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created).toHaveLength(3); // retro ran, screener did not
+  expect(await x.entries()).toEqual([]);
+  expect((await x.memory.store.read()).errors).toEqual([expect.objectContaining({ message: expect.stringContaining("dismissed or already present") })]);
+});
+
+test("screener human verdict or medium confidence writes an observing note that stays out of agent context", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("human", "low", "not sure"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  const raw = (await x.memory.store.read()).entries.find((e) => e.kind === "note");
+  expect(raw).toMatchObject({ state: "observing", observe: { reviews: 0, passed: 0 } });
+  expect(raw?.source).toMatchObject({ screened: "flagged", screenReason: "not sure" });
+  // The adapter keeps it out of the agent's memory view and injection: memoryForTask only injects status "active",
+  // and the observing note maps out of active (GUARDRAILS-SPEC §3.2, §4.7).
+  expect((await x.entries())[0].status).toBe("archived");
+  // medium confidence is never enough, even for confirm
+  const y = await screened();
+  y.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("confirm", "medium"));
+  await y.memory.manual("t", y.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect((await y.memory.store.read()).entries.find((e) => e.kind === "note")).toMatchObject({ state: "observing" });
+});
+
+test("the trust gates run before the screener: a secret-bearing candidate never reaches the model", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Token is sk-live-abc123def456ghi789jkl012"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created).toHaveLength(1); // only the retro ran
+  expect(await x.entries()).toEqual([]);
+  expect((await x.memory.store.read()).errors).toEqual([expect.objectContaining({ message: expect.stringContaining("contains a secret") })]);
+});
+
+test("supersedes stays human: the candidate writes observing whatever the screener says", async () => {
+  const x = await screened();
+  await x.memory.store.update((state) => {
+    state.entries.push({
+      id: "old", projectId: "p", kind: "note", noteKind: "decision", text: "Existing decision", state: "active", stateAt: new Date().toISOString(),
+      counts: emptyCounts(), sources: [], by: "user", revision: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    } as GuardrailEntry);
+    return { value: undefined, changed: true };
+  });
+  x.replies.push(retroReply("Replacement for the existing decision", { supersedes: "old" }), screenReply("confirm", "high"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  const notes = (await x.memory.store.read()).entries.filter((e) => e.kind === "note");
+  expect(notes.map((e) => [e.text, e.state])).toEqual([["Existing decision", "active"], ["Replacement for the existing decision", "observing"]]);
+  expect(notes[1].source?.screened).toBe("flagged");
+});
+
+test("a screener failure fails open: the note writes active as with screening off, and the failure is visible until the next success", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), new Error("screening model exploded"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created).toHaveLength(2);
+  const list = await x.entries();
+  expect(list).toHaveLength(1);
+  expect(list[0]).toMatchObject({ status: "active" });
+  expect(list[0].source.screened).toBeUndefined();
+  const state = await x.memory.store.read();
+  expect(state.screenerUnavailableAt).toEqual(expect.any(String));
+  expect(state.errors).toEqual([expect.objectContaining({ message: expect.stringContaining("Decision screening is unavailable") })]);
+  // A later successful screening clears the marker and the error.
+  x.replies.push(retroReply("Second lesson worth keeping"), screenReply("dismiss", "high", "card-specific"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect((await x.memory.store.read()).screenerUnavailableAt).toBeUndefined();
+  expect((await x.memory.store.read()).errors).toEqual([]);
+});
+
+test("screening off (default) runs one model call and writes a plain active note", async () => {
+  const x = await setup();
+  x.memory.attach(x.model);
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"));
+  await x.summaries.update((state) => {
+    state.entries.push({ id: "s1", taskId: "t", at: new Date().toISOString(), model: "m", agentIds: [], state: "Done", target: "Goal", recap: "- Root cause: two modals in one frame", next: "-" });
+    return { value: undefined, changed: true };
+  });
+  await x.store.mutate((board) => {
+    board.tasks[0].status = "done";
+  });
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created).toHaveLength(1);
+  const list = await x.entries();
+  expect(list[0]).toMatchObject({ status: "active" });
+  expect(list[0].source.screened).toBeUndefined();
+});
+
+test("screened provenance survives the store's parse-on-write round trip", async () => {  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "card-specific"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  const state = await x.memory.store.read();
+  expect(state.screenedOut?.[0]?.reason).toBe("card-specific");
+  // A full serialize/parse round trip keeps the declared fields.
+  const again = await x.memory.store.update((s) => ({ value: s.screenedOut?.length, changed: false }));
+  expect(again).toBe(1);
+});
+
+// ---- CodeRabbit review fixes on PR 95 ------------------------------------------------
+
+test("a secret only in the evidence quote is blocked before the screener is called", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Token kept in the evidence line", { evidence: "sk-live-abc123def456ghi789jkl012 logged the failure" }));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created).toHaveLength(1);
+  expect(await x.entries()).toEqual([]);
+  expect((await x.memory.store.read()).errors).toEqual([expect.objectContaining({ message: expect.stringContaining("contains a secret") })]);
+});
+
+test("the screener prompt carries the reuse line", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("confirm", "high"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(x.created[1].prompt).toContain("Reuse (the later card that needs it): any card that opens a dialog from another");
+});
+
+test("a screening reason that contains a credential is redacted before it is stored", async () => {
+  const x = await screened();
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "the key sk-live-abc123def456ghi789jkl012 leaked here"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  const state = await x.memory.store.read();
+  expect(state.screenedOut?.[0]?.reason).toBe("[redacted: the screening reason contained a credential]");
+  expect(JSON.stringify(state.screenedOut)).not.toContain("sk-live");
+});
+
+test("screenedOut trimming is per project: another project's records survive", async () => {
+  const x = await screened();
+  await x.memory.store.update((s) => {
+    s.screenedOut = Array.from({ length: 20 }, (_, i) => ({ id: `other-${i}`, projectId: "other", at: new Date().toISOString(), noteKind: "pitfall" as const, title: `other ${i}`, reason: "r" }));
+    return { value: undefined, changed: true };
+  });
+  x.replies.push(retroReply("Two modals in one frame freeze Paseo"), screenReply("dismiss", "high", "card-specific"));
+  await x.memory.manual("t", x.model);
+  await new Promise((r) => setTimeout(r, 50));
+  const out = (await x.memory.store.read()).screenedOut || [];
+  expect(out.filter((o) => o.projectId === "other")).toHaveLength(20);
+  expect(out.filter((o) => o.projectId === "p")).toHaveLength(1);
 });

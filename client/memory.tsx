@@ -5,12 +5,12 @@ import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { Project, Status, Task } from "../shared/model";
 import { agentsRule, memoryKinds, type MemoryKind } from "../shared/memory";
-import type { GuardrailEntry, GuardrailState } from "../shared/guardrails";
+import type { GuardrailEntry, GuardrailState, ScreenedOutRecord } from "../shared/guardrails";
 import type { BoardView, MemorySort } from "../shared/settings";
 import { cardFrameStyle, SourceLine } from "./content-card";
 import { eventPoint, menuHandlers, useMenuOpener, type MenuEntry } from "./context-menu";
 import { Chevron, Collapse } from "./disclosure";
-import { ConfirmDialog, Editor, reasonText, useGuardrailActions, type NoteDraft } from "./guardrails";
+import { ConfirmDialog, Editor, reasonText, useGuardrailActions, type GuardrailActions, type NoteDraft } from "./guardrails";
 import { estimateHeight, gridColumns, placeMasonry, sortNotes } from "./memory-layout";
 import { Modal } from "./modal";
 import { Enter, useMotionValue } from "./motion";
@@ -80,12 +80,14 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, compact, source,
       </Enter>
     );
   const archived = entry.state === "archived";
+  const observing = entry.state === "observing";
   const kind = entry.noteKind ?? "decision";
   const color = kindColor(colors, kind);
   const items = (): MenuEntry[] => [
     ...(archived
       ? [{ id: "restore", label: t("Restore"), icon: "ArchiveRestore", onPress: () => void ops.setState(entry, "active") }]
       : [
+          ...(observing ? [{ id: "activate", label: t("Activate"), icon: "Eye", onPress: () => void ops.setState(entry, "active") }] : []),
           { id: "edit", label: t("Edit"), icon: "Pencil", onPress: () => { ops.keep(entry.id); setEditing(true); } },
           entry.pinned
             ? { id: "unpin", label: t("Unpin"), icon: "PinOff", onPress: () => void ops.pin(entry, false) }
@@ -115,6 +117,12 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, compact, source,
         <Dot size={6} color={color} />
         <Label muted size={font.xs} selectable={false}>{t(kindLabels[kind])}</Label>
         {!!reason && <Label muted size={font.xs} selectable={false}>· {reason}</Label>}
+        {observing && (
+          <>
+            <Icon name="Eye" size={12} color={colors.foregroundMuted} />
+            <Label muted size={font.xs} selectable={false}>{t("Screened: awaiting your review")}</Label>
+          </>
+        )}
         <View style={{ flex: 1 }} />
         {entry.pinned && <Icon name="Pin" size={13} color={colors.foregroundMuted} />}
         {openMenu && (
@@ -139,6 +147,7 @@ const MemoryCard = memo(function MemoryCard({ entry, ops, busy, compact, source,
       </View>
       <Label bold size={font.md}>{entry.text}</Label>
       {!!entry.body && <BodyText text={entry.body} lines={expanded ? undefined : 6} />}
+      {observing && !!entry.source?.screenReason && <Label muted size={font.xs} selectable>{t("Screened: {reason}", { reason: entry.source.screenReason })}</Label>}
       {!!sourceId && (
         <View style={{ marginHorizontal: -space[3], marginBottom: -space[1.5] }}>
           <SourceLine task={source} nameOf={nameOf} onOpenTask={ops.openTask} />
@@ -254,11 +263,13 @@ export const MemoryPage = memo(function MemoryPage({
   const actions = useGuardrailActions(project.id);
   const [adding, setAdding] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [screenedOpen, setScreenedOpen] = useState(false);
   const [width, setWidth] = useState(0);
   const disabled = !!project.archivedAt || !view?.enabled;
   const grid = !compact && prefs.memoryLayout === "grid";
   const cards = useMemo(() => new Map(tasks.map((x) => [x.id, x])), [tasks]);
   const entries = view?.entries ?? noEntries;
+  const screenedOut = view?.screenedOut ?? noScreened;
   const { live, archived } = useMemo(() => {
     const notes = entries.filter((e) => e.kind === "note" && (prefs.memoryKind === "all" || e.noteKind === prefs.memoryKind));
     return { live: sortNotes(notes.filter((e) => e.state !== "archived"), prefs.memorySort), archived: sortNotes(notes.filter((e) => e.state === "archived"), "newest") };
@@ -373,6 +384,26 @@ export const MemoryPage = memo(function MemoryPage({
                   </Collapse>
                 </View>
               )}
+              {!!screenedOut.length && (
+                <View style={{ gap: space[2] }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: screenedOpen }}
+                    onPress={() => setScreenedOpen(!screenedOpen)}
+                    style={{ ...noFocusRing, flexDirection: "row", alignItems: "center", gap: space[1], minHeight: touch ? 36 : 24 }}
+                  >
+                    <Chevron open={screenedOpen} title="screened-out" color={colors.foregroundMuted} size={14} />
+                    <Label bold size={font.md} selectable={false}>{t("Screened out · {n}", { n: screenedOut.length })}</Label>
+                  </Pressable>
+                  <Collapse open={screenedOpen} id="screened-out-memory">
+                    <View style={{ gap: space[1.5] }}>
+                      {screenedOut.map((record) => (
+                        <ScreenedRow key={record.id} record={record} actions={actions} disabled={disabled} />
+                      ))}
+                    </View>
+                  </Collapse>
+                </View>
+              )}
             </View>
           </Enter>
           {remaining > 0 && <Button small quiet onPress={pageRows.more}>{t("Show more ({n})", { n: remaining })}</Button>}
@@ -382,6 +413,24 @@ export const MemoryPage = memo(function MemoryPage({
   );
 });
 const noEntries: GuardrailEntry[] = [];
+const noScreened: ScreenedOutRecord[] = [];
+
+/** A screened-out record row: what the screener dropped, why, and one click to undo (§4.7). */
+const ScreenedRow = memo(function ScreenedRow({ record, actions, disabled }: { record: ScreenedOutRecord; actions: GuardrailActions; disabled: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ ...cardFrameStyle(colors), borderLeftWidth: 2, borderLeftColor: colors.foregroundMuted, padding: space[4], gap: space[1], flexDirection: "row", alignItems: "center" }}>
+      <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
+        <Label bold size={font.md}>{record.title}</Label>
+        <Label muted size={font.xs} selectable={false}>
+          {t(kindLabels[record.noteKind])} · {t("Screened: {reason}", { reason: record.reason })}
+        </Label>
+      </View>
+      <Button small quiet icon="ArchiveRestore" disabled={disabled || actions.busy === record.id} onPress={() => void actions.restoreScreened(record)}>
+        {t("Restore")}</Button>
+    </View>
+  );
+});
 
 /** A list of memory cards like the Ideas list: a card that leaves collapses away in place, one that arrives rises in. */
 function MemoryRows({ entries, spacing, render }: { entries: readonly GuardrailEntry[]; spacing?: number; render(entry: GuardrailEntry, leaving: boolean): ReactNode }) {

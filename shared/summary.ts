@@ -78,6 +78,10 @@ export const summarySettings = defineSettings({
     retroEnabled: z.boolean().default(true),
     /** `provider/model` of the auto review session (AUTO-REVIEW-SPEC §12.4); empty: the project's default model, then the summary models. */
     reviewModel: z.string().max(200).optional(),
+    /** Screen retro memory notes before they write (GUARDRAILS-SPEC §4.7); default off. */
+    memoryScreening: z.boolean().default(false),
+    /** `provider/model` for the screener; empty falls back to the summaryModels chain. */
+    memoryScreeningModel: z.string().max(200).default(""),
   }),
 });
 export type SummarySettings = z.infer<typeof summarySettings.schema>;

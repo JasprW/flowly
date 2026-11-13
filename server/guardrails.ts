@@ -219,13 +219,15 @@ export function removeProjectGuardrails(store: GuardrailsStore, projectId: strin
     const clues = state.clues.filter((c) => c.projectId === projectId);
     const errors = state.errors.filter((e) => e.projectId === projectId);
     const retros = state.retros.filter((r) => taskIds.has(r.taskId));
-    if (!entries.length && !items.length && !clues.length && !errors.length && !retros.length && !state.recallStats[projectId]) return { value: null, changed: false };
-    await writeBackup(store.directory, `${projectId}-guardrails`, { entries, items, clues, errors, retros }, at);
+    const screenedOut = (state.screenedOut || []).filter((o) => o.projectId === projectId);
+    if (!entries.length && !items.length && !clues.length && !errors.length && !retros.length && !screenedOut.length && !state.recallStats[projectId]) return { value: null, changed: false };
+    await writeBackup(store.directory, `${projectId}-guardrails`, { entries, items, clues, errors, retros, screenedOut }, at);
     state.entries = state.entries.filter((e) => e.projectId !== projectId);
     state.items = state.items.filter((i) => i.projectId !== projectId);
     state.clues = state.clues.filter((c) => c.projectId !== projectId);
     state.errors = state.errors.filter((e) => e.projectId !== projectId);
     state.retros = state.retros.filter((r) => !taskIds.has(r.taskId));
+    state.screenedOut = (state.screenedOut || []).filter((o) => o.projectId !== projectId);
     delete state.recallStats[projectId];
     return { value: null, changed: true };
   });
@@ -297,9 +299,48 @@ export class GuardrailsService {
       entries: state.entries.filter((e) => e.projectId === projectId),
       items: state.items.filter((i) => i.projectId === projectId),
       errors: state.errors.filter((e) => e.projectId === projectId),
+      screenedOut: (state.screenedOut || []).filter((o) => o.projectId === projectId),
       running: this.running().filter((id) => board.tasks.some((t) => t.id === id && t.projectId === projectId)),
       enabled: memoryOn(project),
     };
+  }
+
+  /**
+   * §4.7: undo a screening dismissal — recreate the note active and drop the record.
+   * The human's restore overrides the screener's verdict, so the note writes active
+   * with no screening provenance. A title that now exists is not an error: the
+   * knowledge is present, which is what the restore wanted — the record is dropped
+   * and the existing note returned.
+   */
+  async restoreScreened(projectId: string, id: string): Promise<GuardrailEntry> {
+    await this.project(projectId);
+    const record = (await this.store.read()).screenedOut?.find((o) => o.id === id && o.projectId === projectId);
+    if (!record) throw new GuardrailError("NOT_FOUND", "This screened-out memory no longer exists. Reload to see the latest.");
+    let entry: GuardrailEntry;
+    try {
+      entry = await this.create({
+        projectId,
+        kind: "note",
+        noteKind: record.noteKind,
+        text: record.title,
+        body: record.body,
+        tags: record.tags,
+        keywords: record.keywords,
+        pinned: false,
+      });
+    } catch (e) {
+      if (!(e instanceof GuardrailError) || e.code !== "MEMORY_DUPLICATE") throw e;
+      const existing = (await this.store.read()).entries.find(
+        (x) => x.projectId === projectId && x.kind === "note" && x.state === "active" && titleKey(x.text) === titleKey(record.title),
+      );
+      if (!existing) throw e;
+      entry = existing;
+    }
+    await this.store.update((state) => {
+      state.screenedOut = (state.screenedOut || []).filter((o) => o.id !== id);
+      return { value: undefined, changed: true };
+    });
+    return entry;
   }
   /** The overview chips (§7.4): observing commands and guidelines learned in the last 7 days, and memory added in them, per project. */
   async counts(): Promise<Record<string, { observing: number; added: number; notes: number }>> {
@@ -639,7 +680,8 @@ export class GuardrailsService {
       } else if (input.tags !== undefined || input.keywords !== undefined || input.pinned !== undefined) throw new GuardrailError("INVALID_INPUT", "Only memories have tags, keywords and a pin.");
       else if (hasSecret(next.text, next.body)) throw new GuardrailError("MEMORY_SECRET", "This looks like it contains a secret (token, key or password). Guardrails never store credentials.");
       const state2 = input.state ?? entry.state;
-      if (state2 === "observing" && entry.kind !== "command") throw new GuardrailError("INVALID_INPUT", "Only commands can be observing.");
+      // An edit must keep a flagged (observing) note observing; introducing observing from another state stays refused (§4.7).
+      if (state2 === "observing" && entry.state !== "observing") throw new GuardrailError("INVALID_INPUT", "Only commands and flagged notes can be observing.");
       if (next.pinned && !entry.pinned && (state2 !== "active" || pinnedCount(own) >= guardrailLimits.pinned))
         throw new GuardrailError("GUARDRAIL_LIMIT", `Only active memories can be pinned, at most ${guardrailLimits.pinned} per project. Unpin one first.`);
       const live = (s: GuardrailState) => s === "active" || s === "observing";
