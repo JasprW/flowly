@@ -151,7 +151,7 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
 
 /** Whether a person can rerun the card's review now (AUTO-REVIEW-SPEC §9.2). */
 export const canRerun = (task: Task, project: Project, disabled: boolean) =>
-  !!task.review && !disabled && task.status === "in_review" && task.review.state !== "running" && autoReviewRuns(project);
+  !!task.review && !disabled && task.status === "in_review" && task.review.state !== "running" && !task.reviewWaiting && autoReviewRuns(project);
 
 /** Rerun the card's review; failures toast. */
 export function useRerun(taskId: string) {

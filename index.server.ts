@@ -673,38 +673,47 @@ export default function contribute(host: PluginServerContext) {
           .catch((e) => logFailure("Flowly session insight failed:", e));
       return;
     }
-    // This turn's suggested next steps as a card under the reply in Paseo's timeline. First thing, before the
-    // settings read, the model lookup (up to 2 s) and the board write: the suggestion is already in the board's
-    // events and none of those steps changes it, so the card waits for nothing. Never blocks the hook.
-    if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
-    // The hook's timeline is always empty; read alongside the settings and model lookups below.
-    const turn = turnTimeline(paseo, event.agent.id);
-    const auto = await autoStatusOn();
-    // Agent habits (WORKFLOW-INSIGHTS-SPEC §12.4): the model this turn ran on, and whether the user's message took one of the suggestions that were open.
-    const model = await sessionModel(paseo, event.agent);
-    const timeline = await turn;
-    const texts = userTexts(timeline);
-    // A rework turn: opened by the user's own words while the card was In review (GUARDRAILS-SPEC §4.1).
-    let rework: string | null = null;
-    await store.mutate((board) => {
-      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(timeline) });
-      if (auto) applyTurnEnded(store, board, identity, event.outcome);
-      rework = memory.reworkQuote(identity, timeline, board);
-    });
-    // A delivery made in this turn is reviewed now that the turn is over (AUTO-REVIEW-SPEC §3.1); never blocks the hook.
-    void reviews.turnEnded(identity.agentId, paseo);
-    // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
-    void store
-      .read()
-      .then((board) => memory.recordTurn(identity, timeline, board))
-      .catch((e) => logFailure("Flowly memory clue not recorded:", e));
-    // The session's plan for the workpad (WORKPAD-SPEC §2.2); never blocks the hook.
-    void workpads.recordTurn(identity, timeline).catch((e) =>
-      logFailure("Kanban workpad plan not recorded:", e),
-    );
-    // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
-    if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
-      void summaries.enqueue(identity.taskId, identity.agentId, timeline, paseo, endedAt, rework);
+    // A delivery made in this turn is reviewed now that the turn is over (AUTO-REVIEW-SPEC §3.1). First, before the
+    // settings, model and timeline reads below (seconds), none of which the review needs; never blocks the hook.
+    let recorded!: (ready: boolean) => void;
+    const lifecycleRecorded = new Promise<boolean>((resolve) => { recorded = resolve; });
+    void reviews.turnEnded(identity.agentId, paseo, lifecycleRecorded);
+    try {
+      // This turn's suggested next steps as a card under the reply in Paseo's timeline. First thing, before the
+      // settings read, the model lookup (up to 2 s) and the board write: the suggestion is already in the board's
+      // events and none of those steps changes it, so the card waits for nothing. Never blocks the hook.
+      if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
+      // The hook's timeline is always empty; read alongside the settings and model lookups below.
+      const turn = turnTimeline(paseo, event.agent.id);
+      const auto = await autoStatusOn();
+      // Agent habits (WORKFLOW-INSIGHTS-SPEC §12.4): the model this turn ran on, and whether the user's message took one of the suggestions that were open.
+      const model = await sessionModel(paseo, event.agent);
+      const timeline = await turn;
+      const texts = userTexts(timeline);
+      // A rework turn: opened by the user's own words while the card was In review (GUARDRAILS-SPEC §4.1).
+      let rework: string | null = null;
+      await store.mutate((board) => {
+        recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(timeline) });
+        if (auto) applyTurnEnded(store, board, identity, event.outcome);
+        rework = memory.reworkQuote(identity, timeline, board);
+      });
+      recorded(true);
+      // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
+      void store
+        .read()
+        .then((board) => memory.recordTurn(identity, timeline, board))
+        .catch((e) => logFailure("Flowly memory clue not recorded:", e));
+      // The session's plan for the workpad (WORKPAD-SPEC §2.2); never blocks the hook.
+      void workpads.recordTurn(identity, timeline).catch((e) =>
+        logFailure("Kanban workpad plan not recorded:", e),
+      );
+      // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
+      if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
+        void summaries.enqueue(identity.taskId, identity.agentId, timeline, paseo, endedAt, rework);
+    } catch (error) {
+      recorded(false);
+      throw error;
+    }
   });
   // Queued follow-ups go out when any session's turn ends (Paseo "queue").
   server.addHook("agent.turn.after", async (event, { paseo }) => {

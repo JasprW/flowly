@@ -11,6 +11,7 @@ const catalog: Catalog = {
   "Finished the auto review": "Concluiu a revisão automática",
   "Auto review": "Revisão automática",
   "Max rework rounds": "Máximo de rodadas de retrabalho",
+  "Waiting for review": "Aguardando revisão",
   "Reviewing": "Revisando",
   "Review failed": "Revisão reprovada",
   "Review unavailable": "Revisão indisponível",

@@ -55,13 +55,17 @@
 
 **agent** 调用 `flowly_update_status(in_review)`，通过 L1 并成功提交，项目开启了 Auto review，卡片未归档、不是设置卡片（§6.3），且有对这张卡生效的检查（§4.2）。人拖进 In review 不触发。
 
-评审在**交付的那个 session 这一轮结束后**才开始（`agent.turn_ended`）；交付时该 session 已空闲则立即开始。交付之后同一轮里 agent 还可能提交、改 workpad，这些会改变指纹让评审作废。等待中的交付只记在内存里：等待期间插件重启，这次交付不评审，卡片留在 In review，人可以按 Rerun。
+评审在**交付的那个 session 这一轮结束后**才开始（`agent.turn_ended`）；交付时该 session 已空闲则立即开始。交付之后同一轮里 agent 还可能提交、改 workpad，这些会改变指纹让评审作废。回合结束的 hook 先把评审入队，再做设置、模型、timeline 等读取（2026-11-13）。检查计算不等待这些读取；只有返工消息等待本轮 `agent.turn_ended` 记录提交后才发送，防止返工的新回合开始后被旧回合的结束记录覆盖。记录失败则不发送返工，并把评审记为 Unavailable。
+
+**等待评审**（2026-11-13）：交付的同一次写入里记下 `task.reviewWaiting`。从交付到评审开始（等回合结束、项目内排队），卡片在 In review 时显示 “Waiting for review”，上一次评审的结果不显示、不进 Attention、不能 Rerun；这期间卡片的未读同 Reviewing 一样暂不计入。评审开始的那次写入清除它；这次交付没被评审（卡片已离开 In review、项目关了 Auto review 等）时也清除。等待中的交付只记在内存里：等待期间插件重启，启动时清除标记，卡片仍在 In review 时评审记为 Unavailable（“Flowly restarted before the review started.”），人可以按 Rerun。
 
 ```mermaid
 stateDiagram-v2
     [*] --> L1: agent 交付到 In review
     L1 --> [*]: fail/stale → 当场拒绝（WORKPAD_FAILING），卡片不动
-    L1 --> Reviewing: 通过，提交到 In review
+    L1 --> Waiting: 通过，提交到 In review
+    Waiting --> Reviewing: 交付回合结束且排到本卡
+    Waiting --> Unavailable: 插件重启
     Reviewing --> Passed: 所有检查通过或不适用
     Reviewing --> Rework: 有检查不通过，且已返工次数 < maxRounds
     Reviewing --> Failed: 有检查不通过，且已返工次数 = maxRounds
@@ -353,6 +357,7 @@ project.reviewDraft?: {
 
 - `task.reviewSetup?: true`：设置卡片。
 - `task.review`：最近一次评审，新的覆盖旧的；写入不改 task revision。
+- `task.reviewWaiting?: { eventId, agentId, from, since, worktree? }`：已交付、评审还没开始（§3.1）；写入不改 task revision。只清除 `eventId` 与自己相同的标记；交付指定的 worktree 一并保存，重启恢复时复制到 review，避免交付事件被裁剪后 Rerun 回退到共享工作区。
 
 ```
 Review {
@@ -388,7 +393,7 @@ Review {
 
 | 名称 | 输入 | 输出 |
 | --- | --- | --- |
-| `reviews.rerun` | `{ taskId }` | `{ ok }`；卡片须在 In review、项目开启且有生效的检查、没有评审在跑 |
+| `reviews.rerun` | `{ taskId }` | `{ ok }`；卡片须在 In review、项目开启且有生效的检查、没有评审在跑或在等待 |
 | `reviews.detect-commands` | `{ projectId }` | `{ commands: [{ name, argv, checked }] }` |
 | `reviews.analyze-history` | `{ projectId }` | `{ status: "started" \| "running" \| "insufficient" }` |
 | `reviews.analysis-status` | `{ projectId }` | `{ state: "idle" \| "running" \| "failed", error?, startedAt?, eligible }`（只在内存里，daemon 重启后为 idle；`eligible`：近 90 天 ≥ 5 次 agent 交付，决定是否显示 Suggest checks from past cards） |
@@ -405,6 +410,7 @@ Review {
 
 卡片有评审记录且仍在这一轮里时：
 
+- `Waiting for review`（In review，已交付、评审未开始，§3.1）：同一位置的指示条，时钟图标、无扫光；评审开始后原地变成 `Reviewing`。
 - `Reviewing n/N`（In review，进行中）：卡片底部展开指示条（图标 + 文字 + 运行中卡片同款点阵扫光，跟随 Reduce Motion 和扫光开关），开始时展开、结束时收起；n 为已结束的检查数。
 - `Review passed`（In review）、`Reworking 1/2`（退回后的工作阶段）、`Review failed`（Blocked，或 Blocked 泳道关闭时的 In review）、`Review unavailable`（In review，或 R1 之后投递失败时的工作阶段）、`Review cancelled`（In review）。
 - 卡片的无障碍标签带上评审状态。
@@ -413,7 +419,8 @@ Review {
 
 - （2026-10-28 删除：原“项目开启 Auto review 时 Auto review 区块放在 Workpad 之前、Workpad 默认收起”。评审现在是 Workpad 里的 **Review** 组，Workpad 按用户的抽屉默认展开，见 GUARDRAILS-SPEC §7.1。）
 - Auto review 区块：分 **Commands** 和 **LLM review** 两组（内置检查在 LLM review 组第一行），每组标题右侧 “通过数/条数”；每行状态图标、名称、耗时。`failed` 行展开显示命令输出末尾或判定理由与文件位置；`passed` 的判断类检查点开可看理由；`skipped`、`unavailable` 行显示原因；共享工作区时注明。评审中逐条更新（沿用卡片详情的 etag 读取，不新增轮询）。
-- 卡片在 In review、项目开启且有生效的检查、没有评审在跑时有 **Rerun**（round 重置为 1，返工发给最近一次交付的 session）。
+- 等待评审时 Review 组只显示 “Waiting for review”，不显示上一次的结果。
+- 卡片在 In review、项目开启且有生效的检查、没有评审在跑或在等待时有 **Rerun**（round 重置为 1，返工发给最近一次交付的 session）。
 - 设置卡片的抽屉显示项目草案（§6.4）。
 
 ### 9.3 项目设置（Edit project → Auto review）

@@ -11,6 +11,7 @@ const catalog: Catalog = {
   "Finished the auto review": "完成了自動驗收",
   "Auto review": "自動驗收",
   "Max rework rounds": "最多重工次數",
+  "Waiting for review": "等待驗收",
   "Reviewing": "驗收中",
   "Review failed": "驗收未通過",
   "Review unavailable": "無法驗收",
