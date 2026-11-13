@@ -12,7 +12,10 @@ import { BackgroundWorkspaces } from "./background-workspace";
 import { GuardrailsService } from "./guardrails";
 
 const roots: string[] = [];
+/** Each setup's MemoryService.idle(): reviews still running must finish before their data dir is removed. */
+const settles: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  await Promise.all(settles.splice(0).map((settle) => settle()));
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
 });
 
@@ -28,6 +31,7 @@ async function setup() {
     removed.push(agent.id);
   }, new BackgroundWorkspaces(f.store.directory, async () => "live"));
   f.service.memory = memory;
+  settles.push(() => memory.idle());
   // People edit notes on the Guardrails page (guardrails.* RPCs, GUARDRAILS-SPEC §7.5).
   const guardrails = new GuardrailsService(f.store);
   const created: Created[] = [];
@@ -315,7 +319,7 @@ test("the finished-card review stores at most one general memory with evidence, 
   await writeFile(join(x.a, "AGENTS.md"), "- Screenshots must not show the host sidebar.\n");
   await writeFile(join(x.a, "CLAUDE.md"), "- Screenshots must not show the host sidebar.\n");
   await x.memory.manual("t", x.model);
-  await new Promise((r) => setTimeout(r, 50));
+  await x.memory.idle();
   expect(x.created).toHaveLength(1);
   expect(x.created[0].prompt).toContain("## AGENTS.md\n- Screenshots must not show the host sidebar.");
   expect(x.created[0].prompt).not.toContain("## CLAUDE.md");
@@ -331,7 +335,7 @@ test("the finished-card review stores at most one general memory with evidence, 
   expect((await x.store.read()).events.at(-1)).toMatchObject({ action: "memory_proposed", actor: "system" });
   // An automatic run with the same summary and no new clues is skipped.
   x.memory.afterDone("t", x.model);
-  await new Promise((r) => setTimeout(r, 50));
+  await x.memory.idle();
   expect(x.created).toHaveLength(1);
 });
 
@@ -344,7 +348,7 @@ test("a failed review records the error and still hard-deletes the session", asy
     board.events.push({ id: "q1", taskId: "t", actor: "agent", action: "progress_reported", reportKind: "question", note: "Unclear which window to test", at: new Date().toISOString() });
   });
   await x.memory.manual("t", x.model);
-  await new Promise((r) => setTimeout(r, 50));
+  await x.memory.idle();
   expect(x.removed).toEqual(["review-1"]);
   expect(x.archived()).toBe(0);
   expect((await x.memory.store.read()).errors).toEqual([expect.objectContaining({ taskId: "t", message: expect.stringContaining("The review model returned no JSON.") })]);
@@ -386,7 +390,7 @@ test("finished-card review tries the ordered summary list and cleans both childr
   });
   x.replies.push("quota limit", '{"candidates": []}');
   await x.memory.manual("t", x.model);
-  await new Promise((r) => setTimeout(r, 50));
+  await x.memory.idle();
   expect(x.created.map((a) => a.config?.provider)).toEqual(["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"]);
   expect(x.removed).toEqual(["review-1", "review-2"]);
   expect((await x.memory.store.read()).errors).toEqual([]);
