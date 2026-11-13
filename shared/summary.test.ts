@@ -142,3 +142,9 @@ test("temporary sessions run Claude in Plan Mode and leave other providers on th
   expect(readOnlyConfig("claude/claude-haiku-5-5")).toEqual({ provider: "claude/claude-haiku-5-5", modeId: "plan" });
   expect(readOnlyConfig("codex/gpt-5.4-mini")).toEqual({ provider: "codex/gpt-5.4-mini" });
 });
+
+test("review reasoning settings round-trip and legacy values keep model defaults", () => {
+  expect(summarySettingsValues({ reviewModel: "codex/m", reviewThinking: "high" })).toMatchObject({ reviewModel: "codex/m", reviewThinking: "high" });
+  expect(summarySettingsValues({ reviewModel: "codex/m" }).reviewThinking).toBeUndefined();
+  expect(summarySettings.schema.safeParse({ reviewThinking: "x".repeat(101) }).success).toBe(false);
+});

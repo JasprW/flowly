@@ -1,0 +1,24 @@
+Flowly
+Tinylink
+6
+tasks
+· 1 done
+Idle
+In review
+2
+Ideas 3
+Guardrails
+Memory
+Insights
+Backlog
+1
+Low
+Chore
+Add Dockerfile and GitHub Actions workflow
+Codex
+GPT-6.1-Sol
+Model default (medium)
+Full Access
+Codex
+GPT-6.1 Terra
+xhigh

@@ -2,7 +2,6 @@ import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
   "Command": "Commande",
-  "Project default model": "Modèle par défaut du projet",
   "Review model": "Modèle de revue",
   "{n} s": "{n} s",
   "Not applicable": "Non applicable",
@@ -1342,7 +1341,7 @@ const catalog: Catalog = {
   "Previous day": "Jour précédent",
   "Next day": "Jour suivant",
   "agent {time}": "agent {time}",
-  "Auto review checked this card after the agent delivered; open it to see each check's result.": "Auto review a vérifié cette carte après la livraison de l’agent ; ouvrez-la pour voir le résultat de chaque vérification.",
+  "Open the card for review results; choose the review model and reasoning in Settings → Models.": "Ouvrez la carte pour les résultats ; choisissez le modèle et le raisonnement dans Paramètres → Modèles.",
   "Deliveries are checked before they reach you, and go back to the agent when they fall short.": "Les livraisons sont vérifiées avant de vous parvenir et retournent à l’agent quand elles ne suffisent pas.",
   "Does what you asked": "Fait ce que vous avez demandé",
   "Resume": "Reprendre",

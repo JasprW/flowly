@@ -1,5 +1,5 @@
 import type { PaseoApi } from "@getpaseo/client";
-import { SUMMARIZER_LABELS, readOnlyConfig } from "../shared/summary";
+import { SUMMARIZER_LABELS, readOnlyConfig, type SummarySettings } from "../shared/summary";
 import { autoReviewLimits } from "../shared/model";
 import { GOAL_ID } from "../shared/auto-review";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
@@ -127,26 +127,36 @@ export function parseReviewOutput(text: string | null | undefined, ids: readonly
 
 /** The review runner: the Review model (Settings → Models), else the summary models; never the project's agent model (§6.3). */
 export function llmReviewer(options: {
-  reviewModel: () => Promise<string>;
+  reviewSettings: () => Promise<Pick<SummarySettings, "reviewModel" | "reviewThinking">>;
   summaryModels: () => Promise<string[]>;
   remove?: RemoveAgent;
   timeoutMs?: number;
 }): LlmReview {
   const remove = options.remove ?? daemonRemoveAgent();
   return async (input: LlmReviewInput, paseo: PaseoApi) => {
-    const chosen = await options.reviewModel();
+    const settings = await options.reviewSettings();
+    const chosen = settings.reviewModel;
     const models = chosen ? [chosen] : await options.summaryModels();
     const ids = input.checks.map((c) => c.id);
     const { model, output } = await runSummaryModels(paseo, models, {
-      create: (model) =>
-        paseo.workspaces.ref(input.task.workspaceId).agents.create({
+      create: async (model) => {
+        let thinkingOptionId: string | undefined;
+        if (chosen === model && settings.reviewThinking) {
+          const slash = model.indexOf("/");
+          const result = await paseo.providers.listModels(model.slice(0, slash));
+          if (result.error) throw new Error(result.error);
+          const info = result.models?.find((m) => m.id === model.slice(slash + 1));
+          if (info?.thinkingOptions?.some((o) => o.id === settings.reviewThinking)) thinkingOptionId = settings.reviewThinking;
+        }
+        return paseo.workspaces.ref(input.task.workspaceId).agents.create({
           parent: input.parentAgentId,
-          config: readOnlyConfig(model),
+          config: { ...readOnlyConfig(model), ...(thinkingOptionId ? { thinkingOptionId } : {}) },
           title: `Flowly review · ${input.task.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-task": input.task.id, "flowly-review": "1" },
           prompt: reviewPrompt(input),
           outputSchema: reviewOutputSchema as unknown as Record<string, unknown>,
-        }),
+        });
+      },
       parse: (text) => parseReviewOutput(text, ids),
       remove,
       timeoutMs: options.timeoutMs ?? 15 * 60 * 1000,
