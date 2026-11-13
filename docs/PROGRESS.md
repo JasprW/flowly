@@ -1,5 +1,12 @@
 # Implementation progress
 
+## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13
+
+- A delivery to In review without `worktree`, from a shared workspace with Auto review on, now looks at the PR/MR links among this call's outputs and the card's existing outputs. A link whose host and repository match a remote of the card's repository gives its head commit through `git ls-remote` (5 s, no prompts); the one worktree, other than the repository's own directory, whose HEAD contains it is reviewed, recorded on the delivery event like an explicit `worktree`, and named in the result's `notice`. None, several, another repository's link or a git/network failure changes nothing (`server/review-worktree.ts` `prWorktree`).
+- Purely local git: works without a GitHub/GitLab connector, and with unpushed commits on top of the PR head.
+- AUTO-REVIEW-SPEC §3.4 and the skill text updated. Onboarding, telemetry, What's new: unchanged (agent-facing, no UI).
+- Checks: see the delivery note. Unrun: a live delivery through the installed plugin.
+
 ## Auto review reads the delivered worktree (card "自动验收能看到卡片在 git worktree 里的改动") — 2026-11-13
 
 - `flowly_update_status(in_review)` and the CLI take an optional `worktree` (absolute path, a folder inside it, or the branch checked out in it). The daemon resolves it before the write (`server/review-worktree.ts`) and refuses, with `INVALID_INPUT`, a path that is missing, outside git, another repository, the card's own workspace, or a branch no worktree has checked out. The resolved real path rides on the delivery event; Rerun reuses it.

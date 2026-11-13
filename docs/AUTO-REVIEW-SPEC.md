@@ -104,7 +104,8 @@ stateDiagram-v2
 - **评审 session** 仍建在卡片工作区里，提示词加一句：交付的代码在该 worktree 里，读文件去那里。
 - **worktree 不在了**（评审开始时解析失败，例如已删除）：所有检查 `unavailable`，原因 “The delivered worktree is unavailable: …”。不退回去看工作区，免得又把别的改动当成这张卡的。
 - worktree 里要能跑项目命令（依赖已装好），否则命令检查按失败计；skill 和工具说明里写明。
-- 不带 `worktree` 的交付行为不变。Flowly 不创建 worktree（D6 不变），只用 agent 已有的。
+- **从 PR 自动找**（2026-11-13）：交付没带 `worktree`、卡片工作区不是 worktree、项目开着 Auto review、卡片这次是进入 In review（不是精确重放）时，取本次 `outputs` 和卡片已有的输出里的 PR/MR 链接（GitHub `…/owner/repo/pull/N`，GitLab `…/group/repo/-/merge_requests/N`）。链接的 host 和仓库路径要对上卡片仓库某个 remote 的 URL（读 `remote.*.url` 原值，scp/ssh/https 都认）；用 `git ls-remote <remote> refs/pull/N/head`（GitLab `refs/merge-requests/N/head`，5 秒超时，不弹凭据）取 head 提交，再找 HEAD 包含它（`merge-base --is-ancestor`）的 worktree，仓库自己的目录不算。所有链接加起来正好一个 worktree 时就按它评审（和显式带 `worktree` 一样记在交付事件上），交付结果的 `notice` 写明用了哪个 worktree、来自哪个链接；没有、不止一个、链接不是本仓库的、git 或网络失败时什么都不做，交付和评审照旧，不报错。显式的 `worktree` 总是优先。
+- 不带 `worktree` 也没找到的交付行为不变。Flowly 不创建 worktree（D6 不变），只用 agent 已有的。
 
 ## 4. 检查
 

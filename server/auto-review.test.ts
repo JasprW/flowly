@@ -976,3 +976,57 @@ test("a worktree that is not this card's repository, or named outside a delivery
   await expect(x.service.write(x.identity, "status", { ...input(ctx), status: "test", worktree: "feat/wt" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   expect((await card(x)).status).toBe("development");
 });
+
+/** The workspace's origin is "github.com/acme/app", served by a local bare repository that has PR 7 at the worktree's commit. */
+async function withPullRequest(x: { a: string; root: string }, worktree: string, git: (cwd: string, ...args: string[]) => Promise<string>) {
+  const bare = join(x.root, "remote.git");
+  await defaultGit(x.root, ["init", "-q", "--bare", bare]);
+  await git(x.a, "remote", "add", "origin", "https://github.com/acme/app.git");
+  await git(x.a, "config", `url.${bare}.insteadOf`, "https://github.com/acme/app.git");
+  await git(worktree, "push", "-q", "origin", "HEAD:refs/pull/7/head");
+}
+
+test("a delivery with this repository's PR and no worktree is reviewed in the worktree holding its head, with a notice (§3.4)", async () => {
+  const seen: LlmReviewInput[] = [];
+  const cwds: string[] = [];
+  const x = await setup({
+    real: true,
+    run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }),
+    llm: async (input) => (seen.push(input), passAll(input, undefined as never)),
+  });
+  const { worktree, git } = await workspaceWithWorktree(x.a, x.root);
+  await withPullRequest(x, worktree, git);
+  let ctx = await x.service.get(x.identity);
+  await x.service.write(x.identity, "status", { ...input(ctx), status: "development" });
+  ctx = await x.service.get(x.identity);
+  const result = (await x.service.write(x.identity, "status", {
+    ...input(ctx, "Delivered"),
+    status: "in_review",
+    nextMoves: [],
+    outputs: [{ target: "https://github.com/acme/app/pull/7" }],
+  })) as { notice?: string };
+  expect(result.notice).toContain(`The auto review will check the worktree ${worktree}, which holds the head of https://github.com/acme/app/pull/7`);
+  await x.reviews.idle();
+  const board = await x.store.read();
+  expect(board.events.findLast((e) => e.to === "in_review")!.worktree).toBe(worktree);
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", shared: false, worktree });
+  expect(cwds).toEqual([worktree]);
+  expect(seen[0]!.diff).toContain("feature.ts");
+}, 20_000);
+
+test("a PR whose head is in several worktrees, or of another repository, changes nothing: the workspace is reviewed (§3.4)", async () => {
+  const cwds: string[] = [];
+  const x = await setup({ real: true, run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }) });
+  const { worktree, git } = await workspaceWithWorktree(x.a, x.root);
+  await withPullRequest(x, worktree, git);
+  // Another repository's PR: nothing found.
+  let board = await x.deliver("development", { outputs: [{ target: "https://github.com/acme/other/pull/7" }] });
+  expect(board.events.findLast((e) => e.to === "in_review")!.worktree).toBeUndefined();
+  // This repository's PR, but its head is in two worktrees: not unique, nothing found.
+  await git(x.a, "worktree", "add", "-q", "--detach", join(x.root, "wt2"), "feat/wt");
+  board = await x.deliver("development", { outputs: [{ target: "https://github.com/acme/app/pull/7" }] });
+  expect(board.events.findLast((e) => e.to === "in_review")!.worktree).toBeUndefined();
+  expect(board.tasks[0]!.review).toMatchObject({ shared: true });
+  expect(board.tasks[0]!.review!.worktree).toBeUndefined();
+  expect(cwds.every((c) => c === x.a)).toBe(true);
+}, 20_000);
