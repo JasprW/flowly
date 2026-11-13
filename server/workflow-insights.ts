@@ -55,6 +55,7 @@ import {
 } from "../shared/workflow-insights";
 import { logFailure } from "./error-report";
 import { BackgroundJobs } from "./background-jobs";
+import { turnTimeline } from "./turn-timeline";
 const DAY_MS = 86_400_000;
 const TICK_MS = 15 * 60_000;
 const COMMANDS_LIMIT = 4000;
@@ -246,6 +247,29 @@ export class WorkflowInsightsService {
     const value = snapshot ? isSummarizer(snapshot.agent as { labels?: Record<string, string> | null }) : false;
     this.summarizer.set(agentId, value);
     return value;
+  }
+
+  /**
+   * A finished turn of any session (the hook's entry, §3.1). The turn's timeline is read only after the checks that
+   * need none: the session's workspace is an unarchived card's and the project has workflow insights on, and the
+   * session is not one of Flowly's own temporary ones (a background agent, or a child labelled as a summarizer:
+   * the card summarizer and the auto review run in the card's workspace and are deleted as soon as they finish,
+   * so reading their timeline fails). A child that is already gone is skipped for the same reason.
+   */
+  async turnEnded(agent: { id: string; workspaceId: string | null; provider: string; parentAgentId?: string | null; background?: boolean }, paseo: PaseoApi) {
+    this.attach(paseo);
+    if (!agent.workspaceId || agent.background || this.summarizer.get(agent.id)) return 0;
+    const board = await this.board.read();
+    const task = board.tasks.find((t) => t.workspaceId === agent.workspaceId && !t.archivedAt);
+    const project = board.projects.find((p) => p.id === task?.projectId);
+    if (!task || !project || !(await this.enabledFor(project))) return 0;
+    if (agent.parentAgentId && this.summarizer.get(agent.id) === undefined) {
+      const snapshot = await paseo.agents.ref(agent.id).refresh().catch(() => null);
+      if (!snapshot) return 0;
+      this.summarizer.set(agent.id, isSummarizer(snapshot.agent as { labels?: Record<string, string> | null }));
+      if (this.summarizer.get(agent.id)) return 0;
+    }
+    return this.recordTurn(agent, await turnTimeline(paseo, agent.id), paseo);
   }
 
   /** A finished turn's shell calls (§3.1); never throws into the hook. */

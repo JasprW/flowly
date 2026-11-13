@@ -28,6 +28,7 @@ import type { NextMoveRows } from "./next-move-rows";
 import { generatedBranchName, resolveWorktreeBaseRef } from "./service";
 import { logFailure } from "./error-report";
 import { BackgroundJobs } from "./background-jobs";
+import { turnTimeline } from "./turn-timeline";
 
 /** `session-insights.json`: serialized writes, backup, atomic replacement; invalid data is preserved, never reset. */
 export class SessionInsightStore {
@@ -141,11 +142,26 @@ export class SessionInsightService {
       .catch((e) => logFailure("Flowly session insight not updated:", e));
   }
 
+  /** Whether a turn of this session gets an insight at all; needs no timeline. */
+  private async wants(agent: OutsideAgent) {
+    if (!isOutsideCandidate(agent)) return false;
+    const settings = await this.settings();
+    return settings.enabled && (settings.parts.progress || settings.parts.nextMoves || settings.parts.ideas);
+  }
+
+  /**
+   * A completed turn of an outside session (the hook's entry). The turn's timeline is read only after the checks
+   * that need none: Flowly's own temporary sessions are deleted as soon as they finish, so reading theirs fails
+   * ("Agent not found"), and a session with insights off has nothing to read it for.
+   */
+  async turnEnded(agent: OutsideAgent, paseo: PaseoApi, endedAt = new Date().toISOString()): Promise<void> {
+    if (!(await this.wants(agent))) return;
+    return this.enqueue(agent, await turnTimeline(paseo, agent.id), paseo, endedAt);
+  }
+
   /** Resolves when this session's queue is drained (tests); the hook does not wait. */
   async enqueue(agent: OutsideAgent, timeline: readonly { type: string }[], paseo: PaseoApi, endedAt = new Date().toISOString()): Promise<void> {
-    if (!isOutsideCandidate(agent)) return;
-    const settings = await this.settings();
-    if (!settings.enabled || !(settings.parts.progress || settings.parts.nextMoves || settings.parts.ideas)) return;
+    if (!(await this.wants(agent))) return;
     const text = turnText(timeline);
     if (!text.trim()) return;
     const batch = { text, endedAt, agent };
