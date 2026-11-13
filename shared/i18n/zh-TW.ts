@@ -568,6 +568,7 @@ const catalog: Catalog = {
   "Closed": "已關閉",
   "Finished turn": "回合已結束",
   "Turn ended": "回合已結束",
+  "Background tasks running": "閒置，背景工作執行中",
   "Thought": "思考",
   "{n} tool calls": "{n} 次工具呼叫",
   "Prepared session belongs to another workspace or is archived.": "預先準備的工作階段屬於其他工作區，或已封存。",

@@ -568,6 +568,7 @@ const catalog: Catalog = {
   "Closed": "Закрыта",
   "Finished turn": "Ход завершён",
   "Turn ended": "Ход завершён",
+  "Background tasks running": "Идут фоновые задачи",
   "Thought": "Размышлял",
   "{n} tool calls": {"one": "{n} вызов инструмента", "few": "{n} вызова инструментов", "many": "{n} вызовов инструментов", "other": "{n} вызова инструментов"},
   "Prepared session belongs to another workspace or is archived.": "Подготовленная сессия относится к другому рабочему пространству или архивирована.",

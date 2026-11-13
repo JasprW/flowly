@@ -183,8 +183,9 @@ export function logFailure(label: string, error: unknown, context?: string) {
 
 /** The plugin context with every RPC handler's unexpected failures reported, then rethrown unchanged. */
 export function reportRpcErrors(server: PluginServerContext): PluginServerContext {
-  const handle: PluginServerContext["handle"] = (contract, handler) =>
-    server.handle(contract, (input, context) => {
+  // One wrapper for both overloads (RPC and, since 0.16, subscriptions); the cast picks one shape for the call.
+  const handle = ((contract: { name: string }, handler: (input: unknown, context: unknown) => unknown) =>
+    (server.handle as (c: unknown, h: (input: unknown, context: unknown) => unknown) => void)(contract, (input, context) => {
       const fail = (error: unknown): never => {
         if (!expectedRpcError(error)) reportError(`rpc ${contract.name}`, error);
         throw error;
@@ -195,7 +196,7 @@ export function reportRpcErrors(server: PluginServerContext): PluginServerContex
       } catch (error) {
         return fail(error);
       }
-    });
+    })) as PluginServerContext["handle"];
   return new Proxy(server, {
     get(target, key) {
       if (key === "handle") return handle;

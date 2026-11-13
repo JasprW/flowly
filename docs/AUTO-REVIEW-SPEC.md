@@ -138,10 +138,11 @@ stateDiagram-v2
 ### 4.4 评审 session（内置检查与 LLM 检查）
 
 - 只在所有命令检查都 `passed`（或没有命令检查）时跑（D9）。有命令检查 `failed` 时，内置检查和 LLM 检查全部 `skipped`，原因 “Command rules failed.”；有 `unavailable` 时原因 “A command rule could not run.”。
-- 一个临时 session 一次判定全部：建在卡片 workspace 里，父 session 为交付的 session，标签同摘要器（`flowly=summarizer`、`flowly-task`、`flowly-review=1`），结束后硬删除，删除失败时归档并记日志。超时 15 分钟。
+- 一个临时 session 一次判定全部：建在卡片 workspace 里，父 session 为交付的 session，标签同摘要器（`flowly=summarizer`、`flowly-task`、`flowly-review=1`），结束后硬删除，删除失败时归档并记日志。超时 15 分钟。Paseo 0.16 宿主上它是后台 agent（`background: true`，不出现在 agent 列表、标签页和通知里），结束后用 SDK 归档而不是硬删除（`docs/PASEO-0.16-SPEC.md` §3.1）。
 - 模型：Settings → Models 的 **Review model**（`task-summary` 设置的 `reviewModel`）；未设置时用项目默认模型；再没有时用摘要模型列表。
-- 输入：卡片标题、描述、type；内置检查的尺子（§4.2）；workpad；交付 note 与 outputs；命令检查结果摘要；项目 `guidance`；diff（`git diff HEAD` 加最近 5 个提交的 patch，截断到 64 KiB 并注明）；要判定的检查（id、name、prompt）。
+- 输入：卡片标题、描述、type；内置检查的尺子（§4.2）；workpad；交付 note 与 outputs；命令检查结果摘要；交付 session 仍在跑的后台任务（见下）；项目 `guidance`；diff（`git diff HEAD` 加最近 5 个提交的 patch，截断到 64 KiB 并注明）；要判定的检查（id、name、prompt）。
 - 指令：只读，不改文件，不运行会改变状态的命令；每条单独判定。
+- 交付时的后台任务（Paseo 0.16，2026-11-11）：开始评审前对交付的 session 调一次 `backgroundWork.list()`（5 秒超时）。有仍在跑的后台任务（例如测试进程、dev server）时，不等待，把它们（种类、描述或命令、开始时间，最多 20 条）写进评审输入的单独一节，并告诉评审：这些任务的结果不属于这次交付，交付里依赖它们的说法（例如 note 说测试通过，而那次测试还在跑）按未经证实处理。不等待是因为后台任务可能永不结束（dev server、watcher），等待会让评审无限期挂起。宿主不支持、方法不存在或查询失败时当作没有后台任务，照常评审，不因此 `unavailable`。
 - 模式（2026-10-30）：`config.modeId = readOnlyMode(provider)`（`shared/summary.ts`）：`claude/*` 和 `claude-*` 自定义 provider（如 `claude-compass-smith-sqp`）用 `plan`，其他 provider 不设（绝不用 full-access）。否则 Claude 评审 session 在 Always Ask 下第一次调用工具就停在权限确认，`runSummaryModels` 把它当失败，整轮评审 `unavailable`（“The summary model asked for a permission.”）。
 - 权限请求（2026-10-30）：没有 Plan Mode 的 provider（Codex 等）仍可能停在权限确认，而临时 session 里没有人能批准。`finishRefusingPermissions`（`server/summary-models.ts`，`runSummaryModels` 和 workflow insights 共用）收到 `permission` 状态时，对 pending 的请求逐个回 deny（附说明让模型不用该工具继续作答），再等这一轮，最多 20 次；请求无法拒绝或超过次数才算失败。这样评审不会因为权限请求而 `unavailable`，卡片也不会因此留在 Attention（§3.2 Unavailable 仍按设计进入 Attention，用于真正跑不起来的情况）。
 - 输出（`outputSchema`，解析宽松：取第一个 JSON 对象，未知 id 和坏条目丢弃）：

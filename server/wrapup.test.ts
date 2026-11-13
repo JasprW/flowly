@@ -17,7 +17,7 @@ afterEach(async () => {
 async function setup(options: {
   kind?: string;
   status?: "done" | "cancelled" | "development";
-  agents?: { id: string; status: string; labels?: Record<string, string> }[];
+  agents?: { id: string; status: string; labels?: Record<string, string>; backgroundWork?: { count: number } }[];
   directory?: string;
   git?: (cwd: string, args: string[]) => Promise<string>;
   ownsWorkspace?: boolean;
@@ -103,6 +103,19 @@ test("running sessions and unfinished cards block; nothing is archived", async (
   expect(running.workspaceArchive).not.toHaveBeenCalled();
   const open = await setup({ status: "development" });
   expect((await open.service.check("t", open.paseo)).blockers).toContain("Only Done or Cancelled cards can be wrapped up.");
+});
+
+test("a session with background tasks still running blocks like a running one (Paseo 0.16); none counted is clean", async () => {
+  const working = await setup({ agents: [{ id: "a1", status: "idle", backgroundWork: { count: 2 } }] });
+  const check = await working.service.check("t", working.paseo);
+  expect(check.blockers).toEqual(["1 session has background tasks still running. Stop them or wait for them to finish first."]);
+  await expect(working.service.run({ id: "t", revision: 3, acknowledgeWarnings: true }, working.paseo)).rejects.toThrow(/background tasks/);
+  expect(working.workspaceArchive).not.toHaveBeenCalled();
+  const done = await setup({ agents: [{ id: "a1", status: "idle", backgroundWork: { count: 0 } }] });
+  expect((await done.service.check("t", done.paseo)).blockers).toEqual([]);
+  // A running session with background tasks is counted once, as running.
+  const both = await setup({ agents: [{ id: "a1", status: "running", backgroundWork: { count: 1 } }] });
+  expect((await both.service.check("t", both.paseo)).blockers).toEqual([expect.stringMatching(/still running/)]);
 });
 
 test("warnings require acknowledgement; stale revision is rejected", async () => {

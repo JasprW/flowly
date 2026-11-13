@@ -14,7 +14,7 @@ export function sessionState(
     | "pendingPermissions"
     | "attentionReason"
     | "lastUserMessageAt"
-  >,
+  > & { backgroundWork?: { count: number } | null },
   events: readonly BoardEvent[] = [],
 ) {
   if (agent.archivedAt)
@@ -34,6 +34,9 @@ export function sessionState(
     return { label: msg("Running"), icon: "Loader", active: true };
   if (agent.status === "closed")
     return { label: msg("Closed"), icon: "CircleStop", active: false };
+  // Paseo 0.16: the turn is over but background tasks it started are still running (PASEO-0.16-SPEC §3.2).
+  if (agent.backgroundWork?.count)
+    return { label: msg("Background tasks running"), icon: "Loader", active: false };
   if (agent.attentionReason === "finished")
     return { label: msg("Finished turn"), icon: "CircleCheck", active: false };
   const last = events

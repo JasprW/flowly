@@ -568,6 +568,7 @@ const catalog: Catalog = {
   "Closed": "終了",
   "Finished turn": "ターン終了",
   "Turn ended": "ターン終了",
+  "Background tasks running": "バックグラウンドタスク実行中",
   "Thought": "思考",
   "{n} tool calls": "ツール呼び出し {n} 件",
   "Prepared session belongs to another workspace or is archived.": "準備済みのセッションは別のワークスペースのもの、またはアーカイブ済みです。",

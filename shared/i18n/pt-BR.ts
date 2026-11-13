@@ -568,6 +568,7 @@ const catalog: Catalog = {
   "Closed": "Fechada",
   "Finished turn": "Turno encerrado",
   "Turn ended": "Turno encerrado",
+  "Background tasks running": "Tarefas em segundo plano ativas",
   "Thought": "Pensou",
   "{n} tool calls": {"one": "{n} chamada de ferramenta", "other": "{n} chamadas de ferramentas"},
   "Prepared session belongs to another workspace or is archived.": "A sessão preparada pertence a outro espaço de trabalho ou está arquivada.",

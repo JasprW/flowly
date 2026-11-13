@@ -568,6 +568,7 @@ const catalog: Catalog = {
   "Closed": "닫힘",
   "Finished turn": "턴 종료",
   "Turn ended": "턴 종료",
+  "Background tasks running": "백그라운드 작업 실행 중",
   "Thought": "생각",
   "{n} tool calls": "도구 호출 {n}회",
   "Prepared session belongs to another workspace or is archived.": "준비된 세션이 다른 워크스페이스에 속하거나 이미 보관되었습니다.",

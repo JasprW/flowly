@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile, rename, copyFile, unlink } from "node:fs/promises";
+import { createHidden } from "./background-agent";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
@@ -379,13 +380,14 @@ export class InsightsService {
     const settings = await this.settings();
     const prompt = digestPrompt({ project: project.title, day: input.day, today: input.day === dayKey(this.now(), tz), material: text, language: await this.language() });
     const { model, output } = await this.background.use(project, paseo, (workspaceId) => runSummaryModels(paseo, summaryModelsOf(settings), {
-      create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
+      create: (model) => createHidden((hidden) => paseo.workspaces.ref(workspaceId).agents.create({
+        ...hidden,
         config: readOnlyConfig(model),
         title: `Kanban digest · ${project.title} · ${input.day}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
         prompt,
         outputSchema: digestJsonSchema as unknown as Record<string, unknown>,
-      }),
+      })),
       parse: (text) => parseDigest(text, taskIds),
       remove: this.removeAgent,
       timeoutMs: this.timeoutMs,

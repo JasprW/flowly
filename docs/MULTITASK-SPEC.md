@@ -39,6 +39,7 @@
 | 检查 | 级别 | 说明 |
 | --- | --- | --- |
 | session 运行中/启动中 | 阻止 | 先停止或等待结束 |
+| session 空闲但有后台任务在跑（Paseo 0.16，agent 快照 `backgroundWork.count > 0`） | 阻止 | “N session(s) has/have background tasks still running. Stop them or wait for them to finish first.” 归档会结束这些任务（测试、dev server 等）。旧宿主快照没有该字段，按 0 处理，行为不变。自动 Wrap up 和删除卡片时的归档用同一预检，所以同样被阻止 |
 | workspace 正在归档或不可用 | 阻止（不可用时只允许归档看板记录） | — |
 | 未提交改动（仅 worktree） | 警告 | 归档后 Paseo 可能删除 worktree 目录，改动会丢失 |
 | 未推送提交 `git rev-list --count HEAD --not --remotes`（仅 worktree） | 警告 | 分支保留，但提交只在本地 |

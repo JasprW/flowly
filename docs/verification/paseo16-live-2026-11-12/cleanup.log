@@ -1,0 +1,6 @@
+project 1b4d88b4-5a3a-47e8-ae68-d16894efca04 rev 1 nativeProjectId prj_08860db027cd20de
+remove {"id":"1b4d88b4-5a3a-47e8-ae68-d16894efca04","removedTasks":1,"backup":"~/.paseo/plugin-data/flowly/removed/1b4d88b4-5a3a-47e8-ae68-d16894efca04-2026-11-12T03-32-04-493Z.json","paseo":{"removed":true,"workspaces":2,"error":""}}
+board: project left false card left false
+agents left []
+workspaces left []
+native projects with p16live {"requestId":"343f234e-03f1-418b-b169-d836a7d4c876","projects":[{"projectId":"remote:git.garena.com/shopee/deep/agent-smith","projectKey":"remote:git.garena.com/shopee/deep/agent-smith","projectDisplayName":"deep/agent-smith","projectCustomName":null,"projectCustomIconRevision":null,"projectIconRevi

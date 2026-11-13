@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Project } from "../shared/model";
 import { daemonWorkspaceRecovery, type WorkspaceRecovery } from "./workspace-restore";
 import { logFailure } from "./error-report";
+import { backgroundAgentsSupported, isBackgroundRefusal } from "./background-agent";
 
 export const BACKGROUND_TITLE = "Flowly background";
 
@@ -34,7 +35,13 @@ export function daemonRevive(recovery: WorkspaceRecovery = daemonWorkspaceRecove
   };
 }
 
-const stateSchema = z.object({ version: z.literal(1), projects: z.record(z.string(), z.string()) });
+const stateSchema = z.object({
+  version: z.literal(1),
+  /** The visible workspace of older hosts, archived between runs. */
+  projects: z.record(z.string(), z.string()),
+  /** The hidden (background) workspace of hosts with background agents, kept open (PASEO-0.16-SPEC §3.1). */
+  hidden: z.record(z.string(), z.string()).optional(),
+});
 type State = z.infer<typeof stateSchema>;
 
 /**
@@ -57,6 +64,17 @@ export class BackgroundWorkspaces {
 
   /** Runs `work` with the project's background workspace open; archives it after the last run. */
   async use<T>(project: Project, paseo: PaseoApi, work: (workspaceId: string) => Promise<T>): Promise<T> {
+    // Support is learned from the first create after a plugin start; until then a background workspace stored for
+    // any project is the evidence (support belongs to the host), so the first run after a restart is not shown
+    // (PASEO-0.16-SPEC §3.1).
+    const supported = backgroundAgentsSupported();
+    if (supported === true || (supported === null && Object.keys((await this.read()).hidden ?? {}).length > 0)) {
+      const hidden = await this.locked(project.id, () => this.hidden(project, paseo)).catch((error) => {
+        if (supported === null && isBackgroundRefusal(error)) return null;
+        throw error;
+      });
+      if (hidden) return work(hidden);
+    }
     const id = await this.locked(project.id, async () => {
       const slot = this.slots.get(project.id);
       if (slot) {
@@ -96,6 +114,27 @@ export class BackgroundWorkspaces {
       source: { kind: "directory", path: project.primaryPath, projectId: project.paseoProjectId },
     });
     await this.write((state) => (state.projects[project.id] = created.id));
+    return created.id;
+  }
+
+  /**
+   * A host with background agents (Paseo 0.16): one background workspace per project, hidden from the
+   * sidebar like its sessions, so it is never archived or restored. A stored one that Paseo no longer
+   * lists (removed or archived) is replaced; the old visible workspace is left alone.
+   */
+  private async hidden(project: Project, paseo: PaseoApi) {
+    const known = (await this.read()).hidden?.[project.id];
+    if (known) {
+      const workspace = await paseo.workspaces.ref(known).refresh().catch(() => null);
+      if (workspace && !workspace.archivingAt) return known;
+    }
+    const created = await paseo.workspaces.create({
+      title: BACKGROUND_TITLE,
+      background: true,
+      idempotencyKey: `flowly-background:${project.id}:${randomUUID()}`,
+      source: { kind: "directory", path: project.primaryPath, projectId: project.paseoProjectId },
+    });
+    await this.write((state) => ((state.hidden ??= {})[project.id] = created.id));
     return created.id;
   }
 

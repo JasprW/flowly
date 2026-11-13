@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile, rename, copyFile, unlink } from "node:fs/promises";
+import { createHidden } from "./background-agent";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -531,13 +532,15 @@ export class WorkflowInsightsService {
         skills: skills.material,
       }) + (guardrails ? `\n\n${guardrails}` : "");
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
-        const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+        const prompt = workflowPrompt(days, material, await this.language(), !!guardrails);
+        const agent = await createHidden((hidden) => paseo.workspaces.ref(workspaceId).agents.create({
+          ...hidden,
           config: readOnlyConfig(model),
           title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
-          prompt: workflowPrompt(days, material, await this.language(), !!guardrails),
+          prompt,
           outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
-        });
+        }));
         this.summarizer.set(agent.id, true);
         let usage: RunUsage | undefined;
         let parsed;
@@ -614,13 +617,14 @@ export class WorkflowInsightsService {
     const corrections = await this.background.use(project, paseo, async (workspaceId) => {
       const { output } = await runSummaryModels(paseo, summaryModelsOf(summary), {
         create: async (model) => {
-          const agent = await paseo.workspaces.ref(workspaceId).agents.create({
+          const agent = await createHidden((hidden) => paseo.workspaces.ref(workspaceId).agents.create({
+            ...hidden,
             config: readOnlyConfig(model),
             title: `Flowly guardrails · ${project.title}`.slice(0, 120),
             labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
             prompt: catchUpPrompt(input.clues, input.section),
             outputSchema: catchUpJsonSchema as unknown as Record<string, unknown>,
-          });
+          }));
           this.summarizer.set(agent.id, true);
           return agent;
         },

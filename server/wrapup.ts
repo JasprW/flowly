@@ -16,7 +16,7 @@ const defaultGit: Git = async (cwd, args) =>
  * wrap-up waits for them first (`settle`), so they never block it.
  */
 async function workspaceSessions(paseo: PaseoApi, workspaceId: string) {
-  const sessions: { id: string; status: string }[] = [];
+  const sessions: { id: string; status: string; backgroundWork: number }[] = [];
   let cursor: string | undefined;
   do {
     const page = await paseo.agents.list({
@@ -25,7 +25,8 @@ async function workspaceSessions(paseo: PaseoApi, workspaceId: string) {
     });
     for (const { agent } of page.entries)
       if (agent.workspaceId === workspaceId && !agent.archivedAt && !isSummarizer(agent))
-        sessions.push({ id: agent.id, status: agent.status });
+        // Paseo 0.16 counts a session's background tasks in its snapshot; older hosts leave it out (0).
+        sessions.push({ id: agent.id, status: agent.status, backgroundWork: agent.backgroundWork?.count ?? 0 });
     cursor = page.pageInfo.nextCursor ?? undefined;
   } while (cursor);
   return sessions;
@@ -68,6 +69,15 @@ export class WrapupService {
     if (active)
       blockers.push(
         `${active} session${active === 1 ? " is" : "s are"} still running. Stop or wait for ${active === 1 ? "it" : "them"} first.`,
+      );
+    // A session that ended its turn but left background tasks running (Paseo 0.16, PASEO-0.16-SPEC §3.2)
+    // blocks like a running one: archiving it would stop them (MULTITASK-SPEC).
+    const working = sessions.filter(
+      (s) => s.status !== "running" && s.status !== "initializing" && s.backgroundWork > 0,
+    ).length;
+    if (working)
+      blockers.push(
+        `${working} session${working === 1 ? " has" : "s have"} background tasks still running. Stop them or wait for them to finish first.`,
       );
     // Cards linked to an existing workspace (e.g. the project's main one) never
     // archive it unless it is a worktree. Older cards lack the flag; the plugin

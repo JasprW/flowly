@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHidden } from "./background-agent";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
@@ -453,13 +454,14 @@ export class MemoryService {
     const models = summaryModelsOf(await this.summarySettings());
     const prompt = retroPrompt(m.text, await this.language());
     const { output } = await this.background.use(m.project, paseo, (workspaceId) => runSummaryModels(paseo, models, {
-      create: (model) => paseo.workspaces.ref(workspaceId).agents.create({
+      create: (model) => createHidden((hidden) => paseo.workspaces.ref(workspaceId).agents.create({
+        ...hidden,
         config: readOnlyConfig(model),
         title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, ...RETRO_LABEL },
         prompt,
         outputSchema: retroJsonSchema as unknown as Record<string, unknown>,
-      }),
+      })),
       parse: (text) => parseRetroOutput(text).map(fitCandidate),
       remove: this.removeAgent,
       timeoutMs: this.timeoutMs,

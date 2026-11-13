@@ -1,0 +1,10 @@
+03:58:59 digest1 {"queued":true}
+03:59:11 digest1 helpers [["c8ef351a",true,"archived"]] visible Flowly background during run []
+03:59:11 digest2 {"queued":true}
+04:01:13 digest2 helpers [["c8ef351a",true,"archived"]] visible Flowly background during run []
+04:01:13 stored {"projects":null,"hidden":"wks_3733becc8473acc5"}
+04:01:18 reload flowly running yes ~/Dev
+04:01:24 digest3-after-reload {"queued":true}
+04:01:36 digest3-after-reload helpers [["397475b9",true,"archived"],["c8ef351a",true,"archived"]] visible Flowly background during run []
+04:01:36 visible Flowly background workspaces in the archive []
+04:01:37 remove {"id":"81d994f6-23b0-48d1-96dd-c121a99a4a77","removedTasks":1,"backup":"…","paseo":{"removed":true,"workspaces":2,"error":""}}

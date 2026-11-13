@@ -98,7 +98,7 @@ Auto：按 `claude/claude-haiku-5-5` → `codex/gpt-6-luna` 顺序尝试可用�
 
 ## 10. 已知风险
 
-- 插件 SDK 未开放 `internal`：summarizer 在卡片 workspace 中短暂可见（Paseo 原生 workspace 视图里是父 session 的子 session），完成后**硬删除**（`server/summarizer-remove.ts`，本地 `DaemonClient.deleteAgent`，用户 2026-10-22 批准；失败回退归档并记日志），不再留在归档。Paseo 可能为它发一次 finished 通知，尚未实测。
+- 插件 SDK 未开放 `internal`：summarizer 在卡片 workspace 中短暂可见（Paseo 原生 workspace 视图里是父 session 的子 session），完成后**硬删除**（`server/summarizer-remove.ts`，本地 `DaemonClient.deleteAgent`，用户 2026-10-22 批准；失败回退归档并记日志），不再留在归档。Paseo 可能为它发一次 finished 通知，尚未实测。Paseo 0.16 宿主上 summarizer 是后台 agent（`background: true`）：运行期间不可见、不发通知，结束后用 SDK 归档（实测不进用户的归档），不再硬删除；旧宿主照旧（`docs/PASEO-0.16-SPEC.md` §3.1）。
 - 手动 Refresh 若判断无新进展（`update=false`）不会新增版本。
 
 ## 11. 验收

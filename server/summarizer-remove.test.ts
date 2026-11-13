@@ -39,3 +39,20 @@ test("when no daemon connection can be made the session is archived and nothing 
   expect(a.archive).toHaveBeenCalledTimes(1);
   log.mockRestore();
 });
+
+test("a background session (Paseo 0.16) is archived through the SDK, without a daemon connection", async () => {
+  const connect = vi.fn(async () => ({ deleteAgent: async () => undefined, close: async () => undefined }));
+  const a = { ...agent(), current: () => ({ background: true }) };
+  await daemonRemoveAgent(connect)(a);
+  expect(a.archive).toHaveBeenCalledTimes(1);
+  expect(connect).not.toHaveBeenCalled();
+});
+
+test("a background session whose archive fails is hard-deleted instead", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const deleted: string[] = [];
+  const archive = vi.fn(async () => Promise.reject(new Error("busy")));
+  await daemonRemoveAgent(async () => ({ deleteAgent: async (id) => void deleted.push(id), close: async () => undefined }))({ id: "child-1", archive, current: () => ({ background: true }) } as never);
+  expect(deleted).toEqual(["child-1"]);
+  log.mockRestore();
+});

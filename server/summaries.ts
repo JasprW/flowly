@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile, rename, copyFile, unlink } from "node:fs/promises";
+import { createHidden } from "./background-agent";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { PaseoApi } from "@getpaseo/client";
@@ -283,14 +284,15 @@ export class SummaryService {
     // Paseo removes a merged/archived workspace's directory (autoArchiveAfterMerge) right after the turn
     // ends: the child cannot be created, so skip instead of recording an error against the card.
     const result = await runSummaryModels(paseo, summaryModelsOf(settings), {
-      create: (model) => paseo.workspaces.ref(task.workspaceId).agents.create({
+      create: (model) => createHidden((hidden) => paseo.workspaces.ref(task.workspaceId).agents.create({
+        ...hidden,
         parent: batch.agentIds[batch.agentIds.length - 1],
         config: readOnlyConfig(model),
         title: `Kanban summary · ${task.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-task": taskId },
         prompt,
         outputSchema: (section ? reworkOutputJsonSchema : outputJsonSchema) as unknown as Record<string, unknown>,
-      }),
+      })),
       parse: (text) => ({ ...parseModelOutput(text), correction: section ? correctionOf(text) : null }),
       remove: this.remove,
       timeoutMs: this.timeoutMs,

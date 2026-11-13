@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { deliveringBackgroundWork } from "./background-work";
 import { createHash } from "node:crypto";
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -76,6 +77,11 @@ export type LlmReviewInput = {
   incremental?: boolean;
   /** The delivering session, as the review session's parent. */
   parentAgentId: string;
+  /**
+   * Background tasks (Paseo 0.16) still running in the delivering session when the review starts (§4.4):
+   * one line each. Absent when the host has none or they could not be read.
+   */
+  backgroundWork?: string[];
 };
 export type LlmVerdict = { id: string; verdict: "pass" | "fail" | "na"; detail: string; file?: string; line?: number; quote?: string };
 export type LlmReview = (input: LlmReviewInput, paseo: PaseoApi) => Promise<{ model: string; verdicts: LlmVerdict[] }>;
@@ -798,6 +804,8 @@ export class AutoReviewService {
       ...(incremental ? { incremental: true } : {}),
       parentAgentId: delivery.agentId,
     };
+    const running = await deliveringBackgroundWork(paseo, delivery.agentId);
+    if (running) input.backgroundWork = running;
     const started = this.clock();
     let result: Awaited<ReturnType<LlmReview>>;
     try {

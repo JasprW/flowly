@@ -1,0 +1,9 @@
+moved done rev 4
+wrapup-check {"taskId":"11840631-1548-4687-8c4f-3a824d9e6915","revision":4,"workspace":{"id":"wks_dafeef70e86a8d40","kind":"local_checkout","directory":"/private/var/folders/0b/f1crzdg95g5fwbq49s_3pw9c0000gq/T/p16live-wQRSAw"},"archiveWorkspace":true,"sessions":1,"git":null,"blockers":["1 session has background tasks still running. Stop them or wait for them to finish first."],"warnings":[]}
+archived? null wrap null
+wrapup refused: Request failed: Cannot wrap up: 1 session has background tasks still running. Stop them or wait for them to finish first. requestType=plugin.rpc.invoke.request code=handler_error
+{"visible":[],"all":[["277860e9","Kanban summary · Write HELLO.md",true,"archived"],["50271ac6","Flowly review · Write HELLO.md",true,"archived"]]}
+{"visible":[],"all":[["277860e9","Kanban summary · Write HELLO.md",true,"archived"],["50271ac6","Flowly review · Write HELLO.md",true,"archived"]]}
+{"visible":[],"all":[["277860e9","Kanban summary · Write HELLO.md",true,"archived"],["50271ac6","Flowly review · Write HELLO.md",true,"archived"]]}
+{"visible":[],"all":[["c0660060","Flowly memory review · Write HELLO.md",true,"live"],["277860e9","Kanban summary · Write HELLO.md",true,"archived"],["50271ac6","Flowly review · Write HELLO.md",true,"archived"]]}
+{"visible":[],"all":[["7704b1f6","Flowly insights · Flowly memory review · Write HELLO.md",true,"live"],["c0660060","Flowly memory review · Write HELLO.md",true,"archived"],["277860e9","Kanban summary · Write HELLO.md",true,"archived"],["50271ac6","Flowly review · Write HELLO.md",true,"archived"]]}

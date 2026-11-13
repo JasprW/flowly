@@ -1,6 +1,6 @@
 # Paseo 0.16 插件能力：调研与接入设计
 
-2026-11-11，卡片「paseo 0.16 plugin」。状态：已设计，未实现。用户决定（2026-11-11）：重点做后台任务（§3.1、§3.2）和 composer（§3.3、§3.4）；侧栏视图、New workspace 项、按设备的设置和其余低优先级能力暂缓（on hold，§3.8），设计保留。每一项接入都要另开卡片，先在本文件补齐该项的契约再动代码。
+2026-11-11，卡片「paseo 0.16 plugin」。状态：已设计；§3.1、§3.2 已实现（卡片「Paseo 0.16 接入：后台任务」，基于 0.16.0-beta.1，2026-11-12 升到 beta.2 并在用户本机 0.16.0-beta.2 daemon 上实测）。用户决定（2026-11-11）：重点做后台任务（§3.1、§3.2）和 composer（§3.3、§3.4）；侧栏视图、New workspace 项、按设备的设置和其余低优先级能力暂缓（on hold，§3.8），设计保留。每一项接入都要另开卡片，先在本文件补齐该项的契约再动代码。
 
 ## 1. 出处与前提
 
@@ -34,10 +34,19 @@
 - **API**：`@getpaseo/client` 的 `agents.create({ background: true, metadata })`。后台 agent 不出现在默认列表、标签页、子 agent 轨道和通知里；它新建的工作区也是后台工作区。
 - **对照标志**：`features.backgroundAgents`；客户端守卫 `requireBackgroundCreation`（未给 `workspaceId` / `callerAgentId` 时改查 `backgroundWorkspaces`）。
 - **探测**：B。
-- **用法**：卡片总结、窗外 insight、项目记忆复盘、Insights 摘要、workflow insights、自动验收的评审 session 改为后台 agent，用户的 session 列表和通知里不再出现这些临时 session。项目级运行（记忆、Insights、workflow insights）可不再依赖 `Flowly background` 工作区的“归档后再恢复”。
-- **未定**：后台 agent 结束后是否仍进入 Paseo 的归档列表。接入前必须实测：若不进归档，硬删除例外可以收窄；若仍进，硬删除照旧。
+- **用法**：卡片总结、窗外 insight、项目记忆复盘、Insights 摘要、workflow insights、自动验收的评审 session 改为后台 agent，用户的 session 列表和通知里不再出现这些临时 session。
+- **实测结论**（2026-11-11，隔离的 0.16.0-beta.1 daemon，Claude haiku）：
+  - 后台 agent 运行中和结束后都不在默认 `agents.list` 里；归档后也不在默认的归档列表（`filter.includeArchived`）里，只有带 `includeBackground` 才列得出。Paseo 应用的历史视图不请求后台 agent，所以**归档后的后台 agent 不会堆在用户的归档里**。
+  - `deleteAgent` 对后台 agent 照样有效。
+  - 不给 `workspaceId` 时，每次创建都会新建一个后台工作区；给定已存在的工作区则不新建。
+  - 旧宿主的拒绝文案：0.16 client 对旧 daemon 为 `Update the host to use background agents.`；0.15.0–0.15.3 client 为 `Update the host to use background workspaces.`；0.15.4 daemon 拒绝 `background` 与 `workspaceId` 同时出现（`background is workspace creation intent; ...`）。三者都按 §2 B 识别为“不支持”。
+- **契约**：
+  - 创建（`server/background-agent.ts` 的 `createHidden`）：先带 `background: true` 创建；遇到上面的拒绝文案时记日志（不进 `$exception`），本次插件启动内不再尝试，并立即按 0.15 方式重建这一次。其它创建失败照旧按各功能的失败处理。
+  - 卡片级运行（卡片总结、窗外 insight、自动验收）仍在卡片自己的工作区里创建，只是加上 `background: true`。
+  - 项目级运行（记忆复盘、Insights 摘要、workflow insights）在已知支持后台 agent 时，改用每个项目一个**后台工作区**（`workspaces.create({ background: true })`，标题仍为 `Flowly background`，id 记在 `background-workspaces.json` 的 `hidden`）。它本身不出现在侧栏，所以不归档、不恢复，一直复用；被删或已归档时新建一个。支持情况未知（插件启动后的第一次运行）时，只要任一项目记有隐藏工作区（支持与否是宿主的属性）就按隐藏路径走，宿主拒绝后台创建再回到可见流程；一条记录都没有（本机第一次运行）或已知不支持时走原来的可见工作区流程（`docs/BACKGROUND-WORKSPACE-SPEC.md`）。
+  - 结束清理（`server/summarizer-remove.ts`）：后台 agent 用 SDK 的 `archive()`，不再走本地连接硬删除；归档失败时退回硬删除。非后台 agent（旧宿主）仍硬删除。代价：后台 agent 的记录留在宿主磁盘上，只是不显示；用户界面里看不到，也不占归档列表。
 - **旧宿主**：现有临时 session、`Flowly background` 工作区与硬删除流程不变。
-- **验收**：0.16 宿主上上述运行期间，Paseo 的 agent 列表、标签页和通知中看不到它们；运行结果与 0.15 一致；运行结束后 Paseo 归档列表里不新增条目（或在实测结论下仍按硬删除清理）；0.15 宿主行为不变。
+- **验收**：0.16 宿主上上述运行期间，Paseo 的 agent 列表、标签页和通知中看不到它们；运行结果与 0.15 一致；运行结束后 Paseo 归档列表里不新增条目；0.15 宿主行为不变。
 
 ### 3.2 Agent 后台任务（background work）【重点】
 
@@ -45,9 +54,10 @@
 - **对照标志**：`features.agentBackgroundWork`；守卫 `assertAgentBackgroundWorkSupported`。
 - **探测**：B。
 - **用法**：
-  - 自动验收：交付时该 session 仍有后台任务在跑（例如测试进程），评审先等待或把它写进评审输入，避免对半成品下结论（`docs/AUTO-REVIEW-SPEC.md`）。
-  - Wrap up 预检：有后台任务在跑的 session 与“运行中”同样阻止 Wrap up（`docs/MULTITASK-SPEC.md`）。
-  - 卡片 session 状态：“空闲但有后台任务”单独显示，不显示成已完成。
+  - 自动验收：交付时该 session 仍有后台任务在跑（例如测试进程），把它们写进评审输入，不等待（`docs/AUTO-REVIEW-SPEC.md` §4.4）。不等待的原因：后台任务可能是永不结束的 dev server 或 watcher，等待会让评审无限期挂起。
+  - Wrap up 预检：有后台任务在跑的 session 与“运行中”同样阻止 Wrap up（`docs/MULTITASK-SPEC.md`）。自动 Wrap up 与删除卡片时的归档沿用同一预检，所以也被阻止。
+  - 卡片 session 状态：“空闲但有后台任务”单独显示为 `Background tasks running`，不显示成已完成。
+- **读取方式**：Wrap up 预检与 session 状态读 agent 快照里的 `backgroundWork.count`（宿主随 agent 更新推送，不另外轮询）；自动验收在交付时调一次 `backgroundWork.list()`（5 秒超时，最多 20 条）取描述。旧宿主的快照没有这个字段，按 0 处理；`list` 不存在或失败时当作没有后台任务。
 - **旧宿主**：不查询，行为同今天。
 - **验收**：0.16 宿主上，有后台任务的 session 阻止 Wrap up 并显示原因；自动验收在有后台任务时按 AUTO-REVIEW-SPEC 新增的规则处理；查询失败按 B 降级，不阻塞交付。
 
@@ -142,7 +152,7 @@
 
 ## 4. 顺序与依赖
 
-1. 先等 0.16.0 正式版。正式版前不把 SDK 依赖改到 beta，也不改 `requirements.paseo`。
+1. 原定先等 0.16.0 正式版。用户决定（2026-11-11，后台任务卡片）：先用 0.16.0-beta.1 实现，SDK 依赖暂锁 beta（2026-11-12 跟随宿主升到 0.16.0-beta.2；beta.2 的 hook agent 多了 `background`，`agent.open.before` 请求的 `background` 为必填），正式版发布后改锁 0.16.0。`requirements.paseo` 不改。
 2. SDK 升到 0.16.0 后，`requirements.paseo` 仍保持 `>=0.15.0`，所有能力按 §2 探测、0.15 回退。心跳加 `paseo_version`（用户决定 2026-11-11，和 SDK 升级一起做，复用 `server/paseo-version.ts`，同步改 `docs/TELEMETRY-SPEC.md` §4、`heartbeatProperties`、key-set 测试和隐私说明），用来看 0.16 的普及率。只有当用户看过普及率、决定放弃 0.15 宿主时才把 `requirements.paseo` 提到 `>=0.16.0`，并在同一改动里删掉 §5 标为“可删除”的回退代码与例外。
 3. 实施分三个任务（用户决定 2026-11-11，不再按小节拆分）：
    - **Composer**：SDK 升级与 §2 探测（先做，后两个任务复用）、§3.3、§3.4。§3.4 判断卡片 session 时元数据还没有就走插件 RPC。
@@ -152,13 +162,13 @@
 
 ## 5. 对 AGENTS.md 例外的影响
 
-只记录影响，不在本卡修改 AGENTS.md；每项在接入它的卡片里、并且最低宿主提到 0.16 时再改。
+只记录影响，不在调研卡修改 AGENTS.md；每项在接入它的卡片里改写对应例外，最低宿主提到 0.16 时再删除。
 
 | 例外 | 0.16 后 | 依据 |
 |---|---|---|
 | web-composer（`client/web-composer.ts`，DOM 填入 Next move） | **可删除**（最低宿主为 0.16 时）；之前仅作 0.15 回退 | §3.3 composer `setPrompt` / `focus` 覆盖其全部用途 |
-| Flowly background 工作区（`server/background-workspace.ts`，归档后经本地连接恢复） | **可收窄或删除**，取决于 §3.1 实测 | 后台 agent 自带隐藏的后台工作区 |
-| 临时 session 硬删除（`server/summarizer-remove.ts`） | **待实测**：后台 agent 不进归档则可收窄，否则保留 | §3.1 未定项；SDK 仍无删除 agent（`deleteAgent` 只在 `DaemonClient`） |
+| Flowly background 工作区（`server/background-workspace.ts`，归档后经本地连接恢复） | **已收窄**：0.16 宿主改用不显示的后台工作区，不归档也不恢复，不用本地连接；归档/恢复只留给 0.15 宿主。最低宿主为 0.16 时**可删除**该例外 | §3.1 实测与契约 |
+| 临时 session 硬删除（`server/summarizer-remove.ts`） | **已收窄**：后台 agent 用 SDK `archive()`（实测不进用户的归档），只有非后台 agent 和归档失败时才硬删除。最低宿主为 0.16 时**可删除**该例外 | §3.1 实测；SDK 仍无删除 agent（`deleteAgent` 只在 `DaemonClient`） |
 | Unwrap 恢复工作区与 session（`server/workspace-restore.ts`） | **保留** | `PaseoApi` 仍无 restore / unarchive；`DaemonClient.undoWorkspaceArchive` 是新官方方法，但仍要本地连接，可在保留例外的前提下改用它 |
 | 已读清除原生 attention（`server/session-reads.ts`） | **保留** | `clearAgentAttention` / `clearWorkspaceAttention` 只在 `DaemonClient` |
 | 错误报告带 Paseo 版本（`server/paseo-version.ts`） | **保留** | `PaseoApi` 仍不暴露版本 |

@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import type { PaseoApi } from "@getpaseo/client";
 import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,6 +11,10 @@ import { BoardService } from "./service";
 import type { SummarySettings } from "../shared/summary";
 import type { CommandRecord, WorkflowSettings } from "../shared/workflow-insights";
 import { BackgroundWorkspaces } from "./background-workspace";
+import { resetBackgroundAgents } from "./background-agent";
+
+// The visible-workspace path (a host without background agents); the hidden one is covered in background-workspace.test.ts.
+beforeEach(() => resetBackgroundAgents(false));
 import { GuardrailsService } from "./guardrails";
 import { emptyCounts, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
 import type { RepoFiles } from "./review-detect";

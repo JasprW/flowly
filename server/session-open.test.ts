@@ -15,6 +15,8 @@ function request(overrides: Partial<PluginSessionOpenRequest> = {}): PluginSessi
     purpose: "interactive",
     title: null,
     labels: {},
+    metadata: {},
+    background: false,
     tools: [],
     env: { KEEP: "1" },
     mcpServers: { other: { type: "http", url: "http://other" } },

@@ -39,6 +39,15 @@ test("session state distinguishes actual work, permission, error and archive", (
   expect(sessionState({ ...actor, status: "closed" }).label).toBe("Closed");
   expect(sessionState({ ...actor, archivedAt: "now" }).label).toBe("Archived");
 });
+test("an idle session with background tasks running says so instead of finished or idle (Paseo 0.16)", () => {
+  const working = { ...actor, lastUserMessageAt: "2026-11-11T00:00:00Z", backgroundWork: { count: 1 } };
+  expect(sessionState(working).label).toBe("Background tasks running");
+  expect(sessionState({ ...working, attentionReason: "finished" }).label).toBe("Background tasks running");
+  expect(sessionState(working, [event("agent.turn_ended", "2026-11-11T00:01:00Z")]).label).toBe("Background tasks running");
+  expect(sessionState({ ...working, status: "running" }).label).toBe("Running");
+  expect(sessionState({ ...working, attentionReason: "permission" }).label).toBe("Waiting for approval");
+  expect(sessionState({ ...working, backgroundWork: { count: 0 } }).label).toBe("Idle");
+});
 test("finished and ended signals never replace a newer turn or user message", () => {
   expect(sessionState({ ...actor, attentionReason: "finished" }).label).toBe(
     "Finished turn",

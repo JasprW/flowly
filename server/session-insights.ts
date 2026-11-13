@@ -1,4 +1,5 @@
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
+import { createHidden } from "./background-agent";
 import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -79,7 +80,7 @@ export class SessionInsightStore {
 }
 
 /** The session the hook names, as far as insights need it. */
-export type OutsideAgent = { id: string; workspaceId: string | null; parentAgentId: string | null; title: string | null; cwd: string; labels?: Readonly<Record<string, string>> | null };
+export type OutsideAgent = { id: string; workspaceId: string | null; parentAgentId: string | null; title: string | null; cwd: string; labels?: Readonly<Record<string, string>> | null; background?: boolean };
 export type InsightSettings = { enabled: boolean; parts: InsightParts; model: SummaryModelChoice };
 
 type Batch = { text: string; endedAt: string; agent: OutsideAgent };
@@ -89,10 +90,11 @@ const ROW_TIMEOUT_MS = 10_000;
 /**
  * A session the outside path handles (NATIVE-SESSION-SPEC §12.1); the caller has already ruled out managed ones.
  * Flowly's own temporary sessions (memory review, digest, workflow insights) are not the person's work: they are
- * deleted as soon as they finish, so an insight run for them only fails or races that delete.
+ * deleted as soon as they finish, so an insight run for them only fails or races that delete. Hook events carry no
+ * labels, so on a 0.16 host they are recognised as background agents (PASEO-0.16-SPEC §3.1); a person's session never is.
  */
 export function isOutsideCandidate(agent: OutsideAgent) {
-  return !!agent.workspaceId && !agent.parentAgentId && !isSummarizer(agent);
+  return !!agent.workspaceId && !agent.parentAgentId && !agent.background && !isSummarizer(agent);
 }
 
 function emptyInsight(agent: OutsideAgent, now: string): SessionInsight {
@@ -210,14 +212,15 @@ export class SessionInsightService {
     // Paseo removes a merged/archived workspace's directory (autoArchiveAfterMerge) right after the turn
     // ends: the child cannot be created and the session is gone with it, so skip instead of failing.
     const result = await runSummaryModels(paseo, settings.model, {
-      create: (model) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
+      create: (model) => createHidden((hidden) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
+        ...hidden,
         parent: agent.id,
         config: readOnlyConfig(model),
         title: `Flowly insights · ${agent.title || "session"}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-session": agent.id },
         prompt,
         outputSchema: insightJsonSchema(parts) as unknown as Record<string, unknown>,
-      }),
+      })),
       parse: (text) => parseInsightOutput(text, parts),
       remove: this.remove,
       timeoutMs: this.timeoutMs,

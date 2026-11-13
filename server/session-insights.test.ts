@@ -113,6 +113,8 @@ test("off by default switch, no parts, subagents, sessions without a workspace, 
   await x.service.enqueue(x.agent, [{ type: "reasoning" }], x.paseo);
   // Flowly's own temporary sessions (memory review, digest, workflow insights): no insight, no stored entry.
   await x.service.enqueue({ ...x.agent, labels: { flowly: "summarizer", "flowly-memory": "retro" } }, turn("x"), x.paseo);
+  // On a 0.16 host the hook agent has no labels; a background agent is always one of Flowly's helpers.
+  await x.service.enqueue({ ...x.agent, background: true }, turn("x"), x.paseo);
   expect(x.created).toEqual([]);
   expect((await x.service.view()).length).toBe(0);
 });

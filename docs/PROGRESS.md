@@ -1213,3 +1213,20 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 端到端测出并修复：Unwrap 后侧栏仍显示 "Workspace is unavailable or archived."（工作区查询缓存的还是归档状态）；现在 Unwrap 后会像 Refresh details 那样重新读取。
 - [ ] 未跑：真机手机（只在浏览器手机宽度下验证）、独立会话复验。
 - 引导/提示/What's new：本步不加，Unwrap 只在已收尾卡片的侧栏里出现、按钮自明；第二步默认开启 Auto wrap up 时一并更新 `first-done` 提示、导览和 What's new。遥测：不加字段，第二步再定。
+
+## 2026-11-11 Paseo 0.16 接入：后台 agent 与 agent 后台任务
+
+- 来源卡：Paseo 0.16 接入：后台任务。规格：`docs/PASEO-0.16-SPEC.md` §3.1、§3.2（含实测结论与契约）、§4（用户决定先用 beta）、§5；`docs/AUTO-REVIEW-SPEC.md` §4.4、`docs/MULTITASK-SPEC.md` D 节、`docs/BACKGROUND-WORKSPACE-SPEC.md`、`docs/SESSION-UX-SPEC.md`、NATIVE-SESSION-SPEC §12.2、TASK-SUMMARY-SPEC §10、AGENTS.md 两条例外。
+- [x] SDK：`@getpaseo/client`、`plugin`、`protocol` 锁到 0.16.0-beta.1（用户 2026-11-11 决定不等正式版；本机 npm 镜像没有 beta，安装要 `--registry=https://registry.npmjs.org/`）。`requirements.paseo` 仍为 `>=0.15.0`。跟着改：`server/error-report.ts` 的 handle 包装兼容 0.16 的重载，`server/session-open.test.ts` 补 `metadata`。
+- [x] 实测（隔离 0.16.0-beta.1 daemon，`--home /tmp/p16/home`、端口 6790，用户的 `~/.paseo` 未动）：后台 agent 不在默认列表，归档后也不在默认归档列表（只有 `includeBackground` 列得出）；`deleteAgent` 仍有效；不给 workspaceId 时每次新建后台工作区。旧宿主的三种拒绝文案见 spec §3.1（0.15.4 daemon 的那条是对本机 daemon 实测的）。
+- [x] §3.1：`server/background-agent.ts` `createHidden`（方式 B 探测，拒绝即本次启动缓存为不支持并按 0.15 重建）。卡片总结、窗外 insight、记忆复盘、Insights 摘要、workflow insights（含 guardrails 补跑）、自动验收评审都经它创建。`server/summarizer-remove.ts`：后台 agent 用 SDK `archive()`，失败或非后台才硬删除。`server/background-workspace.ts`：已知支持时每项目一个隐藏后台工作区（`hidden` 映射），不归档不恢复。
+- [x] §3.2：`server/wrapup.ts` 预检把 `backgroundWork.count > 0` 的空闲 session 列为阻止项（自动 Wrap up、删除时归档共用）；`server/background-work.ts` + `server/auto-review.ts`/`server/review-session.ts` 把交付 session 仍在跑的后台任务写进评审输入（选“写进输入”而非等待：dev server 之类可能永不结束）；`client/session-state.ts` 新状态 `Background tasks running`，9 个目录已补。
+- [x] `npm run typecheck` 0；`npm test` 155 文件通过 / 1 跳过，1369 通过、6 跳过。新增/改动测试：background-agent、background-work、summarizer-remove、background-workspace（隐藏路径）、wrapup（后台任务阻止）、review-session（提示一节）、session-state（标签）、workflow-insights（固定旧宿主路径）。
+- [x] 端到端（隔离 0.16 daemon，本地目录安装的插件，fixture 项目 `p16 e2e`，Claude haiku session 在后台跑 `sleep 600`）：交付触发的总结和评审 session 都是 `background=true`，运行中与结束后都不在默认列表和默认归档里；评审提示里有后台任务一节，评审通过；总结正常生成；session 快照 `backgroundWork.count=1`；卡片进 Done 后 `wrapup-check` 给出阻止项、`tasks.wrapup` 被拒；`backgroundWork.stop` 后阻止项消失。Insights 摘要与记忆复盘跑在隐藏后台工作区里，侧栏没有出现 `Flowly background`，结果正常。
+- [ ] 未跑：Codex 的后台任务（只用 Claude 验证）；workflow insights 在 0.16 上的端到端（与摘要同路径，仅单测）；0.16 的 UI 截图（状态标签只经快照和单测验证）；独立会话复验；装到用户真实 0.15.4 daemon 上的回归（靠拒绝文案实测与单测）。
+- [x] 2026-11-12 SDK 升到 0.16.0-beta.2（用户本机宿主已是 beta.2）；`server/session-open.test.ts` 补必填的 `background: false`。
+- [x] 真实 daemon 端到端（用户本机 0.16.0-beta.2，本地目录安装的插件，临时项目 `p16 live e2e`，Claude haiku session 在后台跑 `sleep 900`；证据 `docs/verification/paseo16-live-2026-11-12/report.md`）：总结、评审、记忆复盘、Insights 摘要、workflow insights 都是 `background=true`，轮询期间默认列表里一次都没出现，结束后全部归档；评审提示含后台任务一节并通过；抽屉里 session 显示 `Background tasks running`（card.png）；进 Done 后自动 Wrap up 未执行，`wrapup-check` 阻止、`tasks.wrapup` 被拒，`backgroundWork.stop` 后阻止项清空；`Flowly background` 工作区是 `background=true`，默认工作区列表里没有。测试项目、session、工作区、临时目录和 `removed/` 备份已清理并核对。
+- [x] 实测发现的 bug：记忆复盘 helper 结束后又被当成窗外 session 跑了一次 insight（`Flowly insights · Flowly memory review · …`）。原因：宿主 `describeHookAgent` 不带 `labels`，`isSummarizer` 在 hook 路径上永远为假。修正：`isOutsideCandidate` 同时排除 `background=true`；`server/session-insights.test.ts` 加用例（改前失败、改后通过）。0.15 宿主的 hook 是否带 labels 未核对。
+- [x] PR #100 CodeRabbit：插件启动后支持情况未知，第一次项目级运行走了可见的 `Flowly background`，结束后归档进用户的归档（step2 实测里就出现过，当时误判为检查写法问题）。修正：支持未知时只要任一项目记有隐藏工作区就走隐藏路径，宿主拒绝再回到可见流程；`server/background-workspace.test.ts` 加两例（改前失败、改后通过）；`live2.mjs` 在同一 daemon 上复验（新项目摘要、重载插件后再摘要，全程无可见工作区），已清理。本机第一次运行（没有任何记录）仍走可见流程。验证脚本按评审收窄了 helper 范围、列表失败不再当成“没有”。
+- 取舍：后台 agent 归档后记录仍留在宿主磁盘（不显示、不占用户归档），不再硬删除。
+- 引导/What's new/遥测：不加。临时 session 变隐藏属于“不再打扰”，新状态标签自明；不加心跳字段（`paseo_version` 由 composer 卡片做）。
