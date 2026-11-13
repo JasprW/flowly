@@ -42,6 +42,7 @@ async function setup() {
     JSON.stringify({ findings: [{ target: "repo_tool", title: "i18n helper", evidence: "3 cards", proposal: "scripts/i18n.mjs", benefit: "fewer edits", confidence: "high", cards }], noise: "", verdict: "ok" });
   const timelines = new Map<string, { timestamp: string; item: unknown }[]>();
   const agentLabels = new Map<string, Record<string, string>>();
+  const refetched: string[] = [];
   const paseo = {
     providers: {
       listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
@@ -54,7 +55,12 @@ async function setup() {
       }),
       ref: (id: string) => ({
         refresh: async () => ({ agent: { id, labels: agentLabels.get(id) || {} } }),
-        timeline: { refetch: async () => ({ entries: timelines.get(id) || [], hasOlder: false, startCursor: null }) },
+        timeline: {
+          refetch: async () => {
+            refetched.push(id);
+            return { entries: timelines.get(id) || [], hasOlder: false, startCursor: null };
+          },
+        },
       }),
     },
     workspaces: {
@@ -100,6 +106,7 @@ async function setup() {
     reply,
     timelines,
     agentLabels,
+    refetched,
     archived: () => archived,
     removed,
     setSettings: (s: Partial<WorkflowSettings>) => (settings = { ...settings, ...s }),
@@ -157,6 +164,34 @@ test("a turn's shell calls are recorded only when on, for the card of the worksp
     b.projects[0].workflowInsights = false;
   });
   expect(await x.service.recordTurn(agent, [shell("c3", "npm test")], x.paseo)).toBe(0);
+});
+
+test("a turn's timeline is read only for a card session with workflow insights on, never for Flowly's own children", async () => {
+  const x = await setup();
+  const at = "2026-10-19T11:00:00.000Z";
+  for (const id of ["s0", "kid", "sum"]) x.timelines.set(id, [{ timestamp: at, item: { type: "user_message", text: "go" } }, { timestamp: at, item: shell(`${id}-c`, "npm test") }]);
+  // Not a card's workspace, no workspace, a background agent, a card summarizer or auto review child, a child already deleted.
+  expect(await x.service.turnEnded({ id: "s0", workspaceId: "elsewhere", provider: "claude" }, x.paseo)).toBe(0);
+  expect(await x.service.turnEnded({ id: "s0", workspaceId: null, provider: "claude" }, x.paseo)).toBe(0);
+  expect(await x.service.turnEnded({ id: "s0", workspaceId: "w0", provider: "claude", background: true }, x.paseo)).toBe(0);
+  x.agentLabels.set("sum", { flowly: "summarizer" });
+  expect(await x.service.turnEnded({ id: "sum", workspaceId: "w0", provider: "claude", parentAgentId: "s0" }, x.paseo)).toBe(0);
+  const gone = { ...x.paseo, agents: { ...x.paseo.agents, ref: (id: string) => ({ ...x.paseo.agents.ref(id), refresh: async () => { throw new Error(`Agent not found: ${id}`); } }) } } as unknown as PaseoApi;
+  expect(await x.service.turnEnded({ id: "kid", workspaceId: "w0", provider: "claude", parentAgentId: "s0" }, gone)).toBe(0);
+  // Workflow insights off, or the card archived.
+  x.setSettings({ enabled: false });
+  expect(await x.service.turnEnded({ id: "s0", workspaceId: "w0", provider: "claude" }, x.paseo)).toBe(0);
+  x.setSettings({ enabled: true });
+  await x.board.mutate((b) => {
+    b.tasks[1].archivedAt = at;
+  });
+  expect(await x.service.turnEnded({ id: "s0", workspaceId: "w1", provider: "claude" }, x.paseo)).toBe(0);
+  expect(x.refetched).toEqual([]);
+  // A card session, and a person's own child session in the card's workspace, are recorded as before.
+  expect(await x.service.turnEnded({ id: "s0", workspaceId: "w0", provider: "claude" }, x.paseo)).toBe(1);
+  expect(await x.service.turnEnded({ id: "kid", workspaceId: "w0", provider: "claude", parentAgentId: "s0" }, x.paseo)).toBe(1);
+  expect(x.refetched).toEqual(["s0", "kid"]);
+  expect((await x.log.read("p")).map((r) => r.id)).toEqual(["s0:s0-c", "kid:kid-c"]);
 });
 
 test("backfill reads card sessions' timelines once", async () => {

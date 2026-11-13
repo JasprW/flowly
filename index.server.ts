@@ -656,10 +656,11 @@ export default function contribute(host: PluginServerContext) {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
     if (!identity) {
-      // A session Flowly does not manage (NATIVE-SESSION-SPEC §12): insights after a completed turn, when switched on.
+      // A session Flowly does not manage (NATIVE-SESSION-SPEC §12): insights after a completed turn, when switched on;
+      // its timeline is read only once the session qualifies.
       if (event.outcome.kind === "completed")
-        void turnTimeline(paseo, event.agent.id)
-          .then((timeline) => sessionInsights.enqueue(event.agent, timeline, paseo, endedAt))
+        void sessionInsights
+          .turnEnded(event.agent, paseo, endedAt)
           .catch((e) => logFailure("Flowly session insight failed:", e));
       return;
     }
@@ -702,8 +703,9 @@ export default function contribute(host: PluginServerContext) {
   });
   // Shell calls of any card-workspace session (WORKFLOW-INSIGHTS-SPEC §3.1); after the hook, never blocking it.
   server.addHook("agent.turn.after", async (event, { paseo }) => {
-    void turnTimeline(paseo, event.agent.id)
-      .then((timeline) => workflow.recordTurn(event.agent, timeline, paseo))
+    // The timeline is read only for a card session of a project with workflow insights on.
+    void workflow
+      .turnEnded(event.agent, paseo)
       .catch((e) => logFailure("Workflow insights commands not recorded:", e));
   });
   server.addHook("agent.permission.before", async (event, { paseo }) => {
