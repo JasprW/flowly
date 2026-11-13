@@ -1,3 +1,9 @@
+## 2026-11-13 PR #103 table wrapping review
+
+- Removed `wordBreak: "break-all"` from web table cells. `overflowWrap: "anywhere"` preserves normal word-boundary wrapping while allowing overlong identifiers and numbers to break within their columns. Contract updated in SESSION-UX-SPEC §8.
+- Verification results are recorded on PR #103. Desktop and physical-phone visual acceptance remain UNRUN.
+- Onboarding and telemetry need no changes for this existing table-rendering refinement.
+
 # Implementation progress
 
 ## Preserve intraword underscores in session/card Markdown — 2026-11-12

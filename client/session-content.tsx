@@ -63,7 +63,6 @@ const Inline = memo(function Inline({
             width: "100%",
             textAlign: tableAlign,
             ...(Platform.OS === "web" && {
-              wordBreak: "break-all",
               overflowWrap: "anywhere",
             }),
           }),
