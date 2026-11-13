@@ -212,7 +212,9 @@ export const linearAdapter: ConnectorAdapter = {
     const { issue, comments } = full as Full;
     const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
     const discussion = comments.map((c) => `${c.id}:${c.updatedAt || c.createdAt}`);
-    return withDiscussion(hash([issue.title || "", issue.description || "", discussion]), hash(discussion));
+    // Sub-issues appear in the Markdown, so adding or renaming one is new content; their status is not.
+    const children = (issue.children?.nodes || []).map((c) => `${c.identifier || ""}:${c.title || ""}`);
+    return withDiscussion(hash([issue.title || "", issue.description || "", children, discussion]), hash(discussion));
   },
   markdown(summary, full, limit) {
     const { issue, comments } = full as Full;

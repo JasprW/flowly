@@ -154,8 +154,16 @@ describe("Linear (CONNECTORS-SPEC §15)", () => {
     expect(edited.fingerprint).not.toBe(first.fingerprint);
     expect(fingerprintChanged("output", first.fingerprint, edited.fingerprint)).toBe(false);
 
+    // A sub-issue's title is content, its status is not.
+    issues[1]!.state = "In Progress";
+    expect((await x.service.detail(ref, true)).fingerprint).toBe(edited.fingerprint);
+    issues[1]!.title = "Add full jitter";
+    const renamed = await x.service.detail(ref, true);
+    expect(renamed.fingerprint).not.toBe(edited.fingerprint);
+    expect(fingerprintChanged("output", edited.fingerprint, renamed.fingerprint)).toBe(false);
+
     comments["ENG-123"].push({ id: "c3", body: "Reopened.", created: "2026-10-20T09:00:00.000Z" });
-    expect(fingerprintChanged("output", edited.fingerprint, (await x.service.detail(ref, true)).fingerprint)).toBe(true);
+    expect(fingerprintChanged("output", renamed.fingerprint, (await x.service.detail(ref, true)).fingerprint)).toBe(true);
   });
 
   test("every request is a read-only GraphQL query POSTed to the API host", async () => {

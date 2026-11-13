@@ -352,12 +352,12 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 - **读取**：`issue(id: "TEAM-123")`（Linear 接受标识或 UUID），`remoteId` 存 UUID。完整读取同一个请求内带回描述、标签、project、cycle、parent、子 issue（最多 50）与评论（`first: 20, orderBy: createdAt` 取得最近 20 条，再按 createdAt 升序显示；Linear 的 first 从最新开始）。
 - **我的条目**：`viewer.assignedIssues`，过滤掉 state type 为 `completed`/`canceled` 的，按 updatedAt 新到旧。**文字搜索**：`issues(filter: { title: { containsIgnoreCase: $term } })`。
 - **状态类别**：state type `triage`/`backlog`/`unstarted` → new，`started` → indeterminate，`completed`/`canceled` → done。`priority` 取 `priorityLabel`，“No priority” 记为空；`container` 为团队名。
-- **指纹**：标题 + 描述 + 评论（id:updatedAt），评论单独作为 discussion 部分；只改状态、负责人、标签不变。`updatedCoversContent=false`（未确认新评论是否推进 issue 的 updatedAt）。
+- **指纹**：标题 + 描述 + 子 issue（标识:标题）+ 评论（id:updatedAt），评论单独作为 discussion 部分；只改状态（包括子 issue 的状态）、负责人、标签不变。`updatedCoversContent=false`（未确认新评论是否推进 issue 的 updatedAt）。
 - **Markdown**：标题、链接，然后元数据（状态、团队、优先级、负责人、标签、project、cycle、parent、估点、截止日、分支、更新时间），然后描述，然后子 issue 列表 `TEAM-n 标题（状态）`，然后最近 20 条评论。Linear 的描述与评论本身是 Markdown，不做转换。
 - **批量摘要**：id 过滤只接受 UUID，`getMany` 逐个查询，并发 4（§5）。
 - **错误**：Linear 把 GraphQL 问题（包括被拒的 key 与限流）以 HTTP 400 + `errors` 返回，也会以 HTTP 200 返回（包括 data 部分成功）。任何 `errors` 都按失败处理，不把缺失的评论或列表当作有效内容覆盖缓存。`AUTHENTICATION_ERROR`/“not authenticated” → AUTH；`RATELIMITED` 或 429 → UNAVAILABLE 并读 `Retry-After`；“Entity not found” → NOT_FOUND；其他 → INVALID（带第一条错误信息）。
 - **界面**：品牌图标用 Simple Icons 的 Linear 路径（CC0）渲染成 48 px PNG，颜色 #5E6AD2，以 data URI 打包。设置 → Connections 增加第七个分组；地址占位 `https://linear.app/your-workspace`。
-- **验收**：连接能校验并显示账户，错 workspace 的 key 被拒；粘贴 issue 链接与手输 `TEAM-123` 都能解析；**From Linear** 列出分配给我的未完成 issue；agent 能用 `flowly_read_external` 读 issue（描述、元数据、子 issue、评论）；改描述或加评论会让指纹变化，只改状态不会；key 被吊销时连接标记 `authFailed` 且不丢缓存内容。
+- **验收**：连接能校验并显示账户，错 workspace 的 key 被拒；粘贴 issue 链接与手输 `TEAM-123` 都能解析；**From Linear** 列出分配给我的未完成 issue；agent 能用 `flowly_read_external` 读 issue（描述、元数据、子 issue、评论）；改描述、增改子 issue 或加评论会让指纹变化，只改状态不会；key 被吊销时连接标记 `authFailed` 且不丢缓存内容。
 - **测试**：`server/connectors/linear.test.ts`（mock GraphQL：`Authorization` 头、API 域名、错 workspace、链接与 key、我的 issue、搜索词走 variables、完整读取与 Markdown、指纹、所有请求都是 POST 到 `/graphql` 的 query、限流）、`shared/connectors.test.ts`（链接识别、`TEAM-123` key、裸数字当文字、与 Jira 同时连接时的歧义）。`server/connectors/fake.ts` 的路由多收一个可选的请求体参数，供 GraphQL 路由使用。
 - onboarding：更新欢迎页功能行、`jira-connect` tip 文案与 README；不新增 tip id（已有 tip 覆盖）。
 - 遥测：不加心跳字段，理由同 §14。What's new：由 release 任务维护，本功能 PR 不加条目。
