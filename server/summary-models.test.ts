@@ -23,7 +23,7 @@ test("shared callers get ordered parsing fallback, cleanup before retry, and sto
     return { id: model, archive: async () => undefined, waitForFinish: async () => ({ status: "idle", lastMessage: model === "two/c" ? "bad" : "[]" }) };
   };
   const result = await runSummaryModels(paseo, ["missing/x", "two/c", "one/b", "one/a"], {
-    create, parse: (text) => JSON.parse(text!), timeoutMs: 100,
+    create, parse: (text) => JSON.parse(text!), timeoutMs: 100, prompt: "p",
     remove: async (agent) => { actions.push(`remove ${agent.id}`); },
   });
   expect(result).toEqual({ model: "one/b", output: [] });
@@ -33,14 +33,14 @@ test("shared callers get ordered parsing fallback, cleanup before retry, and sto
 test("provider-list failure cannot mark unknown models as available", async () => {
   const broken = { providers: { ...paseo.providers, listModels: async () => { throw new Error("discovery offline"); } } } as unknown as PaseoApi;
   const create = vi.fn();
-  await expect(runSummaryModels(broken, ["one/a"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100 })).rejects.toThrow(/No configured summary model/);
-  await expect(runSummaryModels(broken, ["one/a"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100 })).rejects.toBeInstanceOf(SummaryModelError);
+  await expect(runSummaryModels(broken, ["one/a"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100, prompt: "p" })).rejects.toThrow(/No configured summary model/);
+  await expect(runSummaryModels(broken, ["one/a"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100, prompt: "p" })).rejects.toBeInstanceOf(SummaryModelError);
   expect(create).not.toHaveBeenCalled();
 });
 
 test("every model failing is a SummaryModelError naming each failure", async () => {
   const create = async (model: string) => ({ id: model, archive: async () => undefined, waitForFinish: async () => ({ status: "timeout" }) });
-  const error = await runSummaryModels(paseo, ["one/a", "two/c"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100 }).catch((e: unknown) => e);
+  const error = await runSummaryModels(paseo, ["one/a", "two/c"], { create, parse: () => null, remove: async () => {}, timeoutMs: 100, prompt: "p" }).catch((e: unknown) => e);
   expect(error).toBeInstanceOf(SummaryModelError);
   expect((error as Error).message).toBe("one/a: The summary model timed out.; two/c: The summary model timed out.");
 });
@@ -53,7 +53,7 @@ test("a permission request on a temporary session is refused and the run goes on
     respondToPermission: async (o: unknown) => { denied.push(o); },
     waitForFinish: async () => (++waits === 1 ? { status: "permission", final: { pendingPermissions: [{ id: "r1" }, { id: "r2" }] } } : { status: "idle", lastMessage: "[]" }),
   });
-  const result = await runSummaryModels(paseo, ["one/a"], { create, parse: (text) => JSON.parse(text!), remove: async () => {}, timeoutMs: 100 });
+  const result = await runSummaryModels(paseo, ["one/a"], { create, parse: (text) => JSON.parse(text!), remove: async () => {}, timeoutMs: 100, prompt: "p" });
   expect(result).toEqual({ model: "one/a", output: [] });
   expect(denied.map((d) => (d as { requestId: string; response: { behavior: string } }).requestId)).toEqual(["r1", "r2"]);
   expect(denied.every((d) => (d as { response: { behavior: string } }).response.behavior === "deny")).toBe(true);
@@ -61,10 +61,10 @@ test("a permission request on a temporary session is refused and the run goes on
 
 test("a permission request that cannot be refused still fails the model, and an endless one stops", async () => {
   const stuck = async (model: string) => ({ id: model, archive: async () => undefined, waitForFinish: async () => ({ status: "permission", final: { pendingPermissions: [] } }) });
-  await expect(runSummaryModels(paseo, ["one/a"], { create: stuck, parse: () => null, remove: async () => {}, timeoutMs: 100 })).rejects.toThrow("one/a: The summary model asked for a permission.");
+  await expect(runSummaryModels(paseo, ["one/a"], { create: stuck, parse: () => null, remove: async () => {}, timeoutMs: 100, prompt: "p" })).rejects.toThrow("one/a: The summary model asked for a permission.");
   const respond = vi.fn(async () => {});
   const endless = async (model: string) => ({ id: model, archive: async () => undefined, respondToPermission: respond, waitForFinish: async () => ({ status: "permission", final: { pendingPermissions: [{ id: "r" }] } }) });
-  await expect(runSummaryModels(paseo, ["one/a"], { create: endless, parse: () => null, remove: async () => {}, timeoutMs: 100 })).rejects.toThrow(/asked for a permission/);
+  await expect(runSummaryModels(paseo, ["one/a"], { create: endless, parse: () => null, remove: async () => {}, timeoutMs: 100, prompt: "p" })).rejects.toThrow(/asked for a permission/);
   expect(respond).toHaveBeenCalledTimes(20);
 });
 
@@ -87,4 +87,39 @@ test("refusing permissions does not restart the timeout: every wait shares one d
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("a provider without prompt.output_schema gets one fallback re-run without the schema on the open handle", async () => {
+  const actions: string[] = [];
+  let waits = 0;
+  const create = async (model: string) => {
+    actions.push(`create ${model}`);
+    return {
+      id: model, archive: async () => undefined,
+      waitForFinish: async () => (++waits === 1 ? { status: "error", error: "Provider does not support prompt.output_schema" } : { status: "idle", lastMessage: "[]" }),
+      run: async (text: string) => { actions.push(`run ${text}`); return { status: "idle", lastMessage: "[]" }; },
+    };
+  };
+  const result = await runSummaryModels(paseo, ["one/a"], {
+    create, parse: (text) => JSON.parse(text!), timeoutMs: 100, prompt: "shape in prose",
+    remove: async (agent) => { actions.push(`remove ${agent.id}`); },
+  });
+  expect(result).toEqual({ model: "one/a", output: [] });
+  expect(actions).toEqual(["create one/a", "run shape in prose", "remove one/a"]);
+});
+
+test("an unrelated first-wait error is not retried as a schema fallback", async () => {
+  const actions: string[] = [];
+  const create = async (model: string) => ({
+    id: model, archive: async () => undefined,
+    waitForFinish: async () => ({ status: "error", error: "engine overloaded" }),
+    run: async () => { actions.push("run"); return { status: "idle", lastMessage: "[]" }; },
+  });
+  const error = await runSummaryModels(paseo, ["one/a"], {
+    create, parse: () => null, timeoutMs: 100, prompt: "p",
+    remove: async () => {},
+  }).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(SummaryModelError);
+  expect((error as Error).message).toBe("one/a: engine overloaded");
+  expect(actions).toEqual([]);
 });

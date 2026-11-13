@@ -133,6 +133,18 @@ export function parseInsightOutput(textOut: string | null | undefined, parts: In
   };
 }
 
+/**
+ * Guards the schema-free fallback path: a model without `output_schema` can return prose or an
+ * empty object that the lenient parser reads as all-empty, and storing that would wipe the
+ * session's insights. A schema-constrained run cannot produce this shape, so this only bites on
+ * the fallback; valid empty moves and ideas lists still pass.
+ */
+export function requireUsableInsightOutput(out: InsightOutput, parts: InsightParts): InsightOutput {
+  if ((!out.progress && parts.progress) && (!out.moves.length && parts.nextMoves) && (!out.ideas.length && parts.ideas))
+    throw new Error("The insight output had none of its enabled fields.");
+  return out;
+}
+
 /** JSON Schema handed to the insight session: only the enabled parts. */
 export function insightJsonSchema(parts: InsightParts) {
   const properties: Record<string, unknown> = {};

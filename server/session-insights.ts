@@ -20,6 +20,7 @@ import {
   type SessionInsight,
   type SessionInsightView,
   type SessionInsightsState,
+  requireUsableInsightOutput,
 } from "../shared/session-insights";
 import { sessionSummaryRow } from "../shared/native-session";
 import { within } from "./summaries";
@@ -226,6 +227,7 @@ export class SessionInsightService {
     // Paseo removes a merged/archived workspace's directory (autoArchiveAfterMerge) right after the turn
     // ends: the child cannot be created and the session is gone with it, so skip instead of failing.
     const result = await runSummaryModels(paseo, settings.model, {
+      prompt,
       create: (model) => paseo.workspaces.ref(agent.workspaceId!).agents.create({
         parent: agent.id,
         config: readOnlyConfig(model),
@@ -234,7 +236,7 @@ export class SessionInsightService {
         prompt,
         outputSchema: insightJsonSchema(parts) as unknown as Record<string, unknown>,
       }),
-      parse: (text) => parseInsightOutput(text, parts),
+      parse: (text) => requireUsableInsightOutput(parseInsightOutput(text, parts), parts),
       remove: this.remove,
       timeoutMs: this.timeoutMs,
     }).catch((error) => {
