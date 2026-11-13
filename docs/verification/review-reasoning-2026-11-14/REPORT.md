@@ -39,3 +39,9 @@ This PR is based on origin/main with SDK 0.15. It contains only the reasoning fe
 ## Assessment correction during PR preparation
 
 The earlier claim that strict read-only access requires a new host API was too strong. Both the baseline SDK 0.15 and development SDK expose `PaseoAgentConfig.options` → providerOptions; the official [agent-configuration example](https://github.com/getpaseo/paseo/blob/main/plugin-examples/agent-configuration/index.server.ts) passes sandbox_mode / approval_policy. Current mode discovery is evidence about the picker only. Recommendation remains fixed read-only review, but provider-native read-only/never options must be tested before deciding whether host work is necessary. No permission implementation was added in this card.
+
+## Independent verification attempt
+
+Prepared from origin/main without changing the shared checkout/index. Implementation commit `204a997ae05f3486b4da8a86ff648ea22db70a56`: implementer typecheck exit 0; full tests exit 0, 157 files passed/1 skipped, 1430 tests passed/6 skipped. Subsequent permission-assessment correction is documentation only.
+
+Independent session `4d9e69cf-5cbf-42b2-bc45-7b430ba72167` was created in the card workspace as the required claude/claude-haiku-5-5 with bypassPermissions. It errored before verification: individual spend limit. No independent checks or report were produced. That test session was hard-deleted. Independent verification remains UNRUN pending the user's model/provider decision; it is not counted as a pass.
