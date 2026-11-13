@@ -81,3 +81,14 @@ test("the branch point: the nearer merge-base of the home's HEAD and its upstrea
   expect(await worktreeBase(wt)).toBe(later);
   expect((await git(worktree, "merge-base", later, "HEAD")).trim()).toBe(start);
 });
+
+test("PR links and remote URLs: GitHub and GitLab links, scp, ssh and https remotes", async () => {
+  const { parsePrLink, remoteRepo } = await import("./review-worktree");
+  expect(parsePrLink("https://github.com/JasprW/Flowly/pull/105")).toMatchObject({ host: "github.com", path: "jasprw/flowly", ref: "refs/pull/105/head" });
+  expect(parsePrLink("https://git.garena.com/a/b/c/-/merge_requests/9/diffs")).toMatchObject({ host: "git.garena.com", path: "a/b/c", ref: "refs/merge-requests/9/head" });
+  expect(parsePrLink("https://github.com/a/b/issues/3")).toBeNull();
+  expect(parsePrLink("not a url")).toBeNull();
+  expect(remoteRepo("git@github.com:JasprW/flowly.git")).toEqual({ host: "github.com", path: "jasprw/flowly" });
+  expect(remoteRepo("ssh://git@git.garena.com:2222/a/b/c.git")).toEqual({ host: "git.garena.com", path: "a/b/c" });
+  expect(remoteRepo("https://github.com/JasprW/flowly")).toEqual({ host: "github.com", path: "jasprw/flowly" });
+});

@@ -24,7 +24,7 @@ import { mergeWorkpad, plansOf, workpadEnabled, workpadNote, workpadOf, workpadU
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
 import { autoReviewOf, autoReviewRuns, reviewContext } from "../shared/auto-review";
-import { resolveWorktree } from "./review-worktree";
+import { prWorktree, resolveWorktree } from "./review-worktree";
 import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
@@ -522,6 +522,26 @@ export class AgentService {
           },
         );
     }
+    // No worktree named, a shared workspace and a PR among the outputs: the worktree holding its head (§3.4).
+    let foundFrom: string | undefined;
+    if (
+      !namedWorktree &&
+      action === "status" &&
+      (input as StatusInput).status === "in_review" &&
+      resources.task.status !== "in_review" &&
+      resources.workspace.workspaceKind !== "worktree" &&
+      autoReviewRuns(resources.project)
+    ) {
+      const board = await this.store.read();
+      if (!board.agentReceipts.some((r) => r.key === key)) {
+        const links = [
+          ...(outputs || []).map((o) => o.target),
+          ...board.artifacts.filter((a) => a.taskId === resources.task.id && a.role === "output").map((a) => a.target),
+        ];
+        const found = links.length ? await prWorktree(links, resources.workspace.workspaceDirectory).catch(() => null) : null;
+        if (found) [worktree, foundFrom] = [found.directory, found.url];
+      }
+    }
     // Paths are checked before the write; the transaction only records the result.
     // An item link or key of a configured connection becomes an external input (CONNECTORS-SPEC §3.1).
     const externalTarget =
@@ -690,7 +710,9 @@ export class AgentService {
         task.updatedAt = new Date(this.clock()).toISOString();
       }
       let artifactId: string | undefined;
-      let notice: string | undefined;
+      let notice: string | undefined = foundFrom
+        ? `The auto review will check the worktree ${worktree}, which holds the head of ${foundFrom}. Deliver with worktree set when the change is elsewhere.`
+        : undefined;
       const artifactIds: string[] = [];
       for (const output of outputTargets) {
         try {
