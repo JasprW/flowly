@@ -504,6 +504,8 @@ export function TaskForm({
   // A GitHub/GitLab item from another project's repositories warns first (CONNECTORS-SPEC §4.3).
   const repoCheck = useRepoCheck(project.id);
   const [foreignConfirm, setForeignConfirm] = useState<{ item: ExternalSummary; provider: ConnectorProvider; check: RepoCheck } | null>(null);
+  // A repository check is in flight: creating now would silently drop the picked item.
+  const [checkingRepo, setCheckingRepo] = useState(false);
   // A check that resolves after a later pick must not add its (superseded) item.
   const pickSeq = useRef(0);
   const addExternal = useStableCallback((item: ExternalSummary, provider: ConnectorProvider) => {
@@ -520,8 +522,10 @@ export function TaskForm({
     const seq = ++pickSeq.current;
     setPicking(null);
     setForeignConfirm(null);
+    setCheckingRepo(true);
     void repoCheck(item, familyOf(provider)).then((check) => {
       if (seq !== pickSeq.current) return;
+      setCheckingRepo(false);
       if (check?.state === "foreign") return setForeignConfirm({ item, provider, check });
       addExternal(item, provider);
     });
@@ -638,6 +642,8 @@ export function TaskForm({
   const canSave =
     ready &&
     !pending &&
+    !checkingRepo &&
+    !foreignConfirm &&
     !!title.trim() &&
     !(!task && mode === "existing" && !workspaceId) &&
     !(startChosen && (!choice.ready || !prompt.trim()));

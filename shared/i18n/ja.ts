@@ -22,7 +22,6 @@ const catalog: Catalog = {
   "Exit {code}": "終了コード {code}",
   "Find past cards, notes, workpads and deliverables with the search button or S.": "検索ボタンまたは S で、過去のカード、メモ、Workpad、成果物を探せます。",
   "Search everywhere": "すべてを検索",
-  "Adding a GitHub or GitLab item from another project's repositories to a card now warns first, so its workspace keeps the right code.": "他のプロジェクトのリポジトリにある GitHub / GitLab の項目をカードに追加するとき、先に警告が出るようになりました。ワークスペースが正しいコードを保つためです。",
   "Search past cards, summaries, notes and deliverables.": "過去のカード、要約、メモ、成果物を検索します。",
   "Summaries": "要約",
   "Notes": "メモ",

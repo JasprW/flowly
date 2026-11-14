@@ -409,6 +409,7 @@ export function LinkExternal({
     }
   });
   const pick = useStableCallback(async (item: ExternalSummary) => {
+    if (pending) return; // no second attachment while one is in flight
     const seq = ++pickSeq.current;
     setConfirming(null);
     const check = await repoCheck(item, family);
@@ -444,7 +445,7 @@ export function LinkExternal({
                 projectId={projectId}
                 picked={linked}
                 onPick={(item) => void pick(item)}
-                onClose={onClose}
+                onClose={close}
               />
             )}
           </View>

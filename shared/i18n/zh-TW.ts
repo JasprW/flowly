@@ -22,7 +22,6 @@ const catalog: Catalog = {
   "Exit {code}": "結束代碼 {code}",
   "Find past cards, notes, workpads and deliverables with the search button or S.": "用搜尋按鈕或 S 查找過去的卡片、說明、Workpad 和交付物。",
   "Search everywhere": "搜尋全部",
-  "Adding a GitHub or GitLab item from another project's repositories to a card now warns first, so its workspace keeps the right code.": "把屬於其他專案儲存庫的 GitHub/GitLab 項目加到卡片時，現在會先警告，讓卡片工作區保持正確的程式碼。",
   "Search past cards, summaries, notes and deliverables.": "搜尋過去的卡片、摘要、說明和交付物。",
   "Summaries": "摘要",
   "Notes": "說明",

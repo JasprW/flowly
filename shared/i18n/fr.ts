@@ -22,7 +22,6 @@ const catalog: Catalog = {
   "Exit {code}": "Sortie {code}",
   "Find past cards, notes, workpads and deliverables with the search button or S.": "Retrouvez les cartes, notes, workpads et livrables passés avec le bouton de recherche ou S.",
   "Search everywhere": "Rechercher partout",
-  "Adding a GitHub or GitLab item from another project's repositories to a card now warns first, so its workspace keeps the right code.": "Ajouter un élément GitHub ou GitLab issu des dépôts d'un autre projet affiche désormais un avertissement, afin que l'espace de travail garde le bon code.",
   "Search past cards, summaries, notes and deliverables.": "Recherchez les cartes, résumés, notes et livrables passés.",
   "Summaries": "Résumés",
   "Notes": "Notes",
