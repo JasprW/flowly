@@ -1,0 +1,131 @@
+Flowly
+flowly
+Attention
+1
+Sort
+Filter
+New task
+9
+tasks
+· 5 done
+1 running
+1 unread
+In review
+1
+Blocked
+1
+Ideas 4
+Memory
+Insights
+Backlog
+0
+No tasks
+Todo
+1
+Low
+Chore
+#testing
+#better-paseo
+Make better-paseo history-long-load stress tests robust under load
+Card setup done; upstream fix not started; investigation confirmed scope is untouched
+42m ago
+1
+Checks 0/5
+Design
+0
+No tasks
+Development
+0
+No tasks
+Test
+1
+High
+Feature
+flowly#83
+#connectors
+#cards
+Warn when a card's GitHub/GitLab item does not belong to the current project
+PR #83 open on fork awaiting upstream merge; 6-step verification checklist ready
+31m ago
+1 running
+Checks 3/4
+1
+In review
+1
+High
+Chore
+flowly#3 +1
+#a11y
+#testing
+看板卡片补齐可访问名称，让 UI 自动化验证可定位
+上游 PR #84 已创建并完成 CodeRabbit 修复，等上游批准合并
+just now
+1 unread
+Checks 6/6
+2
+Blocked
+1
+High
+Feature
+flowly#1 +2
+#conversation-ui
+#session-composer
+Recognize ui blocks in flowly's session preview
+上游 PR #82 已开，CI 待 jaspr_w 批准，等待上游合并发布
+1h ago
+1
+Checks 6/6
+5
+Done
+0
+Cancelled
+Create task
+Title
+Description
+HybridRbt/paseo-sync#4 does not belong to flowly's repositories.
+The card's workspace will not contain this repository.
+It belongs to paseo sync's repositories.
+Cancel
+Add anyway
+From GitHub
+Status
+Backlog
+Todo
+Design
+Development
+Test
+In review
+Blocked
+Priority
+Low
+Normal
+High
+Urgent
+Type
+None
+Feature
+Bug fix
+Research
+Refactor
+Docs
+Chore
+Tags
+Add tag
+Project root · /Users/jianfengyang/projects/flowly
+Workspace
+New in directory
+New isolated worktree
+Link existing
+Start an agent now
+Agent
+Provider
+Loading…
+Model
+opus[1m]
+Permissions
+Auto mode
+Instruction
+Add images
+or paste or drop them here
+Cancel
+Create and start

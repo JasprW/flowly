@@ -1,0 +1,114 @@
+Flowly
+flowly
+Attention
+Sort
+Filter
+New task
+18
+tasks
+· 13 done
+1 running
+Blocked
+1
+Ideas 3
+Memory
+Insights
+Backlog
+2
+Low
+Chore
+#paseo-sync
+#publishing
+Add screenshots to the paseo-sync directory listing
+Low
+Chore
+#paseo-sync
+#plugin
+Switch local paseo-sync installs to the directory source
+Waiting on 1
+0
+Todo
+Design
+1
+Bug fix
+#paseo-sync
+#plugin
++1
+Treat install-generated files as clean in dirty-git-plugin checks
+Retro review done: fix still needed, card recorded in design stage
+2h ago
+1 running
+Checks 1/4
+Development
+0
+No tasks
+Test
+0
+No tasks
+In review
+0
+No tasks
+Blocked
+1
+High
+Chore
+#paseo-sync
+#plugin
++1
+把这个插件发布到 paseo cafe
+Submitted to official plugin registry, awaiting maintainer review of PR
+6h ago
+1
+Checks 4/4
+13
+Done
+1
+Cancelled
+Create task
+Title
+Description
+HybridRbt/paseo-sync#4
+Skip dirty Git plugins at apply with disclosed repair guidance
+Merged
+From GitHub
+Status
+Backlog
+Todo
+Design
+Development
+Test
+In review
+Blocked
+Priority
+Low
+Normal
+High
+Urgent
+Type
+None
+Feature
+Bug fix
+Research
+Refactor
+Docs
+Chore
+Tags
+Add tag
+Project root · /Users/jianfengyang/Documents/Codex/2026-10-15/wo-xia
+Workspace
+New in directory
+New isolated worktree
+Link existing
+Start an agent now
+Agent
+Provider
+Antigravity
+Model
+Gemini 3.8 Flash (High)
+Permissions
+Full access
+Instruction
+Add images
+or paste or drop them here
+Cancel
+Create and start
