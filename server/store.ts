@@ -55,6 +55,50 @@ export function setTags(task: Task, tags: Task["tags"]) {
   else delete task.tags;
 }
 
+/**
+ * Project settings (PROJECT-SETTINGS-SPEC §2). A lane can only be turned off once it holds no live cards, so no
+ * card is ever left outside the project's workflow. Board-level so the agent write path (agent-service) can apply
+ * the same edit inside its own transaction; the UI's store.updateProject wraps it in `mutate`.
+ */
+export function applyProjectEdit(board: Board, input: ProjectEdit): Project {
+  const p = board.projects.find((p) => p.id === input.id);
+  if (!p) throw new Error("Project not found.");
+  if (p.revision !== input.revision)
+    throw new Error("Revision conflict: reload the project before saving.");
+  if (input.lanes) {
+    const blocked = input.lanes
+      .filter((l) => !l.enabled)
+      .map((l) => ({
+        lane: l,
+        count: board.tasks.filter((t) => t.projectId === p.id && !t.archivedAt && t.status === l.status).length,
+      }))
+      .filter((x) => x.count);
+    if (blocked.length)
+      throw new Error(
+        `Move the cards out of ${blocked
+          .map((x) => `${laneName(p, x.lane.status)} (${x.count})`)
+          .join(", ")} before turning ${blocked.length === 1 ? "it" : "them"} off.`,
+      );
+    p.lanes = input.lanes.map((l) => ({ status: l.status, enabled: l.enabled, ...(l.name?.trim() ? { name: l.name.trim() } : {}) }));
+  }
+  if (input.title !== undefined) p.title = input.title;
+  if (input.description !== undefined) p.description = input.description;
+  if (input.autoStatus !== undefined) p.autoStatus = input.autoStatus;
+  if (input.workpad !== undefined) p.workpad = input.workpad;
+  if (input.workflowInsights !== undefined) p.workflowInsights = input.workflowInsights;
+  if (input.memory !== undefined) p.memory = input.memory;
+  if (input.autoReview !== undefined) p.autoReview = input.autoReview;
+  if (input.agentModel !== undefined) {
+    if (input.agentModel) p.agentModel = input.agentModel;
+    else delete p.agentModel;
+  }
+  if (input.archived !== undefined)
+    p.archivedAt = input.archived ? new Date().toISOString() : null;
+  p.revision++;
+  p.updatedAt = new Date().toISOString();
+  return p;
+}
+
 export class BoardStore {
   private tail: Promise<unknown> = Promise.resolve();
   /** Events created by the running transaction; appended to the flow log once it commits. */
@@ -296,44 +340,7 @@ export class BoardStore {
    * cards, so no card is ever left outside the project's workflow.
    */
   updateProject(input: ProjectEdit) {
-    return this.mutate((board) => {
-      const p = board.projects.find((p) => p.id === input.id);
-      if (!p) throw new Error("Project not found.");
-      if (p.revision !== input.revision)
-        throw new Error("Revision conflict: reload the project before saving.");
-      if (input.lanes) {
-        const blocked = input.lanes
-          .filter((l) => !l.enabled)
-          .map((l) => ({
-            lane: l,
-            count: board.tasks.filter((t) => t.projectId === p.id && !t.archivedAt && t.status === l.status).length,
-          }))
-          .filter((x) => x.count);
-        if (blocked.length)
-          throw new Error(
-            `Move the cards out of ${blocked
-              .map((x) => `${laneName(p, x.lane.status)} (${x.count})`)
-              .join(", ")} before turning ${blocked.length === 1 ? "it" : "them"} off.`,
-          );
-        p.lanes = input.lanes.map((l) => ({ status: l.status, enabled: l.enabled, ...(l.name?.trim() ? { name: l.name.trim() } : {}) }));
-      }
-      if (input.title !== undefined) p.title = input.title;
-      if (input.description !== undefined) p.description = input.description;
-      if (input.autoStatus !== undefined) p.autoStatus = input.autoStatus;
-      if (input.workpad !== undefined) p.workpad = input.workpad;
-      if (input.workflowInsights !== undefined) p.workflowInsights = input.workflowInsights;
-      if (input.memory !== undefined) p.memory = input.memory;
-      if (input.autoReview !== undefined) p.autoReview = input.autoReview;
-      if (input.agentModel !== undefined) {
-        if (input.agentModel) p.agentModel = input.agentModel;
-        else delete p.agentModel;
-      }
-      if (input.archived !== undefined)
-        p.archivedAt = input.archived ? new Date().toISOString() : null;
-      p.revision++;
-      p.updatedAt = new Date().toISOString();
-      return p;
-    });
+    return this.mutate((board) => applyProjectEdit(board, input));
   }
   /**
    * Drops a project and its cards (with their events and agent receipts) from

@@ -35,6 +35,7 @@ import {
   typeInputSchema,
   nextMovesInputSchema,
   workpadInputSchema,
+  projectUpdateInputSchema,
   progressInputSchema,
   statusInputSchema,
   toolContextSchema,
@@ -384,6 +385,17 @@ export class ToolServer {
           },
           (input) => wrap(() => this.agents.write(identity, "workpad", input)),
         );
+        mcp.registerTool(
+          "flowly_update_project",
+          {
+            description:
+              "Change this card's own project's settings: title, description or agentModel — the model new sessions in the project start with (agentModel=null removes the project default so the global default applies again). The project is derived from the card binding, so a session can only change the project it belongs to; no other field of the project is exposed to agents. Pass at least one of the three fields. Copy expectedRevision (task AND project) and request from get_task; a stale project revision returns REVISION_CONFLICT. Bumps the project revision, so re-read get_task afterwards. Does not change card status or task revision.",
+            inputSchema: projectUpdateInputSchema,
+            outputSchema: toolResultSchema,
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+          },
+          (input) => wrap(() => this.agents.write(identity, "update_project", input)),
+        );
         return mcp;
       },
       // A request with multi-byte text can exceed 64 KiB (WORKPAD-SPEC §3).
@@ -469,7 +481,7 @@ export class ToolServer {
     }
     const body = z
       .strictObject({
-        action: z.enum(["get", "status", "progress", "idea", "idea_update", "idea_remove", "remember", "recall", "search", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
+        action: z.enum(["get", "status", "progress", "idea", "idea_update", "idea_remove", "remember", "recall", "search", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "update_project", "external", "ticket"]),
         input: z.unknown(),
       })
       .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));

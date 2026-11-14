@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentModelSchema } from "./agent-defaults";
 import { relations } from "./links";
 import { setupItems } from "./card-setup";
 import { connectorProviderSchema, itemTypeSchema } from "./connectors";
@@ -285,6 +286,23 @@ export const typeInputSchema = z.strictObject({
     "feature: new behavior; bugfix: wrong behavior fixed; research: investigation or analysis without a shipped change; refactor: restructuring without behavior change; docs: documentation only; chore: build, tooling, dependencies, maintenance.",
   ),
 });
+/**
+ * flowly_update_project (PROJECT-SETTINGS-SPEC §2): change the card's own project's title, description or agent
+ * model. The project id is never an input: it is derived from the session's card, so a session can only touch the
+ * project it belongs to. Nothing else from ProjectEdit (lanes, archived, autoReview, the feature switches) is
+ * exposed to agents; the UI's projects.update channel keeps them.
+ */
+export const projectUpdateInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  request: requestSchema,
+  title: z.string().trim().min(1).max(120).optional().describe("The project's display name."),
+  description: z.string().max(10000).optional().describe("The project's description."),
+  agentModel: agentModelSchema
+    .nullable()
+    .optional()
+    .describe("The model new sessions in this project start with; null removes the project default so the global default applies again."),
+});
+export type ProjectUpdateInput = z.infer<typeof projectUpdateInputSchema>;
 /** flowly_suggest_next_moves (NEXT-MOVES-SPEC §2): the session's candidate next messages for the user. */
 export const nextMovesInputSchema = z.strictObject({
   expectedRevision: revisionSchema,

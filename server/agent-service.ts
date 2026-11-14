@@ -11,7 +11,7 @@ import { cardImagePath } from "./card-images";
 import { absoluteTarget, artifactsOf } from "../shared/artifacts";
 import { turnChecklist } from "../shared/turn-checklist";
 import { changeTags, normalizeTags, projectTagStats, tagChangeNote } from "../shared/tags";
-import { setTags } from "./store";
+import { setTags, applyProjectEdit } from "./store";
 import { fingerprintChanged } from "./connectors/fingerprint";
 import { artifactRoots, dropArtifact, externalArtifact, missingArtifacts, normalizeTarget, putArtifact, type NewArtifact } from "./artifacts";
 import { ArtifactReadStore } from "./artifact-reads";
@@ -45,6 +45,7 @@ import {
   workpadInputSchema,
   progressInputSchema,
   statusInputSchema,
+  projectUpdateInputSchema,
   type ToolIdentity,
   type ToolContext,
   type ToolResult,
@@ -62,6 +63,7 @@ import {
   type TypeToolInput,
   type NextMovesInput,
   type WorkpadInput,
+  type ProjectUpdateInput,
   type ExternalContext,
   type ReadExternalInput,
 } from "../shared/tools";
@@ -436,10 +438,10 @@ export class AgentService {
   }
   async write(
     identity: ToolIdentity,
-    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
+    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad" | "update_project",
     raw: unknown,
   ): Promise<ToolResult> {
-    const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
+    const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput | ProjectUpdateInput =
       action === "status"
         ? statusInputSchema.parse(raw)
         : action === "remember"
@@ -462,7 +464,17 @@ export class AgentService {
                     ? nextMovesInputSchema.parse(raw)
                     : action === "workpad"
                       ? parseWorkpadInput(raw)
-                      : progressInputSchema.parse(raw);
+                      : action === "update_project"
+                        ? projectUpdateInputSchema.parse(raw)
+                        : progressInputSchema.parse(raw);
+    if (action === "update_project") {
+      const p = input as ProjectUpdateInput;
+      if (p.title === undefined && p.description === undefined && p.agentModel === undefined)
+        throw new ToolError(
+          "INVALID_INPUT",
+          "Pass at least one of title, description or agentModel; a call that changes nothing is refused.",
+        );
+    }
     const disputes = action === "status" ? (input as StatusInput).disputes : undefined;
     const namedWorktree = action === "status" ? (input as StatusInput).worktree : undefined;
     const signed = this.secrets.validateRequest(
@@ -679,6 +691,34 @@ export class AgentService {
           "ARTIFACTS_DISABLED",
           "Agent artifacts are turned off in Flowly settings. List your deliverables in your reply instead.",
         );
+      // Project settings (PROJECT-SETTINGS-SPEC §3): the project is the session's own card's, derived from the
+      // binding, never from the input. Fields outside the scoped set (lanes, archived, autoReview, the feature
+      // switches) stay UI-only; projects.update keeps them.
+      const projectEvent =
+        action === "update_project"
+          ? (() => {
+              const edit = input as ProjectUpdateInput;
+              applyProjectEdit(board, {
+                id: project.id,
+                revision: input.expectedRevision.project,
+                ...(edit.title !== undefined ? { title: edit.title } : {}),
+                ...(edit.description !== undefined ? { description: edit.description } : {}),
+                ...(edit.agentModel !== undefined ? { agentModel: edit.agentModel } : {}),
+              });
+              const changed = [
+                edit.title !== undefined && "title",
+                edit.description !== undefined && "description",
+                edit.agentModel !== undefined && "agentModel",
+              ].filter(Boolean) as string[];
+              return this.store.event(board, {
+                taskId: task.id,
+                agentId: identity.agentId,
+                actor: "agent",
+                action: "project_updated",
+                note: `Updated project ${changed.join(", ")}.`,
+              });
+            })()
+          : undefined;
       const previous = task.status,
         next = action === "status" ? resolveAgentStatus((input as StatusInput).status, previous) : previous;
       if (next !== previous && !laneEnabled(project, next))
@@ -887,6 +927,7 @@ export class AgentService {
         typeEvent ??
         movesEvent ??
         workpadEvent ??
+        projectEvent ??
         (action === "idea" || action === "remember"
           ? this.store.event(board, {
               taskId: task.id,
