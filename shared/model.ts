@@ -586,7 +586,7 @@ export const receiptSchema = z.object({
   taskId: z.string(),
   payloadHash: z.string(),
   /** `review_rules`: receipts of the tool removed with guardrails (GUARDRAILS-SPEC §9); they expire within 7 days. */
-  action: z.enum(["status", "progress", "idea", "idea_update", "idea_remove", "remember", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "review_rules"]),
+  action: z.enum(["status", "progress", "idea", "idea_update", "idea_remove", "remember", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "update_project", "review_rules"]),
   /** Empty when an artifact write changed nothing (same target already recorded). */
   eventId: z.string(),
   /** Stable result identity for idea writes, even after the idea is removed or pruned. */

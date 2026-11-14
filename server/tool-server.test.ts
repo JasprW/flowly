@@ -93,6 +93,7 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
     "flowly_set_type",
     "flowly_suggest_next_moves",
     "flowly_update_workpad",
+    "flowly_update_project",
   ]);
   // flowly_propose_review_rules is gone (GUARDRAILS-SPEC §9).
   // The setup gate and the workpad's own revision are part of the tool schemas (WORKPAD-SPEC §3, CARD-SETUP-SPEC §3.4).
