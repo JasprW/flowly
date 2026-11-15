@@ -283,6 +283,7 @@ export class SummaryService {
     // Paseo removes a merged/archived workspace's directory (autoArchiveAfterMerge) right after the turn
     // ends: the child cannot be created, so skip instead of recording an error against the card.
     const result = await runSummaryModels(paseo, summaryModelsOf(settings), {
+      prompt,
       create: (model) => paseo.workspaces.ref(task.workspaceId).agents.create({
         parent: batch.agentIds[batch.agentIds.length - 1],
         config: readOnlyConfig(model),

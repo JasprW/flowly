@@ -140,6 +140,7 @@ export function llmReviewer(options: {
     const models = chosen ? [chosen] : await options.summaryModels();
     const ids = input.checks.map((c) => c.id);
     const { model, output } = await runSummaryModels(paseo, models, {
+      prompt: reviewPrompt(input),
       create: async (model) => {
         let thinkingOptionId: string | undefined;
         if (chosen === model && settings.reviewThinking) {

@@ -29,15 +29,21 @@ export function isWorkspaceGone(error: unknown): boolean {
   return segments.length > 0 && segments.every((segment) => WORKSPACE_GONE.test(segment));
 }
 
+type ModelAgentTurn = {
+  status: string;
+  error?: string | null;
+  lastMessage?: string | null;
+  final?: { pendingPermissions?: readonly { id: string }[] } | null;
+};
+
 type ModelAgent = RemovableAgent & {
-  waitForFinish(timeout: number): Promise<{
-    status: string;
-    error?: string | null;
-    lastMessage?: string | null;
-    final?: { pendingPermissions?: readonly { id: string }[] } | null;
-  }>;
+  waitForFinish(timeout: number): Promise<ModelAgentTurn>;
+  run?(text: string, options?: { timeoutMs: number }): Promise<ModelAgentTurn>;
   respondToPermission?(options: { requestId: string; response: { behavior: "deny"; message?: string } }): Promise<void>;
 };
+
+/** Providers without `prompt.output_schema` (dsh-web, observed 2026-11-13) fail the first structured turn before it starts. */
+export const OUTPUT_SCHEMA_ERROR = /prompt\.output_schema/;
 
 /** Times a temporary session may be refused a permission before the run counts as failed. */
 const MAX_PERMISSION_DENIALS = 20;
@@ -67,7 +73,7 @@ export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: nu
 export async function runSummaryModels<T>(
   paseo: PaseoApi,
   configured: SummaryModelChoice,
-  options: { create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number },
+  options: { prompt: string; create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number },
 ): Promise<{ model: string; output: T }> {
   const available = await availableModels(paseo, configured);
   let models: ReturnType<typeof resolveModels>;
@@ -82,7 +88,14 @@ export async function runSummaryModels<T>(
       const agent = await options.create(model);
       let output: T;
       try {
-        const result = await finishRefusingPermissions(agent, options.timeoutMs);
+        let result = await finishRefusingPermissions(agent, options.timeoutMs);
+        // Providers without `prompt.output_schema` fail the first structured turn at start. The
+        // prompt carries the JSON shape in prose, so re-run it once without the constraint on the
+        // already-open handle; one dead turn per job until the provider gains the capability.
+        if (result.status === "error" && result.error && OUTPUT_SCHEMA_ERROR.test(result.error) && agent.run) {
+          await agent.run(options.prompt, { timeoutMs: options.timeoutMs });
+          result = await finishRefusingPermissions(agent, options.timeoutMs);
+        }
         if (result.status !== "idle" || result.error) throw new Error(
           result.status === "timeout" ? "The summary model timed out."
             : result.status === "permission" ? "The summary model asked for a permission."
