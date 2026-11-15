@@ -1,0 +1,29 @@
+{
+  "desktop": {
+    "viewport": {
+      "width": 1700,
+      "height": 1000
+    },
+    "picked": "high"
+  },
+  "compact": {
+    "viewport": {
+      "width": 1000,
+      "height": 900
+    },
+    "picked": "xhigh",
+    "row": {
+      "x": 228,
+      "y": 681,
+      "width": 678,
+      "height": 52
+    }
+  },
+  "freshContextPersisted": "xhigh",
+  "pluginReloadPersisted": "xhigh",
+  "errors": [],
+  "restoredReview": {
+    "model": "codex/gpt-6.1-terra",
+    "thinking": null
+  }
+}

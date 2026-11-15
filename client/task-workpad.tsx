@@ -14,6 +14,7 @@ import { FocusTarget, Marked, limitFor, useFocusTarget, useMark } from "./drawer
 import { ReviewBlock, RerunButton, canRerun, reviewLabel } from "./task-review";
 import { AiMark, Label, font, message, radius, relativeTime, space, touch, useTheme, noFocusRing } from "./ui";
 import { t, tn } from "../shared/i18n";
+import { reviewWaiting } from "../shared/auto-review";
 
 /**
  * Drawer "Workpad" (GUARDRAILS-SPEC §7.1), the card's own account: the agent's acceptance list, what this card was
@@ -55,6 +56,8 @@ export const TaskWorkpad = memo(function TaskWorkpad({
     };
   }, [guardrails, store, task.id]);
   const review = task.review;
+  // Delivered, review not started yet: the previous result is out of date, so it is not shown (AUTO-REVIEW-SPEC §9.2).
+  const waiting = reviewWaiting(task);
   // Optimistic ticks by item id until the board shows them.
   const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const agentIds = plans.map((p) => p.agentId).concat(workpad?.agentId ? [workpad.agentId] : []);
@@ -76,7 +79,7 @@ export const TaskWorkpad = memo(function TaskWorkpad({
     if (at >= 0) setLimit((current) => limitFor(at, current, pageSize));
   }, [focusTarget, workpad]);
   const hasThisCard = own.items.length > 0 || own.notes.length > 0;
-  if (!workpad && !plans.length && !review && !hasThisCard) return null;
+  if (!workpad && !plans.length && !review && !waiting && !hasThisCard) return null;
   const tick = async (item: AcceptanceItem) => {
     const done = !item.done;
     setPending((current) => new Map(current).set(item.id, done));
@@ -112,7 +115,7 @@ export const TaskWorkpad = memo(function TaskWorkpad({
       onToggle={section.onToggle}
       summary={[
         acceptance.length ? t("Acceptance {done}/{total}", { done: acceptance.filter((a) => a.done).length, total: acceptance.length }) : "",
-        review ? reviewLabel(review) : "",
+        waiting ? t("Waiting for review") : review ? reviewLabel(review) : "",
       ].filter(Boolean).join(" · ")}
     >
         {!!acceptance.length && (
@@ -135,10 +138,16 @@ export const TaskWorkpad = memo(function TaskWorkpad({
             ))}
           </Group>
         )}
-        {!!review && (
-          <Group title={t("Review")} action={canRerun(task, project, disabled) ? <RerunButton taskId={task.id} /> : undefined}>
-            <ReviewBlock review={review} />
+        {waiting ? (
+          <Group title={t("Review")}>
+            <WaitingRow />
           </Group>
+        ) : (
+          !!review && (
+            <Group title={t("Review")} action={canRerun(task, project, disabled) ? <RerunButton taskId={task.id} /> : undefined}>
+              <ReviewBlock review={review} />
+            </Group>
+          )
         )}
         {!!plans.length && (
           <Group title={t("Plan")} note={t("From the agent's todo list · updated at turn end")}>
@@ -150,6 +159,18 @@ export const TaskWorkpad = memo(function TaskWorkpad({
     </Section>
   );
 });
+
+function WaitingRow() {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1.5], paddingVertical: space[1] }}>
+      <Icon name="Clock" size={13} color={colors.foregroundMuted} />
+      <Label muted size={font.sm} selectable={false}>
+        {t("Waiting for review")}
+      </Label>
+    </View>
+  );
+}
 
 function Group({ title, note, action, children }: { title: string; note?: string; action?: ReactNode; children: ReactNode }) {
   return (

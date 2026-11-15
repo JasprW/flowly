@@ -1,0 +1,56 @@
+Flowly
+Review status QA 20261113-503c
+2
+tasks
+· 0 done
+Idle
+In review
+2
+Ideas
+Insights
+In review
+2
+Chore
+Waiting review
+1
+Review unavailable
+Chore
+Queue blocker
+1
+Review unavailable
+Review status QA 20261113-503c
+Waiting review
+In review
+Normal
+Chore
+#testing
+Add
+Disposable UI verification card. No implementation work.
+Progress
+Refresh
+Updates after each agent turn.
+Sessions
+1
+Start session
+QA Waiting review
+Ready
+· claude · claude-haiku-5-5
+3m ago
+Workpad
+Acceptance
+Updated 3m ago by QA Waiting review
+Disposable status verification fixture
+Review
+Review unavailable · Round 1
+Flowly restarted before the review started.
+Ran in a shared workspace, with other cards' uncommitted changes.
+Artifacts
+0
+Links
+0
+Details & workspace
+Waiting review
+Usage
+No token data
+Activity
+4

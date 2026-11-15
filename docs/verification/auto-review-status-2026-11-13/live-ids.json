@@ -1,0 +1,29 @@
+{
+  "title": "Review status QA 20261113-503c",
+  "root": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/.auto-review-status-fixture-503c",
+  "cards": [
+    {
+      "id": "f12871c0-f217-4026-b5c4-210d432ddd08",
+      "workspaceId": "wks_728bcf6690cdf336",
+      "title": "Queue blocker",
+      "agentId": "76e21afe-ada1-4622-9607-272e3daae0a4"
+    },
+    {
+      "id": "d417b1a1-3744-471c-b1b6-3ea895f8683d",
+      "workspaceId": "wks_02b8e82c2a427bb7",
+      "title": "Waiting review",
+      "agentId": "3f79c8d1-0eb7-479a-8d45-72d3d32ec0a1"
+    }
+  ],
+  "projectId": "e72c643a-a2c0-419a-99a5-e15fb0a9f04f",
+  "nativeProjectId": "prj_aad05f90500d0bb2",
+  "guardrailId": "0b20e82f-ce33-4fe3-b694-05b7dc14aed5",
+  "cleanup": {
+    "at": "2026-11-13T05:54:38.805Z",
+    "nativeAgents": [],
+    "boardProject": false,
+    "boardCards": [],
+    "nativeProject": false,
+    "nativeWorkspaces": []
+  }
+}

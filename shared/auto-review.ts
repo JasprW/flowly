@@ -67,10 +67,14 @@ export function continuesRound(events: readonly BoardEvent[], taskId: string, pr
   return since.filter((e) => e.action === "agent.turn_started").length <= 1;
 }
 
+/** An agent delivered the card and its review has not started yet (§3.1): the previous review is out of date. */
+export const reviewWaiting = (task: Pick<Task, "status" | "reviewWaiting" | "archivedAt">) =>
+  !!task.reviewWaiting && !task.archivedAt && task.status === "in_review";
+
 /** The review the card face and Attention show: only while the card is still where that review left it (§7). */
-export function visibleReview(task: Pick<Task, "status" | "review" | "archivedAt">): Review | null {
+export function visibleReview(task: Pick<Task, "status" | "review" | "reviewWaiting" | "archivedAt">): Review | null {
   const review = task.review;
-  if (!review || task.archivedAt) return null;
+  if (!review || task.archivedAt || reviewWaiting(task)) return null;
   const status = task.status;
   switch (review.state) {
     case "running":
@@ -94,14 +98,15 @@ export function visibleReview(task: Pick<Task, "status" | "review" | "archivedAt
  * A finished review that needs a person (§7): its Attention signal key, else null. A pass is not one: it only releases
  * the unread sessions the running review held back, which Mark as read clears as usual.
  */
-export function reviewSignal(task: Pick<Task, "status" | "review" | "archivedAt">): { state: "failed" | "unavailable"; key: string } | null {
+export function reviewSignal(task: Pick<Task, "status" | "review" | "reviewWaiting" | "archivedAt">): { state: "failed" | "unavailable"; key: string } | null {
   const review = visibleReview(task);
   if (!review || (review.state !== "failed" && review.state !== "unavailable")) return null;
   return { state: review.state, key: `review:${review.state}:${review.startedAt}` };
 }
 
-/** While a review runs, the card's unread sessions are not counted (§3.2). */
-export const reviewing = (task: Pick<Task, "status" | "review" | "archivedAt">) => visibleReview(task)?.state === "running";
+/** While a review waits to start or runs, the card's unread sessions are not counted (§3.2). */
+export const reviewing = (task: Pick<Task, "status" | "review" | "reviewWaiting" | "archivedAt">) =>
+  reviewWaiting(task) || visibleReview(task)?.state === "running";
 
 const ansi = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 /** The end of a check's output, without colour codes, at most `max` characters. */

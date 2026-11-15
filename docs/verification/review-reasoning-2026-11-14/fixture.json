@@ -1,0 +1,76 @@
+{
+  "root": ".test-data/review-reasoning-dc766582",
+  "owner": "dc766582-reasoning-live",
+  "children": [
+    "6e42edbf-9767-44fd-9e4f-d2de56a9bcc0"
+  ],
+  "projectId": "ffd09ea0-e674-497c-a675-ce715a589504",
+  "nativeProjectId": "prj_260cf3b33240f908",
+  "taskId": "f9c44c9b-3715-4b0a-9d87-e2a0a0360528",
+  "workspaceId": "wks_d8fab4412f01e809",
+  "agentId": "4a39dfc3-5d2d-49c8-b9dd-34035b6a3d52",
+  "selected": {
+    "model": "codex/gpt-6.1-terra",
+    "thinking": "xhigh"
+  },
+  "observed": [
+    {
+      "id": "6e42edbf-9767-44fd-9e4f-d2de56a9bcc0",
+      "title": "Flowly review · Verify ready fixture",
+      "provider": "codex",
+      "model": "gpt-6.1-terra",
+      "thinkingOptionId": "xhigh",
+      "mode": "auto",
+      "background": true,
+      "archived": true,
+      "status": "closed"
+    }
+  ],
+  "review": {
+    "trigger": {
+      "eventId": "ff125f72-ecdd-4000-80af-bb61592d56a3",
+      "agentId": "4a39dfc3-5d2d-49c8-b9dd-34035b6a3d52",
+      "from": "test"
+    },
+    "round": 1,
+    "maxRounds": 1,
+    "state": "passed",
+    "fingerprint": {
+      "taskRevision": 2,
+      "workpadRevision": 1,
+      "sha": "77970fc85fd8",
+      "dirty": true
+    },
+    "shared": true,
+    "shape": {
+      "files": 2,
+      "lines": 17,
+      "size": "s"
+    },
+    "items": [
+      {
+        "id": "goal",
+        "kind": "goal",
+        "name": "Does what you asked",
+        "gating": true,
+        "state": "passed",
+        "ms": 9174,
+        "detail": "README.md contains the exact required sentence, and no implementation changes are required.",
+        "file": "README.md",
+        "line": 2,
+        "quote": "The fixture is ready."
+      }
+    ],
+    "model": "codex/gpt-6.1-terra",
+    "startedAt": "2026-11-13T16:35:12.113Z",
+    "finishedAt": "2026-11-13T16:35:21.887Z"
+  },
+  "cleanup": {
+    "boardProject": false,
+    "boardCards": false,
+    "nativeProject": false,
+    "nativeWorkspaces": 0,
+    "nativeAgents": 0,
+    "directoryRemoved": true
+  }
+}

@@ -1,4 +1,7 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { logFailure } from "./error-report";
+
+vi.mock("./error-report", () => ({ logFailure: vi.fn() }));
 import { llmReviewer, parseReviewOutput, reviewPrompt } from "./review-session";
 import type { LlmReviewInput } from "./auto-review";
 
@@ -85,7 +88,7 @@ test("the reviewer's model: the Review model, else the summary models, never the
     },
   };
   const review = (reviewModel: string) =>
-    llmReviewer({ reviewModel: async () => reviewModel, summaryModels: async () => ["claude/claude-haiku-5-5"], remove: async () => undefined })(base, paseo as never);
+    llmReviewer({ reviewSettings: async () => ({ reviewModel }), summaryModels: async () => ["claude/claude-haiku-5-5"], remove: async () => undefined })(base, paseo as never);
   expect((await review("")).model).toBe("claude/claude-haiku-5-5");
   expect((await review("claude/claude-opus-5-5")).model).toBe("claude/claude-opus-5-5");
   expect(tried).toEqual(["claude/claude-haiku-5-5", "claude/claude-opus-5-5"]);
@@ -95,4 +98,58 @@ test("the card's images are listed by path under the description, nothing withou
   expect(reviewPrompt(base)).not.toContain("Card images");
   const prompt = reviewPrompt({ ...base, task: { ...base.task, images: ["/d/card-images/t/img-1.png"] } });
   expect(prompt).toContain("Card images (part of the description; view each with your image tool): /d/card-images/t/img-1.png");
+});
+
+test.each([
+  ["claude/claude-opus-5-5", "high", "high"],
+  ["claude/claude-opus-5-5", "removed", undefined],
+  ["claude/claude-opus-5-5", "", undefined],
+  ["", "high", undefined],
+])("review reasoning %s/%s is applied only when advertised by the explicit model", async (reviewModel, reviewThinking, expected) => {
+  const configs: Record<string, unknown>[] = [];
+  const paseo = {
+    providers: {
+      listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
+      listModels: async () => ({ models: [{ id: "claude-opus-5-5", thinkingOptions: [{ id: "high", label: "High" }] }] }),
+    },
+    workspaces: { ref: () => ({ agents: { create: async (input: { config: Record<string, unknown> }) => {
+      configs.push(input.config);
+      return { id: "review", waitForFinish: async () => ({ status: "idle", lastMessage: '{"items":[]}' }) };
+    } } }) },
+  };
+  await llmReviewer({
+    reviewSettings: async () => ({ reviewModel, reviewThinking }),
+    summaryModels: async () => ["claude/claude-opus-5-5"],
+    remove: async () => undefined,
+  })(base, paseo as never);
+  expect(configs).toEqual([{ provider: "claude/claude-opus-5-5", modeId: "plan", ...(expected ? { thinkingOptionId: expected } : {}) }]);
+});
+
+
+test.each(["error response", "exception"])("review still runs with default reasoning after metadata %s", async (failure) => {
+  vi.mocked(logFailure).mockClear();
+  let calls = 0;
+  const configs: Record<string, unknown>[] = [];
+  const paseo = {
+    providers: {
+      listAvailable: async () => ({ providers: [{ provider: "claude", available: true }] }),
+      listModels: async () => {
+        if (++calls === 1) return { models: [{ id: "claude-opus-5-5" }] };
+        if (failure === "exception") throw new Error("Metadata unavailable");
+        return { error: "Metadata unavailable", models: [] };
+      },
+    },
+    workspaces: { ref: () => ({ agents: { create: async (input: { config: Record<string, unknown> }) => {
+      configs.push(input.config);
+      return { id: "review", waitForFinish: async () => ({ status: "idle", lastMessage: '{"items":[]}' }) };
+    } } }) },
+  };
+  const result = await llmReviewer({
+    reviewSettings: async () => ({ reviewModel: "claude/claude-opus-5-5", reviewThinking: "high" }),
+    summaryModels: async () => [],
+    remove: async () => undefined,
+  })(base, paseo as never);
+  expect(result.model).toBe("claude/claude-opus-5-5");
+  expect(configs).toEqual([{ provider: "claude/claude-opus-5-5", modeId: "plan" }]);
+  expect(logFailure).toHaveBeenCalledOnce();
 });

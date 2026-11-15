@@ -6,6 +6,27 @@
 
 # Implementation progress
 
+## Review reasoning selection (card "auto review模型reasoning选择") — 2026-11-14
+
+- PR follow-up: hunks separated from shared SDK 0.16/image-removal work onto main’s SDK 0.15. User-authorized GPT Luna independently verified `5042806`: typecheck exit 0, focused 128/128 tests passed, no reproducible defects. See [independent report](verification/review-reasoning-2026-11-14/independent.md).
+
+- Live follow-up: local directory already installed; reload exit 0, enabled/running. Actual desktop (1700×1000) and compact (1000×900) browser UI selected high/xhigh, fresh context and plugin reload retained xhigh. Real Flowly auto reviewer `6e42edbf-9767-44fd-9e4f-d2de56a9bcc0` persisted `thinkingOptionId=xhigh` on codex/gpt-6.1-terra and passed; auto-archived. Disposable native/board resources and directory removed with zero remaining; original review settings restored. Telemetry disabled per dev-install rules. Native windows were not touched; device UI remains UNRUN. Details and screenshots in the report below.
+
+- Settings → Models → Review model now exposes provider-advertised Reasoning options and Model default. `reviewThinking` is optional; model changes clear it. The reviewer reads the model/reasoning pair together and sends `thinkingOptionId` only while that explicit model still supports it; summary fallback gets no override. Corrected the misleading project-default label/spec to match existing summary fallback behavior.
+- Permission assessment: reviewers should have fixed read-only access, with no editable permission picker. Live Codex capability inspection exposes only workspace-write auto/auto-review and full-access, no read-only control. Existing Claude Plan mode and permission denial remain; they do not provide a universal write barrier. Strict enforcement needs provider-native options verification; SDK config.options is already available, so a missing read-only mode alone does not imply missing host support. User clarified this means forbidding reviewer writes, not read-before-write.
+- Existing auto-review tip updated in all catalogs and ONBOARDING-SPEC; no new tip id/tour page. No telemetry field added (no switch or core action). No What's new/version changes.
+- PASS: typecheck exit 0; full tests exit 0, 161 files passed/1 skipped, 1447 tests passed/6 skipped. UNRUN: installed desktop/compact UI, actual review model execution, strict write probe, independent exact-commit verification. Shared working changes left uncommitted and not installed. [Report](verification/review-reasoning-2026-11-14/REPORT.md).
+
+## Auto review waiting state (card "auto review状态显示") — 2026-11-13
+
+- Agent delivery writes `task.reviewWaiting` atomically. Until its review starts, the card strip and drawer Review group show **Waiting for review**, hide the previous result, hold unread Attention signals and disable Rerun. The queue remains serial per project.
+- Review start clears the marker in the same write; a skipped delivery clears it too. Plugin restart turns a still-waiting delivery into Review unavailable with Rerun. The turn-end hook queues the review before settings, model and timeline reads.
+- AUTO-REVIEW-SPEC §3.1, §8.2, §9.1/§9.2 and all nine catalogs updated. Tests cover redelivery, old-result Attention suppression, skip after leaving In review or disabling Auto review, restart/rerun, and waiting behind another card.
+- PR #108 review follow-up: the review computes immediately but rework delivery waits for the delivering turn lifecycle write; failed recording makes the review unavailable. Waiting recovery retains the delivered worktree even after the delivery event is trimmed. Live harness active state now lives under ignored `.test-data`, separate from its committed historical receipt, and completed cleanup permits another setup.
+- Onboarding: no tour change or new tip; this corrects the existing review status at the point users see it. Telemetry: no switch or new core action, so no new field. What's new and version unchanged.
+- Verification: see `docs/verification/auto-review-status-2026-11-13/REPORT.md`. Local plugin reload, real queued-delivery state, desktop/compact card and drawer rendering, restart recovery and the compact Rerun action passed; fixture resources were removed and both registries checked. Independent exact-commit recheck passed on 82849e0: typecheck and 105 focused tests (INDEPENDENT-R2.md); isolated full suite: 1425 passed, 6 skipped. Native windows, phone rendering and a fresh real-model delivering-turn-end/completed verdict remain unrun.
+
+
 ## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13
 
 - A delivery to In review without `worktree`, from a shared workspace with Auto review on, now looks at the PR/MR links among this call's outputs and the card's existing outputs. A link whose host and repository match a remote of the card's repository gives its head commit through `git ls-remote` (5 s, no prompts); the one worktree, other than the repository's own directory, whose HEAD contains it is reviewed, recorded on the delivery event like an explicit `worktree`, and named in the result's `notice`. None, several, another repository's link or a git/network failure changes nothing (`server/review-worktree.ts` `prWorktree`).
