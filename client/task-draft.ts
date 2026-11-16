@@ -1,6 +1,6 @@
 import { enabledStatuses } from "../shared/lanes";
 import { priorities, taskTypes, type Project, type Status, type Task, type TaskType } from "../shared/model";
-import { connectorLimits, type ConnectorProvider, type ExternalSummary } from "../shared/connectors";
+import { connectorLimits, providerInfo, type ConnectorProvider, type ExternalSummary } from "../shared/connectors";
 import { draftField, type FormDraftFields } from "../shared/form-drafts";
 
 const workspaceModes = ["directory", "worktree", "existing"] as const;
@@ -16,7 +16,7 @@ export function restoredTask(fields: FormDraftFields | undefined, project: Proje
     const parsed: unknown = JSON.parse(text("externals") || "[]");
     if (Array.isArray(parsed))
       externals = parsed
-        .filter((x) => x && typeof x.provider === "string" && x.item && typeof x.item.key === "string" && typeof x.item.connectionId === "string")
+        .filter((x) => x && typeof x.provider === "string" && Object.prototype.hasOwnProperty.call(providerInfo, x.provider) && x.item && typeof x.item.key === "string" && typeof x.item.connectionId === "string")
         .slice(0, connectorLimits.perCreate);
   } catch {
     externals = [];

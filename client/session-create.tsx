@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { Modal } from "./modal";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
@@ -32,6 +32,7 @@ function SessionForm({
   seed,
   draft,
   busy,
+  closing,
   attempt,
   requestClose,
 }: {
@@ -48,6 +49,7 @@ function SessionForm({
   refresh(): void;
   draft: FormDraft;
   busy: { current: boolean };
+  closing: { current: boolean };
   attempt: { current: Attempt | undefined };
   requestClose(): void;
 }) {
@@ -102,7 +104,8 @@ function SessionForm({
     choice.ready &&
     hasInstruction;
   async function perform(action: () => Promise<unknown>) {
-    if (lock.current) return;
+    // A close in progress wins; it would unmount the form under a running create.
+    if (lock.current || closing.current) return;
     lock.current = true;
     busy.current = true;
     setSending(true);
@@ -314,12 +317,26 @@ function SessionForm({
  * New session in a card. Its draft (per card and prefill source) is saved on
  * the daemon and restored on every open (docs/FORM-DRAFTS-SPEC.md).
  */
-export function SessionCreate(props: Omit<Parameters<typeof SessionForm>[0], "draft" | "busy" | "attempt" | "requestClose">) {
+export function SessionCreate(props: Omit<Parameters<typeof SessionForm>[0], "draft" | "busy" | "closing" | "attempt" | "requestClose">) {
   const theme = useTheme();
   const { open, onClose, task, seed } = props;
-  const draft = useFormDraft(formDraftKey("session", task.id, seed?.ideaId ? { ideaId: seed.ideaId } : null), open);
+  const key = formDraftKey("session", task.id, seed?.ideaId ? { ideaId: seed.ideaId } : null);
+  const draft = useFormDraft(key, open);
   const busy = useRef(false);
-  const attempt = useRef<Attempt | undefined>(undefined);
+  // A prepared session belongs to the draft it was prepared for (card and idea), never to another.
+  const attempts = useRef(new Map<string, Attempt>());
+  const attempt = useMemo(
+    () => ({
+      get current() {
+        return attempts.current.get(key || "");
+      },
+      set current(next: Attempt | undefined) {
+        if (next) attempts.current.set(key || "", next);
+        else attempts.current.delete(key || "");
+      },
+    }),
+    [key],
+  );
   const closing = useRef(false);
   // Close, Cancel, Esc and Back save what is pending first; a failed save keeps the form open.
   const requestClose = () => {
@@ -327,7 +344,7 @@ export function SessionCreate(props: Omit<Parameters<typeof SessionForm>[0], "dr
     closing.current = true;
     void draft.flush().then((saved) => {
       closing.current = false;
-      if (saved) onClose();
+      if (saved && !busy.current) onClose();
     });
   };
   return (
@@ -341,7 +358,7 @@ export function SessionCreate(props: Omit<Parameters<typeof SessionForm>[0], "dr
       <Modal.Content>
         <Theme.Provider value={theme}>
           {open && draft.status !== "loading" ? (
-            <SessionForm key={draft.generation} {...props} draft={draft} busy={busy} attempt={attempt} requestClose={requestClose} />
+            <SessionForm key={draft.generation} {...props} draft={draft} busy={busy} closing={closing} attempt={attempt} requestClose={requestClose} />
           ) : (
             <Label muted>{t("Loading…")}</Label>
           )}

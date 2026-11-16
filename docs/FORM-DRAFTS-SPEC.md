@@ -79,9 +79,13 @@ what it restores and ignores what it does not understand.
 
 - **New task**: the draft is cleared as soon as the card exists, before the first
   agent starts, so an agent that fails to start never leads to a second card.
-  The draft stores the form's `operationId`, so a retry after reopening reuses the
-  server's idempotent create instead of making a duplicate. A failed create keeps
-  the draft.
+  The draft stores the form's `operationId` and is saved before the first create
+  request (a save that fails stops the create and shows the draft error), so a
+  retry after reopening reuses the server's idempotent create instead of making a
+  duplicate. A failed create keeps the draft.
+- A close that is still saving blocks Create, and a create in progress keeps the
+  form open until it finishes. A session prepared for one draft (card and idea) is
+  never recovered for another.
 - **New session**: the draft is cleared after the session is created; a failed
   create keeps it.
 - A failed clear is shown as a toast; the created resource is not affected.

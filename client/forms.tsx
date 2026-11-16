@@ -32,7 +32,7 @@ import { modelSettings, modelSettingsValues } from "../shared/settings";
 import { launchKanbanSession } from "./session";
 import { ImageAttachments, useImageAttachments } from "./image-attach";
 import { makeThumbnail } from "./web-images";
-import { DraftNotice, draftAttachments, useDraftChanges, useFormDraft, type FormDraft } from "./form-draft";
+import { DraftNotice, draftAttachments, snapshotImages, useDraftChanges, useFormDraft, type FormDraft } from "./form-draft";
 import { formDraftKey } from "../shared/form-drafts";
 import { restoredTask } from "./task-draft";
 import { uploadCardImages } from "./card-image-upload";
@@ -455,6 +455,7 @@ function TaskFormBody({
   agentDefaults,
   draft,
   busy,
+  closing,
   requestClose,
 }: {
   hostId: string;
@@ -470,6 +471,7 @@ function TaskFormBody({
   agentDefaults?: AgentDefaults;
   draft: FormDraft;
   busy: { current: boolean };
+  closing: { current: boolean };
   requestClose(): void;
 }) {
   const theme = useTheme();
@@ -582,10 +584,7 @@ function TaskFormBody({
     () => t("At most {cardImageLimit} images per card.", { cardImageLimit }),
     restoredImages,
   );
-  useDraftChanges(
-    draft,
-    !task && draft.status === "ready",
-    {
+  const draftFields = {
       title,
       description,
       status,
@@ -604,9 +603,8 @@ function TaskFormBody({
       prompt,
       externals: externals.length ? JSON.stringify(externals) : "",
       operationId,
-    },
-    images.attachments,
-  );
+    };
+  useDraftChanges(draft, !task && draft.status === "ready", draftFields, images.attachments);
   const contextRead = useRpc(rpc.taskContext),
     prepare = useRpc(rpc.prepareSession),
     paseo = usePaseo();
@@ -621,10 +619,14 @@ function TaskFormBody({
   const addTags = useStableCallback((values: string[]) => setTags((current) => [...current, ...values.filter((v) => !current.includes(v))]));
   const removeTag = useStableCallback((tag: string) => setTags((current) => current.filter((x) => x !== tag)));
   async function save() {
+    // A close in progress wins; it would unmount the form under a running create.
+    if (closing.current || busy.current) return;
     setPending(true);
     busy.current = true;
     setError("");
     try {
+      // The operationId must be on the daemon before the first create, so a retry after a lost response reuses it.
+      if (!task && !(await draft.persist({ fields: draftFields, images: snapshotImages(images.list()) }))) return;
       const result = task
         ? await update({
             id: task.id,
@@ -928,7 +930,7 @@ function TaskFormBody({
   );
 }
 
-type TaskFormProps = Omit<Parameters<typeof TaskFormBody>[0], "draft" | "busy" | "requestClose">;
+type TaskFormProps = Omit<Parameters<typeof TaskFormBody>[0], "draft" | "busy" | "closing" | "requestClose">;
 
 /**
  * New task / Edit task. A new task's draft (per project and prefill source) is
@@ -946,7 +948,7 @@ export function TaskForm(props: TaskFormProps) {
     closing.current = true;
     void draft.flush().then((saved) => {
       closing.current = false;
-      if (saved) onClose();
+      if (saved && !busy.current) onClose();
     });
   };
   return (
@@ -962,7 +964,7 @@ export function TaskForm(props: TaskFormProps) {
           {draft.status === "loading" ? (
             <Label muted>{t("Loading…")}</Label>
           ) : (
-            <TaskFormBody key={draft.generation} {...props} draft={draft} busy={busy} requestClose={requestClose} />
+            <TaskFormBody key={draft.generation} {...props} draft={draft} busy={busy} closing={closing} requestClose={requestClose} />
           )}
         </Theme.Provider>
       </Modal.Content>

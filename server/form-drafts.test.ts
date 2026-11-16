@@ -110,3 +110,17 @@ test("concurrent saves from the same revision: exactly one wins", async () => {
   expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   expect((await drafts.read("task:p:plain")).draft?.revision).toBe(1);
 });
+
+test("a failed write leaves no temporary file and keeps the previous draft", async () => {
+  const { drafts } = await setup();
+  await drafts.save({ key: "task:p:plain", baseRevision: 0, fields: { title: "kept" }, images: [] });
+  const { chmod } = await import("node:fs/promises");
+  await chmod(drafts.directory, 0o500);
+  try {
+    await expect(drafts.save({ key: "task:p:plain", baseRevision: 1, fields: { title: "lost" }, images: [] })).rejects.toThrow();
+  } finally {
+    await chmod(drafts.directory, 0o700);
+  }
+  expect((await readdir(drafts.directory)).filter((f) => f.includes(".tmp"))).toEqual([]);
+  expect((await drafts.read("task:p:plain")).draft).toMatchObject({ revision: 1, fields: { title: "kept" } });
+});

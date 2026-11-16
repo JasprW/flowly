@@ -34,7 +34,8 @@ export function useFormDraft(key: string | null, active = true) {
   const saveRef = useRef(save);
   saveRef.current = save;
   const saver = useMemo(
-    () => new DraftSaver((input) => saveRef.current({ key: keyRef.current!, ...input }), setSaveState),
+    // Bound to this key: a save still pending when the key changes lands under its own key.
+    () => new DraftSaver((input) => saveRef.current({ key: key!, ...input }), setSaveState),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [key],
   );
@@ -88,9 +89,21 @@ export function useFormDraft(key: string | null, active = true) {
     discard: () => saver.discard(),
     retrySave: async () => {
       if (!saver.state.conflict || !key) return saver.flush();
-      // Keep this form's version on top of the newer one the user was told about.
-      const latest = await readRef.current({ key });
-      return saver.overwrite(latest.draft?.revision ?? 0);
+      try {
+        // Keep this form's version on top of the newer one the user was told about.
+        const latest = await readRef.current({ key });
+        return await saver.overwrite(latest.draft?.revision ?? 0);
+      } catch (e) {
+        // The conflict stays, so Retry stays available.
+        setSaveState({ saving: false, error: message(e), conflict: true });
+        return false;
+      }
+    },
+    /** Saves this snapshot now (before a create); true when it is saved or drafts are off. */
+    persist: (snapshot: DraftSnapshot) => {
+      if (status !== "ready") return Promise.resolve(true);
+      saver.change(snapshot);
+      return saver.flush();
     },
     /** After a successful create; a later change starts a new draft. */
     clear: async () => {

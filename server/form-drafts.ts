@@ -1,4 +1,5 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { logFailure } from "./error-report";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { BoardStore } from "./store";
@@ -54,8 +55,20 @@ export class FormDraftStore {
     const next = formDraftStateSchema.parse(state);
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const temporary = `${this.path}.${randomUUID()}.tmp`;
-    await writeFile(temporary, JSON.stringify(next), { mode: 0o600 });
-    await rename(temporary, this.path);
+    try {
+      // Synced before the rename, so a power loss never leaves a truncated draft file.
+      const file = await open(temporary, "w", 0o600);
+      try {
+        await file.writeFile(JSON.stringify(next));
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      await rename(temporary, this.path);
+    } catch (error) {
+      await rm(temporary, { force: true });
+      throw error;
+    }
   }
   private serialize<T>(job: () => Promise<T>): Promise<T> {
     const run = this.tail.then(job);
@@ -116,13 +129,17 @@ export class FormDraftStore {
         const revision = (current?.revision ?? 0) + 1;
         state.drafts[input.key] = { revision, updatedAt: new Date(this.clock()).toISOString(), fields: input.fields, images };
         await this.write(state);
-        const kept = new Set(images.map((i) => i.file));
-        await this.removeFiles((current?.images || []).map((i) => i.file).filter((f) => !kept.has(f)));
-        return { revision };
       } catch (error) {
+        // Not committed: the new files are referenced by nothing.
         await this.removeFiles(written);
         throw error;
       }
+      // Committed: the new files are referenced now; an old file that cannot be removed is only logged.
+      const kept = new Set(images.map((i) => i.file));
+      await this.removeFiles((current?.images || []).map((i) => i.file).filter((f) => !kept.has(f))).catch((e) =>
+        logFailure("Flowly form draft image cleanup failed:", e),
+      );
+      return { revision: state.drafts[input.key].revision };
     });
   }
 

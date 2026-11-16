@@ -58,3 +58,12 @@ test("no draft restores nothing; unexpected values are ignored", () => {
   // A finished lane is kept only when the form was opened from that lane.
   expect(restoredTask({ status: "done" }, project, "done").status).toBe("done");
 });
+
+test("a restored external item from an unknown provider is dropped, not rendered", () => {
+  const externals = [
+    { provider: "github", item: { key: "o/r#1", connectionId: "c1", summary: "ok" } },
+    { provider: "retired-service", item: { key: "X-1", connectionId: "c2", summary: "gone" } },
+    { provider: "toString", item: { key: "X-2", connectionId: "c3", summary: "prototype" } },
+  ];
+  expect(restoredTask({ externals: JSON.stringify(externals) }, project, "todo").externals.map((x) => x.item.key)).toEqual(["o/r#1"]);
+});
