@@ -10,3 +10,7 @@ PR #115，基于bdf9804；只改daemon同步、定时回归与契约，客户端
 - 回调ref意见不适用当前调用链：BoardPush唯一产品调用方传入useStableCallback与React setState dispatcher，二者身份稳定；没有会随未提交render改变的回调。未为未来假设增加layout effect，按AGENTS Scope control在审查线程说明。
 
 普通失败重试、改绑、创建后重查和完整轮纠正回归均保留。未新增API、依赖、客户端包、界面、引导或遥测字段；手机取样保留原运行边界。
+
+## 独立复核发现的绑定读取窗口
+
+Luna在4d8f667末次检查拒绝放行：异步读取绑定时尚未设置running，新事件的定时回调可能在旧pass运行时被合并而丢失新绑定。已新增同时阻塞bindings和agents.list的确定性回归：修复前exit1，1失败/17跳过，实际writes为空；修复后整套聚焦53通过/0失败，typecheck exit0。readingBindings与running统一保护pendingChange，只有两阶段均结束才drain；普通失败不制造pending，原失败不自旋断言保留。

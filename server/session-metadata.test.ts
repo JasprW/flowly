@@ -297,3 +297,43 @@ test.each([false, true])("a creation during a slow pass gets one fresh pass, wit
     vi.useRealTimers();
   }
 });
+
+test("a creation while bindings are being read gets a fresh pass after the old snapshot", async () => {
+  vi.useFakeTimers();
+  let releaseBindings!: () => void, releasePass!: () => void;
+  const blockedBindings = new Promise<void>((resolve) => { releaseBindings = resolve; });
+  const blockedPass = new Promise<void>((resolve) => { releasePass = resolve; });
+  let sessions: { agentId: string; taskId: string }[] = [];
+  const live: Agent[] = [];
+  const { paseo, list, writes } = fakePaseo(live, async () => undefined);
+  list.mockImplementationOnce(async () => {
+    await blockedPass;
+    return { entries: [], pageInfo: { nextCursor: null } };
+  });
+  const bindings = vi.fn(async () => ({ sessions, workspaces: [] })).mockImplementationOnce(async () => {
+    const snapshot = { sessions, workspaces: [] };
+    await blockedBindings;
+    return snapshot;
+  });
+  const sync = new SessionMetadataSync(Date.now, 120000, bindings);
+  sync.attach(paseo);
+  try {
+    const first = sync.fromBindings();
+    await vi.advanceTimersByTimeAsync(0);
+    sessions = [{ agentId: "new", taskId: "t1" }];
+    live.push({ id: "new" });
+    sync.created(paseo, "new");
+    releaseBindings();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(list).toHaveBeenCalledTimes(1);
+    releasePass();
+    await first;
+    await vi.waitFor(() => expect(writes).toEqual([["new", { "flowly.taskId": "t1", "flowly.agentId": "new" }]]));
+    expect(bindings).toHaveBeenCalledTimes(2);
+  } finally {
+    releaseBindings();
+    releasePass();
+    sync.stop();
+    vi.useRealTimers();
+  }
+});

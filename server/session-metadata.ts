@@ -39,6 +39,7 @@ export class SessionMetadataSync {
   private skippedAt = 0;
   private running: Promise<void> | null = null;
   private pendingChange = false;
+  private readingBindings = false;
   /** The board changed since the last full pass (or none ran yet): bindings may have gone, look at every live value. */
   private dirty = true;
   private paseo: Paseo | null = null;
@@ -67,7 +68,7 @@ export class SessionMetadataSync {
     if (hostSupports(METADATA_FEATURE) === false) return;
     this.dirty = true;
     this.missingWorkspaces.clear();
-    if (this.running) {
+    if (this.running || this.readingBindings) {
       this.pendingChange = true;
       return;
     }
@@ -81,13 +82,25 @@ export class SessionMetadataSync {
 
   /** Runs a pass from the plugin's current bindings; nothing before a handler gave a connection. */
   async fromBindings() {
-    if (!this.bindings || !this.paseo) return;
+    if (!this.bindings || !this.paseo || this.readingBindings) return;
+    this.readingBindings = true;
     try {
       const current = await this.bindings();
       await this.sync(this.paseo, current.sessions, current.workspaces);
     } catch (error) {
       logFailure("Flowly session metadata sync failed:", error);
+    } finally {
+      this.readingBindings = false;
+      this.drainChange();
     }
+  }
+
+  private drainChange() {
+    if (!this.pendingChange || this.running || this.readingBindings) return;
+    this.pendingChange = false;
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    void this.fromBindings();
   }
 
   stop() {
@@ -116,12 +129,7 @@ export class SessionMetadataSync {
       })
       .finally(() => {
         this.running = null;
-        if (this.pendingChange) {
-          this.pendingChange = false;
-          clearTimeout(this.timer);
-          this.timer = undefined;
-          void this.fromBindings();
-        }
+        this.drainChange();
       });
     return this.running;
   }
