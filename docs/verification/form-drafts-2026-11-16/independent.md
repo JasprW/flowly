@@ -76,3 +76,46 @@ Two more gaps, not in the spec list:
 - Full suite: Node 23 exit 1 (1 failure, pre-existing on `origin/main`); Node 24 exit 0 on rerun (1 run earlier failed on a timeout flake).
 - Focused suites: 5/5 files, 41/41 tests passed (Node 24).
 - Part B: 0 run, all UNRUN.
+
+## Re-run on ea6e7f7
+
+Commit under test: `ea6e7f7` (branch `fix/form-drafts`), after `847afb3` (8 review fixes). Worktree `/tmp/flowly-verify-ea6e7f7` created, `npm ci` exit 0, removed afterwards. Part B skipped as instructed (implementer's own evidence is in `ui.md`).
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| Typecheck | `npm run typecheck` | 0 | clean |
+| Full suite, Node 23 | `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test` | 1 | files: 1 failed, 167 passed, 1 skipped (169). tests: 1 failed, 1519 passed, 6 skipped (1526). Failure: the same `server/sqlite-store.test.ts` transaction test as before (pre-existing on `origin/main`) |
+| Full suite, Node 24 (run 1) | same, via `npx -y -p node@24` | 1 | tests: 1 failed, 1519 passed, 6 skipped. Failure: `server/tool-server.test.ts` CLI flow, `Test timed out in 30000ms` (same flake as before) |
+| `server/tool-server.test.ts`, Node 24 | focused rerun | 0 | 12/12 passed |
+| Full suite, Node 24 (run 2) | same | 0 | files: 168 passed, 1 skipped (169). tests: 1520 passed, 6 skipped (1526) |
+| Focused suites, Node 24 | `server/form-drafts.test.ts client/form-draft-saver.test.ts client/task-draft.test.ts client/catalog.test.ts server/guardrails.test.ts` | 0 | 5/5 files, 43/43 tests passed (was 41; the 2 new tests are below) |
+
+Node 23 sqlite failure is the same as before; the Node 23 run was not repeated because the Node 24 result is the CI-equivalent one.
+
+### Review of 847afb3: is each fix real, and tested?
+
+| Fix | Real? | Tested? |
+|---|---|---|
+| Saver bound to its own draft key (`client/form-draft.tsx`, `key!` instead of `keyRef`) | Yes: the closure captures the key the saver was built for. | No. Nothing covers a pending save across a key change. |
+| `retrySave` conflict path: read errors are caught, conflict kept, Retry stays | Yes. | No. |
+| `persist` before the first create (`forms.tsx:629`) | Yes: `operationId` is saved before `paseo`/create runs, and a failed persist returns before create. The `busy` flag is reset in the existing `finally`. | No. There is no test of the order or of a failed persist. |
+| Close during save blocks create; running create defers close (`closing`/`busy` checks in `forms.tsx` and `session-create.tsx`) | Yes, as far as read: `save()` returns early when `closing` or `busy` is set, and `requestClose` no longer closes while `busy`. | No. |
+| Prepared session attempts per draft key (`session-create.tsx`, `Map` keyed by `key`) | Yes: a card's attempt and an idea's attempt no longer overwrite each other. | No. |
+| Unknown external providers dropped on restore (`task-draft.ts`, `hasOwnProperty(providerInfo)`) | Yes. `toString` and retired providers are rejected. | Yes: `client/task-draft.test.ts` new test (`github` kept; `retired-service` and `toString` dropped). |
+| fsync before rename; temp file removed on failure (`server/form-drafts.ts`) | Yes in the code. | Partly: `server/form-drafts.test.ts` new test checks no `.tmp` file is left and the previous draft survives a failed write (chmod 0500 on the directory). It does not check fsync. The test uses chmod, so it does nothing as root. |
+| Failed old-image cleanup after commit no longer deletes new images; error logged with `logFailure` | Yes: the cleanup is moved after the commit and wrapped in `.catch`. | Not directly. The new test does not cover a cleanup failure. |
+
+Item 5 duplicate-card claim: **confirmed**, with a caveat.
+
+- `server/service.ts:474-478`: `createCard` is serialized and returns an existing card with the same `operationId` before any workspace is created. `store.mutate` at line ~578 checks again.
+- `server/service.test.ts:84`: calls `createTask` twice with the same input, expects the same card id and `x.create` called once. That is the only test of this path, and it sits inside a test named for native-root sourcing. It covers a retry after success, not a retry after a failure partway through.
+- `client/task-draft.test.ts`: round-trips `operationId` through restore. It does not prove the form sends it again.
+
+## Still untested
+
+- Retry after a lost response or crash mid-create, i.e. a workspace created but no card written. The Paseo-side `idempotencyKey` (`service.ts:555`) is the only protection there, and no test covers it.
+- The UI sequence: persist → create → clear, and a failed persist keeping the form open. Client UI logic has no tests in these suites.
+- Clear after a successful create fails: the draft stays and the form can be reopened with the old `operationId`. The result is an idempotent re-create, which is probably safe, but not tested.
+- Key binding across a key change; retry after a conflict-read error; the close-vs-create race; per-key prepared attempts; the image-cleanup-failure path.
+- Spec §6 items 1 (Esc/Cancel reopen, reload), 2 (client key use), 4 (`DraftNotice` buttons) are still as in the first report.
+- Part B (live UI) is not run by me in either pass; see `ui.md` for the implementer's probe.

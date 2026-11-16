@@ -27,3 +27,17 @@ Desktop screenshots are in `ui/`. Compact has no screenshots, because shot-lib's
 - Create-clears-draft in the UI, and the save-failure and load-failure notices.
 - Paste events; the image was attached through the file chooser only.
 - Phones, native client or daemon restart, force-quit.
+
+## Re-run after the review fixes (`847afb3`, plugin reloaded)
+
+Three runs. No assertion failed in any of them. Every failure was a navigation or page-load timeout before any form step: shot-lib's 8 s project-chooser click, or `app.paseo.sh` `page.goto` `ERR_TIMED_OUT`. Logs: `ui/run-847afb3-{1,2,3}.log`.
+
+| Run | Passed | Failed (all navigation) |
+| --- | --- | --- |
+| 1 | 12 | compact New session round |
+| 2 | 12 | desktop New task round |
+| 3 | 4 | desktop New session round, both compact rounds |
+
+Taken together, all 16 checks passed at `847afb3`. No single run passed all 16, so the clean single run above is still the one at `089d115`. `ui/results.json` holds the last run's result.
+
+After the runs, a read-only look at the daemon's `form-drafts.json` shows two entries left: `task:<flowly project>:plain` and `session:<this card>:plain`. Both have empty text and no images. No probe text or images are left.
