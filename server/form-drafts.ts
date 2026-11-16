@@ -66,7 +66,8 @@ export class FormDraftStore {
       }
       await rename(temporary, this.path);
     } catch (error) {
-      await rm(temporary, { force: true });
+      // A failed cleanup must not hide why the write failed.
+      await rm(temporary, { force: true }).catch((e) => logFailure("Flowly form draft temp cleanup failed:", e));
       throw error;
     }
   }
@@ -130,8 +131,8 @@ export class FormDraftStore {
         state.drafts[input.key] = { revision, updatedAt: new Date(this.clock()).toISOString(), fields: input.fields, images };
         await this.write(state);
       } catch (error) {
-        // Not committed: the new files are referenced by nothing.
-        await this.removeFiles(written);
+        // Not committed: the new files are referenced by nothing. A failed cleanup must not hide the save error.
+        await this.removeFiles(written).catch((e) => logFailure("Flowly form draft image rollback failed:", e));
         throw error;
       }
       // Committed: the new files are referenced now; an old file that cannot be removed is only logged.

@@ -553,7 +553,7 @@ function TaskFormBody({
   }, [index.data]);
   // Kept in the draft: a retry after reopening reuses the server's idempotent create.
   const [operationId] = useState(
-    () => restored.operationId || `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    () => restored.operationId || draft.unsavedOperation() || `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
   // Optional first agent for a new task (remembered on/off choice).
   const view = useBoardView();
@@ -626,7 +626,7 @@ function TaskFormBody({
     setError("");
     try {
       // The operationId must be on the daemon before the first create, so a retry after a lost response reuses it.
-      if (!task && !(await draft.persist({ fields: draftFields, images: snapshotImages(images.list()) }))) return;
+      if (!task && !(await draft.persist({ fields: draftFields, images: snapshotImages(images.list()) }, operationId))) return;
       const result = task
         ? await update({
             id: task.id,

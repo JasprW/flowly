@@ -2,13 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import * as rpc from "../shared/rpc";
-import type { ReadDraft } from "../shared/form-drafts";
+import { draftConflictMessage, type ReadDraft } from "../shared/form-drafts";
 import { DraftSaver, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
 import type { Attachment } from "./web-images";
 import { Button, Notice, message, space } from "./ui";
 import { t } from "../shared/i18n";
 
 export type FormDraft = ReturnType<typeof useFormDraft>;
+
+/**
+ * Create identities of forms whose draft could not be saved (its load failed),
+ * kept for this client's lifetime so a retry after reopening still reuses the
+ * server's idempotent create.
+ */
+const unsavedOperations = new Map<string, string>();
 
 /**
  * Loads and saves one New task / New session draft on the daemon
@@ -78,6 +85,7 @@ export function useFormDraft(key: string | null, active = true) {
     [saver],
   );
   return {
+    key,
     status,
     draft,
     generation,
@@ -100,16 +108,25 @@ export function useFormDraft(key: string | null, active = true) {
       }
     },
     /** Saves this snapshot now (before a create); true when it is saved or drafts are off. */
-    persist: (snapshot: DraftSnapshot) => {
-      if (status !== "ready") return Promise.resolve(true);
+    persist: (snapshot: DraftSnapshot, operationId?: string) => {
+      if (status !== "ready") {
+        // Nothing can be saved over an unread draft: keep the create identity in memory instead.
+        if (key && operationId) unsavedOperations.set(key, operationId);
+        return Promise.resolve(true);
+      }
       saver.change(snapshot);
       return saver.flush();
     },
+    /** The create identity of an earlier attempt whose draft could not be saved. */
+    unsavedOperation: () => (key ? unsavedOperations.get(key) : undefined),
     /** After a successful create; a later change starts a new draft. */
     clear: async () => {
       saver.discard();
       saver.disable();
       if (!key) return;
+      unsavedOperations.delete(key);
+      // A draft that could not be read is never deleted unseen.
+      if (status !== "ready") return;
       await clearRpc({ key });
     },
   };
@@ -170,7 +187,10 @@ export function DraftNotice({ draft, onDiscardClose }: { draft: FormDraft; onDis
     <View style={{ gap: space[2] }}>
       <Notice>
         {draft.saveState.conflict
-          ? t("This draft was changed in another window. Retry to keep this version instead.")
+          ? draft.saveState.error.includes(draftConflictMessage)
+            ? t("This draft was changed in another window. Retry to keep this version instead.")
+            : // A failed retry: the conflict stays, and so does the reason the retry failed.
+              `${t("This draft was changed in another window. Retry to keep this version instead.")} ${t("The draft was not saved: {error}", { error: draft.saveState.error })}`
           : t("The draft was not saved: {error}", { error: draft.saveState.error })}
       </Notice>
       <View style={{ flexDirection: "row", gap: space[2] }}>

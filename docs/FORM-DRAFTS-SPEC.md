@@ -52,7 +52,9 @@ shows a prefilled form's draft and the reverse.
   draft stays.
 - If the draft cannot be loaded when the form opens, the form shows the error with
   **Retry** and does not save, so a failed load never overwrites a draft with an
-  empty form. Creating still works.
+  empty form. Creating still works, and a successful create does not clear the
+  unread draft. New task keeps its `operationId` in client memory for that draft
+  key instead, so a retry after reopening (same client) still reuses it.
 - A force-quit may lose up to the last ~400 ms of typing.
 
 ## 4. Daemon storage and RPC
