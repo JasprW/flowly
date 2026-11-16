@@ -571,6 +571,7 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     // The first retry waits 5 s; timed rounds (5 s) go on meanwhile.
     await vi.advanceTimersByTimeAsync(5000);
     expect(subscribes).toBe(2);
+    expect(calls.board.length - roundsBefore).toBeGreaterThan(0);
     expect(calls.board.length - roundsBefore).toBeLessThanOrEqual(2);
     stop();
   });
@@ -594,6 +595,10 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     emit!();
     await vi.advanceTimersByTimeAsync(0);
     expect(calls.board.length).toBe(afterLive + 1);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(calls.board.length).toBe(afterLive + 1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls.board.length).toBe(afterLive + 2);
     stop();
   });
 });

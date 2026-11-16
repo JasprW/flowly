@@ -1364,3 +1364,5 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 真正创建、改绑、删卡、Wrap up/unwrap、镜像纠正已验证；修复prepare先于agent创建的缓存跳过、缓存正确后不再核对的问题。保留前置任务普通失败重试实现及回归，避免旧共享树覆盖。
 - 真实0.15.4 daemon回退通过，旧客户端UI未跑；精确ba4aa41候选独立GPT6Luna typecheck及48项聚焦测试通过，旧宿主复验通过；实现者全量1496通过/6跳过。证据：[总报告](verification/paseo016-ga-2026-11-16/REPORT.md)、[手机](verification/paseo016-ga-2026-11-16/PHONE.md)、[旧宿主](verification/paseo016-ga-2026-11-16/OLD-HOST.md)。
 - 无新界面、设置或heartbeat字段，不增加tour/tip/What’s new；README与OVERVIEW说明默认本机ID镜像与订阅行为。
+
+- CodeRabbit后续：缺失归档workspace有界复查、用户批准的忙时补轮、失败不自旋均有回归；定时断言覆盖5秒回退与60秒校对。旧实现3回归失败，修复后5文件52项与typecheck通过。见 verification/paseo016-ga-2026-11-16/CODERABBIT.md。

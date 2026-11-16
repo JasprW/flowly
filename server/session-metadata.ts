@@ -32,10 +32,13 @@ export class SessionMetadataSync {
   private readonly done = new Map<string, string>();
   /** workspaceId → taskId written (or found right) in this daemon run. */
   private readonly doneWorkspaces = new Map<string, string>();
+  /** Bound workspaces absent from the live list, deferred until a board change or bounded recheck. */
+  private readonly missingWorkspaces = new Map<string, number>();
   /** Managed sessions that were not live at the last pass; looked at again after `recheckMs`. */
   private skipped = new Set<string>();
   private skippedAt = 0;
   private running: Promise<void> | null = null;
+  private pendingChange = false;
   /** The board changed since the last full pass (or none ran yet): bindings may have gone, look at every live value. */
   private dirty = true;
   private paseo: Paseo | null = null;
@@ -63,6 +66,11 @@ export class SessionMetadataSync {
   changed() {
     if (hostSupports(METADATA_FEATURE) === false) return;
     this.dirty = true;
+    this.missingWorkspaces.clear();
+    if (this.running) {
+      this.pendingChange = true;
+      return;
+    }
     if (!this.bindings || this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = undefined;
@@ -83,18 +91,22 @@ export class SessionMetadataSync {
   }
 
   stop() {
+    this.pendingChange = false;
     clearTimeout(this.timer);
     this.timer = undefined;
   }
 
-  /** Fire and forget: one pass at a time; a call while one runs is dropped (the next chip round or write asks again). */
+  /** One pass at a time; ordinary reads join it, while changed() queues one fresh binding pass. */
   sync(paseo: Paseo, managed: readonly Managed[], workspaces?: readonly Bound[]) {
     this.paseo = paseo;
     if (this.running || hostSupports(METADATA_FEATURE) === false) return this.running ?? Promise.resolve();
     if (this.now() - this.skippedAt >= this.recheckMs) this.skipped = new Set();
     const full = this.dirty;
     const wanted = managed.filter((m) => full || (this.done.get(m.agentId) !== m.taskId && !this.skipped.has(m.agentId)));
-    const wantedWorkspaces = (workspaces ?? []).filter((w) => this.doneWorkspaces.get(w.workspaceId) !== w.taskId);
+    const wantedWorkspaces = (workspaces ?? []).filter((w) =>
+      this.doneWorkspaces.get(w.workspaceId) !== w.taskId &&
+      (full || this.now() - (this.missingWorkspaces.get(w.workspaceId) ?? -Infinity) >= this.recheckMs),
+    );
     if (!wanted.length && !wantedWorkspaces.length && !this.dirty) return Promise.resolve();
     this.dirty = false;
     this.running = this.pass(paseo, managed, wanted, workspaces ?? null, full)
@@ -104,6 +116,12 @@ export class SessionMetadataSync {
       })
       .finally(() => {
         this.running = null;
+        if (this.pendingChange) {
+          this.pendingChange = false;
+          clearTimeout(this.timer);
+          this.timer = undefined;
+          void this.fromBindings();
+        }
       });
     return this.running;
   }
@@ -154,7 +172,10 @@ export class SessionMetadataSync {
   private async workspacePass(paseo: Paseo, workspaces: readonly Bound[], full: boolean) {
     if (!paseo.workspaces || typeof paseo.workspaces.list !== "function") return;
     const binding = new Map(workspaces.map((w) => [w.workspaceId, w.taskId] as const));
-    for (const workspace of await liveWorkspaces(paseo)) {
+    const listed = await liveWorkspaces(paseo);
+    const listedIds = new Set(listed.map((workspace) => workspace.id));
+    for (const workspace of listed) {
+      this.missingWorkspaces.delete(workspace.id);
       const want = binding.get(workspace.id) ?? null;
       const known = this.doneWorkspaces.get(workspace.id);
       if (!full && want !== null && known === want) continue;
@@ -170,6 +191,9 @@ export class SessionMetadataSync {
       if (!(await this.write(ref, { [metadataTaskId]: want }))) return;
       if (want === null) this.doneWorkspaces.delete(workspace.id);
       else this.doneWorkspaces.set(workspace.id, want);
+    }
+    for (const workspace of workspaces) {
+      if (!listedIds.has(workspace.workspaceId)) this.missingWorkspaces.set(workspace.workspaceId, this.now());
     }
   }
 }

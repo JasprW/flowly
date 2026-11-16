@@ -115,6 +115,8 @@
   - 写入：卡片 session 写 `{ flowly.taskId, flowly.agentId }`，卡片工作区写 `{ flowly.taskId }`，Flowly 为卡片运行的后台 agent（summary、自动验收）在创建时带 `{ flowly.taskId }`（`taskMetadata()`，只在本次运行已确认宿主支持元数据后才带，避免旧宿主拒绝创建）。
   - 同步时机：每次看板写入后 1 s 内跑一轮（合并同一操作的多次写入），用最近一个 RPC 处理器给的连接；chip 轮次询问受管 session 时也会触发。daemon 启动后的第一轮和每次看板写入后的一轮为完整轮：清除插件数据已不再对应的值（删除卡片、session 改绑）。Wrap up 与 unwrap 不改变绑定：归档的工作区与 session 保留镜像，unwrap 用同一 ID 恢复后值仍正确，恢复后的 session 在下一轮补写（未上线的受管 session 每 2 分钟复查）。只清 Flowly 写过的键；只带 `flowly.taskId` 的后台 agent 不清。
   - 以插件数据为准：每轮从看板读当前绑定，元数据不同就改写。宿主不支持（方法 B 识别拒绝）时本次 daemon 运行内不再写。
+  - 在线列表未列出的绑定工作区沿用2分钟有界复查，不得每个chip轮次重列所有资源；看板变化清除该延期，unwrap随即重查；读取/写入失败不记成延期成功。
+  - 用户确认（2026-11-16，CodeRabbit复核）：同步忙时遇到新的created/changed，记一个独立的待处理标记，当前轮结束后读新绑定补一轮。失败造成的dirty只留给下一次既有触发，不能触发立即重试循环；stop清掉待处理标记。
   - 完整轮核对本次读取到的 session/工作区元数据，即使此前已缓存为正确也不能跳过；没有看板变化或新实体的普通轮次仍使用缓存，避免增加读取。
   - 完整轮的 session 清理只针对已不在当前受管集合中的 session；仍受管但改绑到另一张卡的 session 走更新路径，不得根据本轮写入前的旧元数据快照清除刚写入的新绑定。回归验收同时覆盖启动后的首轮和已有同步缓存后的改绑，并确认真正解绑后仍清除 Flowly 的键、保留其他元数据。
   - 新 session：prepare 先建立受管关系，native agent 可能稍后才创建。受管 agent 的 `agent.create.after` 事件须清除该 agent 的未上线缓存并触发同步，不能因为 prepare 期间未找到它而等待 2 分钟复查；不增加周期轮询。

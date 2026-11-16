@@ -12,11 +12,12 @@ function fakePaseo(live: Agent[], setMetadata?: (id: string, patch: Record<strin
   const list = vi.fn(async () => ({ entries: live.map((agent) => ({ agent })), pageInfo: { nextCursor: null } }));
   const writes: [string, Record<string, string>][] = [];
   const workspaceWrites: [string, Record<string, string | null>][] = [];
+  const workspaceList = vi.fn(async () => ({ entries: workspaces ?? [], pageInfo: { nextCursor: null } }));
   const paseo = {
     ...(workspaces
       ? {
           workspaces: {
-            list: async () => ({ entries: workspaces, pageInfo: { nextCursor: null } }),
+            list: workspaceList,
             ref: (id: string) => ({
               setMetadata: async (patch: Record<string, string | null>) => {
                 workspaceWrites.push([id, patch]);
@@ -43,7 +44,7 @@ function fakePaseo(live: Agent[], setMetadata?: (id: string, patch: Record<strin
             },
     },
   };
-  return { paseo: paseo as never, list, writes, workspaceWrites };
+  return { paseo: paseo as never, list, writes, workspaceWrites, workspaceList };
 }
 
 test("writes the card and session ids on live managed sessions only, once per daemon run", async () => {
@@ -220,4 +221,79 @@ test("a failed metadata write remains eligible for the next existing sync round"
   expect(writes).toHaveLength(2);
   await sync.sync(paseo, managed);
   expect(writes).toHaveLength(2);
+});
+
+
+test("absent bound workspaces defer repeated reads, then recheck on deadline or board change", async () => {
+  let now = 0;
+  const workspaces: Workspace[] = [];
+  const { paseo, list, workspaceList, workspaceWrites } = fakePaseo([], async () => undefined, workspaces);
+  const sync = new SessionMetadataSync(() => now, 1000);
+  const bound = [{ workspaceId: "archived", taskId: "t1" }];
+  await sync.sync(paseo, [], bound);
+  await sync.sync(paseo, [], bound);
+  now = 999;
+  await sync.sync(paseo, [], bound);
+  expect(list).toHaveBeenCalledTimes(1);
+  expect(workspaceList).toHaveBeenCalledTimes(1);
+  now = 1000;
+  await sync.sync(paseo, [], bound);
+  expect(workspaceList).toHaveBeenCalledTimes(2);
+  workspaces.push({ id: "archived" });
+  sync.changed();
+  await sync.sync(paseo, [], bound);
+  expect(workspaceWrites).toEqual([["archived", { "flowly.taskId": "t1" }]]);
+});
+
+test("workspace write failures stay eligible for the next existing round", async () => {
+  const { paseo, workspaceList } = fakePaseo([], async () => undefined, [{ id: "w1" }]);
+  const write = vi.fn(async () => undefined).mockRejectedValueOnce(new Error("connection closed"));
+  Object.assign(paseo, { workspaces: { list: workspaceList, ref: () => ({ setMetadata: write }) } });
+  const sync = new SessionMetadataSync();
+  const bound = [{ workspaceId: "w1", taskId: "t1" }];
+  await sync.sync(paseo, [], bound);
+  expect(write).toHaveBeenCalledTimes(1);
+  await sync.sync(paseo, [], bound);
+  expect(write).toHaveBeenCalledTimes(2);
+});
+
+test.each([false, true])("a creation during a slow pass gets one fresh pass, without looping after failure (%s)", async (fail) => {
+  vi.useFakeTimers();
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const live: Agent[] = [];
+  const write = vi.fn(async () => undefined);
+  if (fail) write.mockRejectedValueOnce(new Error("connection closed"));
+  const { paseo, list, writes } = fakePaseo(live, write);
+  list.mockImplementationOnce(async () => {
+    await blocked;
+    return { entries: [], pageInfo: { nextCursor: null } };
+  });
+  let sessions: { agentId: string; taskId: string }[] = [];
+  const bindings = vi.fn(async () => ({ sessions, workspaces: [] }));
+  const sync = new SessionMetadataSync(Date.now, 120000, bindings);
+  sync.attach(paseo);
+  try {
+    const first = sync.fromBindings();
+    await vi.advanceTimersByTimeAsync(0);
+    sessions = [{ agentId: "new", taskId: "t1" }];
+    live.push({ id: "new" });
+    sync.created(paseo, "new");
+    await vi.advanceTimersByTimeAsync(1000);
+    release();
+    await first;
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual(["new", { "flowly.taskId": "t1", "flowly.agentId": "new" }]);
+    expect(bindings).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(writes).toHaveLength(1);
+    if (fail) {
+      await sync.fromBindings();
+      expect(writes).toHaveLength(2);
+    }
+  } finally {
+    release();
+    sync.stop();
+    vi.useRealTimers();
+  }
 });
