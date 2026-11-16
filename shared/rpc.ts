@@ -43,6 +43,7 @@ import {
 import { healthSchema, preparationSchema } from "./tools";
 import { connectionInput, connectionSchema, externalSummarySchema } from "./connectors";
 import { composerStateSchema, composerTarget, maxImages, outgoingImageSchema, queuedMessageSchema } from "./composer";
+import { draftImageInputSchema, formDraftFieldsSchema, formDraftImageLimit, formDraftKeySchema, readDraftOutput } from "./form-drafts";
 import {
   sessionReadStateSchema,
   sessionReadReceiptSchema,
@@ -647,6 +648,26 @@ export const sendQueuedNow = defineRpc({
   name: "composer.send-now",
   input: composerTarget.extend({ id: z.string().min(1).max(200) }),
   output: z.object({ sent: z.boolean() }),
+});
+export const readFormDraft = defineRpc({
+  name: "form-drafts.read",
+  input: z.strictObject({ key: formDraftKeySchema }),
+  output: readDraftOutput,
+});
+export const saveFormDraft = defineRpc({
+  name: "form-drafts.save",
+  input: z.strictObject({
+    key: formDraftKeySchema,
+    baseRevision: z.number().int().min(0),
+    fields: formDraftFieldsSchema,
+    images: z.array(draftImageInputSchema).max(formDraftImageLimit),
+  }),
+  output: z.object({ revision: z.number().int().positive() }),
+});
+export const clearFormDraft = defineRpc({
+  name: "form-drafts.clear",
+  input: z.strictObject({ key: formDraftKeySchema }),
+  output: z.object({ ok: z.boolean() }),
 });
 export const sessionImage = defineRpc({
   name: "sessions.image",

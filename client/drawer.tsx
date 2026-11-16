@@ -1168,7 +1168,7 @@ function TaskDrawerView({
         }}
         refresh={refreshAll}
         defaults={sessionDefaults}
-        seed={ideaSession ? { title: ideaSession.title, prompt: ideaInstruction(ideaSession) } : null}
+        seed={ideaSession ? { title: ideaSession.title, prompt: ideaInstruction(ideaSession), ideaId: ideaSession.id } : null}
       />
       <WrapupModal
         task={task}

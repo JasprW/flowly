@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "저장하지 않고 닫기",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "저장된 초안을 불러오지 못해 여기서 변경한 내용은 저장되지 않습니다: {error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "이 초안은 다른 창에서 변경되었습니다. 다시 시도하면 이 버전을 대신 유지합니다.",
+  "The draft was not saved: {error}": "초안을 저장하지 못했습니다: {error}",
+  "The draft was not cleared: {error}": "초안을 지우지 못했습니다: {error}",
   "Command": "명령",
   "Review model": "검토 모델",
   "{n} s": "{n}초",

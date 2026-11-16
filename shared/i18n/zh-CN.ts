@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "关闭但不保存",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "无法加载已保存的草稿，因此这里的修改不会保存：{error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "此草稿已在另一个窗口中修改。重试将改为保留这里的版本。",
+  "The draft was not saved: {error}": "草稿未保存：{error}",
+  "The draft was not cleared: {error}": "草稿未清除：{error}",
   "Command": "命令",
   "Review model": "评审模型",
   "{n} s": "{n} 秒",

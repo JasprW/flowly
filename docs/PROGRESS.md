@@ -1370,3 +1370,11 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 最终363073c覆盖绑定读取窗口，确定性回归先红后绿；typecheck与全量1501通过/6skip，独立Luna 53聚焦通过并放行。客户端产品源码未改，既有手机与旧宿主证据不冒充新取样。
 
 - 删除清理补轮d38c8ab：在drain前重新dirty，冷/热删除回归先红后绿；55聚焦、typecheck、全量1503/6skip与独立Luna通过。旧报告时序已独立注释；按用户决定继续等CodeRabbit额度。
+
+
+## 2026-11-16 新建任务 / 新建会话草稿（分支 fix/form-drafts）
+
+- 问题：New task 关闭即卸载、New session 每次打开重置，填写一半的标题、描述、指令和图片丢失；已有 composer 草稿只覆盖已存在的 session。
+- 实现：daemon 侧 `server/form-drafts.ts`（`form-drafts.json` + `form-draft-images/`，串行写、原子替换、revision 校验、无效文件保留、项目/卡片归档后清理）与 `form-drafts.read/save/clear` RPC；客户端 `DraftSaver` 停止输入 400 ms 后异步保存，关闭先 flush，失败留在表单并提供 Retry / Close without saving；加载失败不保存。任务草稿含 operationId，卡片一建成立即清草稿，agent 启动失败不会重复建卡。spec：[FORM-DRAFTS-SPEC](FORM-DRAFTS-SPEC.md)。
+- 另一台电脑此前做过同一问题的本地修复和验证（无 .git、无 commit SHA），本分支是本机独立重新实现；那份证据只作历史参考，不代表本提交。
+- 新手引导：修复的是用户本来就预期的行为，不加导览文案或 tip。遥测：不加字段。

@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "保存せずに閉じる",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "保存済みの下書きを読み込めなかったため、ここでの変更は保存されません：{error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "この下書きは別のウィンドウで変更されました。再試行すると、こちらの内容で上書きします。",
+  "The draft was not saved: {error}": "下書きを保存できませんでした：{error}",
+  "The draft was not cleared: {error}": "下書きを消去できませんでした：{error}",
   "Command": "コマンド",
   "Review model": "レビューモデル",
   "{n} s": "{n} 秒",

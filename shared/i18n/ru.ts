@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "Закрыть без сохранения",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "Не удалось загрузить сохранённый черновик, поэтому изменения здесь не сохраняются: {error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "Этот черновик изменён в другом окне. Повторите, чтобы оставить эту версию.",
+  "The draft was not saved: {error}": "Черновик не сохранён: {error}",
+  "The draft was not cleared: {error}": "Черновик не удалён: {error}",
   "Command": "Команда",
   "Review model": "Модель проверки",
   "{n} s": "{n} с",

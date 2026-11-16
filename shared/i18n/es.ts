@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "Cerrar sin guardar",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "No se pudo cargar el borrador guardado, así que los cambios aquí no se guardan: {error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "Este borrador se cambió en otra ventana. Reintenta para conservar esta versión en su lugar.",
+  "The draft was not saved: {error}": "El borrador no se guardó: {error}",
+  "The draft was not cleared: {error}": "El borrador no se borró: {error}",
   "Command": "Comando",
   "Review model": "Modelo de revisión",
   "{n} s": "{n} s",

@@ -1,5 +1,7 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-11-16 新建任务 / 新建会话草稿（已实现，分支 fix/form-drafts）：关闭、取消、Esc、返回都保留草稿，重开恢复文字、选择和已读入图片；任务草稿按项目、会话草稿按卡片、普通入口与 idea/insight/follow-up 预填来源分开。草稿存在 daemon（`form-drafts.json` + `form-draft-images/`），旧 revision 被拒，加载失败不保存，保存失败留在表单并提供“关闭但不保存”；创建成功即清空，任务草稿保存 operationId，重试不会建第二张卡。[FORM-DRAFTS-SPEC](FORM-DRAFTS-SPEC.md)。
+
 2026-11-16 Agent 工具输出（issue #109）：MCP/CLI 默认精简读模型和轻量写续写信息，full 模式保留旧形状，CLI 支持保存写后的请求，活动去掉生命周期噪声；不改存储或授权。[AGENT-OUTPUT-SPEC](AGENT-OUTPUT-SPEC.md)。
 
 2026-11-13 卡片描述图片（已设计，未实现；issue #99）：描述下方一排缩略图，原图与缩略图存到插件数据目录 `card-images/<taskId>/`（存副本，不算产物，CARD-ARTIFACTS“只存引用”不变）；web 粘贴、拖放或 Add images 添加，手机只能看和删；agent 从 session 上下文和 `get_task` 拿到绝对路径自己查看。手机仍不加图片选择器（SDK 0.16 仍没有，维持 2026-10-21 决定），session 发图走 Open in Paseo，向 getpaseo 提 SDK 需求。[CARD-IMAGES-SPEC](CARD-IMAGES-SPEC.md)。

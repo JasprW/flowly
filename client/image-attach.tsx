@@ -51,10 +51,11 @@ export function AttachmentThumb({ attachment, onRemove }: { attachment: Attachme
  * drop or the file chooser (`client/web-images.ts`); phones have no
  * plugin-accessible picker (user decision 2026-10-21, SESSION-PANE-SPEC §6).
  */
-export function useImageAttachments(limit = maxImages, tooMany?: () => string) {
+export function useImageAttachments(limit = maxImages, tooMany?: () => string, initial?: readonly Attachment[]) {
   const toast = useToast();
-  const [attachments, setState] = useState<Attachment[]>([]);
-  const current = useRef<Attachment[]>([]);
+  // A restored draft's images (docs/FORM-DRAFTS-SPEC.md), within this form's limit.
+  const [attachments, setState] = useState<Attachment[]>(() => (initial || []).slice(0, Math.max(0, limit)));
+  const current = useRef<Attachment[]>(attachments);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;

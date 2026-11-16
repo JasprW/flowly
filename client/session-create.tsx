@@ -12,9 +12,15 @@ import { AgentPicker, useAgentChoice } from "./agent-choice";
 import { Pressable } from "react-native";
 import { t } from "../shared/i18n";
 import { ImageAttachments, useImageAttachments } from "./image-attach";
+import { DraftNotice, draftAttachments, useDraftChanges, useFormDraft, type FormDraft } from "./form-draft";
+import { draftField, formDraftKey } from "../shared/form-drafts";
+import { maxImages } from "../shared/composer";
+import { useToast } from "@getpaseo/plugin/client/react-native";
 import { newMessageId, rememberSentImages } from "./sent-images";
 
-export function SessionCreate({
+type Attempt = { operationId: string; messageId: string; fingerprint: string; prepared?: ToolPreparation };
+
+function SessionForm({
   task,
   open,
   workspaceDirectory,
@@ -24,11 +30,15 @@ export function SessionCreate({
   refresh,
   defaults,
   seed,
+  draft,
+  busy,
+  attempt,
+  requestClose,
 }: {
   task: Task;
   open: boolean;
   /** Prefill for a session started from an idea (IDEAS-SPEC §6.3); read when the form opens. */
-  seed?: { title: string; prompt: string } | null;
+  seed?: { title: string; prompt: string; ideaId?: string } | null;
   /** Provider/model/mode of the latest session, reused as this form's starting point. */
   defaults?: { provider: string; model: string; mode: string } | null;
   workspaceDirectory?: string;
@@ -36,38 +46,46 @@ export function SessionCreate({
   onClose(): void;
   onCreated(id: string, feedback: string): void;
   refresh(): void;
+  draft: FormDraft;
+  busy: { current: boolean };
+  attempt: { current: Attempt | undefined };
+  requestClose(): void;
 }) {
-  const theme = useTheme();
+  const toast = useToast();
   const paseo = usePaseo(),
     contextRead = useRpc(rpc.taskContext),
     prepare = useRpc(rpc.prepareSession),
     healthRead = useRpc(rpc.toolsHealth);
-  const choice = useAgentChoice({ enabled: open, cwd: workspaceDirectory, defaults });
+  // Mounted fresh on every open from the saved draft, else the seed (docs/FORM-DRAFTS-SPEC.md).
+  // The instruction starts empty: the task's title and description already reach the session.
+  const saved = draft.draft?.fields;
+  const choice = useAgentChoice({
+    enabled: open,
+    cwd: workspaceDirectory,
+    defaults: saved
+      ? {
+          provider: draftField.text(saved, "provider") || defaults?.provider || "",
+          model: draftField.text(saved, "model") ?? defaults?.model ?? "",
+          mode: draftField.text(saved, "mode") ?? defaults?.mode ?? "",
+          thinking: draftField.text(saved, "thinking") ?? "",
+        }
+      : defaults,
+  });
   const { provider, chosenModel, chosenMode, providers, models, modes } = choice;
-  const [newTitle, setTitle] = useState(""),
-    [newPrompt, setPrompt] = useState(""),
+  const [newTitle, setTitle] = useState(() => draftField.text(saved, "title") ?? seed?.title ?? ""),
+    [newPrompt, setPrompt] = useState(() => draftField.text(saved, "prompt") ?? seed?.prompt ?? ""),
     [sending, setSending] = useState(false),
     [error, setError] = useState(""),
-    [creationPending, setCreationPending] = useState(false);
+    // A prepared session survives closing the form, so a retry finds it instead of creating another.
+    [creationPending, setCreationPending] = useState(() => !!attempt.current?.prepared);
   // Images with the first message (web: paste, drop or Add images).
-  const attachments = useImageAttachments();
-  // Reset each time the form opens. The instruction starts empty: the task's
-  // title and description already reach the session as its work instructions.
-  const wasOpen = useRef(false);
-  useEffect(() => {
-    if (open && !wasOpen.current) {
-      choice.reset(defaults);
-      setPrompt(seed?.prompt || "");
-      setTitle(seed?.title || "");
-      attachments.clear();
-      setError("");
-    }
-    wasOpen.current = open;
-  }, [open]);
-  const attempt = useRef<
-    | { operationId: string; messageId: string; fingerprint: string; prepared?: ToolPreparation }
-    | undefined
-  >(undefined);
+  const attachments = useImageAttachments(maxImages, undefined, draftAttachments(draft.draft));
+  useDraftChanges(
+    draft,
+    draft.status === "ready",
+    { title: newTitle, prompt: newPrompt, provider, model: choice.model, mode: choice.mode, thinking: choice.thinking },
+    attachments.attachments,
+  );
   const lock = useRef(false);
   const tools = useQuery({
     queryKey: ["flowly", "tools"],
@@ -84,6 +102,7 @@ export function SessionCreate({
   async function perform(action: () => Promise<unknown>) {
     if (lock.current) return;
     lock.current = true;
+    busy.current = true;
     setSending(true);
     setError("");
     try {
@@ -92,6 +111,7 @@ export function SessionCreate({
       setError(message(e));
     } finally {
       lock.current = false;
+      busy.current = false;
       setSending(false);
     }
   }
@@ -126,6 +146,7 @@ export function SessionCreate({
             existing.agent.id,
             t("Recovered the existing session. Its initial instruction was not sent again; check its output before continuing."),
           );
+          await draft.clear().catch(() => undefined);
           onClose();
           attempt.current = undefined;
           setCreationPending(false);
@@ -193,24 +214,16 @@ export function SessionCreate({
       );
       attempt.current = undefined;
       setCreationPending(false);
+      // The session exists: its draft is done (a failed clear only warns).
+      await draft.clear().catch((e) => toast.error(t("The draft was not cleared: {error}", { error: message(e) })));
       onClose();
-      setPrompt("");
-      setTitle("");
       refresh();
     });
   }
   // Enter submits, Shift+Enter is a new line.
   const submit = canCreate && tools.data?.ready ? () => void createSession() : undefined;
   return (
-    <Modal
-      open={open}
-      title={t("New session")}
-      onOpenChange={(next) => {
-        if (!next && !lock.current) onClose();
-      }}
-    >
-      <Modal.Content>
-        <Theme.Provider value={theme}>
+    <>
         <Field
           title={t("Session title (optional)")}
           value={newTitle}
@@ -269,6 +282,10 @@ export function SessionCreate({
             {t("A session ID is prepared. Retry checks for an existing session before creating it.")}</Notice>
         )}
         {error && <Notice>{error}</Notice>}
+        <DraftNotice draft={draft} onDiscardClose={() => {
+          draft.discard();
+          onClose();
+        }} />
         <Actions>
           {!tools.data?.ready && (
             <Button
@@ -277,7 +294,7 @@ export function SessionCreate({
             >
               {t("Create ordinary session")}</Button>
           )}
-          <Button quiet disabled={sending} onPress={onClose}>
+          <Button quiet disabled={sending} onPress={requestClose}>
             {t("Cancel")}</Button>
           <Button
             primary
@@ -287,6 +304,45 @@ export function SessionCreate({
             {sending ? t("Creating…") : t("Create session")}
           </Button>
         </Actions>
+    </>
+  );
+}
+
+/**
+ * New session in a card. Its draft (per card and prefill source) is saved on
+ * the daemon and restored on every open (docs/FORM-DRAFTS-SPEC.md).
+ */
+export function SessionCreate(props: Omit<Parameters<typeof SessionForm>[0], "draft" | "busy" | "attempt" | "requestClose">) {
+  const theme = useTheme();
+  const { open, onClose, task, seed } = props;
+  const draft = useFormDraft(formDraftKey("session", task.id, seed?.ideaId ? { ideaId: seed.ideaId } : null), open);
+  const busy = useRef(false);
+  const attempt = useRef<Attempt | undefined>(undefined);
+  const closing = useRef(false);
+  // Close, Cancel, Esc and Back save what is pending first; a failed save keeps the form open.
+  const requestClose = () => {
+    if (busy.current || closing.current) return;
+    closing.current = true;
+    void draft.flush().then((saved) => {
+      closing.current = false;
+      if (saved) onClose();
+    });
+  };
+  return (
+    <Modal
+      open={open}
+      title={t("New session")}
+      onOpenChange={(next) => {
+        if (!next) requestClose();
+      }}
+    >
+      <Modal.Content>
+        <Theme.Provider value={theme}>
+          {open && draft.status !== "loading" ? (
+            <SessionForm key={draft.generation} {...props} draft={draft} busy={busy} attempt={attempt} requestClose={requestClose} />
+          ) : (
+            <Label muted>{t("Loading…")}</Label>
+          )}
         </Theme.Provider>
       </Modal.Content>
     </Modal>

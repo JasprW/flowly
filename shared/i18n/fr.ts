@@ -1,6 +1,11 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "Fermer sans enregistrer",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "Le brouillon enregistré n’a pas pu être chargé : les modifications ici ne sont pas enregistrées. {error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "Ce brouillon a été modifié dans une autre fenêtre. Réessayez pour garder plutôt cette version.",
+  "The draft was not saved: {error}": "Le brouillon n’a pas été enregistré : {error}",
+  "The draft was not cleared: {error}": "Le brouillon n’a pas été effacé : {error}",
   "Command": "Commande",
   "Review model": "Modèle de revue",
   "{n} s": "{n} s",
