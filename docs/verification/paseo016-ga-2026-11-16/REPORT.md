@@ -111,3 +111,11 @@ NODE_ENV=test FLOWLY_TELEMETRY=0 npx vitest run server/session-metadata.test.ts
 首轮发现的两项文档/代码差异（§3.6 改绑后误清空、§4 SDK 仍锁 beta.2）均已在本轮修复。下一步完成手机及剩余运行时验收，再对隔离候选提交检查并走 PR。
 
 本轮没有用户可见行为、开关或遥测变化，不需要新增引导、tip、What's new 或 heartbeat 字段。没有创建项目、工作区或 session fixture，没有删除既有资源。
+
+## 验收资源清理
+
+- 独立会话：f41e3a19-ea2a-4090-8a9c-dc3100657f50（旧宿主与前两轮候选）、e72bfcbe-949a-4f77-bd55-32e04d293957（363073c最终验收）。均在本卡原workspace创建，codex/gpt-6-luna、full-access、background；两者已hard-delete并以原生状态API/DaemonClient.fetchAgent确认不存在。额度用尽的Haiku测试会话0547ebba-6ee0-4b0c-8ef9-85109c4fe61d亦已清理。
+- 手机/元数据fixture的project/card/workspace/agent清理见PHONE.md；旧宿主两次fixture清理见OLD-HOST与LUNA-CANDIDATE。17767、17768端口已无隔离daemon监听。
+- 本任务旧SDK目录约555MiB、原始手机临时目录约4.7MiB、cold-control worktree均已移除；脱敏聚合与规定截图保留在docs/verification。没有删除共享npm缓存或其他任务资源。
+- 清理脚本曾误用SDK ref.refresh校验raw delete：ref仍保留旧snapshot，导致“仍存在”的脚本断言。原生get_agent_status与raw fetchAgent确认已删除；这是验证脚本缓存判断错误，不是删除失败，未盲目重删。
+- 所有P16临时打点和故障开关已移除，performance.json恢复原log:false；当前开发目录typecheck后仅reload插件并确认running，没有重启用户daemon。候选worktree及依赖暂为PR/卡片检查保留。
