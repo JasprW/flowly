@@ -1332,3 +1332,12 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 最终源码提交 `da9b9a5b0da6fa599656edf9dab348da957f8697`：实现者 typecheck 通过，整组聚焦回归 182 通过/5 跳过；独立 GPT Luna typecheck exit 0、全量 exit 0，1445 通过/6 跳过，见 [复验报告](verification/issue-109-luna-rework.md)。Paseo 验证 session 为 `e77a983b-ae48-4778-8a94-fc8a6d32d211`（父会话创建回执）；报告自身的 CODEX_SESSION_ID 另列。
 - 补充失败记录：新增版本冲突测试起初重复用了已提交 request，正确得到 REQUEST_REUSED；改用未提交的旧版本 request 后，REVISION_CONFLICT 断言通过，未弱化断言。
 - 最终 fixture 字符数：读取 29013 → 4537（-84.4%），写入 28244 → 982（-96.5%）。原始报告保留其旧源码与测量，最终结论以本次复验为准。
+
+
+## 2026-11-16 Paseo 0.16.0 正式版回归（PR #100）
+
+- 合并 main 并解决 review reasoning 与后台创建的冲突；client/plugin/protocol 固定 0.16.0，插件版本与最低宿主不变。全部声明对比：后台 API 无签名变更；turn.after.timeline 删除，现有实现已不依赖；新增 wholeTurns 等本卡不扩展。
+- 源码提交 73ce52d：实现者和用户授权的独立 Luna 都通过 typecheck/full tests，161 文件通过/1 跳过、1465 测试通过/6 跳过，exit 0。指定 Haiku 因账户额度失败，没有执行检查。
+- 隔离正式版 daemon 实测六类 helper 隐藏并归档；Codex sleep 后台任务阻止 Wrap up，停止后清空阻止；评审输入列出任务，评审通过；summary/digest/outside insight/native row 和 Codex workflow 结果正常。首轮 workflow 默认 Claude 额度失败，隔离环境改模型后重跑成功。测试脚本误读的 RPC/list 形状已修正，未改产品行为。
+- 清理后插件和 native registry 的 fixture 项目/卡片/工作区/agent 全零，隔离 daemon 与独立测试会话已停止/删除；临时数据清除。报告与独立原始报告见 verification/paseo16-ga-2026-11-16/。
+- UNRUN：本轮真实 0.15 宿主、桌面/手机 UI；兼容回退测试通过，历史 beta.2 UI 证据保留。本轮无新字符串/开关，不加 onboarding/tip/遥测/What's new。

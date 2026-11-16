@@ -1,0 +1,344 @@
+{
+  "fixture": {
+    "directory": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/.worktrees/pr100-stable/.runtime/fixture",
+    "project": "63be5d54-32a0-4246-b6cc-99271e63b689",
+    "card": "a7539bd5-9502-4c21-a56f-eb3108bd22c5",
+    "workspace": "wks_186e04cf4400b38e",
+    "session": "6324b1dd-625b-4e57-b581-e0b25090541b"
+  },
+  "checks": [
+    {
+      "name": "Codex idle with one background task",
+      "result": "PASS"
+    },
+    {
+      "name": "Review input contains running sleep task",
+      "result": "PASS"
+    },
+    {
+      "name": "Review passed",
+      "result": "PASS"
+    },
+    {
+      "name": "Wrap up blocked by background task",
+      "result": "PASS"
+    },
+    {
+      "name": "Explicit Wrap up refuses background task",
+      "result": "PASS"
+    },
+    {
+      "name": "Automatic wrap up did not archive card",
+      "result": "PASS"
+    },
+    {
+      "name": "backgroundWork.stop clears task",
+      "result": "PASS"
+    },
+    {
+      "name": "Wrap up clears blocker after stop",
+      "result": "PASS"
+    },
+    {
+      "name": "Five helper types created",
+      "result": "PASS"
+    },
+    {
+      "name": "All helpers background and archived",
+      "result": "PASS"
+    },
+    {
+      "name": "No helper visible including archive",
+      "result": "PASS"
+    },
+    {
+      "name": "No visible Flowly background workspace",
+      "result": "PASS"
+    },
+    {
+      "name": "No helper attention notifications during project runs",
+      "result": "PASS"
+    },
+    {
+      "name": "Card summary persisted",
+      "result": "PASS"
+    }
+  ],
+  "wrapupBefore": {
+    "taskId": "a7539bd5-9502-4c21-a56f-eb3108bd22c5",
+    "revision": 4,
+    "workspace": {
+      "id": "wks_186e04cf4400b38e",
+      "kind": "local_checkout",
+      "directory": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/.worktrees/pr100-stable/.runtime/fixture"
+    },
+    "archiveWorkspace": true,
+    "sessions": 1,
+    "git": null,
+    "blockers": [
+      "1 session has background tasks still running. Stop them or wait for them to finish first."
+    ],
+    "warnings": []
+  },
+  "wrapupAfter": {
+    "taskId": "a7539bd5-9502-4c21-a56f-eb3108bd22c5",
+    "revision": 4,
+    "workspace": {
+      "id": "wks_186e04cf4400b38e",
+      "kind": "local_checkout",
+      "directory": "/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/.worktrees/pr100-stable/.runtime/fixture"
+    },
+    "archiveWorkspace": true,
+    "sessions": 1,
+    "git": null,
+    "blockers": [],
+    "warnings": []
+  },
+  "helpers": [
+    {
+      "id": "028ff9ae-7c82-4e3d-9d0a-feec39a0a708",
+      "title": "Flowly memory review · Write GA.txt",
+      "background": true,
+      "archived": true
+    },
+    {
+      "id": "2c77c91d-5c8a-473c-a234-3633b7043eac",
+      "title": "Kanban digest · Paseo16 GA regression · 2026-11-16",
+      "background": true,
+      "archived": true
+    },
+    {
+      "id": "d9bbb889-f080-4454-b27b-aea5557e5cc1",
+      "title": "Flowly workflow insights · Paseo16 GA regression",
+      "background": true,
+      "archived": true
+    },
+    {
+      "id": "bafee45d-f789-4135-8d7c-fa33f2fb2b88",
+      "title": "Flowly review · Write GA.txt",
+      "background": true,
+      "archived": true
+    },
+    {
+      "id": "85908089-36be-4b52-b071-1921e369ad44",
+      "title": "Kanban summary · Write GA.txt",
+      "background": true,
+      "archived": true
+    }
+  ],
+  "visibleHelpers": [],
+  "visibleWorkspaces": [],
+  "helperNotifications": [],
+  "summary": {
+    "latest": [
+      {
+        "state": "File written; card in review; sleep intentionally left running",
+        "target": "Write GA.txt containing hello.\n- File exists\n- File contains hello\n- Leave background sleep running intentionally",
+        "recap": "- Wrote GA.txt containing hello\n- Started sleep 600 and left it running\n- Marked all three acceptance criteria done\n- Delivered the card to In review",
+        "next": "Await review.",
+        "id": "45885bea-fa73-40c7-b430-733a30bf23a5",
+        "taskId": "a7539bd5-9502-4c21-a56f-eb3108bd22c5",
+        "at": "2026-11-16T07:49:57.803Z",
+        "model": "codex/gpt-6-luna",
+        "agentIds": [
+          "6324b1dd-625b-4e57-b581-e0b25090541b"
+        ]
+      }
+    ],
+    "running": [],
+    "errors": [],
+    "enabled": true
+  },
+  "workflow": {
+    "etag": "aRAK-ljTIQSNi816AjG7cENHsG4",
+    "value": {
+      "enabled": true,
+      "projectEnabled": true,
+      "backfilling": false,
+      "running": false,
+      "nextRunAt": "2026-11-23T01:00:00.000Z",
+      "windowDays": 7,
+      "lastRun": {
+        "id": "b48e587a-e74c-4a9c-b01a-26973f103f62",
+        "projectId": "63be5d54-32a0-4246-b6cc-99271e63b689",
+        "at": "2026-11-16T07:50:53.816Z",
+        "from": "2026-11-09T07:50:53.816Z",
+        "to": "2026-11-16T07:50:53.816Z",
+        "model": "claude/claude-sonnet-5-5",
+        "manual": true,
+        "status": "error",
+        "reason": "You've hit your individual spend limit · run /usage-credits to ask your admin for a higher limit",
+        "findings": 0,
+        "replaced": 0,
+        "stats": {
+          "calls": 1,
+          "actions": 0,
+          "cards": 1,
+          "sessions": 1
+        }
+      },
+      "findings": [],
+      "installed": [],
+      "current": {},
+      "revision": 1
+    }
+  },
+  "phase2": {
+    "workflow": {
+      "etag": "cI4mRkVC4_-9u2o-0kfyR0Nhchk",
+      "value": {
+        "enabled": true,
+        "projectEnabled": true,
+        "backfilling": false,
+        "running": false,
+        "nextRunAt": "2026-11-23T01:00:00.000Z",
+        "windowDays": 7,
+        "lastRun": {
+          "id": "0483b405-b5c2-4750-9bf2-521355a4a6f5",
+          "projectId": "63be5d54-32a0-4246-b6cc-99271e63b689",
+          "at": "2026-11-16T07:52:15.368Z",
+          "from": "2026-11-09T07:52:15.368Z",
+          "to": "2026-11-16T07:52:15.368Z",
+          "model": "codex/gpt-6-luna",
+          "manual": true,
+          "status": "ok",
+          "reason": "No suggestions this time.",
+          "usage": {
+            "inputTokens": 34991,
+            "cachedInputTokens": 0,
+            "outputTokens": 129,
+            "contextTokens": 35120
+          },
+          "findings": 0,
+          "replaced": 0,
+          "stats": {
+            "calls": 1,
+            "actions": 0,
+            "cards": 1,
+            "sessions": 1
+          }
+        },
+        "findings": [],
+        "installed": [],
+        "current": {},
+        "revision": 2
+      }
+    },
+    "helpers": [
+      {
+        "id": "8d350b8d-2f69-4dd0-8bc5-a401b84c3633",
+        "title": "Flowly insights · GA outside insight fixture",
+        "background": true,
+        "archived": true
+      },
+      {
+        "id": "58ed10d2-0b61-4ecd-8435-09e6030cedda",
+        "title": "Flowly workflow insights · Paseo16 GA regression",
+        "background": true,
+        "archived": true
+      },
+      {
+        "id": "028ff9ae-7c82-4e3d-9d0a-feec39a0a708",
+        "title": "Flowly memory review · Write GA.txt",
+        "background": true,
+        "archived": true
+      },
+      {
+        "id": "2c77c91d-5c8a-473c-a234-3633b7043eac",
+        "title": "Kanban digest · Paseo16 GA regression · 2026-11-16",
+        "background": true,
+        "archived": true
+      },
+      {
+        "id": "d9bbb889-f080-4454-b27b-aea5557e5cc1",
+        "title": "Flowly workflow insights · Paseo16 GA regression",
+        "background": true,
+        "archived": true
+      },
+      {
+        "id": "bafee45d-f789-4135-8d7c-fa33f2fb2b88",
+        "title": "Flowly review · Write GA.txt",
+        "background": true,
+        "archived": true
+      },
+      {
+        "id": "85908089-36be-4b52-b071-1921e369ad44",
+        "title": "Kanban summary · Write GA.txt",
+        "background": true,
+        "archived": true
+      }
+    ],
+    "visible": [],
+    "notifications": [],
+    "insights": {
+      "etag": "l9Fw4VUO7kr8CvBlt4zaMCqXZ0w",
+      "value": []
+    },
+    "outsideSummary": {
+      "id": "232ba698-74cd-4608-bcbe-c74f5d99d321",
+      "at": "2026-11-16T07:52:29.176Z",
+      "model": "codex/gpt-6-luna",
+      "state": "Fixture write confirmed",
+      "target": "Confirm the isolated GA regression fixture wrote GA.txt.",
+      "recap": "- The assistant confirmed GA.txt was written.",
+      "next": "No further step is specified."
+    },
+    "outsideNativeRow": true,
+    "idleBackgroundLabel": "Background tasks running",
+    "hiddenWorkspace": "wks_0e47b164b5b5f247",
+    "digest": {
+      "entry": {
+        "headline": "The GA.txt card was completed and moved to Done after review.",
+        "done": [
+          {
+            "text": "Wrote GA.txt containing “hello” and marked all acceptance criteria complete.",
+            "taskId": "a7539bd5-9502-4c21-a56f-eb3108bd22c5"
+          }
+        ],
+        "progressed": [],
+        "issues": [
+          {
+            "text": "The sleep 600 process was intentionally left running.",
+            "taskId": "a7539bd5-9502-4c21-a56f-eb3108bd22c5"
+          }
+        ],
+        "next": [],
+        "projectId": "63be5d54-32a0-4246-b6cc-99271e63b689",
+        "day": "2026-11-16",
+        "tz": "Asia/Singapore",
+        "at": "2026-11-16T07:51:06.734Z",
+        "model": "codex/gpt-6-luna"
+      },
+      "running": false,
+      "error": null,
+      "enabled": true,
+      "empty": false
+    }
+  },
+  "cleanup": {
+    "pluginProjects": 0,
+    "pluginCards": 0,
+    "nativeAgents": 0,
+    "nativeWorkspaces": 0,
+    "nativeProjects": 0
+  },
+  "commit": "73ce52d2e2669cb4fbc285837ae379ec3e0a4e47",
+  "verifierPaseoSession": "03e8f5af-37f8-4855-b161-81d7d67b3124",
+  "api": {
+    "client": {
+      "betaDeclarations": 26,
+      "stableDeclarations": 26,
+      "changed": 2
+    },
+    "plugin": {
+      "betaDeclarations": 37,
+      "stableDeclarations": 37,
+      "changed": 6
+    },
+    "protocol": {
+      "betaDeclarations": 80,
+      "stableDeclarations": 80,
+      "changed": 7
+    }
+  }
+}

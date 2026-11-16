@@ -33,6 +33,8 @@
 
 ### 3.1 后台 agent（background agents）【重点】
 
+正式版复验（2026-11-16）：0.16.0 上六类临时 agent 均隐藏，SDK 归档后默认列表与默认归档仍不可见；Codex 后台任务的 Wrap up/评审输入与状态规则通过。证据见 `verification/paseo16-ga-2026-11-16/report.md`。
+
 - **API**：`@getpaseo/client` 的 `agents.create({ background: true, metadata })`。后台 agent 不出现在默认列表、标签页、子 agent 轨道和通知里；它新建的工作区也是后台工作区。
 - **对照标志**：`features.backgroundAgents`；客户端守卫 `requireBackgroundCreation`（未给 `workspaceId` / `callerAgentId` 时改查 `backgroundWorkspaces`）。
 - **探测**：B。
@@ -163,6 +165,9 @@
    §3.8 暂缓。
 
 ## 5. 对 AGENTS.md 例外的影响
+
+2026-11-16 正式版 0.16.0 复验确认：下面后台工作区和临时 session 清理例外的收窄继续适用；SDK 仍无 agent 删除能力，保留旧宿主与 archive 失败的硬删除回退。
+
 
 只记录影响，不在调研卡修改 AGENTS.md；每项在接入它的卡片里改写对应例外，最低宿主提到 0.16 时再删除。
 
