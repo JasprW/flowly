@@ -337,3 +337,43 @@ test("a creation while bindings are being read gets a fresh pass after the old s
     vi.useRealTimers();
   }
 });
+
+test.each([false, true])("a deletion during the bindings read still runs full cleanup (cached: %s)", async (cached) => {
+  vi.useFakeTimers();
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  let sessions = [{ agentId: "a1", taskId: "t1" }];
+  let bound = [{ workspaceId: "w1", taskId: "t1" }];
+  const stored: Record<string, string> = { "flowly.taskId": "t1", "flowly.agentId": "a1", other: "keep" };
+  const workspace: Workspace = { id: "w1", metadata: { "flowly.taskId": "t1", other: "keep" } };
+  const { paseo, list } = fakePaseo([], async (_id, patch) => {
+    for (const [key, value] of Object.entries(patch)) if (value === null) delete stored[key]; else stored[key] = value;
+  }, [workspace]);
+  list.mockImplementation(async () => ({ entries: [{ agent: { id: "a1", metadata: { ...stored } } }], pageInfo: { nextCursor: null } }));
+  const bindings = vi.fn(async () => ({ sessions, workspaces: bound })).mockImplementationOnce(async () => {
+    const snapshot = { sessions, workspaces: bound };
+    await blocked;
+    return snapshot;
+  });
+  const sync = new SessionMetadataSync(Date.now, 120000, bindings);
+  sync.attach(paseo);
+  try {
+    if (cached) await sync.sync(paseo, sessions, bound);
+    const first = sync.fromBindings();
+    await vi.advanceTimersByTimeAsync(0);
+    sessions = [];
+    bound = [];
+    sync.changed();
+    release();
+    await first;
+    await vi.waitFor(() => {
+      expect(stored).toEqual({ other: "keep" });
+      expect(workspace.metadata).toEqual({ other: "keep" });
+    });
+    expect(bindings).toHaveBeenCalledTimes(2);
+  } finally {
+    release();
+    sync.stop();
+    vi.useRealTimers();
+  }
+});

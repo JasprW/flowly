@@ -98,6 +98,7 @@ export class SessionMetadataSync {
   private drainChange() {
     if (!this.pendingChange || this.running || this.readingBindings) return;
     this.pendingChange = false;
+    this.dirty = true;
     clearTimeout(this.timer);
     this.timer = undefined;
     void this.fromBindings();
