@@ -1299,3 +1299,12 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 固定 fixture 的 JSON 字符数：读取 29013 → 4537（-84.4%），写入 28244 → 913（-96.8%）。不等同模型 token 或耗时收益。旧完整输出回归改为显式请求 full；新增默认 compact 的真实 loopback MCP/HTTP/CLI 串联与恢复测试，未弱化原有业务断言。
 - 首轮失败保留说明：输出参数最初与 idea.detail 重名，已改为 responseDetail；两个故障注入测试起初挂错 store 方法；备份测试文件曾被 Vitest 误发现。修正后重跑完整聚焦集合通过。独立 worktree 初始未带自己的索引，后仅重建索引，工作文件不变且与验收 commit 一致。
 - UNRUN：安装/重载用户正在使用的插件、桌面/手机 UI；本次为工具输出契约，不新增 UI 能力、开关或计数动作，无需 onboarding/tip/telemetry/What's new 改动。共享工作区的其他改动不纳入提交。
+
+
+### Issue #109 审阅修正
+
+- CodeRabbit 指出两个有效问题：workpad 版本未配套清单会让缓存清单覆盖人的勾选；写后读取若包含另一个人的版本，会给尚未读到该改动的 agent 签发新请求。用户于 2026-11-16 明确同意后一项低概率窗口的最小保护。
+- Workpad 现在总是将 revision 与规范化清单一起返回；compact 续写只为回执提交版本签发，后置版本不同则保留成功回执、返回空续写并要求重读。没有锁、自动重试或存储迁移。
+- 最终源码提交 `da9b9a5b0da6fa599656edf9dab348da957f8697`：实现者 typecheck 通过，整组聚焦回归 182 通过/5 跳过；独立 GPT Luna typecheck exit 0、全量 exit 0，1445 通过/6 跳过，见 [复验报告](verification/issue-109-luna-rework.md)。Paseo 验证 session 为 `e77a983b-ae48-4778-8a94-fc8a6d32d211`（父会话创建回执）；报告自身的 CODEX_SESSION_ID 另列。
+- 补充失败记录：新增版本冲突测试起初重复用了已提交 request，正确得到 REQUEST_REUSED；改用未提交的旧版本 request 后，REVISION_CONFLICT 断言通过，未弱化断言。
+- 最终 fixture 字符数：读取 29013 → 4537（-84.4%），写入 28244 → 982（-96.5%）。原始报告保留其旧源码与测量，最终结论以本次复验为准。
