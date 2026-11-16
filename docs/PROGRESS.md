@@ -1378,3 +1378,9 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 实现：daemon 侧 `server/form-drafts.ts`（`form-drafts.json` + `form-draft-images/`，串行写、原子替换、revision 校验、无效文件保留、项目/卡片归档后清理）与 `form-drafts.read/save/clear` RPC；客户端 `DraftSaver` 停止输入 400 ms 后异步保存，关闭先 flush，失败留在表单并提供 Retry / Close without saving；加载失败不保存。任务草稿含 operationId，卡片一建成立即清草稿，agent 启动失败不会重复建卡。spec：[FORM-DRAFTS-SPEC](FORM-DRAFTS-SPEC.md)。
 - 另一台电脑此前做过同一问题的本地修复和验证（无 .git、无 commit SHA），本分支是本机独立重新实现；那份证据只作历史参考，不代表本提交。
 - 新手引导：修复的是用户本来就预期的行为，不加导览文案或 tip。遥测：不加字段。
+- PR #116 (fork `fang-zeqiang:fix/form-drafts`).
+  - CodeRabbit's first round had 8 findings, fixed in `847afb3`.
+  - Its follow-ups had 3 points, fixed in `2d53e0c`: a successful create no longer clears an unread draft; after a failed load, New task keeps its operationId in client memory; cleanup failures no longer hide the save error.
+  - Independent Haiku 5.5 session: typecheck and Node 24 full suite pass on `652cef6` and `ea6e7f7`. Its live UI part did not run.
+  - Implementer's browser probe: 16/16 at `089d115`. At `847afb3`, every check passed across three runs; the failures in those runs were navigation timeouts. See [verification](verification/form-drafts-2026-11-16/).
+  - Local Node 23 full suite: only the `sqlite-store` transaction test fails. It fails on main too and passes under Node 24.
