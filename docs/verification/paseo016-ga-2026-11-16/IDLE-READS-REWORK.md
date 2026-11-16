@@ -22,3 +22,9 @@
 - 读取故障退避复用5/30/60 s，成功后停止，stop取消。另补初始stream完整列表失败的回归先红（完整读取期望3次、实际2次）；失败轮保留relist，不能把旧live集合当成恢复。
 - 本轮 PASS：typecheck exit0；完整5文件聚焦65项通过，exit0；全量165文件通过/1跳过，1513项通过/6跳过，exit0。环境NODE_ENV=test/FLOWLY_TELEMETRY=0，命令同上。前面的9fa5cc4/Luna报告属于历史版本，不冒充本次最终源码验收；新候选的独立复核另记。
 - 本轮没有新增真机/旧宿主客户端样本，既有UNRUN仍保留。
+
+## 最终修复的独立复核
+
+- 产品源码 SHA：`682fb4fe09dd800374ad72492f8c71dc83289c81`。GPT6Luna/full-access 独立会话 `a9101afd-26ed-4697-9eaa-84da40d58b8c` 对该SHA给出PASS：typecheck exit0，5文件65项通过。独立报告 `LUNA-IDLE-RECOVERY.md`（提交51928dd），由该会话拥有，父任务未编辑。
+- 该测试会话随后hard-delete，inspect返回AGENT_NOT_FOUND；无新fixture、daemon或隔离缓存。根目录同范围patch已在保留其他会话改动后通过typecheck并reload running；未重启daemon、未改性能设置。
+- 三条CodeRabbit线程均已按先红后绿证据回复并解决；新源码的真实补审在额度恢复后继续，不以neutral/skipped放行。新push一度未生成自动CI记录，最终报告推送后用同一分支的workflow_dispatch触发原CI，不改保护规则。实际CI/CodeRabbit与合入状态以PR#117和卡片交付回执为准。
