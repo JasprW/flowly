@@ -20,3 +20,9 @@ The focused regressions cover online-stream initial relist after a failed read, 
 
 - No new phone or old-host client sample was run in this verification. This report makes no claim of live device or compatibility acceptance.
 - Full test suite and UI checks were not run; they were outside this assignment's requested checks.
+
+## Later scope clarification — 2026-11-16
+
+The PASS above is limited to code at `682fb4fe09dd800374ad72492f8c71dc83289c81` and its 65 focused tests. It did not establish the cold-start gate for the later `531adad99e48a62027d54a1cad1f94000b2c559e` candidate. Relative to the source measured for the earlier phone result (`3043bd8`), both `client/session-link.ts` and `server/session-metadata.ts` have since changed, and those later sources were not covered by a new phone sample. This comparison is against the phone-measurement source; it does not imply that `server/session-metadata.ts` changed between `682fb4f` and `531adad`.
+
+After that gap was raised, the user explicitly authorized the 531adad patch to inherit the earlier paired cold-start conclusion. The underlying observed median difference remains +3.7257% against the agreed 5% threshold; this is an accepted inherited result, not a new measurement or a current-source phone PASS. Current-source phone cold-start measurement remains UNRUN. The separate 531adad verification report records this authorization and distinction.
