@@ -1353,3 +1353,5 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - Shipping scope: common host feature detection and heartbeat `paseo_version` with its whitelist, tests and privacy notice. SDK 0.16.0 is inherited from main (#100); the minimum stays 0.15.0. Exact-commit verification is recorded separately.
 
 - Isolated shipping tree on main `fb9e744`: `npm run typecheck` exit 0; `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test` exit 0, 164 files / 1486 tests passed, 1 file / 6 tests skipped. Original shared-tree results above are historical.
+
+- PR #114 CodeRabbit: reproduced two ordinary error-recovery defects (7 metadata tests passed / 2 new tests failed on the original source). Failed list reads now retain the full reconciliation obligation; failed metadata writes no longer enter the completion cache. Retries use the next existing sync round, with no immediate loop. Typecheck exit 0, metadata suite 9/9 passed, full suite 1488 passed / 6 skipped (164 files passed / 1 skipped). Three low-probability concurrency suggestions are pending the user's Scope control decision and are not implemented.

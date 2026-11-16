@@ -77,7 +77,10 @@ export class SessionMetadataSync {
     const full = this.dirty;
     this.dirty = false;
     this.running = this.pass(paseo, managed, wanted, full)
-      .catch((error) => logFailure("Flowly session metadata sync failed:", error))
+      .catch((error) => {
+        if (full) this.dirty = true;
+        logFailure("Flowly session metadata sync failed:", error);
+      })
       .finally(() => {
         this.running = null;
       });
@@ -85,17 +88,12 @@ export class SessionMetadataSync {
   }
 
   /** One write through the probe; false when the host has no metadata (stop the pass). */
-  private async write(target: { setMetadata?: (patch: Patch) => Promise<void> }, patch: Patch, id: string) {
-    try {
-      const result = await withHostFeature(METADATA_FEATURE, () =>
-        typeof target.setMetadata === "function" ? target.setMetadata(patch) : undefined,
-      );
-      return result.ok;
-    } catch (error) {
-      // Not retried in this run: one log per entity, never a loop of failing writes.
-      logFailure("Flowly session metadata write failed:", error, id);
-      return true;
-    }
+  private async write(target: { setMetadata?: (patch: Patch) => Promise<void> }, patch: Patch) {
+    const result = await withHostFeature(METADATA_FEATURE, () =>
+      typeof target.setMetadata === "function" ? target.setMetadata(patch) : undefined,
+    );
+    // Ordinary failures reach the pass handler; only successful writes may enter the done cache.
+    return result.ok;
   }
 
   private async pass(paseo: Paseo, managed: readonly Managed[], wanted: readonly Managed[], full: boolean) {
@@ -114,7 +112,7 @@ export class SessionMetadataSync {
         continue;
       }
       const ref = paseo.agents.ref(m.agentId) as { setMetadata?: (patch: Patch) => Promise<void> };
-      if (!(await this.write(ref, { [metadataTaskId]: m.taskId, [metadataAgentId]: m.agentId }, m.agentId))) return;
+      if (!(await this.write(ref, { [metadataTaskId]: m.taskId, [metadataAgentId]: m.agentId }))) return;
       this.done.set(m.agentId, m.taskId);
     }
     if (full) {
@@ -125,7 +123,7 @@ export class SessionMetadataSync {
         const current = metadataSession(agent.metadata as Record<string, unknown> | null | undefined);
         if (!current || bound.has(agent.id)) continue;
         const ref = paseo.agents.ref(agent.id) as { setMetadata?: (patch: Patch) => Promise<void> };
-        if (!(await this.write(ref, { [metadataTaskId]: null, [metadataAgentId]: null }, agent.id))) return;
+        if (!(await this.write(ref, { [metadataTaskId]: null, [metadataAgentId]: null }))) return;
         this.done.delete(agent.id);
       }
     }
@@ -142,4 +140,3 @@ async function liveAgents(paseo: Paseo) {
   } while (cursor);
   return agents;
 }
-

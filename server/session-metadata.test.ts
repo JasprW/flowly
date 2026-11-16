@@ -119,3 +119,27 @@ test("after a board write, a session whose card is gone is cleared; background a
   await vi.waitFor(() => expect(writes).toEqual([["a2", { "flowly.taskId": null, "flowly.agentId": null }]]));
 });
 
+test("a failed full-pass listing is retried after the last binding is removed", async () => {
+  const { paseo, list, writes } = fakePaseo([{ id: "a1", metadata: { "flowly.taskId": "t1", "flowly.agentId": "a1" } }], async () => undefined);
+  const sync = new SessionMetadataSync();
+  await sync.sync(paseo, [{ agentId: "a1", taskId: "t1" }]);
+  sync.changed();
+  list.mockRejectedValueOnce(new Error("connection closed"));
+  await sync.sync(paseo, []);
+  expect(writes).toEqual([]);
+  await sync.sync(paseo, []);
+  expect(writes).toEqual([["a1", { "flowly.taskId": null, "flowly.agentId": null }]]);
+});
+
+test("a failed metadata write remains eligible for the next existing sync round", async () => {
+  const write = vi.fn(async () => undefined).mockRejectedValueOnce(new Error("connection closed"));
+  const { paseo, writes } = fakePaseo([{ id: "a1" }], write);
+  const sync = new SessionMetadataSync();
+  const managed = [{ agentId: "a1", taskId: "t1" }];
+  await sync.sync(paseo, managed);
+  expect(writes).toHaveLength(1);
+  await sync.sync(paseo, managed);
+  expect(writes).toHaveLength(2);
+  await sync.sync(paseo, managed);
+  expect(writes).toHaveLength(2);
+});

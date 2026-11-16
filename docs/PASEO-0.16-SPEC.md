@@ -106,7 +106,7 @@
 - **旧宿主**：不写，所有判断走插件数据。
 - **验收**：0.16 宿主上新建卡片工作区和 session 后元数据可读到对应 `taskId`；绑定变化（删除卡片、unwrap）时同步更新或清除；元数据与插件数据不一致时以插件数据为准并修正元数据。
 
-- Composer 卡片的 session 部分已实现：daemon 镜像 `flowly.taskId` / `flowly.agentId`，只写 live session 缺少或变化的值；受管集合以插件记录为准，看板写入后清除已解绑的 Flowly 键；旧宿主拒绝后本次运行不再尝试。工作区和后台 agent 的镜像由其余配套卡片实现。
+- Composer 卡片的 session 部分已实现：daemon 镜像 `flowly.taskId` / `flowly.agentId`，只写 live session 缺少或变化的值；受管集合以插件记录为准，看板写入后清除已解绑的 Flowly 键；旧宿主拒绝后本次运行不再尝试。工作区和后台 agent 的镜像由其余配套卡片实现。 普通读取或写入失败只记失败日志，保留未完成同步；下一个既有同步轮次重试，不立即循环。只有写成功或读到值已正确时才记录完成；旧宿主拒绝仍缓存为不支持。
 
 ### 3.7 客户端状态 hook（含 workspace indicator）
 
