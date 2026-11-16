@@ -1,6 +1,6 @@
 # Paseo 0.16 独立验收：chip 静止时不周期读取
 
-- 验收会话 ID：当前执行接口未暴露本会话的 Paseo/Codex session ID；请求信封 message ID：`8b2f5417-7455-4fdc-aedf-f13e386eca27`（上游 source-agent-id：`7ccf8790-97d3-4dab-8503-bab3eddd0dc9`）。
+- 验收会话 ID：`1dcd167e-52ee-408e-acd2-8c91c638e1a5`。
 - 候选：`9fa5cc492c679c6a12756a7d5ae8acb2f52242f7`；comparison base：`61511d7`。只读审阅指定 worktree `.worktrees/paseo016-companion-candidate`；验收前工作树干净。
 - 规格：审阅 `docs/PASEO-0.16-SPEC.md` §3.5，包括其余配套契约；§3.7 暂缓不作为豁免。
 
