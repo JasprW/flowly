@@ -17,7 +17,7 @@ import {
 
 const extension = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" } as const;
 const empty = (): FormDraftState => ({ version: 1, drafts: {} });
-/** The revision the next save must name: the live draft's, else the last cleared one's, else 0. */
+/** The revision the next save must name: the live draft's, else the one recorded at its clear, else 0. */
 const revisionOf = (state: FormDraftState, key: string) => state.drafts[key]?.revision ?? state.cleared?.[key] ?? 0;
 
 /** Whether the draft's project (New task) or card (New session) is still live. */
@@ -156,7 +156,8 @@ export class FormDraftStore {
       if (!draft) return { ok: true };
       if (revision !== undefined && draft.revision !== revision) return { ok: false };
       delete state.drafts[key];
-      (state.cleared ??= {})[key] = draft.revision;
+      // One past the cleared draft: a window still holding its revision cannot save it back.
+      (state.cleared ??= {})[key] = draft.revision + 1;
       await this.write(state);
       await this.removeFiles(draft.images.map((i) => i.file));
       return { ok: true };

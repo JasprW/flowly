@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { DraftSaver, fitDraftFields, mergeAfterFailedLoad } from "./form-draft-saver";
+import { DraftSaver, fitDraftFields, mergeAfterFailedLoad, overwriteLatest } from "./form-draft-saver";
 import { draftConflictMessage } from "../shared/form-drafts";
 
 beforeEach(() => vi.useFakeTimers());
@@ -84,6 +84,18 @@ test("a stale revision is a conflict; overwrite saves on top of the newer one", 
   expect(saver.state.conflict).toBe(true);
   expect(await saver.overwrite(3)).toBe(true);
   expect(calls.at(-1)).toMatchObject({ baseRevision: 3, fields: { title: "mine" } });
+});
+
+test("conflict retry after a clear uses the revision read reports, not 0", async () => {
+  const { saver, calls, setRevision } = setup();
+  saver.loaded(1, []);
+  setRevision(2); // another window created and cleared the draft: no draft left, next save names 2
+  saver.change({ fields: { title: "mine" }, images: [] });
+  expect(await saver.flush()).toBe(false);
+  expect(saver.state.conflict).toBe(true);
+  expect(await overwriteLatest(saver, async () => ({ revision: 2, draft: null }))).toBe(true);
+  expect(calls.at(-1)).toMatchObject({ baseRevision: 2, fields: { title: "mine" } });
+  expect(saver.state.conflict).toBe(false);
 });
 
 test("a draft that failed to load is never saved over", async () => {

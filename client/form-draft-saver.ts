@@ -126,6 +126,16 @@ export class DraftSaver {
 }
 
 /**
+ * Retry after a conflict: save this form's version on top of the current one.
+ * Uses the revision the daemon says the next save must name, which is nonzero
+ * after a clear even though no draft is left.
+ */
+export async function overwriteLatest(saver: DraftSaver, read: () => Promise<{ revision: number }>) {
+  const latest = await read();
+  return saver.overwrite(latest.revision);
+}
+
+/**
  * Text longer than a draft can hold is saved as empty: the open form keeps it
  * and creating still uses it, but it is not kept across a close.
  */

@@ -39,7 +39,7 @@ export const storedDraftSchema = z.object({
 export const formDraftStateSchema = z.object({
   version: z.literal(1),
   drafts: z.record(formDraftKeySchema, storedDraftSchema),
-  /** Last revision of each cleared draft, so revisions never repeat and a stale window cannot save over a newer draft. */
+  /** One past the last revision of each cleared draft, so revisions never repeat and a stale window can neither recreate a cleared draft nor save over a newer one. */
   cleared: z.record(formDraftKeySchema, z.number().int().positive()).optional(),
 });
 export type FormDraftState = z.infer<typeof formDraftStateSchema>;

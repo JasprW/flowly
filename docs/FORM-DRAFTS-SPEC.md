@@ -71,8 +71,9 @@ invalid file is preserved and reported, never reset. Image files are written
 before the JSON that references them and removed after it no longer does.
 
 - `form-drafts.read({ key })` → `{ revision, draft: { revision, fields, images[{ id, name, mimeType, data }] } | null }`.
-  `revision` is what the next save must name: the draft's, else the last cleared
-  revision of that key (revisions never repeat), else 0.
+  `revision` is what the next save must name: the draft's, else the revision
+  recorded when that key was cleared (revisions never repeat), else 0. A conflict
+  Retry overwrites on top of this `revision`, also when no draft is left.
   A draft whose project or card is gone or archived reads as `null` and is removed.
 - `form-drafts.save({ key, baseRevision, fields, images[{ id, name, mimeType, data? }] })` →
   `{ revision }`. `baseRevision` is the revision the client last read or saved (0
@@ -81,7 +82,8 @@ before the JSON that references them and removed after it no longer does.
   sent with `data` once; later saves reference it by `id`. The project (task draft)
   or card (session draft) must exist and not be archived.
 - `form-drafts.clear({ key, revision? })` → `{ ok }`. Removes the draft and its
-  images and remembers its revision. With `revision`, a draft that has since been
+  images and records one past its revision, so a window still holding the cleared
+  revision cannot save it back. With `revision`, a draft that has since been
   saved again (another window) is kept and `ok` is false.
 
 Field values are strings, booleans or string lists (bounded); the client validates

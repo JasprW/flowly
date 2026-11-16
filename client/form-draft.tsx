@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import * as rpc from "../shared/rpc";
 import { draftConflictMessage, type ReadDraft } from "../shared/form-drafts";
-import { DraftSaver, fitDraftFields, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
+import { DraftSaver, fitDraftFields, overwriteLatest, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
 import type { Attachment } from "./web-images";
 import { Button, Notice, message, space } from "./ui";
 import { t } from "../shared/i18n";
@@ -121,8 +121,7 @@ export function useFormDraft(key: string | null, active = true) {
       if (!saver.state.conflict || !key) return saver.flush();
       try {
         // Keep this form's version on top of the newer one the user was told about.
-        const latest = await readRef.current({ key });
-        return await saver.overwrite(latest.draft?.revision ?? 0);
+        return await overwriteLatest(saver, () => readRef.current({ key }));
       } catch (e) {
         // The conflict stays, so Retry stays available.
         setSaveState({ saving: false, error: message(e), conflict: true });

@@ -130,13 +130,25 @@ test("revisions never repeat after a clear, so a stale window cannot save over a
   const key = "session:t:plain";
   await drafts.save({ key, baseRevision: 0, fields: { prompt: "old" }, images: [] }); // window A holds revision 1
   await drafts.clear(key);
-  expect(await drafts.read(key)).toEqual({ revision: 1, draft: null });
+  expect(await drafts.read(key)).toEqual({ revision: 2, draft: null });
   // Window B starts fresh from what it read.
-  expect((await drafts.save({ key, baseRevision: 1, fields: { prompt: "new" }, images: [] })).revision).toBe(2);
+  expect((await drafts.save({ key, baseRevision: 2, fields: { prompt: "new" }, images: [] })).revision).toBe(3);
   // Window A, still at revision 1, is refused.
   await expect(drafts.save({ key, baseRevision: 1, fields: { prompt: "stale" }, images: [] })).rejects.toThrow(draftConflictMessage);
   await expect(drafts.save({ key, baseRevision: 0, fields: { prompt: "stale" }, images: [] })).rejects.toThrow(draftConflictMessage);
   expect((await drafts.read(key)).draft?.fields.prompt).toBe("new");
+});
+
+test("a window still holding the cleared revision cannot recreate the cleared draft", async () => {
+  const { drafts } = await setup();
+  const key = "task:p:plain";
+  await drafts.save({ key, baseRevision: 0, fields: { title: "made" }, images: [] }); // both windows hold revision 1
+  expect(await drafts.clear(key, 1)).toEqual({ ok: true }); // window A created the card
+  // Window B saves before any replacement draft exists.
+  await expect(drafts.save({ key, baseRevision: 1, fields: { title: "made" }, images: [] })).rejects.toThrow(draftConflictMessage);
+  expect(await drafts.read(key)).toEqual({ revision: 2, draft: null });
+  // Its explicit Retry names the revision read() reports and succeeds.
+  expect((await drafts.save({ key, baseRevision: 2, fields: { title: "mine" }, images: [] })).revision).toBe(3);
 });
 
 test("a clear naming an older revision keeps the newer draft", async () => {
