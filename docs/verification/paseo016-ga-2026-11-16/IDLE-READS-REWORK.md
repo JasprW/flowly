@@ -14,3 +14,11 @@
 - 最终源码冻结后再核对 typecheck exit0，全量 exit0（1506通过/6跳过，165文件通过/1跳过）。后续仅证据文档变化，不把未重跑的文档提交称为新源码测试。
 - 测试session已hard-delete，`paseo agent inspect` 返回 AGENT_NOT_FOUND；本轮没有创建项目、卡片、workspace、fixture daemon或隔离缓存，未改性能设置。正常本地checkout的同范围patch在保留其他会话变更后通过typecheck，reload显示Flowly running；这只是载入smoke，不是UI验收。
 - 返工 PR：https://github.com/JasprW/flowly/pull/117 。Node22/24与CI gate通过；首次CodeRabbit因额度跳过，自动合入保持关闭，按用户决定等约21:52恢复后再请求真实补审，不能把skipped当放行。最终合入状态见PR与卡片交付回执。
+
+## CodeRabbit 补审与用户批准的最小修复
+
+- 真实补审在额度恢复后完成（2026-11-16 22:00，本地时间），并非skipped：三条意见均由确定性回归复现。旧源码一次拒绝后不恢复（期望chip重建4次、实际2次）；旧设置响应保留fill而非copy；旧归档扫描只扫1轮而非补2轮。初始3失败/28通过；修好读取恢复后31通过/2并发失败，没有删掉失败回归。
+- 用户随后明确批准两处最小并发保护并保留回归：settings generation和archive-removal counter只决定旧请求能否标记新鲜，以及是否补读，不新增定时轮询。归档旧响应成功/失败都有回归；没有新移除时失败不即时补查，stop后不再补查。
+- 读取故障退避复用5/30/60 s，成功后停止，stop取消。另补初始stream完整列表失败的回归先红（完整读取期望3次、实际2次）；失败轮保留relist，不能把旧live集合当成恢复。
+- 本轮 PASS：typecheck exit0；完整5文件聚焦65项通过，exit0；全量165文件通过/1跳过，1513项通过/6跳过，exit0。环境NODE_ENV=test/FLOWLY_TELEMETRY=0，命令同上。前面的9fa5cc4/Luna报告属于历史版本，不冒充本次最终源码验收；新候选的独立复核另记。
+- 本轮没有新增真机/旧宿主客户端样本，既有UNRUN仍保留。

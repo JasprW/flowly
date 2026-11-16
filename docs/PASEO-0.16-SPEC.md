@@ -102,6 +102,8 @@
   - 看板界面（`client/board-push.tsx`）：收到第一个事件后视为在线，overview、卡片详情、项目 Ideas 停止定时轮询，每个 `board`/`all` 事件让这些查询失效一次（`invalidateCardViews`）。订阅 `connecting` 时、`error`/`closed` 后按原来的间隔轮询；失败后按 5 s、30 s、60 s 重试（`client/push-retry.ts`）。
   - Composer pill（`client/session-link.ts`，命令式，不能用 hook）：用 `client.subscribe`。收到首个事件后停止定时轮次，静止超过一分钟也不做 chip 读取；仅看板/洞察推送、相关 agent 流变化或显式操作触发刷新。agent 流建立后补一次完整列表，session 离开在线列表时刷新归档引用。Ideas、Wrap up、原生 session 设置变化经同一 `sessions` 通知刷新 chip 设置，不依赖分钟校对。失败时立即补读并回到原间隔，恢复首事件后再次停止轮询；只由重试计时器重新订阅（轮次本身不重新订阅，否则宿主立即拒绝时会形成循环）。旧宿主和尚未收到首事件的 connecting 继续原轮询。
   - 不在范围内、仍按原间隔轮询：`attention.count`（原生 attention 不经看板写入）、`summaries.read-changed`（含内存中的运行状态）、`sessions.read-state`、`sessions.managed`、`resources.read-changed`、实时 agent 列表与 session 预览。
+  - chip 轮次的看板或在线 agent 读取失败时，即使订阅仍在线，也须按既有 5/30/60 s 退避重试；未成功应用的完整 agent 列表仍须在重试轮补读。一次成功后停止故障重试，正常静止时仍无周期读取。新的推送可提前刷新，停止插件必须取消待重试。
+  - 用户批准（2026-11-16）：设置推送与归档移除事件各用一个变化编号。旧的设置读取或归档扫描完成时，只有编号未变才能标记缓存新鲜；编号变化则保留新失效并补读。归档扫描的成功/失败均不可吞掉扫描中到达的新移除；补读失败不形成即时重试循环，stop 后不再补读。
 
 ### 3.6 实体元数据（metadata）
 

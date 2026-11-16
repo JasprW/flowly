@@ -1379,3 +1379,6 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 去除分钟触发后，Ideas/Wrap up/native-session 设置通过原有 sessions 通知触发刷新；agent 流建立补一次完整列表、归档事件使归档引用过期。无新增轮询、协议或依赖。
 - 变更后 typecheck exit 0，5 文件 58 聚焦通过；全量 exit 0，165 文件通过/1 跳过，1506 测试通过/6 跳过。独立复核、提交与交付信息见 verification/paseo016-ga-2026-11-16/IDLE-READS-REWORK.md。
 - 本轮 AndroMeld control socket 不存在，adb 无设备；没有新手机或冷启动样本，旧数据保持历史属性。不新增用户操作、设置、引导、遥测字段或版本号。
+
+- CodeRabbit 三条有效补审意见均以确定性回归复现：读取拒绝后chip不恢复、旧设置响应吞新失效、旧归档扫描吞新移除。用户明确批准后两处最小并发保护；各加变化编号，不新增周期轮询。设置旧请求结束保留新失效；归档扫描无论成功/失败都保留新移除并补查。
+- 读取失败用5/30/60 s故障退避，成功即停止；stream初始化未成功应用的完整列表保留relist。该列表路径补回归先红；持续失败不自旋、stop取消、恢复后180秒无周期读取均保留。最终命令、SHA与独立复核记入IDLE-READS-REWORK.md。

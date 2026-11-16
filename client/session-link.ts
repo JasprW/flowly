@@ -136,7 +136,8 @@ export function registerSessionChips(
   const ideaPills = new Map<string, Extra>();
   type Outside = { enabled: boolean; progress: boolean; nextMoves: boolean; ideas: boolean };
   let chipInfo: { managed: Set<string>; ideas: boolean; autoWrapup: boolean; nextMoveTap: "fill" | "copy"; outside: Outside } | null = null,
-    chipInfoAt = 0;
+    chipInfoAt = 0,
+    chipInfoGen = 0;
   let outsideEtag = "",
     outsideViews = new Map<string, SessionInsightView>();
   if (popovers) setChipClient(client);
@@ -157,6 +158,7 @@ export function registerSessionChips(
     // Only what the Task chip needs of an archived session.
     archived: { id: string; workspaceId: string | null }[] = [],
     archivedAt = 0,
+    archiveRemovals = 0,
     scanning = false;
   const archivedEvery = 60_000;
   const liveEvery = 60_000;
@@ -205,6 +207,7 @@ export function registerSessionChips(
             pushAttempt = 0;
           }
           // Settings changes use the same feed even when the board's etag is unchanged.
+          chipInfoGen++;
           chipInfoAt = -Infinity;
           refreshNow();
         },
@@ -252,7 +255,10 @@ export function registerSessionChips(
       const { changed, before, after } = applyLiveUpdate(live, update);
       if (!changed || !relevantChange(before, after)) return;
       // Without a timed round, archiving must refresh the references from this event itself.
-      if (before && !after) archivedAt = -Infinity;
+      if (before && !after) {
+        archivedAt = -Infinity;
+        archiveRemovals++;
+      }
       clearTimeout(nudge);
       nudge = setTimeout(refreshNow, nudgeAfter);
     });
@@ -390,7 +396,8 @@ export function registerSessionChips(
   }
   // One round at a time: an extra request while a round runs queues exactly one more, right after it.
   let running = false,
-    again = false;
+    again = false,
+    readAttempt = 0;
   function refreshNow() {
     if (disposed) return;
     if (running) {
@@ -455,24 +462,27 @@ export function registerSessionChips(
   /** Every agent on the host, archived ones included: megabytes, so never inside a round (see above). */
   async function scanArchived() {
     const start = perfStart();
+    const removals = archiveRemovals;
     try {
       // The daemon pages every agent locally and sends back bare ids (a phone took 7-13 s to decode the full list).
       const refs = await client.rpc(archivedSessionRefs, {});
       if (disposed) return;
       archived = refs;
-      archivedAt = Date.now();
+      if (removals === archiveRemovals) archivedAt = Date.now();
       perfEnd("chips.archived", start);
       // New archived sessions of a card get their chip now; the cards themselves were synced by the round.
       if (board) syncTaskChips(board, [...live.values(), ...archived.filter((a) => !live.has(a.id))], taskMap(board));
     } catch {
       // Try again soon, not every round.
-      archivedAt = Date.now() - archivedEvery + 15_000;
+      if (removals === archiveRemovals) archivedAt = Date.now() - archivedEvery + 15_000;
     } finally {
       scanning = false;
+      if (!disposed && removals !== archiveRemovals) refreshNow();
     }
   }
   async function refresh() {
     running = true;
+    let failed = false;
     const roundStart = perfStart();
     try {
       openStream();
@@ -487,6 +497,8 @@ export function registerSessionChips(
       ]);
       if (disposed) return;
       if (boardResult.status !== "fulfilled" || liveResult.status !== "fulfilled" || (!boardResult.value.value && !board)) {
+        if (needLive) relist = true;
+        failed = true;
         board = null;
         etag = "";
         clear();
@@ -504,12 +516,13 @@ export function registerSessionChips(
         Date.now() - chipInfoAt >= 15_000 &&
         liveAgents.some((a) => !chipInfo!.managed.has(a.id) && !!a.workspaceId && board!.tasks.some((x) => x.workspaceId === a.workspaceId));
       if (popovers && (changed || unknown || !chipInfo || Date.now() - chipInfoAt >= archivedEvery)) {
+        const settingsGen = chipInfoGen;
         const info = await client.rpc(nativeChips, {}).catch(() => null);
         if (disposed) return;
         chipInfo = info
           ? { managed: new Set(info.managed.map((m) => m.agentId)), ideas: info.ideas, autoWrapup: info.autoWrapup, nextMoveTap: info.nextMoveTap, outside: info.outside ?? { enabled: false, progress: false, nextMoves: false, ideas: false } }
           : chipInfo;
-        chipInfoAt = Date.now();
+        if (settingsGen === chipInfoGen) chipInfoAt = Date.now();
       }
       // Sessions Flowly does not manage (NATIVE-SESSION-SPEC §12.7): read only when switched on, by etag.
       if (popovers && chipInfo?.outside?.enabled) {
@@ -538,18 +551,20 @@ export function registerSessionChips(
         void scanArchived();
       }
     } catch {
+      failed = true;
       if (!disposed) clear();
     } finally {
       running = false;
+      if (!failed) readAttempt = 0;
       perfEnd("chips.round", roundStart);
       if (!disposed) {
         if (again) {
           again = false;
           void refresh();
-        } else if (!pushLive)
+        } else if (!pushLive || failed)
           timer = setTimeout(() => {
             void refresh();
-          }, interval);
+          }, pushLive ? pushRetryDelay(readAttempt++) : interval);
       }
     }
   }

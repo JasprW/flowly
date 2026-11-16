@@ -430,6 +430,7 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     const state = {
       etag: "e1",
       agents: [live("a1")] as ReturnType<typeof live>[],
+      archived: [{ id: "old", workspaceId: "w1" }],
       events: [{ id: "evp1", taskId: "t1", actor: "agent", action: "next_moves_suggested", agentId: "a1", at: "2026-10-21T00:00:05Z", moves: [{ label: "Verify", prompt: "Verify it" }] }] as unknown[],
     };
     let push: ((u: unknown) => void) | null = null;
@@ -438,8 +439,9 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
       rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
         if (def.name === "sessions.archived-refs") {
           calls.archived++;
-          await options.scanGate;
-          return [{ id: "old", workspaceId: "w1" }];
+          const refs = [...state.archived];
+          if (calls.archived === 1) await options.scanGate;
+          return refs;
         }
         if (def.name === "sessions.native-chips") {
           calls.native++;
@@ -541,6 +543,59 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     expect(x.released()).toBe(1);
   });
 
+  test("a failed initial stream reconciliation retries the full list before returning to idle", async () => {
+    const x = fake({ stream: true });
+    const list = x.client.paseo.agents.list.getMockImplementation()!;
+    let fullReads = 0;
+    x.client.paseo.agents.list.mockImplementation(async (input) => {
+      if (!input.subscribe && ++fullReads === 2) throw new Error("initial reconcile failed");
+      return list(input);
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fullReads).toBe(2);
+    x.state.agents.push(live("a2"));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fullReads).toBe(3);
+    expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    const after = { ...x.calls };
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.calls).toEqual(after);
+    stop();
+  });
+
+  test.each([false, true])("an archive during a pending scan survives stale completion (failed=%s)", async (failed) => {
+    let release!: () => void;
+    let reject!: (error: Error) => void;
+    const x = fake({ stream: true, scanGate: new Promise<void>((r, j) => { release = r; reject = j; }) });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    x.state.archived = [{ id: "a1", workspaceId: "w1" }];
+    x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    await vi.advanceTimersByTimeAsync(200);
+    if (failed) reject(new Error("old scan failed"));
+    else release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(x.calls.archived).toBe(2);
+    expect(x.client.addComposerPill).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "a1" }));
+    const after = { ...x.calls };
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.calls).toEqual(after);
+    stop();
+  });
+
   test("pushed churn that cannot change a card (a title) causes no round", async () => {
     const x = fake({ stream: true });
     const stop = registerSessionChips(x.client as never, 60_000, 0, popovers);
@@ -596,6 +651,88 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     Object.assign(client, { subscribe });
     return { emit: () => emit!(), close: () => close!(), release, subscribe };
   }
+
+  test.each(["board", "agents"])("a rejected %s read recovers without another change, then returns to zero idle reads", async (target) => {
+    const { client, calls } = fakeClient();
+    const read = client.rpc.getMockImplementation()!;
+    const list = client.paseo.agents.list.getMockImplementation()!;
+    let fail = false;
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (target === "board" && definition.name === "sessions.chip-board-changed" && fail) throw new Error("temporary read failure");
+      return read(definition, input);
+    });
+    client.paseo.agents.list.mockImplementation(async (input) => {
+      if (target === "agents" && fail) throw new Error("temporary agent read failure");
+      return list(input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    fail = true;
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls.pills).toBe(4); // the cleared live and archived chips have been restored
+    const count = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
+
+  test("persistent read failures back off instead of looping, and stop cancels the retry", async () => {
+    const { client } = fakeClient();
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    client.rpc.mockRejectedValue(new Error("read service unavailable"));
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    const failed = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(client.rpc).toHaveBeenCalledTimes(failed);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 1);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 2);
+    stop();
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 2);
+  });
+
+  test("a settings push during an older native-chips read survives its stale response", async () => {
+    const { client } = fakeClient();
+    const { chipState } = await import("./native-chips");
+    const read = client.rpc.getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let tap = "fill";
+    let nativeReads = 0;
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.native-chips") {
+        const nextMoveTap = tap;
+        if (++nativeReads === 1) await gate;
+        return { managed: [{ agentId: "a1" }], ideas: true, autoWrapup: false, nextMoveTap } as never;
+      }
+      return read(definition, input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0, { ideas: () => null });
+    await vi.advanceTimersByTimeAsync(0);
+    tap = "copy";
+    push.emit();
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("copy");
+    expect(nativeReads).toBe(2);
+    stop();
+  });
 
   test("connecting polls; live stops; closure resumes polling; first recovery event stops it again", async () => {
     const { client, calls } = fakeClient();
