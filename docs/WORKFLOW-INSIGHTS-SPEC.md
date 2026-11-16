@@ -73,7 +73,7 @@ agent 在卡片里反复手敲同样的命令、反复写同一类内联脚本�
 ### 3.1 来源
 
 - `agent.turn_ended` hook 提供本轮 timeline（`index.server.ts` 已把它交给 workpad 与 summary）。取其中 `type: "tool_call"` 且 `detail.type === "shell"` 的条目，采集在 hook 返回后异步进行，不阻塞 hook。
-- 范围：本项目卡片 workspace 中的所有 session（与探针一致）。summarizer session（`flowly=summarizer`（兼容既有旧标签） 标签）不采集：hook 里按需查一次 agent 的标签并缓存。
+- 范围：本项目卡片 workspace 中的所有 session（与探针一致）。summarizer session（`flowly=summarizer`（兼容既有旧标签） 标签）不采集：hook 里按需查一次 agent 的标签并缓存。顺序：先判断 workspace 属于未归档卡片且该项目开着 workflow insights、session 不是后台 agent；有 `parentAgentId` 的子 session 先查一次标签，是 summarizer（卡片 summary、自动评审）或已查不到（已删除）就跳过。都通过后才读本轮 timeline（最新一页 200 条），与卡片无关的 session 和 Flowly 用完即删的临时 session 不读（2026-11-13）。
 - 时间：hook 给出的本轮 timeline 条目没有时间戳，记为本轮结束的时间；回填用条目自带的 timestamp。
 - 粒度：每次 shell 调用一条记录，id 为 `<agentId>:<callId>`，hook 与回填得到的同一次调用只记一次。
 - 列：记录**命令发生时**卡片所在的列，即 hook 执行时的 `task.status`；回填时按流转日志回放取当时的列。

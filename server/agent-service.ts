@@ -1,4 +1,5 @@
 import { isSummarizer } from "../shared/summary";
+import { actionableEvent, acceptanceOutput, agentCallSchema, compactRead, type AgentWriteResult, type Continuation } from "../shared/agent-output";
 import { outputLanguage } from "../shared/ai-language";
 import type { LocaleCode } from "../shared/i18n";
 import { enabledStatuses, laneEnabled, laneName } from "../shared/lanes";
@@ -7,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { ideaTitleKey } from "../shared/ideas";
 import { nextMovesAction, noMovesNote } from "../shared/next-moves";
 import { isResolved, linksOf } from "../shared/links";
+import { cardImagePath } from "./card-images";
 import { absoluteTarget, artifactsOf } from "../shared/artifacts";
 import { turnChecklist } from "../shared/turn-checklist";
 import { changeTags, normalizeTags, projectTagStats, tagChangeNote } from "../shared/tags";
@@ -24,6 +26,7 @@ import { mergeWorkpad, plansOf, workpadEnabled, workpadNote, workpadOf, workpadU
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
 import { autoReviewOf, autoReviewRuns, reviewContext } from "../shared/auto-review";
+import { prWorktree, resolveWorktree } from "./review-worktree";
 import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
 import {
@@ -266,6 +269,7 @@ export class AgentService {
       task.id,
       paseo,
       board,
+      false,
     );
     if (!context.workspaceRepoPaths.length)
       throw new ToolError(
@@ -279,7 +283,7 @@ export class AgentService {
    * so artifacts it returns stop being unread for that session. The context
    * returned after a write shows the flags without clearing them.
    */
-  async get(identity: ToolIdentity, recordAccess = true, markArtifacts = recordAccess): Promise<ToolContext> {
+  async get(identity: ToolIdentity, recordAccess = true, markArtifacts = recordAccess, compactActivity = false): Promise<ToolContext> {
     // Taken before reading the board: an artifact added meanwhile stays unread.
     const readAt = new Date(Math.max(Date.now(), this.clock())).toISOString();
     const lastRead = await this.artifactReads.lastRead(identity.agentId).catch(() => undefined);
@@ -322,7 +326,10 @@ export class AgentService {
     const built: ToolContext = {
       identity,
       turnChecklist: [...turnChecklist],
-      task: (({ review: _review, ...task }) => task)(r.task),
+      task: (({ review: _review, images, ...task }) => ({
+        ...task,
+        ...(images ? { images: images.map((image) => ({ ...image, absolutePath: cardImagePath(this.store.directory, task.id, image) })) } : {}),
+      }))(r.task),
       // The card's latest automatic review (AUTO-REVIEW-SPEC §5); state "rework" means its findings come first.
       ...(r.task.review ? { review: reviewContext(r.task.review) } : {}),
       project: r.project,
@@ -352,7 +359,7 @@ export class AgentService {
       ...(await this.store.read().then(async (board) => {
         setup = setupContext(setupMissing(r.task, workpadOf(board.workpads, r.task.id), workpadEnabled(r.project)), r.task.status);
         return {
-          activity: board.events.filter((e) => e.taskId === r.task.id).slice(-20),
+          activity: board.events.filter((e) => e.taskId === r.task.id && (!compactActivity || actionableEvent(e))).slice(compactActivity ? -10 : -20),
           projectTags: projectTagStats(board.tasks, r.project.id).map(({ tag, count }) => ({ tag, count })),
           outputLanguage: outputLanguage(await this.aiLanguage()),
           ideas: board.ideas
@@ -429,11 +436,44 @@ export class AgentService {
       );
     return value;
   }
+  /** Public MCP/CLI read. Internal full-context callers retain their existing shape. */
+  async readAgent(identity: ToolIdentity, options: { responseDetail?: "compact" | "full" } = {}) {
+    const full = options.responseDetail === "full";
+    const current = await this.get(identity, true, true, !full);
+    return full ? current : compactRead(current);
+  }
+  /** Presentation is not a business input, so it cannot change a receipt's replay identity. */
+  async writeAgent(identity: ToolIdentity, action: Parameters<AgentService["write"]>[1], raw: unknown) {
+    const { responseDetail, ...input } = agentCallSchema.parse(raw);
+    return responseDetail === "full" ? this.write(identity, action, input) : this.write(identity, action, input, "compact");
+  }
+  private async continuation(identity: ToolIdentity, revision: ToolContext["revision"]): Promise<Continuation> {
+    const r = await this.resources(identity);
+    if (r.task.revision !== revision.task || r.project.revision !== revision.project)
+      throw new ToolError("REVISION_CONFLICT", "Card or project changed after the write committed. Re-read the task before continuing.");
+    const board = await this.store.read();
+    const enabled = workpadEnabled(r.project);
+    const workpad = enabled ? workpadOf(board.workpads, r.task.id) : undefined;
+    const finished = ["done", "cancelled"].includes(r.task.status);
+    return {
+      identity, toolVersion: 2,
+      task: { id: r.task.id, status: r.task.status },
+      revision, request: this.secrets.request(identity, revision),
+      setup: setupContext(setupMissing(r.task, workpad, enabled), r.task.status),
+      writable: r.context.available && !finished,
+      reason: r.context.reason || (finished ? "Task is finished; only a human can reopen it." : ""),
+      workpadEnabled: enabled,
+      workpad: workpad ? { revision: workpad.revision, acceptance: acceptanceOutput(workpad.acceptance) } : null,
+    };
+  }
+  async write(identity: ToolIdentity, action: AgentWriteAction, raw: unknown, detail: "compact"): Promise<AgentWriteResult>;
+  async write(identity: ToolIdentity, action: AgentWriteAction, raw: unknown, detail?: "full"): Promise<ToolResult>;
   async write(
     identity: ToolIdentity,
-    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
+    action: AgentWriteAction,
     raw: unknown,
-  ): Promise<ToolResult> {
+    detail: "compact" | "full" = "full",
+  ): Promise<ToolResult | AgentWriteResult> {
     const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
       action === "status"
         ? statusInputSchema.parse(raw)
@@ -459,6 +499,7 @@ export class AgentService {
                       ? parseWorkpadInput(raw)
                       : progressInputSchema.parse(raw);
     const disputes = action === "status" ? (input as StatusInput).disputes : undefined;
+    const namedWorktree = action === "status" ? (input as StatusInput).worktree : undefined;
     const signed = this.secrets.validateRequest(
       identity,
       input.request,
@@ -504,6 +545,40 @@ export class AgentService {
         } catch (e) {
           throw new ToolError("ARTIFACT_INVALID", e instanceof Error ? e.message : String(e));
         }
+      }
+    }
+    // A named worktree (AUTO-REVIEW-SPEC §3.4) is resolved before the write; an exact replay keeps its receipt.
+    let worktree: string | undefined;
+    if (namedWorktree) {
+      if ((input as StatusInput).status !== "in_review")
+        throw new ToolError("INVALID_INPUT", "worktree is only valid when you deliver the card to In review (status in_review).");
+      const replay = (await this.store.read()).agentReceipts.some((r) => r.key === key);
+      if (!replay)
+        worktree = await resolveWorktree(namedWorktree, resources.workspace.workspaceDirectory).then(
+          (w) => w.directory,
+          (e: unknown) => {
+            throw new ToolError("INVALID_INPUT", e instanceof Error ? e.message : String(e));
+          },
+        );
+    }
+    // No worktree named, a shared workspace and a PR among the outputs: the worktree holding its head (§3.4).
+    let foundFrom: string | undefined;
+    if (
+      !namedWorktree &&
+      action === "status" &&
+      (input as StatusInput).status === "in_review" &&
+      resources.task.status !== "in_review" &&
+      resources.workspace.workspaceKind !== "worktree" &&
+      autoReviewRuns(resources.project)
+    ) {
+      const board = await this.store.read();
+      if (!board.agentReceipts.some((r) => r.key === key)) {
+        const links = [
+          ...(outputs || []).map((o) => o.target),
+          ...board.artifacts.filter((a) => a.taskId === resources.task.id && a.role === "output").map((a) => a.target),
+        ];
+        const found = links.length ? await prWorktree(links, resources.workspace.workspaceDirectory).catch(() => null) : null;
+        if (found) [worktree, foundFrom] = [found.directory, found.url];
       }
     }
     // Paths are checked before the write; the transaction only records the result.
@@ -654,6 +729,8 @@ export class AgentService {
           "A moveTo=\"done\" move is only offered together with a delivery to In review (status in_review). Leave it out, or deliver first.",
         );
       // Disputed findings ride on a delivery (GUARDRAILS-SPEC §6.1, B7): checked before anything is written.
+      if (worktree && (next !== "in_review" || next === previous))
+        throw new ToolError("INVALID_INPUT", "worktree is only valid when you deliver the card to In review (status in_review).");
       if (disputes?.length) {
         if (next !== "in_review" || next === previous)
           throw new ToolError("INVALID_INPUT", "disputes is only valid when you deliver the card to In review (status in_review).");
@@ -672,7 +749,9 @@ export class AgentService {
         task.updatedAt = new Date(this.clock()).toISOString();
       }
       let artifactId: string | undefined;
-      let notice: string | undefined;
+      let notice: string | undefined = foundFrom
+        ? `The auto review will check the worktree ${worktree}, which holds the head of ${foundFrom}. Deliver with worktree set when the change is elsewhere.`
+        : undefined;
       const artifactIds: string[] = [];
       for (const output of outputTargets) {
         try {
@@ -861,10 +940,14 @@ export class AgentService {
                 action === "progress" ? (input as ProgressInput).kind : "progress",
               ...(next !== previous ? { from: previous, to: next } : {}),
               ...(setupGap.length ? { setup: { missing: setupGap } } : {}),
+              ...(worktree ? { worktree } : {}),
             }));
       // An agent delivery starts the project's automatic review once this write commits (AUTO-REVIEW-SPEC §3.1).
-      if (next === "in_review" && next !== previous && autoReviewRuns(project))
-        review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous };
+      if (next === "in_review" && next !== previous && autoReviewRuns(project) && this.onDelivered) {
+        review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous, ...(worktree ? { worktree } : {}) };
+        // From now until that review starts, the card shows it is waiting, not the previous result (§3.1).
+        task.reviewWaiting = { eventId: event.id, agentId: identity.agentId, from: previous, since: event.at, ...(worktree ? { worktree } : {}) };
+      }
       // The suggestion follows the status change or report it rode on, in the same write (NEXT-MOVES-SPEC §8.3).
       if (carried) recordMoves(carried);
       let ideaId = action === "idea_update" || action === "idea_remove" ? (input as IdeaUpdateInput).id : undefined;
@@ -934,7 +1017,9 @@ export class AgentService {
     }
     const memoryField = memoryId ? { memoryId } : {};
     try {
-      const current = await this.get(identity, true, false);
+      const current = detail === "compact"
+        ? await this.continuation(identity, { task: receipt.taskRevision, project: receipt.projectRevision })
+        : await this.get(identity, true, false);
       this.accesses.set(identity.agentId, {
         at: new Date(this.clock()).toISOString(),
         action,
@@ -953,6 +1038,8 @@ export class AgentService {
     }
   }
 }
+
+type AgentWriteAction = "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad";
 
 /** get_task's acceptance list and plans (WORKPAD-SPEC §4.1, GUARDRAILS-SPEC §7.1). */
 function workpadContext(workpads: readonly Workpad[], plans: Board["plans"], taskId: string, agentId: string) {
@@ -1098,4 +1185,4 @@ export function pruneIdeas(board: Board, taskId: string) {
 
 /** "GitLab", for agent-facing messages. */
 const serviceName = (provider: Parameters<typeof familyOf>[0]) =>
-  ({ jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps", shortcut: "Shortcut" })[familyOf(provider)];
+  ({ jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps", shortcut: "Shortcut", linear: "Linear" })[familyOf(provider)];

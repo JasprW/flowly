@@ -36,6 +36,7 @@ import {
   taskPlacement,
   projectSchema,
   taskSchema,
+  cardImageMimeTypes,
   eventSchema,
   planSnapshotSchema,
 } from "./model";
@@ -315,6 +316,22 @@ export const searchExternal = defineRpc({
   input: z.strictObject({ connectionId: z.string().min(1), query: z.string().max(500), projectId: z.string().min(1).optional(), all: z.boolean().optional() }),
   output: z.object({ results: z.array(externalSummarySchema) }),
 });
+/**
+ * Whether a picked GitHub/GitLab item's repository belongs to the project's
+ * repositories (CONNECTORS-SPEC §4.3): "unknown" when membership can't be judged
+ * (no repositories on that host); "foreign" also names the other projects that
+ * have it. Client-only warning material; the daemon decides.
+ */
+export const repoCheck = defineRpc({
+  name: "connectors.repo-check",
+  input: z.strictObject({ projectId: z.string().min(1), connectionId: z.string().min(1), repo: z.string().trim().min(1).max(300) }),
+  output: z.object({
+    state: z.enum(["member", "foreign", "unknown"]),
+    projectTitle: z.string(),
+    /** Other projects whose repositories contain the repo (foreign only, at most 3). */
+    others: z.array(z.object({ id: z.string(), title: z.string() })),
+  }),
+});
 /** Current summaries of a card's external inputs (cached up to 30 minutes unless `refresh`). */
 export const cardExternals = defineRpc({
   name: "connectors.card",
@@ -345,6 +362,28 @@ export const deleteArtifact = defineRpc({
   name: "artifacts.delete",
   input: z.strictObject({ id: z.string().min(1) }),
   output: z.object({ id: z.string() }),
+});
+/** Description images of a card (CARD-IMAGES-SPEC §3). */
+const base64 = (max: number) => z.string().min(1).max(Math.ceil((max * 4) / 3) + 4).regex(/^[A-Za-z0-9+/]+=*$/, "Image data must be base64.");
+export const addCardImage = defineRpc({
+  name: "card-images.add",
+  input: z.strictObject({
+    taskId: z.string().min(1),
+    expectedRevision: z.number().int(),
+    image: z.strictObject({ name: z.string().max(200), mimeType: z.enum(cardImageMimeTypes), data: base64(5 * 1024 * 1024) }),
+    thumb: z.strictObject({ mimeType: z.enum(cardImageMimeTypes), data: base64(1024 * 1024) }).optional(),
+  }),
+  output: z.object({ task: taskSchema }),
+});
+export const removeCardImage = defineRpc({
+  name: "card-images.remove",
+  input: z.strictObject({ taskId: z.string().min(1), expectedRevision: z.number().int(), id: z.string().min(1).max(100) }),
+  output: z.object({ task: taskSchema }),
+});
+export const readCardImage = defineRpc({
+  name: "card-images.read",
+  input: z.strictObject({ taskId: z.string().min(1), id: z.string().min(1).max(100), size: z.enum(["thumb", "full"]) }),
+  output: z.object({ dataUri: z.string() }),
 });
 /** A person ticks an acceptance criterion (WORKPAD-SPEC §6.3). */
 export const checkWorkpad = defineRpc({

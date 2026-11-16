@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { imageMimeTypes, maxImageBytes, maxImages, type OutgoingImage } from "../shared/composer";
 import { t } from "../shared/i18n";
+import { thumbDimensions } from "./card-image-upload";
 
 /**
  * Web-only image input for the session composer (paste, drag-and-drop, file
@@ -17,8 +18,16 @@ type Listener = (event: { preventDefault(): void; clipboardData?: Transfer; data
 type EventNode = { addEventListener(type: string, listener: Listener): void; removeEventListener(type: string, listener: Listener): void };
 
 const browser = globalThis as unknown as {
-  document?: { createElement(tag: "input"): BrowserInput };
+  document?: { createElement(tag: "input"): BrowserInput; createElement(tag: "canvas"): BrowserCanvas };
+  Image?: new () => BrowserImage;
   FileReader?: new () => { onload: null | (() => void); onerror: null | (() => void); result: unknown; readAsDataURL(file: BrowserFile): void };
+};
+type BrowserImage = { onload: null | (() => void); onerror: null | (() => void); src: string; naturalWidth: number; naturalHeight: number };
+type BrowserCanvas = {
+  width: number;
+  height: number;
+  getContext(kind: "2d"): { drawImage(image: BrowserImage, x: number, y: number, w: number, h: number): void } | null;
+  toDataURL(type: string, quality?: number): string;
 };
 type BrowserInput = {
   type: string;
@@ -56,13 +65,13 @@ function readFile(file: BrowserFile): Promise<Attachment> {
  * Reads image files, keeping at most `room` of them. Returns readable
  * reasons for anything skipped (type, size, count).
  */
-export async function readImages(files: readonly BrowserFile[], room: number) {
+export async function readImages(files: readonly BrowserFile[], room: number, tooMany = t("At most {maxImages} images per message.", { maxImages })) {
   const problems: string[] = [];
   const accepted: BrowserFile[] = [];
   for (const file of files) {
     if (!(imageMimeTypes as readonly string[]).includes(file.type)) problems.push(t("{name} is not a PNG, JPEG, GIF or WebP image.", { name: file.name || t("File") }));
     else if (file.size > maxImageBytes) problems.push(t("{name} is larger than 5 MB.", { name: file.name || t("Image") }));
-    else if (accepted.length >= room) problems.push(t("At most {maxImages} images per message.", { maxImages }));
+    else if (accepted.length >= room) problems.push(tooMany);
     else accepted.push(file);
   }
   const images = await Promise.all(accepted.map(readFile));
@@ -124,4 +133,37 @@ export function listenForImages(node: unknown, onFiles: (files: BrowserFile[]) =
     target.removeEventListener?.("dragover", over);
     target.removeEventListener?.("drop", drop);
   };
+}
+
+/**
+ * A small WebP (else JPEG) copy of an attachment drawn on a canvas, for card
+ * image thumbnails. Resolves null when the browser cannot make one; the
+ * daemon then serves the full image instead.
+ */
+export function makeThumbnail(attachment: Pick<Attachment, "uri">): Promise<OutgoingImage | null> {
+  return new Promise((resolve) => {
+    if (!imageInputSupported || !browser.Image) return resolve(null);
+    const image = new browser.Image();
+    image.onerror = () => resolve(null);
+    image.onload = () => {
+      try {
+        const size = thumbDimensions(image.naturalWidth, image.naturalHeight);
+        const canvas = browser.document!.createElement("canvas");
+        const context = size && canvas.getContext("2d");
+        if (!size || !context) return resolve(null);
+        canvas.width = size.width;
+        canvas.height = size.height;
+        context.drawImage(image, 0, 0, size.width, size.height);
+        let uri = canvas.toDataURL("image/webp", 0.8);
+        // Browsers without WebP encoding return PNG.
+        if (!uri.startsWith("data:image/webp")) uri = canvas.toDataURL("image/jpeg", 0.8);
+        const mimeType = uri.slice(5, uri.indexOf(";")) as OutgoingImage["mimeType"];
+        const data = uri.slice(uri.indexOf(",") + 1);
+        resolve((imageMimeTypes as readonly string[]).includes(mimeType) && data ? { mimeType, data } : null);
+      } catch {
+        resolve(null);
+      }
+    };
+    image.src = attachment.uri;
+  });
 }

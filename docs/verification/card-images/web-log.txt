@@ -1,0 +1,5 @@
+pending thumbnails in Edit task: 6
+after save: 3 images, revision 5, thumbs image/webp,image/webp,image/webp
+viewer text: bravo.png | 2 / 3
+after remove: 2 images (alpha.png, charlie.png)
+page errors: none

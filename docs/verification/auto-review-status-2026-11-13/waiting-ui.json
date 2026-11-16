@@ -1,0 +1,16 @@
+[
+  {
+    "phase": "waiting",
+    "layout": "desktop",
+    "viewport": 1700,
+    "label": "Open task Waiting review. In review. Acceptance 1/1. Waiting for review. Normal priority, Chore. 0 running, 0 finished turns, 0 unread sessions, 0 need attention.",
+    "errors": []
+  },
+  {
+    "phase": "waiting",
+    "layout": "compact",
+    "viewport": 1000,
+    "label": "Open task Waiting review. In review. Acceptance 1/1. Waiting for review. Normal priority, Chore. 0 running, 0 finished turns, 0 unread sessions, 0 need attention.",
+    "errors": []
+  }
+]

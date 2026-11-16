@@ -1,4 +1,5 @@
 import type { BoardOverview } from "../shared/overview";
+import { imageInputSupported } from "./web-images";
 import { CardDetailProvider, detailQueryOptions, detailUnavailable, invalidateCardViews, useCardDetailQuery, useProjectIdeasQuery } from "./card-detail-query";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Animated, Platform, Pressable, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
@@ -156,7 +157,7 @@ const tipText: Record<TipId, (compact?: boolean) => string> = {
   "next-move": () => t("When an agent finishes a turn, its suggested next steps sit above the message box. Tap one to fill it in; nothing is sent until you press Send. Some steps act on the card, like Move to Done."),
   "older-finished": () => t("Cards that finished a while ago fold under “Show older” at the bottom of Done and Cancelled. Settings → Workflow sets how long they stay."),
   "first-ticket": () => t("A card has an item from a connected service as an input. Agents read it every turn and see when it changes. Flowly never changes it there, and its status doesn't move the card."),
-  "jira-connect": () => t("Work from Jira, Confluence, GitHub, GitLab, Azure DevOps or Shortcut: connect them in Settings → Connections, then start a card with From… or add items with the Artifacts +. Flowly only reads them."),
+  "jira-connect": () => t("Work from Jira, Confluence, GitHub, GitLab, Azure DevOps, Shortcut or Linear: connect them in Settings → Connections, then start a card with From… or add items with the Artifacts +. Flowly only reads them."),
   connectors: () => t("The Artifacts + now adds Confluence pages and GitHub or GitLab issues and pull requests too, besides files, links and Jira tickets. Connect services in Settings → Connections."),
   "project-menu": () => t("Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove."),
   subagents: () => t("When a session starts subagents, a Subagents chip appears above its message box. Click it to see their status and open one in Paseo."),
@@ -166,6 +167,7 @@ const tipText: Record<TipId, (compact?: boolean) => string> = {
   search: () => t("Find past cards, notes, workpads and deliverables with the search button or S."),
   "first-workflow-insight": () => t("Workflow insights found repeated work worth keeping. Open Insights to turn a suggestion into a card."),
   "lane-swipe": () => t("Swipe left or right to switch lanes."),
+  "card-images": () => t("Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description."),
   "card-display": (compact) => compact
     // Compact puts the Sort choices and Card display… in the Filters dialog.
     ? t("Cards too busy? Choose what they show in Settings → Cards, or from Filters → Card display.")
@@ -174,7 +176,7 @@ const tipText: Record<TipId, (compact?: boolean) => string> = {
   "sidebar-order": () => t("Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar."),
   "session-history": () => t("A session's output now starts at the beginning of its current turn. Press Load earlier at the top to read further back."),
   "settings-entry": () => t("Turn features on or off and change settings here."),
-  "auto-review": () => t("Auto review checked this card after the agent delivered; open it to see each check's result."),
+  "auto-review": () => t("Open the card for review results; choose the review model and reasoning in Settings → Models."),
   "first-guardrail": () => t("Flowly learned a check from a card you sent back. Open Guardrails to see what it checks now."),
   "first-workpad": () => t("This card has a workpad: the agent's acceptance list. The card shows how many items are met; open it to tick items yourself and to see the latest review."),
 };
@@ -1252,6 +1254,7 @@ function BoardContent(
           reviewShown: !task && projectTasks.some((x) => !!visibleReview(x)),
           learnedGuideline: !task && !!projectGuardrails?.added,
           laneSwipe: touch && !task && !page && shownStatuses.length > 1 && projectTasks.some((x) => !x.archivedAt),
+          imageInput: imageInputSupported && !!task && !task.archivedAt && !task.images?.length,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",
       });

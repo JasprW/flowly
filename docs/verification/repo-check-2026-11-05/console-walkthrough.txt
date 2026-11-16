@@ -1,0 +1,2 @@
+log: [repo-check] result: {"state":"foreign","projectTitle":"flowly","others":[{"id":"9a59462a-9c14-4183-868f-42f5bfce1856","title":"paseo sync"}]}
+log: [repo-check] result: {"state":"foreign","projectTitle":"flowly","others":[{"id":"9a59462a-9c14-4183-868f-42f5bfce1856","title":"paseo sync"}]}

@@ -14,7 +14,10 @@ import { insightsViewSchema } from "../shared/workflow-stats";
 import { BackgroundWorkspaces } from "./background-workspace";
 
 const roots: string[] = [];
+/** Each setup's InsightsService.idle(): digests still running must finish before their data dir is removed. */
+const settles: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  await Promise.all(settles.splice(0).map((settle) => settle()));
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 // Waits for the background digest runs themselves, not for a fixed time.
@@ -40,6 +43,8 @@ async function setup() {
   let wsArchived = 0;
   const removed: string[] = [];
   const replies: string[] = [];
+  /** While held, digest sessions do not finish: a test decides when the running one ends. */
+  let gate: Promise<void> | undefined;
   let reply = JSON.stringify({ headline: "Login is ready for review", done: [], progressed: [{ text: "Login built", taskId: "t" }], issues: [], next: [] });
   const paseo = {
     providers: {
@@ -64,7 +69,10 @@ async function setup() {
             created.push({ workspaceId, ...o });
             return {
               id: `digest-${created.length}`,
-              waitForFinish: async () => ({ status: "idle", error: null, lastMessage: replies.shift() ?? reply }),
+              waitForFinish: async () => {
+                await gate;
+                return { status: "idle", error: null, lastMessage: replies.shift() ?? reply };
+              },
               archive: async () => {
                 archived++;
                 return {};
@@ -81,7 +89,18 @@ async function setup() {
   const service = new InsightsService(board, flow, git, new SummaryStore(board.directory), digests, async () => settings, async () => "en", 1000, () => NOW, new BackgroundWorkspaces(board.directory, async () => "live"), async (agent) => {
     removed.push(agent.id);
   });
+  settles.push(() => service.idle());
+  /** Holds every digest session until the returned release is called. */
+  const hold = () => {
+    let release!: () => void;
+    gate = new Promise<void>((resolve) => (release = resolve));
+    return () => {
+      gate = undefined;
+      release();
+    };
+  };
   return {
+    hold,
     root,
     board,
     flow,
@@ -159,6 +178,8 @@ test("a past day's digest is generated once on read; today's only on refresh", a
 
 test("one digest per project at a time: days picked meanwhile generate only the last one", async () => {
   const x = await setup();
+  // 10-15 keeps running until the other days are picked, however slow the machine is.
+  const release = x.hold();
   x.service.refresh({ projectId: "p", tz: "UTC", day: "2026-10-15" }, x.paseo);
   x.service.refresh({ projectId: "p", tz: "UTC", day: "2026-10-14" }, x.paseo);
   const waiting = await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo);
@@ -166,6 +187,7 @@ test("one digest per project at a time: days picked meanwhile generate only the 
   expect(waiting.running).toBe(false);
   x.service.refresh({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo);
   expect((await x.service.digest({ projectId: "p", tz: "UTC", day: "2026-10-13" }, x.paseo)).running).toBe(true);
+  release();
   await settle(x);
   const state = await x.digests.read();
   expect(state.entries.map((e) => e.day)).toEqual(["2026-10-15"]);

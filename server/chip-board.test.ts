@@ -61,3 +61,10 @@ test("the projected reader handles unchanged, latest-boundary removal and title 
   expect(applyBoardPatch(first, answer.patch!)).toEqual(next);
   expect(chipMoves({ events: next.events, agent: { id: "a", status: "idle" }, cardFinished: false, hidden: () => false })).toBeNull();
 });
+
+test("the chip projection drops card image records (CARD-IMAGES-SPEC §2.1)", () => {
+  const source = board();
+  source.tasks[0].images = [{ id: "img-a", name: "a.png", mimeType: "image/png", bytes: 3, createdAt: at }];
+  expect(chipBoard(source).tasks[0].images).toBeUndefined();
+  expect(source.tasks[0].images).toHaveLength(1);
+});

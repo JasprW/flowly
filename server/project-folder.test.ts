@@ -1,12 +1,25 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BoardStore } from "./store";
 import { ProjectFolders, readSnapshot, snapshotPath, SnapshotInvalidError } from "./project-folder";
+import { setErrorSink } from "./error-report";
+
+// Lets a test make the snapshot write fail with a chosen error; every other write passes through.
+const writeFault: { error: Error | null } = { error: null };
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  const writeFile: typeof fs.writeFile = (path, ...rest) =>
+    writeFault.error && String(path).includes("project.json") ? Promise.reject(writeFault.error) : fs.writeFile(path, ...rest);
+  return { ...fs, writeFile, default: { ...fs, writeFile } };
+});
 
 const roots: string[] = [];
 afterEach(async () => {
+  writeFault.error = null;
+  setErrorSink(null);
+  vi.restoreAllMocks();
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
 
@@ -66,8 +79,11 @@ test("unchanged projects are not rewritten; an edited .gitignore is kept", async
   expect(await readFile(join(r1, ".flowly", ".gitignore"), "utf8")).toBe("");
 });
 
-test("a failed snapshot write never fails the board and is reported", async () => {
+test("a failed snapshot write never fails the board; a folder without permission is shown, not reported", async () => {
   const { store, folders, r1 } = await setup();
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
   await chmod(r1, 0o500);
   try {
     await folders.flush();
@@ -77,6 +93,42 @@ test("a failed snapshot write never fails the board and is reported", async () =
   } finally {
     await chmod(r1, 0o700);
   }
+  expect(reported).toEqual([]);
+});
+
+// TELEMETRY-SPEC §11.2: the user's disk or folder refusing the write is not a Flowly bug.
+test.each(["EROFS", "EPERM", "EACCES", "ENOSPC", "ENOENT"])("a %s snapshot failure is logged and shown, not reported", async (code) => {
+  const { folders } = await setup();
+  const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
+  writeFault.error = Object.assign(new Error(`${code}: refused`), { code });
+  await folders.flush();
+  expect(folders.state("p1")!.error).toBe(`${code}: refused`);
+  expect(log).toHaveBeenCalledWith("Kanban project folder not saved:", "p1", `${code}: refused`);
+  expect(reported).toEqual([]);
+});
+
+test("a deleted project root is shown, not reported", async () => {
+  const { folders, r1 } = await setup();
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
+  await rm(r1, { recursive: true, force: true });
+  await folders.flush();
+  expect(folders.state("p1")!.error).toMatch(/ENOENT/);
+  expect(reported).toEqual([]);
+});
+
+test("a programming error in the snapshot write is still reported", async () => {
+  const { folders } = await setup();
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const reported: string[] = [];
+  setErrorSink((source) => reported.push(source));
+  writeFault.error = new TypeError("Cannot read properties of undefined");
+  await folders.flush();
+  expect(folders.state("p1")!.error).toBe("Cannot read properties of undefined");
+  expect(reported).toEqual(["Kanban project folder not saved:", "Kanban project folder not saved:"]);
 });
 
 test("removing a project keeps its snapshot; restore brings the same records back", async () => {

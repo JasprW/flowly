@@ -1,0 +1,166 @@
+Flowly
+paseo sync
+flowly
+Attention
+1
+Sort
+Filter
+New task
+10
+tasks
+· 5 done
+1 running
+Blocked
+2
+Ideas 4
+Memory
+Insights
+In review
+0
+No tasks
+Blocked
+2
+High
+Feature
+flowly#1 +2
+#conversation-ui
+#session-composer
+Recognize ui blocks in flowly's session preview
+上游 PR #82 已开，CI 待 jaspr_w 批准，等待上游合并发布
+1h ago
+1
+Checks 6/6
+High
+Chore
+flowly#3 +1
+#a11y
+#testing
+看板卡片补齐可访问名称，让 UI 自动化验证可定位
+上游 PR #84 已创建并完成 CodeRabbit 修复，等上游批准合并
+16m ago
+1
+Checks 6/6
+2
+5
+Done
+0
+Cancelled
+flowly
+Recognize ui blocks in flowly's session preview
+Blocked
+High
+Feature
+#conversation-ui
+#session-composer
+Add
+From idea on
+对话渲染有问题
+Flowly's session pane renders every ui/app fenced block as a plain code dump, because plugin timeline transformers only run in the host session view. Detect ui/app fences in parseSessionMarkdown/SessionMarkdown and render a compact collapsed notice instead (for example: Inline UI — open in Paseo to view it live), keeping the source copyable. Done when: an agent reply containing a ui block shows the notice in the card session preview on desktop and phone, catalogs cover the new string, and client tests cover the fence detection.
+Why: This research card was filed because ui blocks looked unrendered; the flowly preview surface will keep creating that impression for every Card-wrapped reply even when everything works.
+Context:
+Files: client/session-transcript.tsx (TranscriptEntry renders SessionMarkdown for agent replies, ~line 461), client/session-content.tsx (SessionMarkdown code-block branch, ~line 165), client/session-markdown.ts (parseSessionMarkdown). Constraint: plugin timeline transformers (genui's addTimelineTransformer in its index.client.tsx) run only in the host session view, never inside flowly's own preview, so live rendering there is not possible. AGENTS.md UI rules apply (plain UI, all new strings in every catalog under shared/i18n/, npm test enforces).
+From card: 对话渲染有问题 (367fc641-e8a9-4aa6-983d-6f6efb973f09)
+Source progress:
+Fix chat rendering failure when messages contain ui Card content.
+•
+Diagnose why ui Card blocks render as raw code in chat
+•
+Identify the responsible renderer and the exact failure condition
+•
+Verify the Card spec is valid and restore live rendering
+•
+Report root cause and recovery steps
+•
+Root cause: better-paseo assistantMarkdown transformer claims assistant messages first, shadowing genui
+•
+User A/B verified: disabling better-paseo chat restores ui rendering in native sessions
+•
+Flowly card sidebar also shows code: preview self-drawn, plugins never run there; idea 34a2cb13 filed
+•
+Card In review, 5/5 checks passed; upstream yield-on-ui-fence fix idea proposed
+Progress
+Refresh
+上游 PR #82 已开，CI 待 jaspr_w 批准，等待上游合并发布
+Recap
+- isInlineUiFence + UiFenceBlock merged via PR #1; npm test 1222 pass
+- Phone verification PASS with screenshot; acceptance 6/6
+- Fork v1.8.0 tagged, release workflow green (npm publish 为 JasprW 专属条件跳过)
+- 上游 PR #82 已开，CodeRabbit 通过，CI 为 action_required 待 jaspr_w 批准
+Next
+用户在 PR 页点 Approve and run，CI 绿后合并 #82 并打 v1.8.0 标签
+Show more
+Updated 1h ago
+·
+Haiku 5.5
+Sessions
+1
+Start session
+Recognize ui blocks in flowly's session preview
+Turn ended
+· claude · opus[1m]
+1h ago
+Workpad
+MacBook-Air-Silver.local:~/.paseo/worktrees/0h1iy7r3/kanban-recognize-ui-blocks-in-flowly-s-session@cb2db1e
+Updated 1h ago by Recognize ui blocks in flowly's session preview
+Acceptance
+An agent reply containing a ui/app fenced block shows a compact collapsed notice ("Inline UI — open in Paseo to view it live") in the card session preview, not a plain code dump
+The ui/app source stays copyable: expanding the notice reveals the selectable source text (Collapse + selectable mono Text; pixel capture of the expanded state not obtained)
+The new UI string exists in every catalog under shared/i18n/ (npm test i18n gate)
+Client tests cover ui/app fence detection (ui, app, case-insensitive, first-word language, rejects lookalike languages)
+SESSION-UX-SPEC.md markdown-subset section documents the notice behavior
+Show 1 more
+Checks
+Fence-detection tests in client/session-markdown.test.ts pass
+npx vitest run client/session-markdown.test.ts
+@cb2db1e · 1h ago
+Show output
+TypeScript typecheck passes
+npm run typecheck
+@cb2db1e · 1h ago
+Show output
+Full suite incl. i18n catalog coverage passes
+npm test
+@cb2db1e · 1h ago
+Show output
+Desktop: card session preview shows the notice (shot-lib capture)
+shot-lib capture
+@cb2db1e · 1h ago
+Show output
+Phone: card session preview shows the notice (user-confirmed on device)
+User on-device check (SM-S911B)
+@cb2db1e · 1h ago
+Show output
+Show 1 more
+Artifacts
+5
+Outputs
+Upstream PR JasprW/flowly#82: ui-fence notice + 1.8.0
+GitHub pull request · Open · Upstream PR (feat + 1.8.0 bump) — CodeRabbit pass, CI gate awaits maintainer approval; merge + tag v1.8.0 there publishes npm 1.8.0
+Release 1.8.0 staging on HybridRbt/flowly
+GitHub pull request · Merged · Version bump PR merged on the fork (975def8); tag v1.8.0 validated green by the Release workflow
+v1.8.0 release validation run (green)
+Release run at tag v1.8.0: validate/Node22/Node24/CI gate success; publish skipped by design (JasprW-only)
+PR #1: session preview shows ui/app fences as a collapsed inline-UI notice
+GitHub pull request · Merged · ui/app fence notice — merged to origin/main (squash 5b78ad3)
+验证截图：折叠通知与主视图实时渲染对照
+Real desktop screenshots: collapsed notice in this card's session preview + host-view live render for contrast
+Ideas
+0
+All ideas
+No open ideas. Agents add them when they see a worthwhile next step.
+Closed · 1
+Links
+2
+Details & workspace
+Recognize ui blocks in flowly's session preview
+Usage
+39.1M tokens · 98.8% cached · 4 turns
+Activity
+17
+Add GitHub issue or pull request
+It becomes an input of this card. Agents read it every turn; Flowly never changes it in GitHub.
+HybridRbt/paseo-sync#4 does not belong to flowly's repositories.
+The card's workspace will not contain this repository.
+It belongs to paseo sync's repositories.
+Cancel
+Link anyway

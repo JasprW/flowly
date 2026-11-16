@@ -1,4 +1,5 @@
 import { useCardDetailQuery, useTaskDetail } from "./card-detail-query";
+import { CardImageRow } from "./card-images";
 import { drawerDetailPoll } from "./query-activity";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isNoMoves, nextMovesAction } from "../shared/next-moves";
@@ -1074,6 +1075,15 @@ function TaskDrawerView({
               <Clamped key={task.id} background={colors.surface0} bare>
                 <SessionMarkdown text={task.description} />
               </Clamped>
+            )}
+            {!!task.images?.length && (
+              <CardImageRow
+                taskId={task.id}
+                revision={task.revision}
+                images={task.images}
+                visible={ready}
+                disabled={!!task.archivedAt || !!project.archivedAt}
+              />
             )}
             {!!detailState.error && <Notice>{message(detailState.error)}</Notice>}
             {!detailState.detail ? <Button quiet onPress={detailState.retry}>{detailState.error ? t("Retry") : t("Loading cards…")}</Button> : order.map((id) => <Fragment key={id}>{section(id)}</Fragment>)}

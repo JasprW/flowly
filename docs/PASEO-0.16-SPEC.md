@@ -5,9 +5,11 @@
 ## 1. 出处与前提
 
 - 出处：npm `@getpaseo/plugin@0.16.0-beta.1`、`@getpaseo/client@0.16.0-beta.1`、`@getpaseo/protocol@0.16.0-beta.1` 的 `.d.ts`（`dist/client/*.d.ts`、`dist/client/composer.d.ts`、`dist/shared/*.d.ts`、`dist/server/*.d.ts`、client 包 `dist/index.d.ts`），对照 Flowly 当前锁定的 0.15.0；changelog <https://paseo.sh/changelog#release-0.16.0-beta.1>（2026-11-10）。
-- Flowly 当前：`@getpaseo/plugin`、`@getpaseo/protocol`、`@getpaseo/client` 锁在 0.15.0，`paseo-plugin.json` 的 `requirements.paseo` 为 `>=0.15.0`。npm `latest` 为 0.15.4，`beta` 为 0.16.0-beta.1。
+- Flowly 当前（2026-11-16）：`@getpaseo/plugin`、`@getpaseo/protocol`、`@getpaseo/client` 锁在 0.16.0，`paseo-plugin.json` 的 `requirements.paseo` 为 `>=0.15.0`。正式版宿主为 0.16.0。
 - 本机 daemon 0.15.4 的 `server_info.features` 只报 `backgroundWorkspaces`、`agentConfigApply`，不报本文用到的任何新标志。所以下面每一项都要求 0.16 宿主。
 - 范围：只列 Flowly 能用上的能力。平板/键盘适配、diff 提速、移动端 timeline 重做是宿主内部改进，Flowly 不用改动，不列。
+
+正式版 API 对比（2026-11-16，npm 包 beta.2 → 0.16.0）：`agents.create({ background: true })`、隐藏/归档字段和 `backgroundWork.list/stop/subscribe` 签名不变。`agent.turn.after.timeline` 已移除，新增 timeline `wholeTurns` 选项；Flowly 现有 `turnTimeline` 已主动读取最新页，不依赖被删字段，保留 0.15 兼容读法。其余新增包括 workspace row badge、主题可选颜色、插件 registry 读取与 review `all` 模式，本卡不接入。
 
 ## 2. 能力探测
 
@@ -152,7 +154,7 @@
 
 ## 4. 顺序与依赖
 
-1. 原定先等 0.16.0 正式版。用户决定（2026-11-11，后台任务卡片）：先用 0.16.0-beta.1 实现，SDK 依赖暂锁 beta（2026-11-12 跟随宿主升到 0.16.0-beta.2；beta.2 的 hook agent 多了 `background`，`agent.open.before` 请求的 `background` 为必填），正式版发布后改锁 0.16.0。`requirements.paseo` 不改。
+1. 原定先等 0.16.0 正式版。用户决定（2026-11-11，后台任务卡片）：先用 0.16.0-beta.1 实现，SDK 依赖暂锁 beta（2026-11-12 跟随宿主升到 0.16.0-beta.2；beta.2 的 hook agent 多了 `background`，`agent.open.before` 请求的 `background` 为必填），2026-11-16 用户已升级正式版，本卡改锁 0.16.0，并对比 beta.2 的 API、复验后台 agent 与后台任务，通过回归和 PR 检查后合入。`requirements.paseo` 不改。
 2. SDK 升到 0.16.0 后，`requirements.paseo` 仍保持 `>=0.15.0`，所有能力按 §2 探测、0.15 回退。心跳加 `paseo_version`（用户决定 2026-11-11，和 SDK 升级一起做，复用 `server/paseo-version.ts`，同步改 `docs/TELEMETRY-SPEC.md` §4、`heartbeatProperties`、key-set 测试和隐私说明），用来看 0.16 的普及率。只有当用户看过普及率、决定放弃 0.15 宿主时才把 `requirements.paseo` 提到 `>=0.16.0`，并在同一改动里删掉 §5 标为“可删除”的回退代码与例外。
 3. 实施分三个任务（用户决定 2026-11-11，不再按小节拆分）：
    - **Composer**：SDK 升级与 §2 探测（先做，后两个任务复用）、§3.3、§3.4。§3.4 判断卡片 session 时元数据还没有就走插件 RPC。

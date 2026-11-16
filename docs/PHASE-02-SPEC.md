@@ -1,5 +1,7 @@
 # Phase 2：Agent tools 与 skill 实施合约
 
+2026-11-16 输出契约修订：MCP/CLI 默认返回精简读模型与轻量写续写信息，`responseDetail: "full"` / CLI `--full` 保留旧形状；CLI 写支持 `--save-request`，连续写不必重复读卡。以下第 5–7 节的完整上下文返回约定以 [AGENT-OUTPUT-SPEC](AGENT-OUTPUT-SPEC.md) 为准；身份、版本、冲突与重放规则不变。
+
 2026-11-06 Paseo 0.14 增量：`flowly` MCP server 不再写进 agent 创建配置，改由 `agent.session_open` 在每次启动时注入；“Send Kanban work instructions” 加入的空闲 session 重开后也有 MCP。下文中“创建时写入 MCP 配置”“已有 session 只有 CLI”的描述以 [PASEO-SESSION-TOOLS-SPEC](PASEO-SESSION-TOOLS-SPEC.md) 为准。
 
 2026-10-22 回合清单增量：skill 与实时 get_task 共用简短动作清单，旧会话通过读卡获得最新规则；输出字段为可选的兼容增量，不新增写入闸门。统计脚本同步校准，见 [TURN-CHECKLIST-SPEC](TURN-CHECKLIST-SPEC.md)。

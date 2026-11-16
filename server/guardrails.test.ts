@@ -12,7 +12,7 @@ import type { DetectedCommand } from "./review-detect";
 
 const roots: string[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
 });
 
 async function setup(detected: DetectedCommand[] = []) {

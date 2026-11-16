@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentFixture } from "./agent-fixture";
@@ -23,6 +23,7 @@ import {
   type RunCheck,
 } from "./auto-review";
 import { GuardrailsService } from "./guardrails";
+import { reviewPrompt } from "./review-session";
 import type { AgentService } from "./agent-service";
 import type { ChangeShape, Lane } from "../shared/model";
 import { emptyCounts, type CardItem, type GuardrailEntry } from "../shared/guardrails";
@@ -30,8 +31,11 @@ import { projectLanes } from "../shared/lanes";
 import { attentionItems } from "../shared/attention";
 
 const roots: string[] = [];
+/** Waits for each setup's review (started by a delivery) to finish, so it is not still writing when the data dir is removed. */
+const settles: (() => Promise<void>)[] = [];
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
+  await Promise.all(settles.splice(0).map((settle) => settle()));
+  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
 });
 
 type Ctx = Awaited<ReturnType<AgentService["get"]>>;
@@ -93,6 +97,8 @@ async function setup(
     baseRef?: string;
     /** The workspace directory and git to use, with the real diff and shape (a linked root); default: fakes. */
     directory?: string;
+    /** Real git, diff and shape in the fixture's own workspace directory (`x.a`). */
+    real?: boolean;
     git?: Git;
     run?: RunCheck;
   } = {},
@@ -127,6 +133,7 @@ async function setup(
   const repo = { head: "aaaaaaaaaaaa" };
   const git: Git =
     options.git ??
+    (options.real ? defaultGit : undefined) ??
     (async (_cwd, args) => {
       const key = args.join(" ");
       if (key === "rev-parse --short=12 HEAD") return repo.head;
@@ -148,7 +155,7 @@ async function setup(
     guardrails,
     llm: options.llm ?? passAll,
     ...(options.conversation ? { conversation: options.conversation } : {}),
-    ...(options.directory
+    ...(options.directory || options.real
       ? {}
       : {
           diff: async (_dir: string, since?: string, baseRef?: string) => {
@@ -176,6 +183,10 @@ async function setup(
     await reviews.idle();
     return x.store.read();
   };
+  settles.push(async () => {
+    await delivering;
+    await reviews.idle();
+  });
   const turnStarted = () =>
     x.store.mutate((b) => {
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" });
@@ -383,6 +394,9 @@ test("attention: a running review holds back unread sessions; a pass only releas
     expect(item.signals).toEqual([`review:${state}:${task.review.startedAt}`]);
     expect(item.updatedAt).toBe(task.review.finishedAt);
   }
+  // A new delivery hides the old failure and holds unread until its review starts.
+  task.reviewWaiting = { eventId: "next", agentId: "actor", from: "development", since: stamp };
+  expect(attentionItems(board, agents as never, [], false)).toEqual([]);
 });
 
 test("the review starts when the delivering session's turn ends, not while it is still running", async () => {
@@ -391,6 +405,8 @@ test("the review starts when the delivering session's turn ends, not while it is
   let board = await x.deliver("development");
   expect(x.runs).toEqual([]);
   expect(board.tasks[0]!.review).toBeUndefined();
+  // Waiting is recorded in the delivery's own write (§3.1).
+  expect(board.tasks[0]!.reviewWaiting).toMatchObject({ agentId: "actor", from: "development" });
   // Another session's turn ending does not start it.
   await x.reviews.turnEnded("second", x.paseo);
   expect(x.runs).toEqual([]);
@@ -399,11 +415,166 @@ test("the review starts when the delivering session's turn ends, not while it is
   await x.reviews.idle();
   board = await x.store.read();
   expect(board.tasks[0]!.review).toMatchObject({ state: "passed" });
+  expect(board.tasks[0]!.reviewWaiting).toBeUndefined();
   expect(x.runs).toEqual(["npm test"]);
   // Once only.
   await x.reviews.turnEnded("actor", x.paseo);
   await x.reviews.idle();
   expect(x.runs).toEqual(["npm test"]);
+});
+
+test("while a delivery waits for its review the previous result is hidden; the wait ends when the review starts (§3.1, §9)", async () => {
+  const { visibleReview, reviewing, reviewSignal } = await import("../shared/auto-review");
+  const x = await setup();
+  await x.deliver("development");
+  expect((await card(x)).review).toMatchObject({ state: "passed" });
+  // The user sends it back; the agent delivers again while its turn is still running.
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  x.actors.actor!.status = "running";
+  await x.deliver();
+  let task = await card(x);
+  expect(task.review).toMatchObject({ state: "passed" });
+  expect(task.reviewWaiting).toBeTruthy();
+  expect(visibleReview(task)).toBeNull();
+  expect(reviewing(task)).toBe(true);
+  expect(reviewSignal(task)).toBeNull();
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(/waiting to start/);
+  // The review's start clears it in the same write.
+  let seen: unknown = "unset";
+  x.setDuring(async () => {
+    seen = (await card(x)).reviewWaiting;
+  });
+  x.actors.actor!.status = "idle";
+  await x.reviews.turnEnded("actor", x.paseo);
+  await x.reviews.idle();
+  expect(seen).toBeUndefined();
+  task = await card(x);
+  expect(task.reviewWaiting).toBeUndefined();
+  expect(visibleReview(task)).toMatchObject({ state: "passed" });
+});
+
+test("a waiting delivery that is not reviewed (card moved out of In review) does not leave the card waiting", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  expect((await card(x)).reviewWaiting).toBeTruthy();
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  await x.reviews.turnEnded("actor", x.paseo);
+  await x.reviews.idle();
+  expect(x.runs).toEqual([]);
+  expect((await card(x)).reviewWaiting).toBeUndefined();
+});
+
+test("recover: a delivery still waiting for its review at a restart becomes unavailable and can be rerun", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  expect(await x.reviews.recover()).toBe(true);
+  const task = await card(x);
+  expect(task.reviewWaiting).toBeUndefined();
+  expect(task.review).toMatchObject({ state: "unavailable", reason: "Flowly restarted before the review started.", trigger: { agentId: "actor", from: "development" }, items: [] });
+  expect(await x.reviews.recover()).toBe(false);
+  x.actors.actor!.status = "idle";
+  await x.reviews.rerun("t", x.paseo);
+  await x.reviews.idle();
+  expect((await card(x)).review).toMatchObject({ state: "passed" });
+});
+
+test("turning Auto review off before the delivering turn ends clears the waiting marker without running checks", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  await x.store.mutate((b) => {
+    b.projects[0]!.autoReview!.enabled = false;
+  });
+  await x.reviews.turnEnded("actor", x.paseo);
+  await x.reviews.idle();
+  expect(x.runs).toEqual([]);
+  expect((await card(x)).reviewWaiting).toBeUndefined();
+});
+
+test("a fast review computes immediately but sends rework only after the delivering turn is recorded", async () => {
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  let release!: (ready: boolean) => void;
+  const recorded = new Promise<boolean>((resolve) => { release = resolve; });
+  let computed!: () => void;
+  const reworked = new Promise<void>((resolve) => { computed = resolve; });
+  x.store.onCommit = () => {
+    void x.store.read().then((b) => { if (b.tasks[0]!.review?.state === "rework") computed(); });
+  };
+  x.reviews.deps.send = async (message) => {
+    await x.store.mutate((b) => { x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" }); });
+    x.sent.push({ agentId: message.agentId, text: message.text });
+  };
+  const review = x.reviews.turnEnded("actor", x.paseo, recorded);
+  try {
+    await reworked;
+    expect(x.runs).toEqual(["npm test"]);
+    expect(x.sent).toEqual([]);
+    await x.store.mutate((b) => {
+      x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_ended", agentId: "actor", model: "codex/test", pick: 0, byUser: true });
+    });
+    release(true);
+    await review;
+    expect(x.sent).toHaveLength(1);
+    const facts = (await x.store.read()).events.filter((e) => e.action === "agent.turn_started" || e.action === "agent.turn_ended");
+    expect(facts.slice(-2).map((e) => e.action)).toEqual(["agent.turn_ended", "agent.turn_started"]);
+    expect(facts.at(-2)).toMatchObject({ model: "codex/test", pick: 0, byUser: true });
+  } finally {
+    x.store.onCommit = null;
+    release(true);
+    await x.reviews.idle();
+  }
+});
+
+test("a lifecycle write failure does not start a rework turn", async () => {
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  await x.reviews.turnEnded("actor", x.paseo, Promise.resolve(false));
+  expect(x.sent).toEqual([]);
+  expect((await card(x)).review).toMatchObject({ state: "unavailable", reason: "The delivering turn could not be recorded, so the rework message was not sent." });
+});
+
+test("a second card keeps waiting while the project's first review runs; reviews remain serial", async () => {
+  const x = await setup();
+  x.actors.actor!.status = "running";
+  await x.deliver("development");
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  x.setDuring(async () => { entered(); await gate; });
+  const first = x.reviews.turnEnded("actor", x.paseo);
+  try {
+    await started;
+    await x.store.mutate((b) => {
+      b.tasks.push({ ...b.tasks[0]!, id: "second-card", workspaceId: "second-workspace", operationId: "second-create", review: undefined,
+        reviewWaiting: { eventId: "second-delivery", agentId: "second", from: "development", since: stamp } });
+    });
+    x.actors.second!.status = "running";
+    await x.reviews.delivered({ taskId: "second-card", projectId: "p", eventId: "second-delivery", agentId: "second", from: "development" }, x.paseo);
+    const second = x.reviews.turnEnded("second", x.paseo);
+    const queued = (await x.store.read()).tasks.find((t) => t.id === "second-card")!;
+    expect(queued.reviewWaiting).toBeTruthy();
+    expect(queued.review).toBeUndefined();
+    expect(x.runs).toEqual(["npm test"]);
+    release();
+    await Promise.all([first, second]);
+    const finished = (await x.store.read()).tasks.find((t) => t.id === "second-card")!;
+    expect(finished.reviewWaiting).toBeUndefined();
+    expect(finished.review?.state).toBe("passed");
+    expect(x.runs).toEqual(["npm test", "npm test"]);
+  } finally {
+    release();
+    await x.reviews.idle();
+  }
 });
 
 test("runCheck runs an argument array without a shell: exit code, output tail, timeout and a missing command", async () => {
@@ -887,4 +1058,155 @@ test("linked root diff: a large change in one repository cannot push the others 
   expect(diff).toContain("[Admin: diff truncated]");
   expect(diff).toContain("## Repository SMITH (its paths start with SMITH/)");
   expect(diff).toContain("diff --git a/SMITH/src/app.ts b/SMITH/src/app.ts");
+}, 20_000);
+
+/** The fixture workspace as a git repository with a worktree on `feat/wt` that changed a file, committed and not. */
+async function workspaceWithWorktree(dir: string, root: string) {
+  const git = (cwd: string, ...args: string[]) => defaultGit(cwd, ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
+  await mkdir(dir, { recursive: true });
+  await git(dir, "init", "-q", "-b", "main");
+  await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "vitest" } }));
+  await writeFile(join(dir, "app.ts"), "export const a = 1;\n");
+  await git(dir, "add", ".");
+  await git(dir, "commit", "-q", "-m", "init");
+  const worktree = join(root, "wt");
+  await git(dir, "worktree", "add", "-q", "-b", "feat/wt", worktree);
+  await writeFile(join(worktree, "feature.ts"), "export const feature = true;\n");
+  await git(worktree, "add", ".");
+  await git(worktree, "commit", "-q", "-m", "feature");
+  await writeFile(join(worktree, "app.ts"), "export const a = 2;\n");
+  // Another session's uncommitted change and a later commit on main: neither is this card's.
+  await writeFile(join(dir, "other.ts"), "export const other = 1;\n");
+  await git(dir, "add", "other.ts");
+  await git(dir, "commit", "-q", "-m", "other card");
+  await writeFile(join(dir, "app.ts"), "export const a = 99;\n");
+  return { worktree: await realpath(worktree), git };
+}
+
+test("a delivery that names a worktree is reviewed there: commands, diff since the branch point, fingerprint, not shared (§3.4)", async () => {
+  const seen: LlmReviewInput[] = [];
+  const cwds: string[] = [];
+  const x = await setup({
+    real: true,
+    run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }),
+    llm: async (input) => (seen.push(input), passAll(input, undefined as never)),
+  });
+  const { worktree, git } = await workspaceWithWorktree(x.a, x.root);
+  const board = await x.deliver("development", { worktree: "feat/wt" });
+  const delivered = board.events.findLast((e) => e.action === "status_changed" && e.to === "in_review")!;
+  expect(delivered.worktree).toBe(worktree);
+  const review = board.tasks[0]!.review!;
+  expect(review).toMatchObject({ state: "passed", shared: false, worktree });
+  expect(cwds).toEqual([worktree]);
+  expect(review.fingerprint.sha).toBe((await git(worktree, "rev-parse", "--short=12", "HEAD")).trim());
+  expect(review.fingerprint.dirty).toBe(true);
+  const input = seen[0]!;
+  expect(input.worktree).toBe(worktree);
+  expect(input.shared).toBeUndefined();
+  expect(input.diff).toContain("feature.ts");
+  expect(input.diff).toContain("+export const a = 2;");
+  expect(input.diff).not.toContain("other.ts");
+  expect(input.diff).not.toContain("a = 99");
+  expect(reviewPrompt(input)).toContain(`The delivered code is in the git worktree ${worktree}`);
+  // Rerun keeps the worktree; once it is gone the review is unavailable instead of checking the workspace.
+  await git(x.a, "worktree", "remove", "--force", worktree);
+  await x.reviews.rerun("t", x.paseo);
+  await x.reviews.idle();
+  const again = (await card(x)).review!;
+  expect(again.state).toBe("unavailable");
+  expect(again.reason).toContain("The delivered worktree is unavailable");
+  // Kept on the review, so a later Rerun still names it even after the delivery event is trimmed.
+  expect(again.worktree).toBe(worktree);
+  expect(cwds).toEqual([worktree]);
+}, 20_000);
+
+test("restart recovery keeps the waiting worktree after its delivery event is trimmed; Rerun checks that worktree", async () => {
+  const cwds: string[] = [];
+  const x = await setup({ real: true, run: async (_argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 1, output: "" }) });
+  const { worktree } = await workspaceWithWorktree(x.a, x.root);
+  x.actors.actor!.status = "running";
+  await x.deliver("development", { worktree: "feat/wt" });
+  expect((await card(x)).reviewWaiting?.worktree).toBe(worktree);
+  await x.store.mutate((b) => {
+    for (let i = 0; i < 100; i++) x.store.event(b, { taskId: "t", actor: "agent", action: "progress", note: `checkpoint ${i}` });
+  });
+  expect((await x.store.read()).events.some((e) => e.to === "in_review")).toBe(false);
+  await x.reviews.recover();
+  expect((await card(x)).review).toMatchObject({ state: "unavailable", worktree });
+  x.actors.actor!.status = "idle";
+  await x.reviews.rerun("t", x.paseo);
+  await x.reviews.idle();
+  expect(cwds).toEqual([worktree]);
+  expect((await card(x)).review).toMatchObject({ state: "passed", worktree, shared: false });
+}, 20_000);
+
+test("a worktree that is not this card's repository, or named outside a delivery, is refused and the card stays (§3.4)", async () => {
+  const x = await setup({ real: true });
+  await workspaceWithWorktree(x.a, x.root);
+  const other = join(x.root, "other");
+  await mkdir(other);
+  await defaultGit(other, ["init", "-q"]);
+  let ctx = await x.service.get(x.identity);
+  await x.service.write(x.identity, "status", { ...input(ctx), status: "development" });
+  ctx = await x.service.get(x.identity);
+  await expect(x.service.write(x.identity, "status", { ...input(ctx, "Delivered"), status: "in_review", nextMoves: [], worktree: other })).rejects.toMatchObject({
+    code: "INVALID_INPUT",
+    message: expect.stringContaining("not a worktree of this card's repository"),
+  });
+  await expect(x.service.write(x.identity, "status", { ...input(ctx), status: "test", worktree: "feat/wt" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  expect((await card(x)).status).toBe("development");
+});
+
+/** The workspace's origin is "github.com/acme/app", served by a local bare repository that has PR 7 at the worktree's commit. */
+async function withPullRequest(x: { a: string; root: string }, worktree: string, git: (cwd: string, ...args: string[]) => Promise<string>) {
+  const bare = join(x.root, "remote.git");
+  await defaultGit(x.root, ["init", "-q", "--bare", bare]);
+  await git(x.a, "remote", "add", "origin", "https://github.com/acme/app.git");
+  await git(x.a, "config", `url.${bare}.insteadOf`, "https://github.com/acme/app.git");
+  await git(worktree, "push", "-q", "origin", "HEAD:refs/pull/7/head");
+}
+
+test("a delivery with this repository's PR and no worktree is reviewed in the worktree holding its head, with a notice (§3.4)", async () => {
+  const seen: LlmReviewInput[] = [];
+  const cwds: string[] = [];
+  const x = await setup({
+    real: true,
+    run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }),
+    llm: async (input) => (seen.push(input), passAll(input, undefined as never)),
+  });
+  const { worktree, git } = await workspaceWithWorktree(x.a, x.root);
+  await withPullRequest(x, worktree, git);
+  let ctx = await x.service.get(x.identity);
+  await x.service.write(x.identity, "status", { ...input(ctx), status: "development" });
+  ctx = await x.service.get(x.identity);
+  const result = (await x.service.write(x.identity, "status", {
+    ...input(ctx, "Delivered"),
+    status: "in_review",
+    nextMoves: [],
+    outputs: [{ target: "https://github.com/acme/app/pull/7" }],
+  })) as { notice?: string };
+  expect(result.notice).toContain(`The auto review will check the worktree ${worktree}, which holds the head of https://github.com/acme/app/pull/7`);
+  await x.reviews.idle();
+  const board = await x.store.read();
+  expect(board.events.findLast((e) => e.to === "in_review")!.worktree).toBe(worktree);
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", shared: false, worktree });
+  expect(cwds).toEqual([worktree]);
+  expect(seen[0]!.diff).toContain("feature.ts");
+}, 20_000);
+
+test("a PR whose head is in several worktrees, or of another repository, changes nothing: the workspace is reviewed (§3.4)", async () => {
+  const cwds: string[] = [];
+  const x = await setup({ real: true, run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }) });
+  const { worktree, git } = await workspaceWithWorktree(x.a, x.root);
+  await withPullRequest(x, worktree, git);
+  // Another repository's PR: nothing found.
+  let board = await x.deliver("development", { outputs: [{ target: "https://github.com/acme/other/pull/7" }] });
+  expect(board.events.findLast((e) => e.to === "in_review")!.worktree).toBeUndefined();
+  // This repository's PR, but its head is in two worktrees: not unique, nothing found.
+  await git(x.a, "worktree", "add", "-q", "--detach", join(x.root, "wt2"), "feat/wt");
+  board = await x.deliver("development", { outputs: [{ target: "https://github.com/acme/app/pull/7" }] });
+  expect(board.events.findLast((e) => e.to === "in_review")!.worktree).toBeUndefined();
+  expect(board.tasks[0]!.review).toMatchObject({ shared: true });
+  expect(board.tasks[0]!.review!.worktree).toBeUndefined();
+  expect(cwds.every((c) => c === x.a)).toBe(true);
 }, 20_000);

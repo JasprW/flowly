@@ -1,10 +1,11 @@
-import type { PaseoApi } from "@getpaseo/client";
 import { createHidden } from "./background-agent";
-import { SUMMARIZER_LABELS, readOnlyConfig } from "../shared/summary";
+import type { PaseoApi } from "@getpaseo/client";
+import { SUMMARIZER_LABELS, readOnlyConfig, type SummarySettings } from "../shared/summary";
 import { autoReviewLimits } from "../shared/model";
 import { GOAL_ID } from "../shared/auto-review";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { runSummaryModels } from "./summary-models";
+import { logFailure } from "./error-report";
 import type { LlmReview, LlmReviewInput, LlmVerdict } from "./auto-review";
 
 /**
@@ -55,6 +56,10 @@ export function reviewPrompt(input: LlmReviewInput): string {
           'This workspace is shared with other cards (not a worktree): changes in the diff that have nothing to do with this card may belong to another card. Do not fail "goal" for them; fail it only when something the user asked for is missing or wrong.',
         ]
       : []),
+    // §3.4: the delivery named a worktree; the session's own working directory is the card's workspace, not the code.
+    ...(input.worktree
+      ? [`The delivered code is in the git worktree ${input.worktree}, not in your working directory: read files there. The commands ran there and the diff below is its branch's change.`]
+      : []),
     // §6.3: from round 2 only the changes since the previous delivery are shown.
     ...(input.incremental
       ? [
@@ -63,7 +68,7 @@ export function reviewPrompt(input: LlmReviewInput): string {
       : []),
     `Reply only with JSON: {"items":[{"id","verdict","detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,
     "",
-    `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}`,
+    `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}${input.task.images?.length ? `\nCard images (part of the description; view each with your image tool): ${input.task.images.join(", ")}` : ""}`,
     // The built-in check's yardstick (§4.2): the user's own words, oldest first; a later one replaces an earlier one.
     ...(input.conversation !== undefined
       ? [
@@ -130,27 +135,42 @@ export function parseReviewOutput(text: string | null | undefined, ids: readonly
 
 /** The review runner: the Review model (Settings → Models), else the summary models; never the project's agent model (§6.3). */
 export function llmReviewer(options: {
-  reviewModel: () => Promise<string>;
+  reviewSettings: () => Promise<Pick<SummarySettings, "reviewModel" | "reviewThinking">>;
   summaryModels: () => Promise<string[]>;
   remove?: RemoveAgent;
   timeoutMs?: number;
 }): LlmReview {
   const remove = options.remove ?? daemonRemoveAgent();
   return async (input: LlmReviewInput, paseo: PaseoApi) => {
-    const chosen = await options.reviewModel();
+    const settings = await options.reviewSettings();
+    const chosen = settings.reviewModel;
     const models = chosen ? [chosen] : await options.summaryModels();
     const ids = input.checks.map((c) => c.id);
     const { model, output } = await runSummaryModels(paseo, models, {
-      create: (model) =>
-        createHidden((hidden) => paseo.workspaces.ref(input.task.workspaceId).agents.create({
+      create: async (model) => {
+        let thinkingOptionId: string | undefined;
+        if (chosen === model && settings.reviewThinking) {
+          try {
+            const slash = model.indexOf("/");
+            const result = await paseo.providers.listModels(model.slice(0, slash));
+            if (result.error) throw new Error(result.error);
+            const info = result.models?.find((m) => m.id === model.slice(slash + 1));
+            if (info?.thinkingOptions?.some((o) => o.id === settings.reviewThinking)) thinkingOptionId = settings.reviewThinking;
+          } catch (error) {
+            // The optional reasoning lookup must not prevent review with the model's default.
+            logFailure("Flowly review reasoning lookup failed:", error);
+          }
+        }
+        return createHidden((hidden) => paseo.workspaces.ref(input.task.workspaceId).agents.create({
           ...hidden,
           parent: input.parentAgentId,
-          config: readOnlyConfig(model),
+          config: { ...readOnlyConfig(model), ...(thinkingOptionId ? { thinkingOptionId } : {}) },
           title: `Flowly review · ${input.task.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-task": input.task.id, "flowly-review": "1" },
           prompt: reviewPrompt(input),
           outputSchema: reviewOutputSchema as unknown as Record<string, unknown>,
-        })),
+        }));
+      },
       parse: (text) => parseReviewOutput(text, ids),
       remove,
       timeoutMs: options.timeoutMs ?? 15 * 60 * 1000,

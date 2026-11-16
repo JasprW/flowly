@@ -3,6 +3,7 @@ import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { openExternalUrl } from "@getpaseo/plugin/client";
 import { Icon, copyText, useToast } from "@getpaseo/plugin/client/react-native";
 import {
+  columnWidth,
   isInlineUiFence,
   parseSessionInline,
   parseSessionMarkdown,
@@ -31,17 +32,25 @@ const Inline = memo(function Inline({
   text,
   size = 14,
   bold = false,
+  tableAlign,
 }: {
   text: string;
   size?: number;
   bold?: boolean;
+  tableAlign?: "left" | "center" | "right";
 }) {
   const { colors } = useTheme();
   const toast = useToast();
   const [linkError, setLinkError] = useState(false);
   const parts = useMemo(() => parseSessionInline(text), [text]);
   return (
-    <View style={{ minWidth: 0, flexShrink: 1 }}>
+    <View
+      style={{
+        minWidth: 0,
+        flexShrink: 1,
+        alignSelf: tableAlign ? "stretch" : undefined,
+      }}
+    >
       <Text
         selectable
         style={{
@@ -50,6 +59,13 @@ const Inline = memo(function Inline({
           lineHeight: size * 1.55,
           fontWeight: bold ? "600" : "400",
           flexShrink: 1,
+          ...(tableAlign && {
+            width: "100%",
+            textAlign: tableAlign,
+            ...(Platform.OS === "web" && {
+              overflowWrap: "anywhere",
+            }),
+          }),
         }}
       >
         {parts.map((part, index) => {
@@ -101,12 +117,6 @@ const Inline = memo(function Inline({
   );
 });
 
-/** Column width from the longest cell, so short columns stay narrow and long ones wrap. */
-function columnWidth(cells: string[]) {
-  const longest = Math.max(...cells.map((cell) => cell.length), 1);
-  return Math.min(Math.max(longest * 8 + 24, 64), 260);
-}
-
 const TableBlock = memo(function TableBlock({
   block,
 }: {
@@ -154,15 +164,14 @@ const TableBlock = memo(function TableBlock({
                   paddingVertical: 7,
                   borderLeftWidth: col ? 1 : 0,
                   borderColor: colors.border,
-                  alignItems:
-                    block.align[col] === "right"
-                      ? "flex-end"
-                      : block.align[col] === "center"
-                        ? "center"
-                        : "flex-start",
                 }}
               >
-                <Inline text={row[col] || ""} size={13} bold={rowIndex === 0} />
+                <Inline
+                  text={row[col] || ""}
+                  size={13}
+                  bold={rowIndex === 0}
+                  tableAlign={block.align[col] || "left"}
+                />
               </View>
             ))}
           </View>

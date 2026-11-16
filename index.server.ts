@@ -29,9 +29,10 @@ import { ComposerService, ComposerStore } from "./server/composer";
 import { adoptIdea } from "./server/ideas";
 import { createLink, deleteLink } from "./server/links";
 import { ArtifactService } from "./server/artifacts";
+import { CardImageService } from "./server/card-images";
 import { WorkpadService } from "./server/workpad";
 import { ConnectorService, migrateTicketDirectory, refKey } from "./server/connectors/service";
-import { projectRepos } from "./server/connectors/repos";
+import { projectRepos, repoVerdict } from "./server/connectors/repos";
 import { linkedCardCounts } from "./shared/connectors";
 import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
@@ -476,6 +477,7 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.removeProject, async (input, { paseo }) => {
     const taskIds = new Set((await store.read()).tasks.filter((t) => t.projectId === input.id).map((t) => t.id));
     const removed = await service.removeProject(input, paseo);
+    await cardImages.removeTasks(taskIds).catch((e) => logFailure("Card images not moved to removed:", e));
     await summaries.store.removeTasks(input.id, taskIds).catch((e) =>
       logFailure("Kanban summaries not removed:", e),
     );
@@ -499,6 +501,9 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.createLink, (input) => createLink(store, input));
   server.handle(rpc.deleteLink, (input) => deleteLink(store, input));
   const artifacts = new ArtifactService(store, connectors);
+  // Description images (CARD-IMAGES-SPEC); files no card refers to go at start.
+  const cardImages = new CardImageService(store);
+  void cardImages.cleanup().catch((e) => logFailure("Card images not cleaned:", e));
   const workpads = new WorkpadService(store);
   // Automatic review of agent deliveries (AUTO-REVIEW-SPEC); rework goes out through the composer queue.
   const reviews = new AutoReviewService(store, {
@@ -519,7 +524,7 @@ export default function contribute(host: PluginServerContext) {
     guardrails,
     // A temporary session judges the built-in check, guidelines and card items, hard-deleted after like the summarizer.
     llm: llmReviewer({
-      reviewModel: async () => (await summaries.settings()).reviewModel ?? "",
+      reviewSettings: () => summaries.settings(),
       summaryModels: async () => summaryModelsOf(await summaries.settings()),
     }),
   });
@@ -534,6 +539,26 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.testConnection, (input) => connectors.test(input));
   server.handle(rpc.deleteConnection, (input) => connectors.remove(input.id));
   server.handle(rpc.searchExternal, (input) => connectors.search(input));
+  // A picked GitHub/GitLab item's repository vs the project's repositories (CONNECTORS-SPEC §4.3).
+  server.handle(rpc.repoCheck, async (input) => {
+    const unknown = { state: "unknown" as const, projectTitle: "", others: [] as { id: string; title: string }[] };
+    const [connection, board] = await Promise.all([connectors.connections.get(input.connectionId).catch(() => null), store.read()]);
+    const project = board.projects.find((p) => p.id === input.projectId && !p.archivedAt);
+    if (!connection || !project) return unknown;
+    const repos = await projectRepos(project.primaryPath, connection.baseUrl).catch(() => []);
+    const state = repoVerdict(input.repo, repos);
+    if (state !== "foreign") return { state, projectTitle: project.title, others: [] };
+    // Other projects are checked concurrently: a cold scan of each root would otherwise delay the warning (§4.3).
+    const members = await Promise.all(
+      board.projects
+        .filter((other) => other.id !== project.id && !other.archivedAt)
+        .map(async (other) => {
+          const list = await projectRepos(other.primaryPath, connection.baseUrl).catch(() => []);
+          return repoVerdict(input.repo, list) === "member" ? { id: other.id, title: other.title } : null;
+        }),
+    );
+    return { state, projectTitle: project.title, others: members.filter((m): m is { id: string; title: string } => !!m).slice(0, 3) };
+  });
   server.handle(rpc.cardExternals, async (input) => {
     const list = (await store.read()).artifacts.filter((a) => a.taskId === input.taskId && a.external);
     const located = await connectors.locate(list);
@@ -562,12 +587,16 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.artifactStatus, (input, { paseo }) => artifacts.status(input, paseo));
   server.handle(rpc.previewArtifact, (input, { paseo }) => artifacts.preview(input, paseo));
   server.handle(rpc.checkWorkpad, (input) => workpads.check(input));
+  server.handle(rpc.addCardImage, (input) => cardImages.add(input));
+  server.handle(rpc.removeCardImage, (input) => cardImages.remove(input));
+  server.handle(rpc.readCardImage, (input) => cardImages.read(input));
   server.handle(rpc.deleteTask, async (input, { paseo }) => {
     const archived = input.archive
       ? await wrapups.run({ ...input, keepCard: true, purpose: "delete" }, paseo)
       : null;
     const projectId = (await store.read()).tasks.find((t) => t.id === input.id)?.projectId;
     const deleted = await store.deleteTask(input);
+    await cardImages.removeTasks([deleted.id]).catch((e) => logFailure("Card images not moved to removed:", e));
     if (projectId)
       await flow.removeTask(projectId, deleted.id).catch((e) =>
         logFailure("Kanban flow log not cleaned:", e),
@@ -656,45 +685,55 @@ export default function contribute(host: PluginServerContext) {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
     if (!identity) {
-      // A session Flowly does not manage (NATIVE-SESSION-SPEC §12): insights after a completed turn, when switched on.
+      // A session Flowly does not manage (NATIVE-SESSION-SPEC §12): insights after a completed turn, when switched on;
+      // its timeline is read only once the session qualifies.
       if (event.outcome.kind === "completed")
-        void turnTimeline(paseo, event.agent.id)
-          .then((timeline) => sessionInsights.enqueue(event.agent, timeline, paseo, endedAt))
+        void sessionInsights
+          .turnEnded(event.agent, paseo, endedAt)
           .catch((e) => logFailure("Flowly session insight failed:", e));
       return;
     }
-    // This turn's suggested next steps as a card under the reply in Paseo's timeline. First thing, before the
-    // settings read, the model lookup (up to 2 s) and the board write: the suggestion is already in the board's
-    // events and none of those steps changes it, so the card waits for nothing. Never blocks the hook.
-    if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
-    // The hook's timeline is always empty; read alongside the settings and model lookups below.
-    const turn = turnTimeline(paseo, event.agent.id);
-    const auto = await autoStatusOn();
-    // Agent habits (WORKFLOW-INSIGHTS-SPEC §12.4): the model this turn ran on, and whether the user's message took one of the suggestions that were open.
-    const model = await sessionModel(paseo, event.agent);
-    const timeline = await turn;
-    const texts = userTexts(timeline);
-    // A rework turn: opened by the user's own words while the card was In review (GUARDRAILS-SPEC §4.1).
-    let rework: string | null = null;
-    await store.mutate((board) => {
-      recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(timeline) });
-      if (auto) applyTurnEnded(store, board, identity, event.outcome);
-      rework = memory.reworkQuote(identity, timeline, board);
-    });
-    // A delivery made in this turn is reviewed now that the turn is over (AUTO-REVIEW-SPEC §3.1); never blocks the hook.
-    void reviews.turnEnded(identity.agentId, paseo);
-    // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
-    void store
-      .read()
-      .then((board) => memory.recordTurn(identity, timeline, board))
-      .catch((e) => logFailure("Flowly memory clue not recorded:", e));
-    // The session's plan for the workpad (WORKPAD-SPEC §2.2); never blocks the hook.
-    void workpads.recordTurn(identity, timeline).catch((e) =>
-      logFailure("Kanban workpad plan not recorded:", e),
-    );
-    // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
-    if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
-      void summaries.enqueue(identity.taskId, identity.agentId, timeline, paseo, endedAt, rework);
+    // A delivery made in this turn is reviewed now that the turn is over (AUTO-REVIEW-SPEC §3.1). First, before the
+    // settings, model and timeline reads below (seconds), none of which the review needs; never blocks the hook.
+    let recorded!: (ready: boolean) => void;
+    const lifecycleRecorded = new Promise<boolean>((resolve) => { recorded = resolve; });
+    void reviews.turnEnded(identity.agentId, paseo, lifecycleRecorded);
+    try {
+      // This turn's suggested next steps as a card under the reply in Paseo's timeline. First thing, before the
+      // settings read, the model lookup (up to 2 s) and the board write: the suggestion is already in the board's
+      // events and none of those steps changes it, so the card waits for nothing. Never blocks the hook.
+      if (event.outcome.kind === "completed") void nextRows.turnEnded(identity, paseo);
+      // The hook's timeline is always empty; read alongside the settings and model lookups below.
+      const turn = turnTimeline(paseo, event.agent.id);
+      const auto = await autoStatusOn();
+      // Agent habits (WORKFLOW-INSIGHTS-SPEC §12.4): the model this turn ran on, and whether the user's message took one of the suggestions that were open.
+      const model = await sessionModel(paseo, event.agent);
+      const timeline = await turn;
+      const texts = userTexts(timeline);
+      // A rework turn: opened by the user's own words while the card was In review (GUARDRAILS-SPEC §4.1).
+      let rework: string | null = null;
+      await store.mutate((board) => {
+        recordLifecycle(store, board, identity, "agent.turn_ended", event.outcome, { model, pick: turnPick(board.events, identity.agentId, texts), byUser: startedByUser(timeline) });
+        if (auto) applyTurnEnded(store, board, identity, event.outcome);
+        rework = memory.reworkQuote(identity, timeline, board);
+      });
+      recorded(true);
+      // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
+      void store
+        .read()
+        .then((board) => memory.recordTurn(identity, timeline, board))
+        .catch((e) => logFailure("Flowly memory clue not recorded:", e));
+      // The session's plan for the workpad (WORKPAD-SPEC §2.2); never blocks the hook.
+      void workpads.recordTurn(identity, timeline).catch((e) =>
+        logFailure("Kanban workpad plan not recorded:", e),
+      );
+      // Progress summary (TASK-SUMMARY-SPEC): runs after the hook returns, never blocks it.
+      if (event.outcome.kind === "completed" && (await summaries.settings()).summaryEnabled)
+        void summaries.enqueue(identity.taskId, identity.agentId, timeline, paseo, endedAt, rework);
+    } catch (error) {
+      recorded(false);
+      throw error;
+    }
   });
   // Queued follow-ups go out when any session's turn ends (Paseo "queue").
   server.addHook("agent.turn.after", async (event, { paseo }) => {
@@ -702,8 +741,9 @@ export default function contribute(host: PluginServerContext) {
   });
   // Shell calls of any card-workspace session (WORKFLOW-INSIGHTS-SPEC §3.1); after the hook, never blocking it.
   server.addHook("agent.turn.after", async (event, { paseo }) => {
-    void turnTimeline(paseo, event.agent.id)
-      .then((timeline) => workflow.recordTurn(event.agent, timeline, paseo))
+    // The timeline is read only for a card session of a project with workflow insights on.
+    void workflow
+      .turnEnded(event.agent, paseo)
       .catch((e) => logFailure("Workflow insights commands not recorded:", e));
   });
   server.addHook("agent.permission.before", async (event, { paseo }) => {

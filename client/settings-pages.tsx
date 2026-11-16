@@ -204,7 +204,7 @@ export function ModelsPage({ active }: { active: boolean }) {
   );
 }
 
-/** The auto review session's model (AUTO-REVIEW-SPEC §12.4); Default: the project's default model, then the summary models. */
+/** The auto review session's model; Default uses the summary models. */
 function ReviewModelGroup({ active }: { active: boolean }) {
   const paseo = usePaseo();
   const summary = useStored(useSettings(summarySettings), summarySettingsValues);
@@ -223,7 +223,13 @@ function ReviewModelGroup({ active }: { active: boolean }) {
     },
     enabled: active && provider !== AUTO,
   });
-  const defaultLabel = t("Project default model");
+  const model = stored.startsWith(`${provider}/`) ? stored.slice(provider.length + 1) : "";
+  const selected = models.data?.models?.find((m) => m.id === model);
+  const thinkingOptions = selected?.thinkingOptions || [];
+  const thinking = thinkingOptions.some((o) => o.id === summary.values?.reviewThinking) ? summary.values!.reviewThinking! : "";
+  const defaultThinkingLabel = thinkingOptions.find((o) => o.id === selected?.defaultThinkingOptionId)?.label;
+  const modelDefault = defaultThinkingLabel ? t("Model default ({defaultLabel})", { defaultLabel: defaultThinkingLabel }) : t("Model default");
+  const defaultLabel = t("Summary models");
   return (
     <SettingsGroup title={t("Review model")}>
       <SettingSelect
@@ -235,18 +241,31 @@ function ReviewModelGroup({ active }: { active: boolean }) {
         options={[{ value: AUTO, label: defaultLabel }, ...providerOptions(providers.data?.providers || [], providerInfo.data?.entries || [])]}
         onChange={(next) => {
           setProvider(next);
-          if (next === AUTO) summary.save({ reviewModel: "" });
+          if (next === AUTO) summary.save({ reviewModel: "", reviewThinking: "" });
         }}
       />
       {provider !== AUTO && (
         <SettingSelect
           title={t("Model")}
-          value={stored.startsWith(`${provider}/`) ? stored.slice(provider.length + 1) : ""}
+          value={model}
           placeholder={t("Choose a model")}
           disabled={summary.busy}
           loading={models.isPending}
           options={modelOptions(models.data?.models || [])}
-          onChange={(model) => summary.save({ reviewModel: `${provider}/${model}` })}
+          onChange={(model) => summary.save({ reviewModel: `${provider}/${model}`, reviewThinking: "" })}
+        />
+      )}
+      {provider !== AUTO && !!model && thinkingOptions.length > 0 && (
+        <SettingSelect
+          title={t("Reasoning")}
+          value={thinking}
+          placeholder={modelDefault}
+          disabled={summary.busy}
+          options={[
+            { value: "", label: modelDefault },
+            ...thinkingOptions.map((o) => ({ value: o.id, label: o.label, detail: o.description })),
+          ]}
+          onChange={(reviewThinking) => summary.save({ reviewThinking })}
         />
       )}
     </SettingsGroup>

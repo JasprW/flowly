@@ -1,0 +1,22 @@
+Flowly
+Review status QA 20261113-503c
+2
+tasks
+· 0 done
+Idle
+In review
+2
+Ideas
+Insights
+In review
+2
+Chore
+Waiting review
+1
+Waiting for review
+Chore
+Queue blocker
+1
+Reviewing
+· 0/2 passed
+· running QA controlled check

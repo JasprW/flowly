@@ -308,6 +308,7 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
 
 - **去掉 L1**：`flowly_update_status(in_review)` 不再返回 `WORKPAD_OPEN` 或 `WORKPAD_FAILING`，`acknowledgeOpen` 只对 `SETUP_INCOMPLETE` 有效（CARD-SETUP-SPEC §3.4；“workpad 缺失”改为“验收清单缺失”）。
 - 交付调用新增可选 `disputes?: [{ id, reason ≤300 }]`：id 必须是本卡最近一次评审里 `failed` 的项，或已在 `task.disputes` 里的项（重复提交幂等），否则 `INVALID_INPUT`。接受的争议写进 `task.disputes: [{ id, kind, name, reason, round, at }]`（≤10 条，随卡保留，不改 task revision 之外的语义；B7）。卡进入 Done / Cancelled 时按 §6.6 记账后清空；人把卡拖回工作阶段不清空（争议还在，等下一次评审）。
+- 交付调用新增可选 `worktree`：改动在卡片仓库的另一个 git worktree 里时，填它的路径或分支，评审在那里跑命令、读 diff（AUTO-REVIEW-SPEC §3.4）。
 - 项目开启、卡片未归档即触发；没有任何命令和准则时也跑内置检查。
 
 ### 6.2 改动的形状

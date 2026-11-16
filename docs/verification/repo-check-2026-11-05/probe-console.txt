@@ -1,0 +1,1 @@
+log: [repo-check] result: {"state":"member","projectTitle":"paseo sync","others":[]}

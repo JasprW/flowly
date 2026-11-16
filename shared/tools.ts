@@ -7,6 +7,7 @@ import { guardrailScopeSchema } from "./guardrails";
 import { agentSearchSources, searchLimits } from "./search";
 import {
   taskSchema,
+  cardImageSchema,
   projectSchema,
   eventSchema,
   receiptSchema,
@@ -123,6 +124,15 @@ export const statusInputSchema = z.strictObject({
     .max(disputeLimits.perTask)
     .optional()
     .describe("Only with status in_review: findings of the latest auto review you think are wrong. They are not judged again; the user decides."),
+  worktree: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1000)
+    .optional()
+    .describe(
+      "Only with status in_review, when the change is in a git worktree of this card's repository other than its workspace (for example .worktrees/<name>): the worktree's absolute path, or the branch checked out in it. The auto review then runs the project's commands and reads the diff there; dependencies must be installed in it.",
+    ),
   nextMoves: deliveryMoves,
   outputs: deliveryOutputs,
 });
@@ -387,7 +397,8 @@ export const toolContextSchema = z.object({
       missing: z.array(z.enum(setupItems)),
     })
     .optional(),
-  task: taskSchema,
+  /** Card images carry the absolute path of their file (CARD-IMAGES-SPEC §5). */
+  task: taskSchema.extend({ images: z.array(cardImageSchema.extend({ absolutePath: z.string() })).optional() }),
   project: projectSchema,
   revision: revisionSchema,
   request: requestSchema,

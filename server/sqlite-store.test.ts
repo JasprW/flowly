@@ -28,7 +28,7 @@ function open(path: string, storage: StorageOptions = {}) {
 }
 afterEach(async () => {
   await Promise.all(stores.splice(0).map((s) => s.close().catch(() => undefined)));
-  await Promise.all(directories.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(directories.splice(0).map((d) => rm(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
 });
 const onDisk = (path: string) => readDatabaseFile(sqlite, join(path, "flowly.sqlite"));
 const text = (value: unknown) => JSON.stringify(value);

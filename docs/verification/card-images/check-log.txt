@@ -1,0 +1,32 @@
+{
+  "images": [
+    {
+      "id": "img-f64a3cbf-b75e-417e-a85e-b53207751a99",
+      "name": "alpha.png",
+      "mimeType": "image/png",
+      "bytes": 6967,
+      "thumbMimeType": "image/webp",
+      "createdAt": "2026-11-13T02:31:04.680Z"
+    },
+    {
+      "id": "img-b79ea882-dbe7-498e-a50d-c337fdab75a7",
+      "name": "charlie.png",
+      "mimeType": "image/png",
+      "bytes": 9115,
+      "thumbMimeType": "image/webp",
+      "createdAt": "2026-11-13T02:31:04.771Z"
+    }
+  ],
+  "contextLine": "Card images (part of the description; view each with your image tool): /Users/bofan.wang/.paseo/plugin-data/flowly/card-images/d2a3c4cf-25b7-40aa-a3ed-5ba2f9b51c3a/img-f64a3cbf-b75e-417e-a85e-b53207751a99.png, /Users/bofan.wang/.paseo/plugin-data/flowly/card-images/d2a3c4cf-25b7-40aa-a3ed-5ba2f9b51c3a/img-b79ea882-dbe7-498e-a50d-c337fdab75a7.png",
+  "sizes": [
+    6967,
+    9115
+  ]
+}
+total 56
+drwx------@ 6 bofan.wang  staff   192 Nov 13 10:31 .
+drwx------@ 3 bofan.wang  staff    96 Nov 13 10:31 ..
+-rw-------@ 1 bofan.wang  staff  9115 Nov 13 10:31 img-b79ea882-dbe7-498e-a50d-c337fdab75a7.png
+-rw-------@ 1 bofan.wang  staff  2850 Nov 13 10:31 img-b79ea882-dbe7-498e-a50d-c337fdab75a7.thumb.webp
+-rw-------@ 1 bofan.wang  staff  6967 Nov 13 10:31 img-f64a3cbf-b75e-417e-a85e-b53207751a99.png
+-rw-------@ 1 bofan.wang  staff  2876 Nov 13 10:31 img-f64a3cbf-b75e-417e-a85e-b53207751a99.thumb.webp

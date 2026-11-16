@@ -1,0 +1,41 @@
+Flowly
+Review status QA 20261113-503c
+Attention
+2
+Recent activity
+Filter
+New task
+2
+tasks
+· 0 done
+Idle
+In review
+2
+Ideas
+Insights
+Development
+0
+No tasks
+Test
+0
+No tasks
+In review
+2
+Chore
+Waiting review
+1
+Reviewing
+· 0/2 passed
+· running QA controlled check
+Chore
+Queue blocker
+1
+Review unavailable
+0
+Blocked
+Done
+0
+No tasks
+Cancelled
+0
+No tasks

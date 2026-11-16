@@ -3,6 +3,7 @@ import { deliveringBackgroundWork } from "./background-work";
 import { createHash } from "node:crypto";
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { cardImagePath } from "./card-images";
 import { promisify } from "node:util";
 import type { PaseoApi } from "@getpaseo/client";
 import { laneEnabled } from "../shared/lanes";
@@ -44,9 +45,18 @@ import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
 import { logFailure } from "./error-report";
+import { resolveWorktree, worktreeBase } from "./review-worktree";
 
 /** An agent delivery to In review that starts a review (AUTO-REVIEW-SPEC §3.1). */
-export type DeliveredReview = { taskId: string; projectId: string; eventId: string; agentId: string; from: HistoryStatus };
+export type DeliveredReview = {
+  taskId: string;
+  projectId: string;
+  eventId: string;
+  agentId: string;
+  from: HistoryStatus;
+  /** The git worktree the delivery named (§3.4): the review runs and reads there instead of the workspace. */
+  worktree?: string;
+};
 
 /** One check the review session judges (GUARDRAILS-SPEC §6.3): the built-in goal, a guideline or a card item. */
 export type JudgedCheck = {
@@ -61,7 +71,7 @@ export type JudgedCheck = {
 };
 /** What the review session reads (GUARDRAILS-SPEC §6.3). */
 export type LlmReviewInput = {
-  task: { id: string; title: string; description: string; type?: TaskType; workspaceId: string };
+  task: { id: string; title: string; description: string; type?: TaskType; workspaceId: string; /** Absolute paths of the card's images (CARD-IMAGES-SPEC §5). */ images?: string[] };
   checks: JudgedCheck[];
   /** The user's messages in the card's sessions, oldest first (§4.2); null when they could not be read. */
   conversation?: string[] | null;
@@ -75,6 +85,8 @@ export type LlmReviewInput = {
   diff: string;
   /** Round ≥ 2 of a rework: `diff` holds only what changed since the previous delivery (§6.3). */
   incremental?: boolean;
+  /** The git worktree the delivery named (§3.4): where the delivered code is, outside the session's working directory. */
+  worktree?: string;
   /** The delivering session, as the review session's parent. */
   parentAgentId: string;
   /**
@@ -541,11 +553,28 @@ export class AutoReviewService {
   }
 
   /** A session's turn ended: start the review of its delivery, if one waits. */
-  turnEnded(agentId: string, paseo: PaseoApi) {
+  turnEnded(agentId: string, paseo: PaseoApi, lifecycleRecorded?: Promise<boolean>) {
     const delivery = this.pending.get(agentId);
     if (!delivery) return Promise.resolve();
     this.pending.delete(agentId);
-    return this.enqueue(delivery.projectId, delivery.taskId, () => this.review(delivery, false, paseo));
+    return this.enqueue(delivery.projectId, delivery.taskId, async () => {
+      try {
+        await this.review(delivery, false, paseo, lifecycleRecorded);
+      } finally {
+        // A review that started cleared it already; one that was skipped or failed early must not leave the card waiting.
+        await this.clearWaiting(delivery.taskId, delivery.eventId);
+      }
+    });
+  }
+
+  /** Clears the card's waiting marker (§3.1) if it is still the one this delivery set. */
+  private clearWaiting(taskId: string, eventId: string) {
+    return this.store.transaction((b) => {
+      const t = b.tasks.find((x) => x.id === taskId);
+      if (t?.reviewWaiting?.eventId !== eventId) return { value: false, changed: false };
+      delete t.reviewWaiting;
+      return { value: true, changed: true };
+    });
   }
 
   /** A person's Rerun from the drawer (§7): the card is in In review, round starts at 1. */
@@ -557,17 +586,45 @@ export class AutoReviewService {
     if (task.status !== "in_review") throw new Error("Only a card in In review can be reviewed again.");
     if (!autoReviewRuns(project)) throw new Error("Turn on Auto review in the project settings first.");
     if (task.review?.state === "running") throw new Error("A review of this card is already running.");
+    if (task.reviewWaiting) throw new Error("A review of this card is waiting to start.");
     const delivery = latestDelivery(board, task);
     if (!delivery) throw new Error("No agent delivered this card to In review, so there is no session to send rework to.");
     void this.enqueue(project.id, task.id, () => this.review(delivery, true, paseo));
     return { ok: true as const };
   }
 
-  /** At plugin start: a review that was running when Flowly stopped never finishes, so it becomes Unavailable (§3.2). */
+  /**
+   * At plugin start: a review that was running when Flowly stopped never finishes, so it becomes Unavailable (§3.2);
+   * a delivery still waiting for its review is never reviewed (the wait is only in memory), so it becomes Unavailable too.
+   */
   recover() {
     return this.store.transaction((b) => {
       let changed = false;
       for (const t of b.tasks) {
+        const waiting = t.reviewWaiting;
+        if (waiting) {
+          delete t.reviewWaiting;
+          changed = true;
+          const project = b.projects.find((p) => p.id === t.projectId);
+          if (t.status === "in_review" && !t.archivedAt && project && t.review?.state !== "running") {
+            const reason = "Flowly restarted before the review started.";
+            const now = this.now();
+            t.review = {
+              trigger: { eventId: waiting.eventId, agentId: waiting.agentId, from: waiting.from },
+              ...(waiting.worktree ? { worktree: waiting.worktree } : {}),
+              round: 1,
+              maxRounds: autoReviewOf(project).maxRounds,
+              state: "unavailable",
+              reason,
+              fingerprint: { taskRevision: t.revision, workpadRevision: b.workpads.find((w) => w.taskId === t.id)?.revision ?? 0, dirty: false },
+              shared: true,
+              items: [],
+              startedAt: now,
+              finishedAt: now,
+            };
+            this.store.event(b, { taskId: t.id, actor: "system", action: reviewFinishedAction, agentId: waiting.agentId, note: `Auto review unavailable: ${reason}` });
+          }
+        }
         if (t.review?.state !== "running") continue;
         const reason = "Flowly restarted during the review.";
         t.review = {
@@ -603,22 +660,36 @@ export class AutoReviewService {
     return new Date(this.clock()).toISOString();
   }
 
-  private async review(delivery: DeliveredReview, manual: boolean, paseo: PaseoApi) {
+  private async review(delivery: DeliveredReview, manual: boolean, paseo: PaseoApi, lifecycleRecorded?: Promise<boolean>) {
     const board = await this.store.read();
     const task = board.tasks.find((t) => t.id === delivery.taskId);
     const project = task && board.projects.find((p) => p.id === task.projectId);
     if (!task || !project || task.archivedAt || project.archivedAt || task.status !== "in_review" || !autoReviewRuns(project)) return;
-    const where = await this.deps.workspace(task, paseo).catch(() => null);
+    const workspace = await this.deps.workspace(task, paseo).catch(() => null);
+    let where = workspace;
+    let baseRef = task.baseRef;
+    let whereUnavailable = "The card's workspace directory is unavailable.";
+    // A delivery that named a worktree is reviewed there (§3.4); one that is gone is not replaced by the workspace.
+    if (workspace && delivery.worktree) {
+      try {
+        const worktree = await resolveWorktree(delivery.worktree, workspace.directory, this.git);
+        where = { directory: worktree.directory, worktree: true };
+        baseRef = task.baseRef ?? (await worktreeBase(worktree, this.git)) ?? undefined;
+      } catch (e) {
+        where = null;
+        whereUnavailable = `The delivered worktree is unavailable: ${e instanceof Error ? e.message : String(e)}`.slice(0, autoReviewLimits.reason);
+      }
+    }
     let head = where ? await readHead(where.directory, this.git, this.now()) : null;
     // A workspace that is not a Git repository itself reads the repositories in it (a linked root, §6.2).
-    const linked = where && !head ? await linkedRepos(where.directory) : [];
+    const linked = where && !head && !delivery.worktree ? await linkedRepos(where.directory) : [];
     let repoShas: Record<string, string> | undefined;
     if (linked.length) ({ head, repos: repoShas } = await linkedHead(linked, this.git, this.now()));
     const measured = !where
       ? null
       : linked.length
-        ? await linkedShape(linked, task.baseRef, this.git).catch(() => null)
-        : await (this.deps.shape ?? ((d: string, base?: string) => reviewShape(d, base, this.git)))(where.directory, task.baseRef).catch(() => null);
+        ? await linkedShape(linked, baseRef, this.git).catch(() => null)
+        : await (this.deps.shape ?? ((d: string, base?: string) => reviewShape(d, base, this.git)))(where.directory, baseRef).catch(() => null);
     const config = autoReviewOf(project);
     // What is checked is fixed when it starts; editing the guardrails meanwhile does not change this review (§4.3).
     const guard = this.deps.guardrails
@@ -632,6 +703,8 @@ export class AutoReviewService {
     const started = await this.store.transaction<{ previous?: Task["review"]; round: number } | null>((b) => {
       const t = b.tasks.find((x) => x.id === delivery.taskId);
       if (!t || t.archivedAt || t.status !== "in_review") return { value: null, changed: false };
+      // Waiting ends in the same write the review starts in, so the card never shows the previous result meanwhile.
+      if (!manual && t.reviewWaiting?.eventId === delivery.eventId) delete t.reviewWaiting;
       const previous = t.review;
       const round = !manual && continuesRound(b.events, t.id, previous) ? previous!.round + 1 : 1;
       const disputes = new Map((t.disputes || []).map((d) => [d.id, d.reason]));
@@ -665,6 +738,7 @@ export class AutoReviewService {
           dirty: !!head?.dirty,
         },
         shared: !where?.worktree,
+        ...(delivery.worktree ? { worktree: delivery.worktree } : {}),
         ...(measured ? { shape: measured.shape } : {}),
         items,
         startedAt,
@@ -676,7 +750,7 @@ export class AutoReviewService {
     const items = (await this.current(delivery.taskId, startedAt))?.items ?? [];
     const set = (id: string, patch: Partial<ReviewItem>) => this.updateItems(delivery.taskId, startedAt, [id], patch);
     if (!where) {
-      await this.updateItems(delivery.taskId, startedAt, items.filter((i) => i.state === "queued").map((i) => i.id), { state: "unavailable", reason: "The card's workspace directory is unavailable." });
+      await this.updateItems(delivery.taskId, startedAt, items.filter((i) => i.state === "queued").map((i) => i.id), { state: "unavailable", reason: whereUnavailable });
     } else {
       // Every active and observing command runs, in list order; each result shows as soon as it is in (§6.3 step 1).
       const runIn = linked.length ? await changedRepos(linked, task.createdAt, this.git) : [];
@@ -705,7 +779,7 @@ export class AutoReviewService {
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
         });
       }
-      await this.judge(delivery, startedAt, task, started.round > 1 && !manual ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo);
+      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual && started.previous?.worktree === delivery.worktree ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo);
     }
     const after = !where ? null : linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now());
     const outcome = await this.finish(delivery.taskId, startedAt, where ? after : undefined);
@@ -716,6 +790,11 @@ export class AutoReviewService {
         .reviewed({ projectId: outcome.task.projectId, taskId: outcome.task.id, items: outcome.review.items, previous: started.previous?.items, disputed: (outcome.task.disputes || []).map((d) => d.id) })
         .catch((e) => logFailure("Flowly guardrail counts not updated:", e, outcome.task.id));
     if (!outcome.rework) return;
+    // Compute the review immediately, but never start a rework turn before its predecessor is recorded.
+    if (lifecycleRecorded && !(await lifecycleRecorded)) {
+      await this.markUnavailable(delivery.taskId, startedAt, "The delivering turn could not be recorded, so the rework message was not sent.");
+      return;
+    }
     const live = await this.deps.sessionLive(outcome.review.trigger.agentId, outcome.task, paseo).catch(() => false);
     const sent = live
       ? await this.deps.send({ taskId: outcome.task.id, agentId: outcome.review.trigger.agentId, text: reworkMessage(outcome.review, words) }, paseo).then(
@@ -776,7 +855,14 @@ export class AutoReviewService {
     const text = (i: ReviewItem) =>
       i.kind === "goal" ? goalPrompt : i.kind === "guideline" ? [guard?.guidelines.find((g) => g.id === i.id)?.text ?? i.name, guard?.guidelines.find((g) => g.id === i.id)?.body].filter(Boolean).join("\n") : i.name;
     const input: LlmReviewInput = {
-      task: { id: task.id, title: task.title, description: task.description, type: task.type, workspaceId: task.workspaceId },
+      task: {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        type: task.type,
+        workspaceId: task.workspaceId,
+        ...(task.images?.length ? { images: task.images.map((image) => cardImagePath(this.store.directory, task.id, image)) } : {}),
+      },
       checks: judged.map((i) => {
         const quote = guard?.words.get(i.id);
         const prior = incremental ? before.get(i.id) : undefined;
@@ -802,6 +888,7 @@ export class AutoReviewService {
             task.baseRef,
           ),
       ...(incremental ? { incremental: true } : {}),
+      ...(delivery.worktree ? { worktree: where.directory } : {}),
       parentAgentId: delivery.agentId,
     };
     const running = await deliveringBackgroundWork(paseo, delivery.agentId);
@@ -949,8 +1036,16 @@ function latestDelivery(board: Board, task: Task): DeliveredReview | null {
   for (let i = board.events.length - 1; i >= 0; i--) {
     const e = board.events[i];
     if (e.taskId === task.id && e.action === "status_changed" && e.to === "in_review" && e.actor === "agent" && e.agentId && e.from)
-      return { taskId: task.id, projectId: task.projectId, eventId: e.id, agentId: e.agentId, from: e.from };
+      return { taskId: task.id, projectId: task.projectId, eventId: e.id, agentId: e.agentId, from: e.from, ...(e.worktree ? { worktree: e.worktree } : {}) };
   }
-  if (task.review) return { taskId: task.id, projectId: task.projectId, eventId: task.review.trigger.eventId, agentId: task.review.trigger.agentId, from: task.review.trigger.from };
+  if (task.review)
+    return {
+      taskId: task.id,
+      projectId: task.projectId,
+      eventId: task.review.trigger.eventId,
+      agentId: task.review.trigger.agentId,
+      from: task.review.trigger.from,
+      ...(task.review.worktree ? { worktree: task.review.worktree } : {}),
+    };
   return null;
 }

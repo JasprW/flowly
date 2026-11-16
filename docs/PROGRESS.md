@@ -1,4 +1,73 @@
+## 2026-11-13 PR #103 table wrapping review
+
+- Removed `wordBreak: "break-all"` from web table cells. `overflowWrap: "anywhere"` preserves normal word-boundary wrapping while allowing overlong identifiers and numbers to break within their columns. Contract updated in SESSION-UX-SPEC §8.
+- Verification results are recorded on PR #103. Desktop and physical-phone visual acceptance remain UNRUN.
+- Onboarding and telemetry need no changes for this existing table-rendering refinement.
+
 # Implementation progress
+
+## Review reasoning selection (card "auto review模型reasoning选择") — 2026-11-14
+
+- PR follow-up: hunks separated from shared SDK 0.16/image-removal work onto main’s SDK 0.15. User-authorized GPT Luna independently verified `5042806`: typecheck exit 0, focused 128/128 tests passed, no reproducible defects. See [independent report](verification/review-reasoning-2026-11-14/independent.md).
+
+- Live follow-up: local directory already installed; reload exit 0, enabled/running. Actual desktop (1700×1000) and compact (1000×900) browser UI selected high/xhigh, fresh context and plugin reload retained xhigh. Real Flowly auto reviewer `6e42edbf-9767-44fd-9e4f-d2de56a9bcc0` persisted `thinkingOptionId=xhigh` on codex/gpt-6.1-terra and passed; auto-archived. Disposable native/board resources and directory removed with zero remaining; original review settings restored. Telemetry disabled per dev-install rules. Native windows were not touched; device UI remains UNRUN. Details and screenshots in the report below.
+
+- Settings → Models → Review model now exposes provider-advertised Reasoning options and Model default. `reviewThinking` is optional; model changes clear it. The reviewer reads the model/reasoning pair together and sends `thinkingOptionId` only while that explicit model still supports it; summary fallback gets no override. Corrected the misleading project-default label/spec to match existing summary fallback behavior.
+- Permission assessment: reviewers should have fixed read-only access, with no editable permission picker. Live Codex capability inspection exposes only workspace-write auto/auto-review and full-access, no read-only control. Existing Claude Plan mode and permission denial remain; they do not provide a universal write barrier. Strict enforcement needs provider-native options verification; SDK config.options is already available, so a missing read-only mode alone does not imply missing host support. User clarified this means forbidding reviewer writes, not read-before-write.
+- Existing auto-review tip updated in all catalogs and ONBOARDING-SPEC; no new tip id/tour page. No telemetry field added (no switch or core action). No What's new/version changes.
+- PASS: typecheck exit 0; full tests exit 0, 161 files passed/1 skipped, 1447 tests passed/6 skipped. UNRUN: installed desktop/compact UI, actual review model execution, strict write probe, independent exact-commit verification. Shared working changes left uncommitted and not installed. [Report](verification/review-reasoning-2026-11-14/REPORT.md).
+
+## Auto review waiting state (card "auto review状态显示") — 2026-11-13
+
+- Agent delivery writes `task.reviewWaiting` atomically. Until its review starts, the card strip and drawer Review group show **Waiting for review**, hide the previous result, hold unread Attention signals and disable Rerun. The queue remains serial per project.
+- Review start clears the marker in the same write; a skipped delivery clears it too. Plugin restart turns a still-waiting delivery into Review unavailable with Rerun. The turn-end hook queues the review before settings, model and timeline reads.
+- AUTO-REVIEW-SPEC §3.1, §8.2, §9.1/§9.2 and all nine catalogs updated. Tests cover redelivery, old-result Attention suppression, skip after leaving In review or disabling Auto review, restart/rerun, and waiting behind another card.
+- PR #108 review follow-up: the review computes immediately but rework delivery waits for the delivering turn lifecycle write; failed recording makes the review unavailable. Waiting recovery retains the delivered worktree even after the delivery event is trimmed. Live harness active state now lives under ignored `.test-data`, separate from its committed historical receipt, and completed cleanup permits another setup.
+- Onboarding: no tour change or new tip; this corrects the existing review status at the point users see it. Telemetry: no switch or new core action, so no new field. What's new and version unchanged.
+- Verification: see `docs/verification/auto-review-status-2026-11-13/REPORT.md`. Local plugin reload, real queued-delivery state, desktop/compact card and drawer rendering, restart recovery and the compact Rerun action passed; fixture resources were removed and both registries checked. Independent exact-commit recheck passed on 82849e0: typecheck and 105 focused tests (INDEPENDENT-R2.md); isolated full suite: 1425 passed, 6 skipped. Native windows, phone rendering and a fresh real-model delivering-turn-end/completed verdict remain unrun.
+
+
+## Auto review finds the worktree from the delivered PR (card "自动验收能看到卡片在 git worktree 里的改动", follow-up) — 2026-11-13
+
+- A delivery to In review without `worktree`, from a shared workspace with Auto review on, now looks at the PR/MR links among this call's outputs and the card's existing outputs. A link whose host and repository match a remote of the card's repository gives its head commit through `git ls-remote` (5 s, no prompts); the one worktree, other than the repository's own directory, whose HEAD contains it is reviewed, recorded on the delivery event like an explicit `worktree`, and named in the result's `notice`. None, several, another repository's link or a git/network failure changes nothing (`server/review-worktree.ts` `prWorktree`).
+- Purely local git: works without a GitHub/GitLab connector, and with unpushed commits on top of the PR head.
+- AUTO-REVIEW-SPEC §3.4 and the skill text updated. Onboarding, telemetry, What's new: unchanged (agent-facing, no UI).
+- Checks: see the delivery note. Unrun: a live delivery through the installed plugin.
+
+## Auto review reads the delivered worktree (card "自动验收能看到卡片在 git worktree 里的改动") — 2026-11-13
+
+- `flowly_update_status(in_review)` and the CLI take an optional `worktree` (absolute path, a folder inside it, or the branch checked out in it). The daemon resolves it before the write (`server/review-worktree.ts`) and refuses, with `INVALID_INPUT`, a path that is missing, outside git, another repository, the card's own workspace, or a branch no worktree has checked out. The resolved real path rides on the delivery event; Rerun reuses it.
+- The review resolves it again at start, then runs the commands, reads shape and diff and takes the fingerprint there; `shared` is false and `review.worktree` records the directory. The diff base is the nearer merge-base of the home repository's HEAD and its upstream (or the card's `baseRef`), so main moving on adds nothing. A worktree that is gone makes every check unavailable instead of falling back to the workspace. The review prompt says where the code is.
+- Skill text, tool description, CLI help, AUTO-REVIEW-SPEC §3.4 / §2 / §8.2 and GUARDRAILS-SPEC §6.1 updated.
+- Onboarding: no tour copy or tip (agent-facing delivery parameter, no user-visible UI). Telemetry: no new field (not a switch; deliveries are already counted). What's new: none.
+- Checks: see the delivery note. Unrun: a live auto review through the installed plugin.
+
+## Card description images (issue #99, card "Add image as description") — 2026-11-13
+
+- Spec: `docs/CARD-IMAGES-SPEC.md` (user decisions 2026-11-13: copies in `<plugin data>/card-images/<taskId>/`, phones view and remove only, thumbnails under the description).
+- Daemon: `server/card-images.ts` (`card-images.add/remove/read` RPCs, revision CAS, files written before the board and removed when its write fails, start-up cleanup of unreferenced files, card delete and project Remove move them to `removed/`). The native chip projection drops `images`.
+- Agents: the session context lists the absolute paths right after the description; `flowly_get_task` gives each image its `absolutePath`; the skill text says to view them before starting; the auto review prompt lists them.
+- Client: thumbnail row under the description in the card sidebar (thumbnails only while the sidebar is ready, full image only in the viewer, with previous/next and Remove); web paste/drop/**Add images** on the description of New task and Edit task, a 320 px canvas thumbnail (WebP, else JPEG), uploads after the save. New task's former first-message images became description images.
+- Onboarding: tip `card-images` (web, open card without images) and a More features line. README highlight. Telemetry: no heartbeat field (not a core action).
+- Live check on Tinylink (`docs/verification/card-images/`): web paste/drop/file chooser, save, thumbnails, viewer, remove, context paths, card delete moving images to `removed/`, and a Claude Haiku session reading the images by path all passed. Unrun: Codex (the `codex-aicodewith` provider failed before its turn; plain `codex` is not installed) and the phone (no device reachable over adb, AndroMeld not running).
+
+## Preserve intraword underscores in session/card Markdown — 2026-11-12
+
+- Fixed session previews and card descriptions swallowing intraword underscores, including when copied: `parseSessionInline` checks the outside characters of underscore emphasis, keeps rejected matches literal and resumes scanning one character later. Existing link parsing stays unchanged.
+- Added regression tests for snake_case, repeated underscores, CJK descriptions, file paths, standalone emphasis and a valid emphasis following a rejected match. Updated SESSION-UX-SPEC §8.
+- Onboarding, What's new and telemetry: unchanged (pure bug fix, no new capability, switch or action).
+- PR #101 review follow-up: Unicode punctuation is now an emphasis boundary; `_` remains a word character despite its Unicode punctuation category. Six regression cases cover Chinese colon/full stop, single-sided punctuation, brackets, italic and bold.
+- Checks: see the PR delivery note. Unrun: live plugin reload, desktop/phone rendering and selection/copy.
+
+## Linear issue connector — 2026-11-12
+
+- Added Linear as the seventh read-only provider family. Each connection binds one verified Linear workspace and a personal API key held only by the daemon. GraphQL requests use a fixed API host, constant query operations and variables; no mutations or remote status writes.
+- Issue links and TEAM-123 keys resolve; the picker lists assigned open issues and searches titles. New task's From Linear and Artifacts + reuse the existing connector flows, including scoped agent reads, cached content, content unread fingerprints and revoked-token handling. Jira/Linear bare-key ambiguity requires an explicit service or URL.
+- Ported the earlier local `638a423` implementation onto current main, preserving newer onboarding content. Added workspace-address validation and required verification fields; all GraphQL errors, including partial HTTP-200 responses, fail without overwriting cached content. Request only the latest 20 comments, displayed oldest first.
+- Tests cover recognition, API-key secrecy, fixed read-only endpoint, title variables, metadata/comments/sub-issues, fingerprints, workspace mismatch, partial errors, retry-after, revoked keys, more than 100 comments, new-card inputs, existing-card linking, scoped agent reads and unread changes.
+- Onboarding: existing tour row and `jira-connect` tip updated, no new tip id; nine translation catalogs and English/Chinese README updated. What's new and version stay with the release task. Telemetry unchanged: no new feature switch or core action, and connector type/address is never reported.
+- Checks: see the PR delivery note. Unrun: authenticated live Linear workspace/API validation, plugin installation/reload, desktop/phone UI and the repository's designated independent Claude verification session.
+
 
 ## Session preview Next moves appear without reopening (card "side bar session next move chip修复") — 2026-11-11
 
@@ -36,6 +105,13 @@
 - Independent check of eb62c81 (before the two items above): [verification/telemetry-errors-2026-11-10-verify.md](verification/telemetry-errors-2026-11-10-verify.md), pass with notes; its Medium finding (auth failures hidden) is fixed, the timing-dependent retry test now waits within a 200 ms retry.
 - Open, proposed as an idea: Windows linked roots (`symlink` EPERM without Developer Mode).
 - Onboarding and heartbeat fields: none (internal fixes; nothing new to learn or count).
+
+## Test suite: git is hermetic (test-hygiene fix) — 2026-11-10
+
+- Bug (found while verifying PR #95 on this machine): the fixtures' own `git commit` calls inherited the machine's global git config, whose hooks path carries a pre-commit guard — any fixture commit on a branch named `main` was blocked. `server/repos.test.ts` ("matches canonical subdirectories…"), `server/wrapup.test.ts` ("real git: uncommitted and local-only commits are detected") and the six linked-root tests in `server/auto-review.test.ts` failed on a machine with such a hook and passed on machines without one; the suite was machine-dependent.
+- `vitest.config.mjs` sets `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_SYSTEM=/dev/null` through `test.env` (and keeps `testTimeout` 15000 and the `docs/verification/**`, `.claude/**` and `.worktrees/**` excludes), so git subprocesses see no global or system config however vitest is started: `npm test`, `npm run dev`, `npx vitest run <file>` or an IDE runner. It is a plain `.mjs` because `tsconfig.json` only includes `.ts`/`.tsx`; a `vitest.config.ts` importing `vitest/config` adds errors to `tsc --noEmit`. The `npm test` and `npm run dev` scripts are plain `vitest run` / `vitest` again. Tests needing a git identity already pass `-c user.name/-c user.email` per command, so nothing else changes.
+- Checks: `npm run typecheck` exit 0; `npm test` 1354 passed, 0 failed, 6 skipped; with a simulated global hook (`core.hooksPath` pre-commit that blocks commits on `main`, via `GIT_CONFIG_GLOBAL`), `npx vitest run server/repos.test.ts server/wrapup.test.ts server/auto-review.test.ts` passes 46/46, and fails 8 of 46 without `vitest.config.mjs`.
+- Onboarding and telemetry: none (test hygiene, nothing user-visible).
 
 ## Auto review reads every repository of a linked root — 2026-11-07
 
@@ -1177,6 +1253,14 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 引导：不改导览。`card-display` 提示在紧凑布局改为指向 “Filters → Card display”（桌面仍是 Sort 菜单），新字符串已加入 9 个目录，ONBOARDING-SPEC 提示表同步。What's new / 遥测：无。
 - 润色（同日）：Low/Normal 优先级图标改为 `ArrowDown`/`Minus`（原信号格图标几乎看不见）；分组标题折叠摘要贴行尾右对齐（`SectionHeader`、`Disclosure`）；Ideas/Memory 来源行的状态不再折行。typecheck、npm test（1291 passed, 1 skipped）、make check 均 exit 0；impeccable detect 无发现。真机未验证。证据：`docs/verification/mobile-header-2026-10-31/report.md`。
 
+## 2026-11-05 建卡/挂接时校验 GitHub/GitLab 条目仓库归属
+
+- 背景：2026-11-05 一张 paseo-sync PR 卡误建在 flowly 项目，卡片工作区锁在错误仓库根，session 得去工作区外找代码。按 [CONNECTORS-SPEC §4.3](CONNECTORS-SPEC.md#43-项目仓库范围github--gitlab) 新增建卡/挂接校验：New task 表单与卡片侧栏挂接选择器选中 GitHub/GitLab 条目时，先问 daemon 该仓库（`ExternalSummary.container`）是否属于当前项目的项目仓库；`foreign` 先出非阻断警告（点名条目与项目，说明卡片工作区不包含该仓库，若其他项目包含则点名），确认后才加入/挂接；`unknown`（项目仓库为空、container 为空、RPC 失败）与非 git 族保持沉默。校验在选中时机进行，天然覆盖"我参与的"范围与链接/owner/repo#nr 直查等绕过项目搜索范围的路径。
+- RPC `connectors.repo-check`（输入 projectId、connectionId、repo；输出 state/projectTitle/others≤3）；判定纯函数 `repoVerdict`（大小写不敏感，空即 unknown）在 `server/connectors/repos.ts`；handler 在 `index.server.ts`（复用 5 分钟缓存的 `projectRepos`，others 排除归档项目）。客户端 `client/connectors.tsx`：`useRepoCheck`（失败/空数据静默）与 `ForeignRepoWarning`（Notice + Cancel/确认），`LinkExternal` 与 `client/forms.tsx` 的 `pickExternal`（拆出 `addExternal`）接入。
+- 范围外（有意）：Artifacts"文件或链接"表单粘贴条目链接的自动识别不做校验（非选择器路径），已按 spec 注明。
+- 引导：不改导览、不加 tip（警告本身即提示，无新入口）；What's new 不加（2026-11-13 上游作者要求撤回：2026-11-10 起的规则是 feature/fix/docs 改动不碰 whats-new、只有 release 任务写，且 1.8.0 已于 11-10 发布、条目无人可见——条目与 9 个目录里的字符串已删除）；遥测不加字段（客户端一次性警告，daemon 侧无核心动作可计数）。
+- 已运行：typecheck、npm test（146 files / 1223 passed / 6 skipped）、`npx vitest run server/connectors/repos.test.ts`（3 passed）；桌面 UI 实机走查（2026-11-05，本地 remove+install 交换安装，Playwright + shot-lib）：foreign 建卡警告（含其他项目提示）、Cancel/Add anyway、挂接路径警告/确认/清理、双项目 member 沉默全部 PASS，无卡片或 artifact 残留。未运行：非 git 族沉默（该 daemon 无对应连接，结构性短路）、手机端走查、D2（另一看板 foreign，等价路径覆盖）。[验证记录](verification/repo-check-2026-11-05/report.md)。
+
 ## 2026-11-05 看板卡片可访问名称与稳定 testID（自动化定位）
 
 - 来源卡：看板卡片补齐可访问名称，让 UI 自动化验证可定位。此前卡片可访问名称不含泳道、无 testID，Playwright `getByText` 只命中宿主侧栏同名会话条目，pager/横向滚动落点不定时点卡片经常点空；按 [UI-UX-SPEC §2](UI-UX-SPEC.md#2-board-toolbar-and-secondary-controls) 2026-11-04 automation names 条（本次新增）落契约。
@@ -1222,3 +1306,29 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - [x] PR #100 CodeRabbit：插件启动后支持情况未知，第一次项目级运行走了可见的 `Flowly background`，结束后归档进用户的归档（step2 实测里就出现过，当时误判为检查写法问题）。修正：支持未知时只要任一项目记有隐藏工作区就走隐藏路径，宿主拒绝再回到可见流程；`server/background-workspace.test.ts` 加两例（改前失败、改后通过）；`live2.mjs` 在同一 daemon 上复验（新项目摘要、重载插件后再摘要，全程无可见工作区），已清理。本机第一次运行（没有任何记录）仍走可见流程。验证脚本按评审收窄了 helper 范围、列表失败不再当成“没有”。
 - 取舍：后台 agent 归档后记录仍留在宿主磁盘（不显示、不占用户归档），不再硬删除。
 - 引导/What's new/遥测：不加。临时 session 变隐藏属于“不再打扰”，新状态标签自明；不加心跳字段（`paseo_version` 由 composer 卡片做）。
+## 2026-11-13 turn.after 钩子先过滤再读 turn timeline
+
+- 起因：PostHog 上的 `Flowly turn timeline not read`（1.8.0、1.7.2 各 1 个安装）是 SDK `fetchAgentTimeline` 抛出的普通 Error，最可能是读取时 Flowly 已硬删除了自己的临时会话（`Agent not found`）；而且每个外部会话每回合结束都会拉 200 条 timeline。
+- 改动：外部会话分支改走 `SessionInsightService.turnEnded`（先判断 `isOutsideCandidate` 和开关，再读 timeline）；workflow 钩子改走 `WorkflowInsightsService.turnEnded`（先判断未归档卡片 workspace、workflow insights 开关、非后台 agent；有 `parentAgentId` 的先查标签，summarizer 或已删除则跳过）。NATIVE-SESSION-SPEC §12.2、WORKFLOW-INSIGHTS-SPEC §3.1 已同步。
+- 用户自己在卡片 workspace 里建的子 session（无 summarizer 标签）仍照常采集命令。
+- 测试：`server/session-insights.test.ts`、`server/workflow-insights.test.ts` 各加一条，断言不合格的会话不调用 `timeline.refetch`、合格会话行为不变。
+
+
+## 2026-11-16 Agent 工具输出精简（issue #109）
+
+- 先更新 [输出契约](AGENT-OUTPUT-SPEC.md)：MCP/CLI 默认 compact，`responseDetail: "full"` / `--full` 保留完整输出与 Jira `ticket` 兼容。输出选项不参与写入回执摘要，idea 的正文 `detail` 保留。
+- 写后只生成续写信息，不再构造完整上下文、session 列表、记忆或外部摘要；Workpad 返回带 ID 的规范化验收清单。CLI 可用 `--save-request` 保存写后的请求，拒绝、空续写和本地保存失败保留重试快照，并区分已经提交的写入。
+- get_task 去掉管理字段、false artifact 标记；先过滤生命周期/next-move 事件，再取最近 10 条有效活动。保留范围、护栏、图片、有效操作 ID、未读语义。
+- PASS：实现者聚焦回归 178 通过/5 跳过；源码提交 `2c96ec6dd7b2c8e8bc411e67ef3fa1cfb91cdd12` 的 typecheck exit 0，全量测试 exit 0，1442 通过/6 跳过。用户指定的 GPT Luna 独立验收同样通过，无阻断审阅项，见 [独立报告](verification/issue-109-luna.md)。原指定 Haiku 因账户额度限制在启动时失败，未执行检查；用户授权改用 Luna。
+- 固定 fixture 的 JSON 字符数：读取 29013 → 4537（-84.4%），写入 28244 → 913（-96.8%）。不等同模型 token 或耗时收益。旧完整输出回归改为显式请求 full；新增默认 compact 的真实 loopback MCP/HTTP/CLI 串联与恢复测试，未弱化原有业务断言。
+- 首轮失败保留说明：输出参数最初与 idea.detail 重名，已改为 responseDetail；两个故障注入测试起初挂错 store 方法；备份测试文件曾被 Vitest 误发现。修正后重跑完整聚焦集合通过。独立 worktree 初始未带自己的索引，后仅重建索引，工作文件不变且与验收 commit 一致。
+- UNRUN：安装/重载用户正在使用的插件、桌面/手机 UI；本次为工具输出契约，不新增 UI 能力、开关或计数动作，无需 onboarding/tip/telemetry/What's new 改动。共享工作区的其他改动不纳入提交。
+
+
+### Issue #109 审阅修正
+
+- CodeRabbit 指出两个有效问题：workpad 版本未配套清单会让缓存清单覆盖人的勾选；写后读取若包含另一个人的版本，会给尚未读到该改动的 agent 签发新请求。用户于 2026-11-16 明确同意后一项低概率窗口的最小保护。
+- Workpad 现在总是将 revision 与规范化清单一起返回；compact 续写只为回执提交版本签发，后置版本不同则保留成功回执、返回空续写并要求重读。没有锁、自动重试或存储迁移。
+- 最终源码提交 `da9b9a5b0da6fa599656edf9dab348da957f8697`：实现者 typecheck 通过，整组聚焦回归 182 通过/5 跳过；独立 GPT Luna typecheck exit 0、全量 exit 0，1445 通过/6 跳过，见 [复验报告](verification/issue-109-luna-rework.md)。Paseo 验证 session 为 `e77a983b-ae48-4778-8a94-fc8a6d32d211`（父会话创建回执）；报告自身的 CODEX_SESSION_ID 另列。
+- 补充失败记录：新增版本冲突测试起初重复用了已提交 request，正确得到 REQUEST_REUSED；改用未提交的旧版本 request 后，REVISION_CONFLICT 断言通过，未弱化断言。
+- 最终 fixture 字符数：读取 29013 → 4537（-84.4%），写入 28244 → 982（-96.5%）。原始报告保留其旧源码与测量，最终结论以本次复验为准。

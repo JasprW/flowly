@@ -16,7 +16,7 @@ async function setup() {
   return f;
 }
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
 });
 type Fixture = Awaited<ReturnType<typeof setup>>;
 const idea = (ctx: Awaited<ReturnType<AgentService["get"]>>, title = "Fix the flaky test", extra = {}) => ({
