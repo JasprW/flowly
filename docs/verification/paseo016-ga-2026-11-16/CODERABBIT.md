@@ -20,3 +20,5 @@ Luna在4d8f667末次检查拒绝放行：异步读取绑定时尚未设置runnin
 ## 补轮必须保留完整清理
 
 CodeRabbit补审确认：旧363异步读取旧绑定后可能消耗dirty，补轮得到空绑定便提前返回。新增冷/热缓存删除回归在旧363均失败（exit1，2失败/18跳过，两个Flowly session键仍存在）；drainChange启动新绑定读取前重新dirty，修复后5文件55聚焦通过、typecheck exit0，失败不自旋断言仍通过。旧报告结论时序由新的独立验收者澄清，不由实现者修改旧验证证据。
+
+d38c8ab最终：typecheck exit0、55聚焦通过；全量1503通过/6跳过/0失败；独立Luna在精确SHA复核PASS。旧报告时序已由独立会话澄清，见LUNA-CLEANUP-FINAL.md。
