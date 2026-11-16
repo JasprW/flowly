@@ -100,7 +100,7 @@
   - 订阅 `board.changes`（`shared/rpc.ts`，输入 `{}`，事件 `{ seq, scope: "all" | "board" | "sessions" }`）。契约用普通对象而不是 `defineSubscription`，因为 0.15 宿主上该导出不存在。
   - daemon（`server/change-feed.ts`）：每个新订阅先推一次 `scope: "all"`（表示订阅已生效，客户端读一次，也补上断线期间的变化）；之后看板写入（`BoardStore.onCommit`）推 `board`，会话外洞察写入推 `sessions`；100 ms 内的多次写入合并成一个事件，作用域不同时合并为 `all`；没有订阅者时什么都不做。
   - 看板界面（`client/board-push.tsx`）：收到第一个事件后视为在线，overview、卡片详情、项目 Ideas 停止定时轮询，每个 `board`/`all` 事件让这些查询失效一次（`invalidateCardViews`）。订阅 `connecting` 时、`error`/`closed` 后按原来的间隔轮询；失败后按 5 s、30 s、60 s 重试（`client/push-retry.ts`）。
-  - Composer pill（`client/session-link.ts`，命令式，不能用 hook）：用 `client.subscribe`。在线时每个事件跑一轮，定时轮次放宽到 60 s；失败时回到原间隔，并且只由重试计时器重新订阅（轮次本身不重新订阅，否则宿主立即拒绝时会形成循环）。
+  - Composer pill（`client/session-link.ts`，命令式，不能用 hook）：用 `client.subscribe`。收到首个事件后停止定时轮次，静止超过一分钟也不做 chip 读取；仅看板/洞察推送、相关 agent 流变化或显式操作触发刷新。agent 流建立后补一次完整列表，session 离开在线列表时刷新归档引用。Ideas、Wrap up、原生 session 设置变化经同一 `sessions` 通知刷新 chip 设置，不依赖分钟校对。失败时立即补读并回到原间隔，恢复首事件后再次停止轮询；只由重试计时器重新订阅（轮次本身不重新订阅，否则宿主立即拒绝时会形成循环）。旧宿主和尚未收到首事件的 connecting 继续原轮询。
   - 不在范围内、仍按原间隔轮询：`attention.count`（原生 attention 不经看板写入）、`summaries.read-changed`（含内存中的运行状态）、`sessions.read-state`、`sessions.managed`、`resources.read-changed`、实时 agent 列表与 session 预览。
 
 ### 3.6 实体元数据（metadata）

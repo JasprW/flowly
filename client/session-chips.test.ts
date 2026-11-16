@@ -508,6 +508,39 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     stop();
   });
 
+  test("with board pushes, stream startup reconciles and archiving refreshes refs without a timed round", async () => {
+    const x = fake({ stream: true });
+    let emit!: () => void;
+    Object.assign(x.client, {
+      subscribe: (_c: unknown, _i: unknown, onEvent: () => void) => {
+        emit = onEvent;
+        return Object.assign(() => undefined, { ready: Promise.resolve() });
+      },
+    });
+    const read = x.client.rpc.getMockImplementation()!;
+    let archived = false;
+    x.client.rpc.mockImplementation(async (definition, input) => {
+      const result = await read(definition, input);
+      if (definition.name === "sessions.archived-refs" && archived) return [{ id: "a1", workspaceId: "w1" }] as never;
+      return result;
+    });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit(); // board subscription goes live before the initial agent stream list resolves
+    await vi.advanceTimersByTimeAsync(0);
+    expect(x.calls.live).toBe(2);
+    expect(x.calls.archived).toBe(1);
+    archived = true;
+    x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(x.calls.archived).toBe(2);
+    expect(x.client.addComposerPill).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "a1" }));
+    const before = { ...x.calls };
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.calls).toEqual(before);
+    stop();
+    expect(x.released()).toBe(1);
+  });
+
   test("pushed churn that cannot change a card (a title) causes no round", async () => {
     const x = fake({ stream: true });
     const stop = registerSessionChips(x.client as never, 60_000, 0, popovers);
@@ -551,6 +584,74 @@ test("native startup requests the private slim board, never the full board endpo
 });
 
 describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
+  function pushing(client: object) {
+    let emit: (() => void) | undefined;
+    let close: (() => void) | undefined;
+    const release = vi.fn();
+    const subscribe = vi.fn((_c: unknown, _i: unknown, onEvent: () => void, options: { onClosed: () => void }) => {
+      emit = onEvent;
+      close = options.onClosed;
+      return Object.assign(release, { ready: Promise.resolve() });
+    });
+    Object.assign(client, { subscribe });
+    return { emit: () => emit!(), close: () => close!(), release, subscribe };
+  }
+
+  test("connecting polls; live stops; closure resumes polling; first recovery event stops it again", async () => {
+    const { client, calls } = fakeClient();
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.board).toHaveLength(3); // no first event: still connecting
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    const online = calls.board.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls.board).toHaveLength(online);
+    push.close();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.board).toHaveLength(online + 1); // immediate fallback read
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.board).toHaveLength(online + 3);
+    expect(push.subscribe).toHaveBeenCalledTimes(2);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    const recovered = calls.board.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls.board).toHaveLength(recovered);
+    stop();
+    push.emit();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls.board).toHaveLength(recovered);
+  });
+
+  test("a settings push updates chip preferences even when the board etag is unchanged", async () => {
+    const { client } = fakeClient();
+    const { chipState } = await import("./native-chips");
+    const read = client.rpc.getMockImplementation()!;
+    let nextMoveTap = "fill";
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.native-chips") return {
+        managed: [{ agentId: "a1" }], ideas: true, autoWrapup: false, nextMoveTap,
+      } as never;
+      return read(definition, input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0, { ideas: () => null });
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("fill");
+    nextMoveTap = "copy";
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("copy");
+    const count = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
+
   test("a subscription the host refuses at once is retried on its own wait, never in a loop with the rounds", async () => {
     const { client, calls } = fakeClient();
     let subscribes = 0;
@@ -576,8 +677,8 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     stop();
   });
 
-  test("while pushes arrive the timed round runs once a minute and each push runs one round", async () => {
-    const { client, calls } = fakeClient();
+  test("live pushes stop all timed chip reads beyond a minute; each push still updates the chips", async () => {
+    const { client, calls, state } = fakeClient();
     let emit: (() => void) | null = null;
     Object.assign(client, {
       subscribe: vi.fn((_c: unknown, _i: unknown, onEvent: () => void) => {
@@ -590,15 +691,22 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     emit!();
     await vi.advanceTimersByTimeAsync(0);
     const afterLive = calls.board.length;
-    await vi.advanceTimersByTimeAsync(30_000);
+    const rpcCalls = client.rpc.mock.calls.length;
+    const listCalls = client.paseo.agents.list.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
     expect(calls.board.length).toBe(afterLive);
+    expect(client.rpc).toHaveBeenCalledTimes(rpcCalls);
+    expect(client.paseo.agents.list).toHaveBeenCalledTimes(listCalls);
+    state.boardEtag = "e2";
+    state.title = "Renamed after idle";
     emit!();
     await vi.advanceTimersByTimeAsync(0);
     expect(calls.board.length).toBe(afterLive + 1);
+    expect(calls.updates).toBe(2);
     await vi.advanceTimersByTimeAsync(59_999);
     expect(calls.board.length).toBe(afterLive + 1);
     await vi.advanceTimersByTimeAsync(1);
-    expect(calls.board.length).toBe(afterLive + 2);
+    expect(calls.board.length).toBe(afterLive + 1);
     stop();
   });
 });

@@ -145,13 +145,13 @@ export function registerSessionChips(
   const stopHidden = onMovesHidden(() => {
     if (!disposed && lastRound) syncExtras(lastRound.current, [...live.values()], lastRound.tasks);
   });
-  // This poll runs on every client, phones included, where each response is
+  // This refresh runs on every client, phones included, where each response is
   // decoded on the JS thread while the user may be typing in a composer
   // (PERFORMANCE-SPEC). So: the board is re-read only when its etag changed;
-  // live sessions come from the agent stream (listed once, then every minute to
-  // reconcile; every round only where there is no stream); and the archived scan
+  // live sessions come from the agent stream (reconciled at most once a minute
+  // on active rounds; every round only where there is no stream); and the archived scan
   // (every agent on the host, megabytes) runs after the round, never inside it,
-  // when a chipped session left the live list or once a minute (NATIVE-SESSION-SPEC §8).
+  // when a session left the live list or after a minute on an active round. Live board pushes stop timed rounds.
   let board: LinkBoard | null = null,
     etag = "",
     // Only what the Task chip needs of an archived session.
@@ -170,10 +170,8 @@ export function registerSessionChips(
     stopStream: (() => void) | null = null,
     releaseStream: (() => Promise<void>) | null = null;
   const opening = new Set<string>();
-  // Paseo 0.16 pushes "the board changed" (PASEO-0.16-SPEC §3.5): while they arrive, a round runs per change and the
-  // timed round only every `pushedEvery` (live list and archived scan keep their minute). A host without
-  // subscriptions, a failed or closed subscription, and the wait for its first event keep the timed rounds.
-  const pushedEvery = 60_000;
+  // Paseo 0.16 pushes "the board changed" (PASEO-0.16-SPEC §3.5): once live, only changes trigger rounds.
+  // A host without subscriptions, a failed/closed subscription, and the wait for its first event keep polling.
   let pushLive = false,
     pushAttempt = 0,
     pushHandle: (() => void) | null = null,
@@ -206,6 +204,8 @@ export function registerSessionChips(
             pushLive = true;
             pushAttempt = 0;
           }
+          // Settings changes use the same feed even when the board's etag is unchanged.
+          chipInfoAt = -Infinity;
           refreshNow();
         },
         { onClosed: fail },
@@ -251,6 +251,8 @@ export function registerSessionChips(
       if (disposed) return;
       const { changed, before, after } = applyLiveUpdate(live, update);
       if (!changed || !relevantChange(before, after)) return;
+      // Without a timed round, archiving must refresh the references from this event itself.
+      if (before && !after) archivedAt = -Infinity;
       clearTimeout(nudge);
       nudge = setTimeout(refreshNow, nudgeAfter);
     });
@@ -265,6 +267,7 @@ export function registerSessionChips(
         if (disposed) return void releaseStream().catch(() => undefined);
         streamReady = true;
         relist = true;
+        if (pushLive) refreshNow();
       })
       .catch(() => undefined);
   }
@@ -494,7 +497,7 @@ export function registerSessionChips(
       etag = boardResult.value.etag;
       if (liveResult.value) reconcileLive(liveResult.value);
       const liveAgents = [...live.values()];
-      // Managed sessions and the Ideas switch: when the board changed, else once a minute (a setting change alone).
+      // Managed sessions and preferences: board/settings pushes, or at most once a minute on other active rounds.
       // A session in a card's workspace that is not known as managed yet may just have been prepared: check sooner.
       const unknown =
         !!chipInfo &&
@@ -543,10 +546,10 @@ export function registerSessionChips(
         if (again) {
           again = false;
           void refresh();
-        } else
+        } else if (!pushLive)
           timer = setTimeout(() => {
             void refresh();
-          }, pushLive ? Math.max(interval, pushedEvery) : interval);
+          }, interval);
       }
     }
   }

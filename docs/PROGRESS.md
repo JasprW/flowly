@@ -1370,3 +1370,12 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 最终363073c覆盖绑定读取窗口，确定性回归先红后绿；typecheck与全量1501通过/6skip，独立Luna 53聚焦通过并放行。客户端产品源码未改，既有手机与旧宿主证据不冒充新取样。
 
 - 删除清理补轮d38c8ab：在drain前重新dirty，冷/热删除回归先红后绿；55聚焦、typecheck、全量1503/6skip与独立Luna通过。旧报告时序已独立注释；按用户决定继续等CodeRabbit额度。
+
+
+## 2026-11-16 Paseo 0.16 在线 chip 零周期读取返工
+
+- 自动验收发现 PR #115 保留的 60 s chip 校对违背「屏幕静止时没有周期性读取」；§3.7 的暂缓不豁免该项。接受意见，保留历史 51→1 手机数据并更正其解释。
+- 先增强回归：静止 180 s 原实现读取 2→5，exit 1；在线时不再安排定时轮次后通过。首事件前、旧宿主、订阅拒绝/关闭继续轮询；恢复首事件后再次停止。
+- 去除分钟触发后，Ideas/Wrap up/native-session 设置通过原有 sessions 通知触发刷新；agent 流建立补一次完整列表、归档事件使归档引用过期。无新增轮询、协议或依赖。
+- 变更后 typecheck exit 0，5 文件 58 聚焦通过；全量 exit 0，165 文件通过/1 跳过，1506 测试通过/6 跳过。独立复核、提交与交付信息见 verification/paseo016-ga-2026-11-16/IDLE-READS-REWORK.md。
+- 本轮 AndroMeld control socket 不存在，adb 无设备；没有新手机或冷启动样本，旧数据保持历史属性。不新增用户操作、设置、引导、遥测字段或版本号。

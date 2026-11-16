@@ -26,6 +26,10 @@
 
 所有临时 `P16_COLD_PROBE` 打点、故障开关已移除，performance.json 恢复本轮前的 `log:false`。尝试通过安装 API 临时切换目录被宿主 `already configured` 拒绝，没有移除或重建用户的插件配置。
 
+## 自动验收返工更正
+
+此前把一分钟 chip 校对排除在零周期读取目标之外的解释不成立；§3.7 暂缓不取消 §3.5 的验收。下列 51→1 是返工前的真实历史测量，证明约98%减少，不能证明零周期读取。返工移除在线分钟轮次，证据另见 `IDLE-READS-REWORK.md`，不把旧手机样本冒充新代码测量。
+
 ## 手机收益
 
 - 设备：Pixel 9 Pro，1280×2856，Paseo Android 0.16.0。电量 100%，温度 33.9–34.9°C。不是旧文档中的 Samsung/1080×2340。AndroMeld control socket 不存在，按项目约定使用 adb；没有发送 session 消息、操作其他人的 host、系统设置或其他 app。
@@ -38,7 +42,7 @@
 | chip 的 `board.read.same` | 10 | 10 | 1 | 0 |
 | `chips.round` | 10 | 10 | 1 | 0 |
 
-两个回退窗口共 51 次目标读取，两个正常窗口共 1 次，减少约 98%；正常窗口中该 1 次是既有的一分钟校对。`gfxinfo` 稳定窗口 p50/p90/p99 均约 6/8/11 ms，Slow UI thread 均为 2：可测收益是减少读取，没有声称帧率改善。§3.5 明确保留的一分钟 chip 校对、attention、summary、read-state、resources 和 agent 流校对不属于“停止轮询”的目标；§3.7 仍按用户决定暂缓。
+两个回退窗口共 51 次目标读取，两个正常窗口共 1 次，减少约 98%；正常窗口中该 1 次是既有的一分钟校对。`gfxinfo` 稳定窗口 p50/p90/p99 均约 6/8/11 ms，Slow UI thread 均为 2：可测收益是减少读取，没有声称帧率改善。attention、summary、read-state、resources 和实时 agent 列表仍属规格明列的其他读取；一分钟 chip 校对则不满足本卡目标，已由返工删除。§3.7 仍按用户决定暂缓。
 
 ## 冷启动
 
