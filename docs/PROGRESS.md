@@ -1288,3 +1288,14 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 改动：外部会话分支改走 `SessionInsightService.turnEnded`（先判断 `isOutsideCandidate` 和开关，再读 timeline）；workflow 钩子改走 `WorkflowInsightsService.turnEnded`（先判断未归档卡片 workspace、workflow insights 开关、非后台 agent；有 `parentAgentId` 的先查标签，summarizer 或已删除则跳过）。NATIVE-SESSION-SPEC §12.2、WORKFLOW-INSIGHTS-SPEC §3.1 已同步。
 - 用户自己在卡片 workspace 里建的子 session（无 summarizer 标签）仍照常采集命令。
 - 测试：`server/session-insights.test.ts`、`server/workflow-insights.test.ts` 各加一条，断言不合格的会话不调用 `timeline.refetch`、合格会话行为不变。
+
+
+## 2026-11-16 Agent 工具输出精简（issue #109）
+
+- 先更新 [输出契约](AGENT-OUTPUT-SPEC.md)：MCP/CLI 默认 compact，`responseDetail: "full"` / `--full` 保留完整输出与 Jira `ticket` 兼容。输出选项不参与写入回执摘要，idea 的正文 `detail` 保留。
+- 写后只生成续写信息，不再构造完整上下文、session 列表、记忆或外部摘要；Workpad 返回带 ID 的规范化验收清单。CLI 可用 `--save-request` 保存写后的请求，拒绝、空续写和本地保存失败保留重试快照，并区分已经提交的写入。
+- get_task 去掉管理字段、false artifact 标记；先过滤生命周期/next-move 事件，再取最近 10 条有效活动。保留范围、护栏、图片、有效操作 ID、未读语义。
+- PASS：实现者聚焦回归 178 通过/5 跳过；源码提交 `2c96ec6dd7b2c8e8bc411e67ef3fa1cfb91cdd12` 的 typecheck exit 0，全量测试 exit 0，1442 通过/6 跳过。用户指定的 GPT Luna 独立验收同样通过，无阻断审阅项，见 [独立报告](verification/issue-109-luna.md)。原指定 Haiku 因账户额度限制在启动时失败，未执行检查；用户授权改用 Luna。
+- 固定 fixture 的 JSON 字符数：读取 29013 → 4537（-84.4%），写入 28244 → 913（-96.8%）。不等同模型 token 或耗时收益。旧完整输出回归改为显式请求 full；新增默认 compact 的真实 loopback MCP/HTTP/CLI 串联与恢复测试，未弱化原有业务断言。
+- 首轮失败保留说明：输出参数最初与 idea.detail 重名，已改为 responseDetail；两个故障注入测试起初挂错 store 方法；备份测试文件曾被 Vitest 误发现。修正后重跑完整聚焦集合通过。独立 worktree 初始未带自己的索引，后仅重建索引，工作文件不变且与验收 commit 一致。
+- UNRUN：安装/重载用户正在使用的插件、桌面/手机 UI；本次为工具输出契约，不新增 UI 能力、开关或计数动作，无需 onboarding/tip/telemetry/What's new 改动。共享工作区的其他改动不纳入提交。
