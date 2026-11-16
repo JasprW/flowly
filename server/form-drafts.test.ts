@@ -38,7 +38,7 @@ test("keys separate projects, cards and prefill sources", () => {
 
 test("a saved draft reads back with its images, per key", async () => {
   const { drafts } = await setup();
-  expect(await drafts.read("task:p:plain")).toEqual({ draft: null });
+  expect(await drafts.read("task:p:plain")).toEqual({ revision: 0, draft: null });
   const saved = await drafts.save({
     key: "task:p:plain",
     baseRevision: 0,
@@ -123,4 +123,30 @@ test("a failed write leaves no temporary file and keeps the previous draft", asy
   }
   expect((await readdir(drafts.directory)).filter((f) => f.includes(".tmp"))).toEqual([]);
   expect((await drafts.read("task:p:plain")).draft).toMatchObject({ revision: 1, fields: { title: "kept" } });
+});
+
+test("revisions never repeat after a clear, so a stale window cannot save over a newer draft", async () => {
+  const { drafts } = await setup();
+  const key = "session:t:plain";
+  await drafts.save({ key, baseRevision: 0, fields: { prompt: "old" }, images: [] }); // window A holds revision 1
+  await drafts.clear(key);
+  expect(await drafts.read(key)).toEqual({ revision: 1, draft: null });
+  // Window B starts fresh from what it read.
+  expect((await drafts.save({ key, baseRevision: 1, fields: { prompt: "new" }, images: [] })).revision).toBe(2);
+  // Window A, still at revision 1, is refused.
+  await expect(drafts.save({ key, baseRevision: 1, fields: { prompt: "stale" }, images: [] })).rejects.toThrow(draftConflictMessage);
+  await expect(drafts.save({ key, baseRevision: 0, fields: { prompt: "stale" }, images: [] })).rejects.toThrow(draftConflictMessage);
+  expect((await drafts.read(key)).draft?.fields.prompt).toBe("new");
+});
+
+test("a clear naming an older revision keeps the newer draft", async () => {
+  const { drafts } = await setup();
+  const key = "task:p:plain";
+  await drafts.save({ key, baseRevision: 0, fields: { title: "A" }, images: [{ id: "a", name: "a.png", mimeType: "image/png", data: png }] });
+  await drafts.save({ key, baseRevision: 1, fields: { title: "B" }, images: [{ id: "a", name: "a.png", mimeType: "image/png" }] });
+  expect(await drafts.clear(key, 1)).toEqual({ ok: false });
+  expect((await drafts.read(key)).draft).toMatchObject({ revision: 2, fields: { title: "B" } });
+  expect(await readdir(drafts.imageDirectory)).toHaveLength(1);
+  expect(await drafts.clear(key, 2)).toEqual({ ok: true });
+  expect((await drafts.read(key)).draft).toBeNull();
 });

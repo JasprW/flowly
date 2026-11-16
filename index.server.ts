@@ -277,7 +277,7 @@ export default function contribute(host: PluginServerContext) {
   void formDrafts.prune().catch((e) => logFailure("Flowly form draft cleanup failed:", e));
   server.handle(rpc.readFormDraft, (input) => formDrafts.read(input.key));
   server.handle(rpc.saveFormDraft, (input) => formDrafts.save(input));
-  server.handle(rpc.clearFormDraft, (input) => formDrafts.clear(input.key));
+  server.handle(rpc.clearFormDraft, (input) => formDrafts.clear(input.key, input.revision));
   const images = new SessionImageService(store);
   server.handle(rpc.sessionImage, (input, { paseo }) => images.read(input, paseo));
   const tails = new SessionTailService(store);

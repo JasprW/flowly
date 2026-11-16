@@ -20,18 +20,63 @@
     "detail": ""
   },
   {
-    "name": "desktop sessionRound",
-    "ok": false,
-    "detail": "TimeoutError: locator.click: Timeout 8000ms exceeded."
+    "name": "desktop New session: instruction restored after Esc",
+    "ok": true,
+    "detail": ""
   },
   {
-    "name": "compact taskRound",
-    "ok": false,
-    "detail": "Error: page.goto: net::ERR_TIMED_OUT at https://app.paseo.sh/"
+    "name": "desktop New session: image restored after Esc",
+    "ok": true,
+    "detail": "1 thumbnail(s)"
   },
   {
-    "name": "compact sessionRound",
-    "ok": false,
-    "detail": "TimeoutError: page.goto: Timeout 45000ms exceeded."
+    "name": "desktop New session: restored in a fresh browser context",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "desktop New session: cleared probe stays cleared",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: title restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: description restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: restored in a fresh browser context",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: cleared probe stays cleared",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New session: instruction restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New session: image restored after Esc",
+    "ok": true,
+    "detail": "1 thumbnail(s)"
+  },
+  {
+    "name": "compact New session: restored in a fresh browser context",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New session: cleared probe stays cleared",
+    "ok": true,
+    "detail": ""
   }
 ]

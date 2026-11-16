@@ -8,8 +8,10 @@ const segment = "[A-Za-z0-9][A-Za-z0-9_.-]{0,199}";
 export const formDraftKeyPattern = new RegExp(`^(task|session):${segment}:(plain|(idea|insight|follow):${segment})$`);
 export const formDraftKeySchema = z.string().max(500).regex(formDraftKeyPattern, "Invalid draft key.");
 
+/** Longest text a saved draft field holds; a longer value is kept only in the open form. */
+export const formDraftTextLimit = 20000;
 export const formDraftValueSchema = z.union([
-  z.string().max(20000),
+  z.string().max(formDraftTextLimit),
   z.boolean(),
   z.array(z.string().max(2000)).max(50),
 ]);
@@ -37,6 +39,8 @@ export const storedDraftSchema = z.object({
 export const formDraftStateSchema = z.object({
   version: z.literal(1),
   drafts: z.record(formDraftKeySchema, storedDraftSchema),
+  /** Last revision of each cleared draft, so revisions never repeat and a stale window cannot save over a newer draft. */
+  cleared: z.record(formDraftKeySchema, z.number().int().positive()).optional(),
 });
 export type FormDraftState = z.infer<typeof formDraftStateSchema>;
 export type StoredDraft = z.infer<typeof storedDraftSchema>;
@@ -51,6 +55,8 @@ export const draftImageInputSchema = z.strictObject({
 export type DraftImageInput = z.infer<typeof draftImageInputSchema>;
 
 export const readDraftOutput = z.object({
+  /** The revision the next save builds on (0 when the key has never been saved). */
+  revision: z.number().int().min(0),
   draft: z
     .object({
       revision: z.number().int().positive(),

@@ -666,7 +666,8 @@ export const saveFormDraft = defineRpc({
 });
 export const clearFormDraft = defineRpc({
   name: "form-drafts.clear",
-  input: z.strictObject({ key: formDraftKeySchema }),
+  /** `revision`: the draft is cleared only while it is still that revision. */
+  input: z.strictObject({ key: formDraftKeySchema, revision: z.number().int().min(0).optional() }),
   output: z.object({ ok: z.boolean() }),
 });
 export const sessionImage = defineRpc({

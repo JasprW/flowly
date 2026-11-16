@@ -19,9 +19,15 @@ writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`); };
 
-// Wide layouts show a dialog; the compact layout shows the form as a sheet without the dialog role.
-const dialog = (s) => s.page.locator('[role="dialog"]:visible, body').first();
+// The open form only: the innermost element holding a form field and the form's Cancel button
+// (a dialog on wide layouts, a sheet without the dialog role on compact). Never the page or the drawer behind it.
+const formField = '[aria-label="Title"], [aria-label="Instruction"]';
+const dialog = (s) => s.page.locator('div').filter({ has: s.page.locator(formField) }).filter({ has: s.page.getByRole('button', { name: 'Cancel', exact: true }) }).last();
 const field = (s, label) => dialog(s).getByLabel(label, { exact: true }).first();
+// The probe never writes over a draft someone else left: it stops the round instead.
+async function refuseIfDraft(s, labels) {
+  for (const label of labels) if ((await field(s, label).inputValue()) !== '') throw new Error(`existing ${label} draft; refusing to overwrite it`);
+}
 async function closeEsc(s) {
   await s.page.keyboard.press('Escape');
   await s.page.getByLabel('Title', { exact: true }).or(s.page.getByLabel('Instruction', { exact: true })).first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => undefined);
@@ -51,6 +57,7 @@ async function taskRound(browser, w, h, tag) {
   let s = await openAt(browser, w, h);
   try {
     await openNewTask(s);
+    await refuseIfDraft(s, ['Title', 'Description']);
     await field(s, 'Title').fill(`${stamp} ${tag}`);
     await field(s, 'Description').fill(`desc ${tag}`);
     await s.page.waitForTimeout(1200);
@@ -81,6 +88,7 @@ async function sessionRound(browser, w, h, tag) {
   try {
     await openCard(s, card);
     await openNewSession(s);
+    await refuseIfDraft(s, ['Instruction']);
     await field(s, 'Instruction').fill(`${stamp} session ${tag}`);
     const chooser = s.page.waitForEvent('filechooser', { timeout: 8000 }).catch(() => null);
     await dialog(s).getByRole('button', { name: 'Add images' }).click({ timeout: 8000 }).catch(() => undefined);

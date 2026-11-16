@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import * as rpc from "../shared/rpc";
 import { draftConflictMessage, type ReadDraft } from "../shared/form-drafts";
-import { DraftSaver, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
+import { DraftSaver, fitDraftFields, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
 import type { Attachment } from "./web-images";
 import { Button, Notice, message, space } from "./ui";
 import { t } from "../shared/i18n";
@@ -40,6 +40,12 @@ export function useFormDraft(key: string | null, active = true) {
   readRef.current = read;
   const saveRef = useRef(save);
   saveRef.current = save;
+  // What the form last reported, also while its load failed (nothing is saved then).
+  const typed = useRef<DraftSnapshot | null>(null);
+  // What the form showed when it mounted, to tell the user's changes from defaults.
+  const base = useRef<DraftSnapshot | null>(null);
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const saver = useMemo(
     // Bound to this key: a save still pending when the key changes lands under its own key.
     () => new DraftSaver((input) => saveRef.current({ key: key!, ...input }), setSaveState),
@@ -48,6 +54,10 @@ export function useFormDraft(key: string | null, active = true) {
   );
   const load = useCallback(() => {
     if (!key) return setStatus("off");
+    // Retry after a failed load keeps what was typed meanwhile.
+    const kept = statusRef.current === "failed" ? { typed: typed.current, base: base.current } : null;
+    typed.current = null;
+    base.current = null;
     setStatus("loading");
     setLoadError("");
     saver.disable();
@@ -55,8 +65,13 @@ export function useFormDraft(key: string | null, active = true) {
     readRef.current({ key })
       .then((result) => {
         if (!live || keyRef.current !== key) return;
-        saver.loaded(result.draft?.revision ?? 0, result.draft?.images.map((i) => i.id) || []);
-        setDraft(result.draft);
+        saver.loaded(result.revision, result.draft?.images.map((i) => i.id) || []);
+        const merged = kept ? mergeAfterFailedLoad(result.draft, kept.typed, kept.base) : null;
+        if (merged) {
+          setDraft({ revision: result.revision || 1, fields: merged.fields, images: merged.images.map((i) => ({ ...i })) });
+          // Saved like any change; the merge holds everything the loaded draft had.
+          saver.change({ fields: fitDraftFields(merged.fields), images: merged.images });
+        } else setDraft(result.draft);
         setGeneration((g) => g + 1);
         setStatus("ready");
       })
@@ -92,7 +107,14 @@ export function useFormDraft(key: string | null, active = true) {
     loadError,
     saveState,
     retryLoad: load,
-    change: (snapshot: DraftSnapshot) => saver.change(snapshot),
+    /** The form's content when it mounted. */
+    started: (snapshot: DraftSnapshot) => {
+      base.current = snapshot;
+    },
+    change: (snapshot: DraftSnapshot) => {
+      typed.current = snapshot;
+      saver.change({ ...snapshot, fields: fitDraftFields(snapshot.fields) });
+    },
     flush: () => saver.flush(),
     discard: () => saver.discard(),
     retrySave: async () => {
@@ -114,7 +136,7 @@ export function useFormDraft(key: string | null, active = true) {
         if (key && operationId) unsavedOperations.set(key, operationId);
         return Promise.resolve(true);
       }
-      saver.change(snapshot);
+      saver.change({ ...snapshot, fields: fitDraftFields(snapshot.fields) });
       return saver.flush();
     },
     /** The create identity of an earlier attempt whose draft could not be saved. */
@@ -127,7 +149,8 @@ export function useFormDraft(key: string | null, active = true) {
       unsavedOperations.delete(key);
       // A draft that could not be read is never deleted unseen.
       if (status !== "ready") return;
-      await clearRpc({ key });
+      // Only the revision this form saw: a newer draft from another window is kept.
+      await clearRpc({ key, revision: saver.currentRevision });
     },
   };
 }
@@ -160,6 +183,7 @@ export function useDraftChanges(draft: FormDraft, ready: boolean, fields: DraftS
     const now = `${fieldsKey}\u0000${imagesKey}`;
     if (last.current === null) {
       last.current = now;
+      draft.started({ fields: latest.current.fields, images: snapshotImages(latest.current.images) });
       return;
     }
     if (last.current === now) return;

@@ -41,3 +41,9 @@ Three runs. No assertion failed in any of them. Every failure was a navigation o
 Taken together, all 16 checks passed at `847afb3`. No single run passed all 16, so the clean single run above is still the one at `089d115`. `ui/results.json` holds the last run's result.
 
 After the runs, a read-only look at the daemon's `form-drafts.json` shows two entries left: `task:<flowly project>:plain` and `session:<this card>:plain`. Both have empty text and no images. No probe text or images are left.
+
+## Re-run after CodeRabbit's second round (plugin reloaded on the working tree that became the next commit)
+
+- The probe is now scoped to the open form only: the innermost element holding the form field and its Cancel button, never the page.
+- It refuses to run a round when the form already has a draft.
+- One run: 16 passed, 0 failed, exit 0 (`ui/run-review2.log`). Desktop and compact; New task and New session; image restore included.

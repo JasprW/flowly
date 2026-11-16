@@ -604,7 +604,7 @@ function TaskFormBody({
       externals: externals.length ? JSON.stringify(externals) : "",
       operationId,
     };
-  useDraftChanges(draft, !task && draft.status === "ready", draftFields, images.attachments);
+  useDraftChanges(draft, !task && draft.status !== "loading", draftFields, images.attachments);
   const contextRead = useRpc(rpc.taskContext),
     prepare = useRpc(rpc.prepareSession),
     paseo = usePaseo();

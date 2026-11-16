@@ -86,7 +86,7 @@ function SessionForm({
   const attachments = useImageAttachments(maxImages, undefined, restoredImages);
   useDraftChanges(
     draft,
-    draft.status === "ready",
+    draft.status !== "loading",
     { title: newTitle, prompt: newPrompt, provider, model: choice.model, mode: choice.mode, thinking: choice.thinking },
     attachments.attachments,
   );

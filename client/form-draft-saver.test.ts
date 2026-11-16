@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { DraftSaver } from "./form-draft-saver";
+import { DraftSaver, fitDraftFields, mergeAfterFailedLoad } from "./form-draft-saver";
 import { draftConflictMessage } from "../shared/form-drafts";
 
 beforeEach(() => vi.useFakeTimers());
@@ -93,4 +93,35 @@ test("a draft that failed to load is never saved over", async () => {
   await vi.advanceTimersByTimeAsync(1000);
   expect(await saver.flush()).toBe(true);
   expect(calls).toHaveLength(0);
+});
+
+test("the saver reports the revision it last loaded or saved", async () => {
+  const { saver } = setup();
+  saver.loaded(0, []);
+  saver.change({ fields: { title: "a" }, images: [] });
+  await saver.flush();
+  expect(saver.currentRevision).toBe(1);
+});
+
+test("text longer than a draft holds is saved empty, so the draft save never blocks a create", () => {
+  const long = "x".repeat(20001);
+  expect(fitDraftFields({ prompt: long, title: "kept", startAgent: true, tags: ["a"] })).toEqual({ prompt: "", title: "kept", startAgent: true, tags: ["a"] });
+});
+
+test("Retry after a failed load keeps what was typed and what was saved", () => {
+  const saved = { fields: { title: "saved title", prompt: "", priority: "high", status: "design", tags: ["a"], operationId: "card-saved" }, images: [image("s")] };
+  // The form after the failed load started from defaults…
+  const base = { fields: { title: "", prompt: "", priority: "normal", status: "todo", tags: [], operationId: "card-typed" }, images: [] };
+  // …and the user then typed a title and prompt, raised the priority and added a tag and an image.
+  const typed = { fields: { title: "typed title", prompt: "typed prompt", priority: "urgent", status: "todo", tags: ["b"], operationId: "card-typed" }, images: [image("t")] };
+  expect(mergeAfterFailedLoad(saved, typed, base)).toEqual({
+    // Untouched defaults (status) never override the saved choice; the saved operationId stays.
+    fields: { title: "saved title\n\ntyped title", prompt: "typed prompt", priority: "urgent", status: "design", tags: ["a", "b"], operationId: "card-saved" },
+    images: [image("s"), image("t")],
+  });
+  // Nothing changed after the failed load: the loaded draft is used as is.
+  expect(mergeAfterFailedLoad(saved, base, base)).toBeNull();
+  expect(mergeAfterFailedLoad(saved, null, base)).toBeNull();
+  // No saved draft: what was typed becomes the draft.
+  expect(mergeAfterFailedLoad(null, typed, base)).toEqual(typed);
 });

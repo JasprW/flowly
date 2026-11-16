@@ -55,6 +55,12 @@ shows a prefilled form's draft and the reverse.
   empty form. Creating still works, and a successful create does not clear the
   unread draft. New task keeps its `operationId` in client memory for that draft
   key instead, so a retry after reopening (same client) still reuses it.
+- **Retry** after a failed load keeps what was typed meanwhile. Fields the user
+  changed after the failed load are combined with the loaded draft: changed
+  choices win, title/description/instruction written on both sides are kept as
+  both (saved text first), the saved `operationId` is kept, images are joined.
+- A text value longer than 20000 characters is saved as empty; the open form keeps
+  it and creating uses it, but it is not kept across a close.
 - A force-quit may lose up to the last ~400 ms of typing.
 
 ## 4. Daemon storage and RPC
@@ -64,7 +70,9 @@ shows a prefilled form's draft and the reverse.
 invalid file is preserved and reported, never reset. Image files are written
 before the JSON that references them and removed after it no longer does.
 
-- `form-drafts.read({ key })` → `{ draft: { revision, fields, images[{ id, name, mimeType, data }] } | null }`.
+- `form-drafts.read({ key })` → `{ revision, draft: { revision, fields, images[{ id, name, mimeType, data }] } | null }`.
+  `revision` is what the next save must name: the draft's, else the last cleared
+  revision of that key (revisions never repeat), else 0.
   A draft whose project or card is gone or archived reads as `null` and is removed.
 - `form-drafts.save({ key, baseRevision, fields, images[{ id, name, mimeType, data? }] })` →
   `{ revision }`. `baseRevision` is the revision the client last read or saved (0
@@ -72,7 +80,9 @@ before the JSON that references them and removed after it no longer does.
   in another window.`: an older writer never overwrites a newer draft. An image is
   sent with `data` once; later saves reference it by `id`. The project (task draft)
   or card (session draft) must exist and not be archived.
-- `form-drafts.clear({ key })` → `{ ok }`. Removes the draft and its images.
+- `form-drafts.clear({ key, revision? })` → `{ ok }`. Removes the draft and its
+  images and remembers its revision. With `revision`, a draft that has since been
+  saved again (another window) is kept and `ok` is false.
 
 Field values are strings, booleans or string lists (bounded); the client validates
 what it restores and ignores what it does not understand.

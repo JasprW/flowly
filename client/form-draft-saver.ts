@@ -1,4 +1,4 @@
-import { draftConflictMessage, type DraftImageInput, type FormDraftFields } from "../shared/form-drafts";
+import { draftConflictMessage, formDraftTextLimit, type DraftImageInput, type FormDraftFields } from "../shared/form-drafts";
 
 /** What a form saves: its fields and the images it has read in. */
 export type DraftSnapshot = {
@@ -45,6 +45,10 @@ export class DraftSaver {
   }
   get dirty() {
     return !!this.pending;
+  }
+  /** The revision of the last successful load or save. */
+  get currentRevision() {
+    return this.revision;
   }
 
   change(snapshot: DraftSnapshot) {
@@ -119,4 +123,54 @@ export class DraftSaver {
     this.state = next;
     this.onState(next);
   }
+}
+
+/**
+ * Text longer than a draft can hold is saved as empty: the open form keeps it
+ * and creating still uses it, but it is not kept across a close.
+ */
+export function fitDraftFields(fields: FormDraftFields): FormDraftFields {
+  const out: FormDraftFields = {};
+  for (const [name, value] of Object.entries(fields)) out[name] = typeof value === "string" && value.length > formDraftTextLimit ? "" : value;
+  return out;
+}
+
+/** Free text both sides may have written; other strings are choices, where the typed one wins. */
+const joinText = new Set(["title", "description", "prompt"]);
+const keepSaved = new Set(["operationId"]);
+
+/**
+ * After Retry on a failed load: the loaded draft combined with what the user
+ * changed meanwhile (`typed` compared with the form's starting point `base`),
+ * so neither is lost. Changed choices win; title, description and instruction
+ * both sides wrote differently are kept as both (saved first, then typed); the
+ * saved operationId is kept; images are joined. Returns null when nothing was
+ * changed (the loaded draft is used as is).
+ */
+export function mergeAfterFailedLoad(
+  loaded: { fields: FormDraftFields; images: DraftSnapshot["images"] } | null,
+  typed: DraftSnapshot | null,
+  base: DraftSnapshot | null,
+): DraftSnapshot | null {
+  if (!typed) return null;
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const changed = Object.keys(typed.fields).filter((name) => !same(typed.fields[name], base?.fields[name]));
+  const baseImages = new Set((base?.images || []).map((i) => i.id));
+  const added = typed.images.filter((i) => !baseImages.has(i.id));
+  if (!changed.length && !added.length) return null;
+  if (!loaded) return typed;
+  const fields: FormDraftFields = { ...loaded.fields };
+  for (const name of changed) {
+    const value = typed.fields[name];
+    const before = loaded.fields[name];
+    if (typeof value === "string") {
+      // The saved create identity may already name a created card: it always wins.
+      if (keepSaved.has(name) && typeof before === "string" && before) continue;
+      fields[name] = joinText.has(name) && typeof before === "string" && before.trim() && value.trim() && before !== value ? `${before}\n\n${value}` : value;
+    } else if (Array.isArray(value)) {
+      fields[name] = Array.isArray(before) ? [...before, ...value.filter((v) => !before.includes(v))] : value;
+    } else fields[name] = value;
+  }
+  const ids = new Set(loaded.images.map((i) => i.id));
+  return { fields, images: [...loaded.images, ...added.filter((i) => !ids.has(i.id))] };
 }

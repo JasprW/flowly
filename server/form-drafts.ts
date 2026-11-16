@@ -17,6 +17,8 @@ import {
 
 const extension = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" } as const;
 const empty = (): FormDraftState => ({ version: 1, drafts: {} });
+/** The revision the next save must name: the live draft's, else the last cleared one's, else 0. */
+const revisionOf = (state: FormDraftState, key: string) => state.drafts[key]?.revision ?? state.cleared?.[key] ?? 0;
 
 /** Whether the draft's project (New task) or card (New session) is still live. */
 function scopeLive(board: Board, key: string) {
@@ -80,16 +82,17 @@ export class FormDraftStore {
     await Promise.all(files.map((file) => rm(join(this.imageDirectory, file), { force: true })));
   }
 
-  read(key: string): Promise<{ draft: ReadDraft }> {
+  read(key: string): Promise<{ revision: number; draft: ReadDraft }> {
     return this.serialize(async () => {
       const state = await this.load();
       const draft = state.drafts[key];
-      if (!draft) return { draft: null };
+      if (!draft) return { revision: revisionOf(state, key), draft: null };
       if (!scopeLive(await this.board.read(), key)) {
         delete state.drafts[key];
+        if (state.cleared) delete state.cleared[key];
         await this.write(state);
         await this.removeFiles(draft.images.map((i) => i.file));
-        return { draft: null };
+        return { revision: 0, draft: null };
       }
       const images = [];
       for (const image of draft.images) {
@@ -100,7 +103,7 @@ export class FormDraftStore {
           // A missing file drops only that image; the rest of the draft is kept.
         }
       }
-      return { draft: { revision: draft.revision, fields: draft.fields, images } };
+      return { revision: draft.revision, draft: { revision: draft.revision, fields: draft.fields, images } };
     });
   }
 
@@ -108,7 +111,7 @@ export class FormDraftStore {
     return this.serialize(async () => {
       const state = await this.load();
       const current = state.drafts[input.key];
-      if ((current?.revision ?? 0) !== input.baseRevision) throw new Error(draftConflictMessage);
+      if (revisionOf(state, input.key) !== input.baseRevision) throw new Error(draftConflictMessage);
       if (!scopeLive(await this.board.read(), input.key)) throw new Error("Project or task is unavailable or archived.");
       const known = new Map((current?.images || []).map((i) => [i.id, i]));
       const written: string[] = [];
@@ -127,8 +130,9 @@ export class FormDraftStore {
           written.push(file);
           images.push({ id: image.id, name: image.name, mimeType: image.mimeType, file });
         }
-        const revision = (current?.revision ?? 0) + 1;
+        const revision = revisionOf(state, input.key) + 1;
         state.drafts[input.key] = { revision, updatedAt: new Date(this.clock()).toISOString(), fields: input.fields, images };
+        if (state.cleared) delete state.cleared[input.key];
         await this.write(state);
       } catch (error) {
         // Not committed: the new files are referenced by nothing. A failed cleanup must not hide the save error.
@@ -144,12 +148,15 @@ export class FormDraftStore {
     });
   }
 
-  clear(key: string) {
+  /** With `revision`, only that revision is cleared: a newer draft from another window is kept (`ok: false`). */
+  clear(key: string, revision?: number) {
     return this.serialize(async () => {
       const state = await this.load();
       const draft = state.drafts[key];
       if (!draft) return { ok: true };
+      if (revision !== undefined && draft.revision !== revision) return { ok: false };
       delete state.drafts[key];
+      (state.cleared ??= {})[key] = draft.revision;
       await this.write(state);
       await this.removeFiles(draft.images.map((i) => i.file));
       return { ok: true };
@@ -167,6 +174,11 @@ export class FormDraftStore {
         if (!scopeLive(board, key)) {
           files.push(...draft.images.map((i) => i.file));
           delete state.drafts[key];
+          removed++;
+        }
+      for (const key of Object.keys(state.cleared || {}))
+        if (!scopeLive(board, key)) {
+          delete state.cleared![key];
           removed++;
         }
       if (!removed) return 0;
