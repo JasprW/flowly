@@ -162,6 +162,7 @@ export function registerSessionChips(
     scanning = false;
   const archivedEvery = 60_000;
   const liveEvery = 60_000;
+  let archiveRetry: ReturnType<typeof setTimeout> | undefined;
   // A pushed change of one session asks for a round soon; the wait gathers the updates of one transition.
   const nudgeAfter = 150;
   const live = new Map<string, PaseoAgent>();
@@ -461,6 +462,8 @@ export function registerSessionChips(
     );
   /** Every agent on the host, archived ones included: megabytes, so never inside a round (see above). */
   async function scanArchived() {
+    clearTimeout(archiveRetry);
+    archiveRetry = undefined;
     const start = perfStart();
     const removals = archiveRemovals;
     try {
@@ -474,7 +477,10 @@ export function registerSessionChips(
       if (board) syncTaskChips(board, [...live.values(), ...archived.filter((a) => !live.has(a.id))], taskMap(board));
     } catch {
       // Try again soon, not every round.
-      if (removals === archiveRemovals) archivedAt = Date.now() - archivedEvery + 15_000;
+      if (removals === archiveRemovals) {
+        archivedAt = Date.now() - archivedEvery + 15_000;
+        if (!disposed) archiveRetry = setTimeout(refreshNow, 15_000);
+      }
     } finally {
       scanning = false;
       if (!disposed && removals !== archiveRemovals) refreshNow();
@@ -522,7 +528,10 @@ export function registerSessionChips(
         chipInfo = info
           ? { managed: new Set(info.managed.map((m) => m.agentId)), ideas: info.ideas, autoWrapup: info.autoWrapup, nextMoveTap: info.nextMoveTap, outside: info.outside ?? { enabled: false, progress: false, nextMoves: false, ideas: false } }
           : chipInfo;
-        if (settingsGen === chipInfoGen) chipInfoAt = Date.now();
+        if (!info) {
+          chipInfoAt = -Infinity;
+          failed = true;
+        } else if (settingsGen === chipInfoGen) chipInfoAt = Date.now();
       }
       // Sessions Flowly does not manage (NATIVE-SESSION-SPEC §12.7): read only when switched on, by etag.
       if (popovers && chipInfo?.outside?.enabled) {
@@ -531,7 +540,7 @@ export function registerSessionChips(
         if (result) {
           if (result.value) outsideViews = new Map(result.value.map((v) => [v.agentId, v]));
           outsideEtag = result.etag;
-        }
+        } else failed = true;
       } else if (outsideEtag) {
         outsideEtag = "";
         outsideViews = new Map();
@@ -577,6 +586,7 @@ export function registerSessionChips(
     disposed = true;
     latestClick++;
     clearTimeout(timer);
+    clearTimeout(archiveRetry);
     stopHidden();
     stopStream?.();
     void releaseStream?.().catch(() => undefined);

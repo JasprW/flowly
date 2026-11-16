@@ -28,3 +28,10 @@
 - 产品源码 SHA：`682fb4fe09dd800374ad72492f8c71dc83289c81`。GPT6Luna/full-access 独立会话 `a9101afd-26ed-4697-9eaa-84da40d58b8c` 对该SHA给出PASS：typecheck exit0，5文件65项通过。独立报告 `LUNA-IDLE-RECOVERY.md`（提交51928dd），由该会话拥有，父任务未编辑。
 - 该测试会话随后hard-delete，inspect返回AGENT_NOT_FOUND；无新fixture、daemon或隔离缓存。根目录同范围patch已在保留其他会话改动后通过typecheck并reload running；未重启daemon、未改性能设置。
 - 三条CodeRabbit线程均已按先红后绿证据回复并解决；新源码的真实补审在额度恢复后继续，不以neutral/skipped放行。新push一度未生成自动CI记录，最终报告推送后用同一分支的workflow_dispatch触发原CI，不改保护规则。实际CI/CodeRabbit与合入状态以PR#117和卡片交付回执为准。
+
+## 后续失败路径补审与冷启动门槛
+
+- 2026-11-16 23:00，真实CodeRabbit对682fb4f后的报告head完成补审：归档/设置/外部insights三个读取故障未实际恢复，另指出候选手机冷启动证据不足。三条读取路径均复现红灯（3失败/36通过），未删除失败断言。
+- 最小修复：归档失败时实际安排15秒一次性补查（新扫描与stop取消）；设置失败保留失效并进入既有5/30/60退避，insights失败同样进入退避。恢复成功后不保留周期读取。完整5文件聚焦69项与typecheck通过，exit0；全量和最终独立报告随后记录。
+- **本次候选手机冷启动门槛未满足。** 3043bd8的历史+3.7257%通过的是用户指定5%配对中位差标准，后续client/session-link.ts与server/session-metadata.ts已变；没有本次源码的手机样本。新AndroMeld连接仍失败，adb无设备。已向用户请求连接手机补测或明确授权本次补丁沿用，未获得决定前不合入。卡片对应验收项已撤勾。
+- 实现者不修改独立验收报告；该门槛澄清由最终独立会话另记并追加到其指定证据。

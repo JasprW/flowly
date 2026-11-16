@@ -596,6 +596,41 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     stop();
   });
 
+  test.each([false, true])("a failed archive scan retries after its delay or is cancelled on stop (stop=%s)", async (stopFirst) => {
+    const x = fake({ stream: true });
+    const read = x.client.rpc.getMockImplementation()!;
+    let fail = false;
+    x.client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.archived-refs" && fail) throw new Error("archive service unavailable");
+      return read(definition, input);
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    x.state.archived = [{ id: "a1", workspaceId: "w1" }];
+    fail = true;
+    x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    await vi.advanceTimersByTimeAsync(150);
+    const scans = () => x.client.rpc.mock.calls.filter(([d]) => d.name === "sessions.archived-refs").length;
+    expect(scans()).toBe(2);
+    fail = false;
+    if (stopFirst) stop();
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(scans()).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(scans()).toBe(stopFirst ? 2 : 3);
+    if (!stopFirst) expect(x.client.addComposerPill).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "a1" }));
+    const count = x.client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.client.rpc).toHaveBeenCalledTimes(count);
+    if (!stopFirst) stop();
+  });
+
   test("pushed churn that cannot change a card (a title) causes no round", async () => {
     const x = fake({ stream: true });
     const stop = registerSessionChips(x.client as never, 60_000, 0, popovers);
@@ -651,6 +686,50 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     Object.assign(client, { subscribe });
     return { emit: () => emit!(), close: () => close!(), release, subscribe };
   }
+
+  test.each(["settings", "insights"])("a failed %s push read retries without another change and then stops", async (target) => {
+    const { client, state } = fakeClient();
+    const { chipState, outsideState } = await import("./native-chips");
+    state.live.push(Object.assign(agent("o1"), { workspaceId: "wx", status: "idle", pendingPermissions: [], lastUserMessageAt: "2026-10-21T00:00:00Z" }));
+    const read = client.rpc.getMockImplementation()!;
+    let fail = false;
+    let tap = "fill";
+    let suggestion = "s1";
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.native-chips") {
+        if (fail && target === "settings") throw new Error("settings unavailable");
+        return { managed: [{ agentId: "a1" }], ideas: true, autoWrapup: false, nextMoveTap: tap,
+          outside: { enabled: true, progress: true, nextMoves: true, ideas: true } } as never;
+      }
+      if (definition.name === "sessions.insights") {
+        if (fail && target === "insights") throw new Error("insights unavailable");
+        return { etag: suggestion, value: [{ agentId: "o1", workspaceId: "wx", suggestion: {
+          id: suggestion, at: "2026-10-21T00:00:05Z", current: true, moves: [{ label: "Go", prompt: "Go on" }],
+        }, ideas: [] }] } as never;
+      }
+      return read(definition, input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0, { ideas: () => null, outsideIdeas: () => null });
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("fill");
+    expect(outsideState("o1")?.moves?.eventId).toBe("s1");
+    tap = "copy";
+    suggestion = "s2";
+    fail = true;
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(chipState("a1")?.nextMoveTap).toBe("copy");
+    expect(outsideState("o1")?.moves?.eventId).toBe("s2");
+    const count = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
 
   test.each(["board", "agents"])("a rejected %s read recovers without another change, then returns to zero idle reads", async (target) => {
     const { client, calls } = fakeClient();
