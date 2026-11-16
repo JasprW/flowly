@@ -1,0 +1,22 @@
+[
+  {
+    "id": "A1 foreign warns on flowly board",
+    "ok": true,
+    "note": "names item + project + consequence + other-project hint"
+  },
+  {
+    "id": "A2 cancel adds nothing",
+    "ok": true,
+    "note": "warning gone, no chip"
+  },
+  {
+    "id": "A3 confirm adds the chip",
+    "ok": true,
+    "note": "chip present, warning gone"
+  },
+  {
+    "id": "B1 own repo silent on flowly board",
+    "ok": false,
+    "note": "upstream remote is a project repo, no warning"
+  }
+]

@@ -150,6 +150,14 @@ GitHub 和 GitLab 上的“全站搜索”结果太杂。daemon 从卡片所在�
 
 项目仓库 = 项目根本身（若是 git 仓库）以及其一级子目录中的 git 仓库（覆盖 linked root 的 symlink）。用 `git remote get-url` 读取所有 remote（参数数组，不经 shell），只保留 host 与连接地址一致的。结果按项目缓存 5 分钟。RPC `connectors.search` 增加可选 `projectId`。
 
+建卡/挂接时的仓库归属校验（2026-11-05）：New task 表单（§8.2）与卡片侧栏的挂接选择器（§8.1）在选中一个 GitHub/GitLab 条目时，先用 RPC `connectors.repo-check`（输入 `projectId`、`connectionId`、`repo` = 条目的 `ExternalSummary.container`）判断该仓库是否属于当前项目的项目仓库：
+
+- `member`：属于，直接加入；
+- `foreign`：不属于——显示非阻断警告，点名条目 key 与项目名，并说明卡片工作区不会包含该仓库；若其他项目的项目仓库包含它，点名那些项目。确认（“仍然添加”/“仍然挂接”）后才加入，取消则不加入；
+- `unknown`：项目仓库为空（该项目在该连接的 host 上读不到 git remote，无法判断）、`container` 为空或 RPC 失败——保持沉默，不打扰。
+
+非 git 族（Jira/Confluence/Azure/Shortcut）没有仓库概念，不校验。校验不依赖搜索范围：从“我参与的”范围或链接 / `owner/repo#nr` 直查选中的条目同样经过校验。Artifacts 的“文件或链接”表单粘贴条目链接的自动识别不在此校验内（那不是选择器路径）。
+
 ## 5. GitLab
 
 - **连接**：地址（默认 `https://gitlab.com`，自建如 `https://git.garena.com`）；Personal Access Token，权限 `read_api`（只读）；请求头 `PRIVATE-TOKEN`。校验 `GET /api/v4/user`，账户显示 `name (@username)`。
@@ -212,12 +220,13 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 ```
 
 - 选 connector 项打开对应的选择器（现 `LinkTicket` 泛化为 `LinkExternal`），我的最近 + 搜索，选中即添加为 input，toast “Linked <key>”。多个同族连接时选择器顶部切换连接（`lastTicketConnection` 改为按族记忆：`lastConnections: Record<family, id>`，旧值迁入 jira）。
+- 选中的 GitHub/GitLab 条目不属于当前项目的项目仓库时，先出现 §4.3 的警告，确认后才挂接；否则按上一条直接添加。
 - “文件或链接…”即现在的表单；粘贴的链接属于任一已连接服务时自动识别为该条目（role 取表单所选，默认 input；2026-10-21 起不再固定为 input，agent 自己开的 PR/MR 可登记为 output）。
 - 一个连接都没有时，+ 直接打开“文件或链接”表单，表单下方一行淡色提示“也可以连接 Jira、Confluence、GitHub、GitLab”。
 
 ### 8.2 New task 表单
 
-`From Jira` 按钮改为 **From…**：每个已连接的服务一个按钮（“From Jira”、“From GitLab” 等，换行排列）。实现时没有用菜单：New task 表单本身在 Modal 里，看板的上下文菜单画在 Modal 下层，按钮行更可靠，也少一次点击。条目条（chip）显示族图标。标题预填规则不变（标题为空才预填，换选只替换未改过的预填值）：issue/PR/MR 用标题，Confluence 页用页面标题。每张卡建卡时最多 5 个条目，与现在一致。
+`From Jira` 按钮改为 **From…**：每个已连接的服务一个按钮（“From Jira”、“From GitLab” 等，换行排列）。实现时没有用菜单：New task 表单本身在 Modal 里，看板的上下文菜单画在 Modal 下层，按钮行更可靠，也少一次点击。条目条（chip）显示族图标。标题预填规则不变（标题为空才预填，换选只替换未改过的预填值）：issue/PR/MR 用标题，Confluence 页用页面标题。每张卡建卡时最多 5 个条目，与现在一致。选中的 GitHub/GitLab 条目不属于当前项目的项目仓库时，先出现 §4.3 的警告（确认后才加入条目条），与挂接选择器一致。
 
 ### 8.3 侧栏行与预览
 
@@ -259,7 +268,7 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 
 - 每个 adapter 用 mock fetch：链接识别（含多级 group、子页面、锚点、tiny link、`/display/`）、裸 key、白名单之外的路径直接抛错、只发 GET、错误映射（GitHub 限流 403 不算凭据失效、GitLab 403、Confluence 登录页）、Markdown 渲染与截断、指纹（状态/标签变化不算，新 commit 算）。
 - storage → Markdown 转换器单测（代码宏、表格、info 宏、ac:link、图片）。
-- 项目仓库范围：remote 解析（ssh/https 两种写法、多 remote、symlink 子仓库）、host 不匹配时忽略。
+- 项目仓库范围：remote 解析（ssh/https 两种写法、多 remote、symlink 子仓库）、host 不匹配时忽略；建卡/挂接校验 `repoVerdict`（大小写不敏感；空 `container` 或项目仓库为空 → `unknown` 不警告）。
 - 凭据：RPC 返回、日志、工具输出不含令牌。
 - 联调：按用户提供的令牌在 git.garena.com 与公司 Confluence 做只读验证（令牌由用户在设置页填写，agent 不接触），GitHub 用公共仓库与用户私有仓库各一个条目。
 - 按项目要求，用 full-access 的 `codex/gpt-6-luna` session 做 UI 验收（桌面与手机布局、+ 菜单、选择器、预览、删除连接后恢复），证据存 `docs/verification/connectors.md`。
