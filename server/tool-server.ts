@@ -37,12 +37,11 @@ import {
   workpadInputSchema,
   progressInputSchema,
   statusInputSchema,
-  toolContextSchema,
-  toolResultSchema,
   type ToolIdentity,
   type ToolPreparation,
 } from "../shared/tools";
 import { AgentService } from "./agent-service";
+import { agentReadSchema, agentWriteSchema, outputDetailSchema, outputDetailShape } from "../shared/agent-output";
 import { BoardStore } from "./store";
 import { BoardService } from "./service";
 import { ToolSecrets, writePrivate, type ContextMethod } from "./tool-context";
@@ -194,20 +193,20 @@ export class ToolServer {
           "flowly_get_task",
           {
             description:
-              "Read this session's current Kanban card, latest turnChecklist, effective repo/worktree directories, both revisions and signed request. Read at the start of every turn, including commit/merge-only follow-ups, and before any write. Handle unread inputs and fix setup.missing (flowly_set_type, flowly_set_tags, flowly_update_workpad) before work.",
-            inputSchema: z.strictObject({}),
-            outputSchema: toolContextSchema,
+              "Read this session's current Kanban card, latest turnChecklist, effective repo/worktree directories, both revisions and signed request. Read at the start of every turn, after long work before delivery, and after a conflict or expired request. Consecutive successful writes use current.revision/request from the previous result; no extra read is needed. Compact by default; use responseDetail=full for the previous complete context. Handle unread inputs and fix setup.missing (flowly_set_type, flowly_set_tags, flowly_update_workpad) before work.",
+            inputSchema: outputDetailSchema,
+            outputSchema: agentReadSchema,
             annotations: { readOnlyHint: true, openWorldHint: false },
           },
-          () => wrap(() => this.agents.get(identity)),
+          (input) => wrap(() => this.agents.readAgent(identity, input)),
         );
         mcp.registerTool(
           "flowly_update_status",
           {
             description:
               "Move this card to one of allowedStatuses from get_task (design, development, test, blocked or in_review when they are lanes of this project; lanes lists the names the user sees). Use the work stage that matches what you are doing now: design for plans/specs/research, development for implementation, test for verification; you decide where to start and may skip or go back. Keep it current: switch when the work changes, and at the start of each turn correct the stage the card was automatically resumed in if it does not match the work. Copy revisions and request from get_task, include a note. Done/cancelled are human decisions. Delivering to in_review with missing card setup (no type, no tags or no acceptance list) returns SETUP_INCOMPLETE and changes nothing; the first attempt is always refused, even with acknowledgeOpen=true. Set what you can, then retry with acknowledgeOpen=true and a note explaining what is still missing; a changed card or acceptance list, or a new turn, requires a new refusal. With the project's Auto review on, Flowly checks the delivery against get_task guardrails when your turn ends and sends it back with a message starting [Flowly auto review when something fails. If a finding is wrong, deliver with disputes=[{id, reason}] (ids from guardrails.lastReview) instead of arguing in the note; the user decides. When you deliver (in_review), pass outputs=[{target,title,note}] for the PR/MR links, reports and evidence from this call, or outputs=[] if none; omission returns a reminder. Outputs are registered atomically with this write. Also pass nextMoves: the 1-3 messages the user is most likely to send you next (same items as flowly_suggest_next_moves, recommended first; a moveTo=\"done\" move is only accepted together with in_review), or [] when nothing needs the user. Leave it out on mid-work stage changes. A delivery (in_review or blocked) that leaves this turn without next moves, or without any idea on the card, gets a reminders list in its result, and so does any write while the card setup is missing: text only, the write succeeded. A refused call records nothing: resend it with the same nextMoves. Retry identical uncertain requests only.",
-            inputSchema: statusInputSchema,
-            outputSchema: toolResultSchema,
+            inputSchema: statusInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: {
               readOnlyHint: false,
               destructiveHint: true,
@@ -215,15 +214,15 @@ export class ToolServer {
               openWorldHint: false,
             },
           },
-          (input) => wrap(() => this.agents.write(identity, "status", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "status", input)),
         );
         mcp.registerTool(
           "flowly_report_progress",
           {
             description:
-              "Append this session's checkpoint/blocker/result/question without changing card status or task revision. kind=question asks the user something and marks the card Needs you until they reply; it is the fallback when you have no question tool of your own (such as AskUserQuestion) or the question is open-ended. Never report a question you already asked through that tool. Copy revisions/request from get_task. Partial contribution does not complete the card. When you ask (kind=question; the moves are the likely answers), report a blocker or give a result, pass nextMoves (same items as flowly_suggest_next_moves, 1-3 recommended first, or [] when nothing needs the user). For kind=result, pass outputs=[{target,title,note}] for the PR/MR links, reports and evidence from this call, or outputs=[] if none; omission returns a reminder. Outputs are registered atomically with this write and are invalid for other kinds. A question or result that leaves this turn without next moves gets a reminders list in its result: text only, the write succeeded.",
-            inputSchema: progressInputSchema,
-            outputSchema: toolResultSchema,
+              "Append this session's checkpoint/blocker/result/question without changing card status or task revision. kind=question asks the user something and marks the card Needs you until they reply; it is the fallback when you have no question tool of your own (such as AskUserQuestion) or the question is open-ended. Never report a question you already asked through that tool. Copy revisions/request from get_task or the previous successful write current. Partial contribution does not complete the card. When you ask (kind=question; the moves are the likely answers), report a blocker or give a result, pass nextMoves (same items as flowly_suggest_next_moves, 1-3 recommended first, or [] when nothing needs the user). For kind=result, pass outputs=[{target,title,note}] for the PR/MR links, reports and evidence from this call, or outputs=[] if none; omission returns a reminder. Outputs are registered atomically with this write and are invalid for other kinds. A question or result that leaves this turn without next moves gets a reminders list in its result: text only, the write succeeded.",
+            inputSchema: progressInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: {
               readOnlyHint: false,
               destructiveHint: false,
@@ -231,15 +230,15 @@ export class ToolServer {
               openWorldHint: false,
             },
           },
-          (input) => wrap(() => this.agents.write(identity, "progress", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "progress", input)),
         );
         mcp.registerTool(
           "flowly_propose_idea",
           {
             description:
-              "Propose a next step the user did not ask for. scope=here: an extension of this card's goal; the user may send it back to this card's session as an instruction. scope=new: divergent work (a bug found on the way, a refactor, a separate feature); the user may turn it into a new card that starts from your detail, rationale and context, whose agent cannot see this conversation, so put files, branches and findings in context. Do not propose work this card already requires, propose at most 3 per delivery, check ideas from get_task for duplicates, and never start the idea yourself. Does not change card status or task revision. Copy revisions/request from get_task.",
-            inputSchema: ideaInputSchema,
-            outputSchema: toolResultSchema,
+              "Propose a next step the user did not ask for. scope=here: an extension of this card's goal; the user may send it back to this card's session as an instruction. scope=new: divergent work (a bug found on the way, a refactor, a separate feature); the user may turn it into a new card that starts from your detail, rationale and context, whose agent cannot see this conversation, so put files, branches and findings in context. Do not propose work this card already requires, propose at most 3 per delivery, check ideas from get_task for duplicates, and never start the idea yourself. Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: ideaInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: {
               readOnlyHint: false,
               destructiveHint: false,
@@ -247,40 +246,40 @@ export class ToolServer {
               openWorldHint: false,
             },
           },
-          (input) => wrap(() => this.agents.write(identity, "idea", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "idea", input)),
         );
         mcp.registerTool(
           "flowly_update_idea",
           {
             description:
-              "Edit or dismiss an idea on this card (id from get_task ideas). Pass only the fields to change: title, detail, rationale, context, type, priority, scope or tags (tags replace the suggested ones). status=dismissed closes it: use it when the user rejected the idea in conversation or it no longer applies (for example this card already did it), instead of leaving it open. A dismissed idea stays under Closed, where only the user can restore it. Only open ideas can be edited; an accepted idea is final (IDEA_CLOSED). Does not change card status or task revision. Copy revisions/request from get_task.",
-            inputSchema: ideaUpdateInputSchema,
-            outputSchema: toolResultSchema,
+              "Edit or dismiss an idea on this card (id from get_task ideas). Pass only the fields to change: title, detail, rationale, context, type, priority, scope or tags (tags replace the suggested ones). status=dismissed closes it: use it when the user rejected the idea in conversation or it no longer applies (for example this card already did it), instead of leaving it open. A dismissed idea stays under Closed, where only the user can restore it. Only open ideas can be edited; an accepted idea is final (IDEA_CLOSED). Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: ideaUpdateInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "idea_update", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "idea_update", input)),
         );
         mcp.registerTool(
           "flowly_remove_idea",
           {
             description:
-              "Delete an idea on this card that should never have been proposed: a duplicate, a mistake, or work this card already requires. For an idea the user rejected, prefer flowly_update_idea status=dismissed, which keeps it visible. An accepted idea cannot be removed (IDEA_CLOSED). Does not change card status or task revision. Copy revisions/request from get_task.",
-            inputSchema: ideaRemovalSchema,
-            outputSchema: toolResultSchema,
+              "Delete an idea on this card that should never have been proposed: a duplicate, a mistake, or work this card already requires. For an idea the user rejected, prefer flowly_update_idea status=dismissed, which keeps it visible. An accepted idea cannot be removed (IDEA_CLOSED). Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: ideaRemovalSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "idea_remove", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "idea_remove", input)),
         );
         mcp.registerTool(
           "flowly_remember",
           {
             description:
-              "Remember something for the project that would make a later, different card's agent re-ask the user, retry a dead end or hit the same problem: a decision the user made with its reason, including a rejected option (decision); a dead end, or the general lesson behind a bug you fixed, not the fix (pitfall); how the user wants work done here that the repository does not say (convention); people, external systems and environments (contact). It takes effect at once for new sessions on this project, so only propose what holds beyond this card. Not this card's progress (that is the summary), not open or deferred items (those are ideas), not what code, git or docs already say, and never a secret (say where it is kept). Only what holds beyond this card: if every later card that would need it works on the same feature, file or bug, leave it to the code and the summary. At most 3 per delivery, usually none; check get_task memory and flowly_recall first. To correct an entry, propose a new one with supersedes=<its id>; you cannot edit or delete entries. Returns MEMORY_DISABLED, MEMORY_DUPLICATE, MEMORY_LIMIT or MEMORY_SECRET when refused. Does not change card status or task revision. Copy revisions/request from get_task.",
-            inputSchema: rememberInputSchema,
-            outputSchema: toolResultSchema,
+              "Remember something for the project that would make a later, different card's agent re-ask the user, retry a dead end or hit the same problem: a decision the user made with its reason, including a rejected option (decision); a dead end, or the general lesson behind a bug you fixed, not the fix (pitfall); how the user wants work done here that the repository does not say (convention); people, external systems and environments (contact). It takes effect at once for new sessions on this project, so only propose what holds beyond this card. Not this card's progress (that is the summary), not open or deferred items (those are ideas), not what code, git or docs already say, and never a secret (say where it is kept). Only what holds beyond this card: if every later card that would need it works on the same feature, file or bug, leave it to the code and the summary. At most 3 per delivery, usually none; check get_task memory and flowly_recall first. To correct an entry, propose a new one with supersedes=<its id>; you cannot edit or delete entries. Returns MEMORY_DISABLED, MEMORY_DUPLICATE, MEMORY_LIMIT or MEMORY_SECRET when refused. Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: rememberInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "remember", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "remember", input)),
         );
         mcp.registerTool(
           "flowly_recall",
@@ -308,23 +307,23 @@ export class ToolServer {
           "flowly_add_artifact",
           {
             description:
-              "Register a file or link that is an input this card worked from or an output it delivered, so the user and later sessions can find it. role=input|output; target is an http(s) link or a path (absolute, or relative to the workspace directory) inside this card's directories. Add deliverables when you produce them (specs, reports, exported files, PRs, verification evidence), not every file you touched: source code changes are already visible through the workspace diff. Use a short title and a one-line note on what it is for. Adding a recorded target again updates the one you or another agent added; one the user added stays as is. Check artifacts in get_task first. Does not change card status or task revision. Copy revisions/request from get_task.",
-            inputSchema: artifactInputSchema,
-            outputSchema: toolResultSchema,
+              "Register a file or link that is an input this card worked from or an output it delivered, so the user and later sessions can find it. role=input|output; target is an http(s) link or a path (absolute, or relative to the workspace directory) inside this card's directories. Add deliverables when you produce them (specs, reports, exported files, PRs, verification evidence), not every file you touched: source code changes are already visible through the workspace diff. Use a short title and a one-line note on what it is for. Adding a recorded target again updates the one you or another agent added; one the user added stays as is. Check artifacts in get_task first. Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: artifactInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "artifact", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "artifact", input)),
         );
         mcp.registerTool(
           "flowly_remove_artifact",
           {
             description:
-              "Remove an artifact an agent added to this card (id from get_task artifacts), e.g. a wrong or replaced entry. Artifacts the user added can only be removed by the user. Never deletes the file. Copy revisions/request from get_task.",
-            inputSchema: artifactRemovalSchema,
-            outputSchema: toolResultSchema,
+              "Remove an artifact an agent added to this card (id from get_task artifacts), e.g. a wrong or replaced entry. Artifacts the user added can only be removed by the user. Never deletes the file. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: artifactRemovalSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "artifact_remove", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "artifact_remove", input)),
         );
         const readExternal = {
           description:
@@ -344,45 +343,45 @@ export class ToolServer {
           "flowly_set_tags",
           {
             description:
-              'Tag this card with the functional areas it touches and the improvement directions it serves (for example a module like "drawer" or "session-composer", or a direction like "performance", "a11y", "mobile"), so the user can filter and search cards later. Tags are not the task type, status or priority; do not repeat those. Reuse a tag from projectTags in get_task when one fits instead of inventing a synonym. Do this at the start of the work, before you change code (get_task setup.tagsMissing). Use 1-4 short lowercase tags and adjust them if the scope changes. You can only remove tags an agent added. Does not change card status or task revision. Copy revisions/request from get_task.',
-            inputSchema: tagsInputSchema,
-            outputSchema: toolResultSchema,
+              'Tag this card with the functional areas it touches and the improvement directions it serves (for example a module like "drawer" or "session-composer", or a direction like "performance", "a11y", "mobile"), so the user can filter and search cards later. Tags are not the task type, status or priority; do not repeat those. Reuse a tag from projectTags in get_task when one fits instead of inventing a synonym. Do this at the start of the work, before you change code (get_task setup.tagsMissing). Use 1-4 short lowercase tags and adjust them if the scope changes. You can only remove tags an agent added. Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.',
+            inputSchema: tagsInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "tags", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "tags", input)),
         );
         mcp.registerTool(
           "flowly_set_type",
           {
             description:
-              "Set this card's type (feature, bugfix, research, refactor, docs, chore) when it has none (get_task setup.typeMissing). Do this at the start of the work, before you change code. A type the user or an agent already set is kept: the call returns TYPE_ALREADY_SET and changes nothing, so do not retry with another type. Increments the task revision. Copy revisions/request from get_task.",
-            inputSchema: typeInputSchema,
-            outputSchema: toolResultSchema,
+              "Set this card's type (feature, bugfix, research, refactor, docs, chore) when it has none (get_task setup.typeMissing). Do this at the start of the work, before you change code. A type the user or an agent already set is kept: the call returns TYPE_ALREADY_SET and changes nothing, so do not retry with another type. Increments the task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: typeInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "type", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "type", input)),
         );
         mcp.registerTool(
           "flowly_suggest_next_moves",
           {
             description:
-              "For updates in the middle of a turn, or when your delivery call had no nextMoves; when you deliver or ask, pass nextMoves on flowly_update_status / flowly_report_progress instead. Offer the 1-3 next messages the user is most likely to send you (e.g. verify the change, commit and push, continue to the next stage), recommended first, or [] when nothing needs the user. Flowly shows them above the user's message box; picking one only fills the box, the user edits or sends it. Valid until the user's next message starts a new turn; calling again in the same turn replaces them. Still mention the options in your reply. Not for questions (use flowly_report_progress kind=question; its nextMoves are the likely answers) or for divergent work (use flowly_propose_idea). Does not change card status or task revision. Copy revisions/request from get_task.",
-            inputSchema: nextMovesInputSchema,
-            outputSchema: toolResultSchema,
+              "For updates in the middle of a turn, or when your delivery call had no nextMoves; when you deliver or ask, pass nextMoves on flowly_update_status / flowly_report_progress instead. Offer the 1-3 next messages the user is most likely to send you (e.g. verify the change, commit and push, continue to the next stage), recommended first, or [] when nothing needs the user. Flowly shows them above the user's message box; picking one only fills the box, the user edits or sends it. Valid until the user's next message starts a new turn; calling again in the same turn replaces them. Still mention the options in your reply. Not for questions (use flowly_report_progress kind=question; its nextMoves are the likely answers) or for divergent work (use flowly_propose_idea). Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: nextMovesInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "next_moves", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "next_moves", input)),
         );
         mcp.registerTool(
           "flowly_update_workpad",
           {
             description:
-              "Do this at the start of the work, before you change code (get_task setup.workpadMissing): write 3-5 acceptance criteria and tick them as you meet them; the reviewer reads them as your own claim, not as proof. Replace this card's acceptance list: send the whole list every time; items you leave out are removed. Only acceptance is accepted: validation, confusions or any other field returns WORKPAD_INVALID. The plan comes from your own todo list; do not repeat it here. Copy workpad.revision from get_task as workpadRevision (0 when there is none). On WORKPAD_CONFLICT the user changed it: re-read, keep their ticks, retry. WORKPAD_DISABLED (workpadEnabled=false in get_task): the user turned it off for this project; list your criteria in your notes instead and do not retry. Does not change card status or task revision. Copy revisions/request from get_task.",
-            inputSchema: workpadInputSchema,
-            outputSchema: toolResultSchema,
+              "Do this at the start of the work, before you change code (get_task setup.workpadMissing): write 3-5 acceptance criteria and tick them as you meet them; the reviewer reads them as your own claim, not as proof. Replace this card's acceptance list: send the whole list every time; items you leave out are removed. Only acceptance is accepted: validation, confusions or any other field returns WORKPAD_INVALID. The plan comes from your own todo list; do not repeat it here. Copy workpad.revision from get_task as workpadRevision (0 when there is none). On WORKPAD_CONFLICT the user changed it: re-read, keep their ticks, retry. WORKPAD_DISABLED (workpadEnabled=false in get_task): the user turned it off for this project; list your criteria in your notes instead and do not retry. Does not change card status or task revision. Copy revisions/request from get_task or the previous successful write current.",
+            inputSchema: workpadInputSchema.extend(outputDetailShape),
+            outputSchema: agentWriteSchema,
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
           },
-          (input) => wrap(() => this.agents.write(identity, "workpad", input)),
+          (input) => wrap(() => this.agents.writeAgent(identity, "workpad", input)),
         );
         return mcp;
       },
@@ -475,15 +474,14 @@ export class ToolServer {
       .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
     const value =
       body.action === "get"
-        ? (z.strictObject({}).parse(body.input),
-          await this.agents.get(identity))
+        ? await this.agents.readAgent(identity, outputDetailSchema.parse(body.input))
         : body.action === "external" || body.action === "ticket"
           ? await this.agents.readExternal(identity, readExternalInputSchema.parse(body.input))
           : body.action === "recall"
             ? await this.agents.recall(identity, recallInputSchema.parse(body.input))
             : body.action === "search"
               ? await this.agents.searchCards(identity, agentSearchInputSchema.parse(body.input))
-            : await this.agents.write(identity, body.action, body.input);
+            : await this.agents.writeAgent(identity, body.action, body.input);
     this.json(res, { ok: true, result: value });
   }
   private async prepare(

@@ -92,7 +92,7 @@ PR/MR 的 head sha 计入指纹：新的 push 意味着要 review 的内容变�
 | CLI `ticket --id` | `external --id` | 旧命令保留为别名 |
 | RPC `tickets.*` | `connectors.*` | 不保留（客户端与 daemon 随插件一起发布） |
 | 错误码 `TICKET_*` / `TICKETS_DISABLED` | `EXTERNAL_AUTH` / `EXTERNAL_NOT_FOUND` / `EXTERNAL_UNAVAILABLE` / `CONNECTORS_DISABLED` | 别名工具也返回新错误码 |
-| `get_task.artifacts[].ticket` | `external` | Jira 条目同时输出一份 `ticket`（deprecated），供旧 skill 的 session 识别；后续版本删除 |
+| `get_task.artifacts[].ticket` | `external` | 默认精简输出只带 `external`；`responseDetail: "full"` / CLI `--full` 继续为 Jira 输出 `ticket`（deprecated），供依赖旧字段的调用方使用，见 [AGENT-OUTPUT-SPEC](AGENT-OUTPUT-SPEC.md) |
 | 设置 `lastTicketConnection` | `lastConnections`（按族） | 旧值读作 jira 的记忆 |
 | 卡片显示字段 `ticket` | `external` | 存储的 `cardHidden` 中的 `ticket` 读作 `external` |
 | 代码模块 `shared/tickets.ts`、`server/tickets.ts`、`client/tickets.tsx` | `shared/connectors.ts`、`server/connectors/*`、`client/connectors.tsx` | — |

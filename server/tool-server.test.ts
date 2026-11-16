@@ -31,7 +31,7 @@ async function setup() {
         Authorization: authorization,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ action, input }),
+      body: JSON.stringify({ action, input: ["recall", "search", "external", "ticket"].includes(action) ? input : { responseDetail: "full", ...(input as object) } }),
     });
     return { status: response.status, ...(await response.json()) };
   };
@@ -42,7 +42,11 @@ afterEach(async () => {
 });
 test("MCP initialize/list can precede actor creation; live calls require SDK context", async () => {
   const x = await setup();
+  // This suite owns the legacy full-output contract; compact defaults have their own transport suite.
   const mcp = async (method: string, params: unknown, id = 1) => {
+    const call = params as { name?: string; arguments?: object };
+    if (method === "tools/call" && !["flowly_recall", "flowly_search", "flowly_read_external", "flowly_read_ticket"].includes(call.name || ""))
+      params = { ...call, arguments: { responseDetail: "full", ...call.arguments } };
     const response = await fetch(x.url + "mcp", {
       method: "POST",
       headers: {
@@ -141,7 +145,7 @@ test("MCP initialize/list can precede actor creation; live calls require SDK con
   expect(described("flowly_get_task")).toContain("setup.missing");
   for (const name of ["flowly_set_type", "flowly_set_tags", "flowly_update_workpad"])
     expect(described(name), name).toContain("at the start of the work, before you change code");
-  expect(Object.keys(listed.find((t) => t.name === "flowly_update_workpad")!.inputSchema.properties).sort()).toEqual(["acceptance", "expectedRevision", "request", "workpadRevision"]);
+  expect(Object.keys(listed.find((t) => t.name === "flowly_update_workpad")!.inputSchema.properties).sort()).toEqual(["acceptance", "expectedRevision", "request", "responseDetail", "workpadRevision"]);
   // The skill (GUARDRAILS-SPEC §9): no self-reported checks, no review rules, the guardrails paragraph.
   for (const gone of ["WORKPAD_OPEN", "WORKPAD_FAILING", "flowly_propose_review_rules", "reviewRules", "dirty=true", "fresh=stale", "memory.candidates"]) expect(skillText).not.toContain(gone);
   expect(skillText).toContain("`flowly_get_task.guardrails` lists what this delivery will be checked against");
@@ -340,7 +344,7 @@ test("CLI runs a complete scoped flow; replay, wrong env, snapshots and flags", 
   const cli = async (...args: string[]) => {
     const result = await run(
       process.execPath,
-      [prepared.cliPath, "--context-file", prepared.contextFile, ...args],
+      [prepared.cliPath, "--context-file", prepared.contextFile, "--full", ...args],
       { env: { ...process.env, PASEO_AGENT_ID: "actor" } },
     );
     expect(result.stdout.endsWith("\n")).toBe(true);
@@ -542,7 +546,7 @@ test("CLI outputs and first refusal: real transport, persisted IDs and exact rep
   const x = await setup();
   const prepared = await x.server.prepareExisting("t", "actor", x.paseo);
   const snapshot = `${x.root}/outputs-request.json`;
-  const cli = async (...args: string[]) => JSON.parse((await run(process.execPath, [prepared.cliPath, "--context-file", prepared.contextFile, ...args], { env: { ...process.env, PASEO_AGENT_ID: "actor" } })).stdout);
+  const cli = async (...args: string[]) => JSON.parse((await run(process.execPath, [prepared.cliPath, "--context-file", prepared.contextFile, "--full", ...args], { env: { ...process.env, PASEO_AGENT_ID: "actor" } })).stdout);
   await cli("current", "--save-request", snapshot);
   const args = ["status", "in_review", "--request-file", snapshot, "--note", "Output registered", "--outputs", JSON.stringify([{ target: "https://github.com/fixture/repo/pull/1" }]), "--no-moves"];
   const delivered = await cli(...args);

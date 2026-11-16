@@ -1,9 +1,11 @@
 export const cliSource = String.raw`#!/usr/bin/env node
-import {readFile, writeFile} from 'node:fs/promises';
+import {readFile, writeFile, rename, rm} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
 
 const args=process.argv.slice(2), opts={}, positional=[];
 const allowed=new Set(['context-file','save-request','request-file','task-revision','project-revision','note','kind','title','detail','rationale','context','type','priority','scope','role','target','id','add','remove','tags','moves','workpad','workpad-file','workpad-revision','acknowledge-open','no-moves','body','keywords','supersedes','query','outputs','no-outputs','dismiss','sources','limit','disputes','worktree']);
-const booleanFlags=new Set(['acknowledge-open','no-moves','no-outputs','dismiss']);
+allowed.add('full');
+const booleanFlags=new Set(['acknowledge-open','no-moves','no-outputs','dismiss','full']);
 const workpadFlags=['workpad','workpad-file','workpad-revision'];
 const ideaFlags=['detail','rationale','context','type','priority','scope','tags'];
 const tagFlags=['add','remove'];
@@ -17,7 +19,7 @@ try {
     if(arg.startsWith('--')) {const key=arg.slice(2);if(!allowed.has(key)||Object.hasOwn(opts,key))fail('Unknown or duplicate flag: '+arg); if(booleanFlags.has(key)){opts[key]=true;continue;} const value=args[++i];if(value===undefined||value.startsWith('--'))fail('Missing value for '+arg);opts[key]=value;}
     else positional.push(arg);
   }
-  const command=positional[0];if(!['current','get','status','note','idea','idea-update','idea-remove','remember','recall','search','artifact','artifact-remove','tags','set-type','next-moves','workpad','external','ticket'].includes(command))fail('Usage: current [--save-request path] | external --id <artifact id> (read an external input: Jira ticket, Confluence page, GitHub/GitLab issue or PR/MR; ticket is an alias) | status <design|development|test|blocked|in_review> | note (status and note also take --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> or --no-moves: the next steps for the user, recorded with the call) | idea --title --detail --rationale [--context --type --priority --scope here|new] | idea-update --id <idea id> [--title --detail --rationale --context --type --priority --scope --tags] [--dismiss] (edit an open idea of this card, or dismiss it) | idea-remove --id <idea id> (delete an idea proposed by mistake) | remember --kind decision|convention|pitfall|contact --title [--body --tags a,b --keywords x,y --supersedes <memory id>] (remember for the project; takes effect at once) | recall [--query words --kind k] (search project memory and guardrails; no request file) | search --query <words> [--sources card,summary,note,workpad,idea,artifact --limit n] (search other cards in this project; no request file) | artifact --role input|output --target <path or link> [--title --note] | artifact-remove --id <artifact id> | tags [--add a,b] [--remove c] | set-type <feature|bugfix|research|refactor|docs|chore> (only when the card has no type) | next-moves --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> | workpad --workpad-revision <n> (--workpad <JSON> | --workpad-file <path>) with {acceptance: [{id?, text, done}]} only; status in_review / note --kind result take --outputs <JSON array of {target,title?,note?}> or --no-outputs; omission returns a reminder. status in_review [--disputes <JSON array of {id, reason}>] disputes findings of the latest auto review (ids from current guardrails.lastReview); [--worktree <path or branch>] names the git worktree holding the change when it is not in the card workspace, so the auto review checks it there; [--acknowledge-open] confirms missing card setup only after a prior SETUP_INCOMPLETE for the current state, with --context-file and --request-file.');
+  const command=positional[0];if(!['current','get','status','note','idea','idea-update','idea-remove','remember','recall','search','artifact','artifact-remove','tags','set-type','next-moves','workpad','external','ticket'].includes(command))fail('Usage: current [--full] [--save-request path] (writes also accept --full and --save-request path) | external --id <artifact id> (read an external input: Jira ticket, Confluence page, GitHub/GitLab issue or PR/MR; ticket is an alias) | status <design|development|test|blocked|in_review> | note (status and note also take --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> or --no-moves: the next steps for the user, recorded with the call) | idea --title --detail --rationale [--context --type --priority --scope here|new] | idea-update --id <idea id> [--title --detail --rationale --context --type --priority --scope --tags] [--dismiss] (edit an open idea of this card, or dismiss it) | idea-remove --id <idea id> (delete an idea proposed by mistake) | remember --kind decision|convention|pitfall|contact --title [--body --tags a,b --keywords x,y --supersedes <memory id>] (remember for the project; takes effect at once) | recall [--query words --kind k] (search project memory and guardrails; no request file) | search --query <words> [--sources card,summary,note,workpad,idea,artifact --limit n] (search other cards in this project; no request file) | artifact --role input|output --target <path or link> [--title --note] | artifact-remove --id <artifact id> | tags [--add a,b] [--remove c] | set-type <feature|bugfix|research|refactor|docs|chore> (only when the card has no type) | next-moves --moves <JSON array of 0-3 {label, prompt} or {label, moveTo:"done"}> | workpad --workpad-revision <n> (--workpad <JSON> | --workpad-file <path>) with {acceptance: [{id?, text, done}]} only; status in_review / note --kind result take --outputs <JSON array of {target,title?,note?}> or --no-outputs; omission returns a reminder. status in_review [--disputes <JSON array of {id, reason}>] disputes findings of the latest auto review (ids from current guardrails.lastReview); [--worktree <path or branch>] names the git worktree holding the change when it is not in the card workspace, so the auto review checks it there; [--acknowledge-open] confirms missing card setup only after a prior SETUP_INCOMPLETE for the current state, with --context-file and --request-file.');
   if(positional.length!==(['status','set-type'].includes(command)?2:1))fail('Unexpected positional arguments.');
   const path=opts['context-file']||process.env.FLOWLY_CONTEXT_FILE||process.env.ULTRA_KANBAN_CONTEXT_FILE;if(!path)fail('No session context. Use the command supplied by the card drawer.');
   const context=JSON.parse(await readFile(path,'utf8'));
@@ -51,7 +53,6 @@ try {
   else if(command==='external'||command==='ticket'){if(!opts.id)fail(command+' requires --id <artifact id> (an external input from current).');if(['request-file','save-request','note','kind','role','target'].some(k=>opts[k]!==undefined))fail('Only --id is valid for '+command+'.');action='external';input={artifactId:opts.id};}
   else if(command==='get'||command==='current') {if(['request-file','task-revision','project-revision','note','kind','role','target','id'].some(k=>opts[k]!==undefined))fail('Write flags are not valid for current.');}
   else {
-    if(opts['save-request'])fail('--save-request is only valid for current.');
     if(command==='idea'){if(!opts['request-file']||!opts.title?.trim()||!opts.detail?.trim()||!opts.rationale?.trim())fail('idea requires --request-file, --title, --detail and --rationale.');if(opts.note||opts.kind)fail('--note and --kind are not valid for idea.');}
     else if(command==='idea-update'||command==='idea-remove'){if(!opts['request-file']||!opts.id)fail(command+' requires --request-file and --id.');if(opts.note||opts.kind||opts.role||opts.target)fail('--note, --kind, --role and --target are not valid for '+command+'.');if(command==='idea-update'&&opts.title===undefined&&!opts.dismiss&&!ideaFlags.some(k=>opts[k]!==undefined))fail('idea-update needs a field to change or --dismiss.');}
     else if(command==='remember'){if(!opts['request-file']||!opts.kind||!opts.title?.trim())fail('remember requires --request-file, --kind and --title.');if(opts.note)fail('--note is not valid for remember.');}
@@ -88,11 +89,22 @@ try {
     if(opts['no-outputs'])input.outputs=[];
     else if(opts.outputs!==undefined){let outputs;try{outputs=JSON.parse(opts.outputs);}catch{fail('--outputs must be a JSON array of {target,title?,note?}; use --no-outputs when there are none.');}if(!Array.isArray(outputs))fail('--outputs must be a JSON array of {target,title?,note?}.');input.outputs=outputs;}
   }
+  if(opts.full){if(['recall','search','external','ticket'].includes(command))fail('--full is only valid for current and writes.');input.responseDetail='full';}
   const response=await fetch(new URL('api',url),{method:'POST',headers:{Authorization:'Bearer '+context.credential,'Content-Type':'application/json'},body:JSON.stringify({action,input}),signal:AbortSignal.timeout(20000)});
   const body=await response.json();if(!response.ok||!body.ok){process.stderr.write(JSON.stringify(body.error||{code:'HTTP_ERROR',message:'HTTP '+response.status})+'\n');process.exitCode=1;}
   else {
-    if(opts['save-request'])await writeFile(opts['save-request'],JSON.stringify({identity:body.result.identity,revision:body.result.revision,request:body.result.request},null,2),{mode:0o600});
     process.stdout.write(JSON.stringify(body.result,null,2)+'\n');
+    if(opts['save-request']){
+      const next=action==='get'?body.result:body.result.current;
+      const prefix=action==='get'?'Read succeeded.':'Write committed; do not submit a new request to repeat it.';
+      if(!next?.identity||!next.revision||!next.request)fail(prefix+' No usable continuation; request snapshot was kept. Re-read the card, or retry the original request to recover its receipt.');
+      const path=opts['save-request'],temporary=path+'.'+randomUUID()+'.tmp';
+      try{
+        await writeFile(temporary,JSON.stringify({identity:next.identity,revision:next.revision,request:next.request,...(next.workpad!==undefined?{workpad:next.workpad}:{})},null,2),{mode:0o600});
+        await rename(temporary,path);
+      }catch(e){fail(prefix+' Could not save request snapshot: '+e.message);}
+      finally{await rm(temporary,{force:true});}
+    }
   }
 }catch(error){process.stderr.write(JSON.stringify({code:'CLI_FAILURE',message:error instanceof Error?error.message:String(error),hint:'For a timeout, keep the request snapshot and retry the same parameters; do not assume whether it committed.'})+'\n');process.exitCode=1;}
 `;

@@ -1,5 +1,7 @@
 # Paseo Kanban Plugin：Spec 大纲与路线图
 
+2026-11-16 Agent 工具输出（issue #109）：MCP/CLI 默认精简读模型和轻量写续写信息，full 模式保留旧形状，CLI 支持保存写后的请求，活动去掉生命周期噪声；不改存储或授权。[AGENT-OUTPUT-SPEC](AGENT-OUTPUT-SPEC.md)。
+
 2026-11-13 卡片描述图片（已设计，未实现；issue #99）：描述下方一排缩略图，原图与缩略图存到插件数据目录 `card-images/<taskId>/`（存副本，不算产物，CARD-ARTIFACTS“只存引用”不变）；web 粘贴、拖放或 Add images 添加，手机只能看和删；agent 从 session 上下文和 `get_task` 拿到绝对路径自己查看。手机仍不加图片选择器（SDK 0.16 仍没有，维持 2026-10-21 决定），session 发图走 Open in Paseo，向 getpaseo 提 SDK 需求。[CARD-IMAGES-SPEC](CARD-IMAGES-SPEC.md)。
 
 2026-11-11 Paseo 0.16 插件能力（已设计，未实现）：重点是后台任务（摘要、记忆复盘、Insights、自动验收改用后台 agent；自动验收和 Wrap up 考虑 agent 仍在跑的后台任务）和 composer（Next moves 用 `setPrompt`/`focus` 填入，手机也可用；卡片 session 的输入框上放阶段选择与 Next moves 控件）；插件订阅、实体元数据、客户端状态 hook 作配套；侧栏视图、New workspace 项、按设备设置暂缓（用户决定 2026-11-11）。探测方式：贡献函数存在 / 调用识别 `Update the host…` 拒绝 / 宿主版本兜底（插件读不到 `server_info.features`），0.15 回退；列出对 AGENTS.md 例外的影响。等 0.16.0 正式版后分三个任务做：composer（含 SDK 升级）、后台任务、其余配套。[PASEO-0.16-SPEC](PASEO-0.16-SPEC.md)。

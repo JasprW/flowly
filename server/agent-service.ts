@@ -1,4 +1,5 @@
 import { isSummarizer } from "../shared/summary";
+import { actionableEvent, acceptanceOutput, agentCallSchema, compactRead, type AgentWriteResult, type Continuation } from "../shared/agent-output";
 import { outputLanguage } from "../shared/ai-language";
 import type { LocaleCode } from "../shared/i18n";
 import { enabledStatuses, laneEnabled, laneName } from "../shared/lanes";
@@ -268,6 +269,7 @@ export class AgentService {
       task.id,
       paseo,
       board,
+      false,
     );
     if (!context.workspaceRepoPaths.length)
       throw new ToolError(
@@ -281,7 +283,7 @@ export class AgentService {
    * so artifacts it returns stop being unread for that session. The context
    * returned after a write shows the flags without clearing them.
    */
-  async get(identity: ToolIdentity, recordAccess = true, markArtifacts = recordAccess): Promise<ToolContext> {
+  async get(identity: ToolIdentity, recordAccess = true, markArtifacts = recordAccess, compactActivity = false): Promise<ToolContext> {
     // Taken before reading the board: an artifact added meanwhile stays unread.
     const readAt = new Date(Math.max(Date.now(), this.clock())).toISOString();
     const lastRead = await this.artifactReads.lastRead(identity.agentId).catch(() => undefined);
@@ -357,7 +359,7 @@ export class AgentService {
       ...(await this.store.read().then(async (board) => {
         setup = setupContext(setupMissing(r.task, workpadOf(board.workpads, r.task.id), workpadEnabled(r.project)), r.task.status);
         return {
-          activity: board.events.filter((e) => e.taskId === r.task.id).slice(-20),
+          activity: board.events.filter((e) => e.taskId === r.task.id && (!compactActivity || actionableEvent(e))).slice(compactActivity ? -10 : -20),
           projectTags: projectTagStats(board.tasks, r.project.id).map(({ tag, count }) => ({ tag, count })),
           outputLanguage: outputLanguage(await this.aiLanguage()),
           ideas: board.ideas
@@ -434,11 +436,43 @@ export class AgentService {
       );
     return value;
   }
+  /** Public MCP/CLI read. Internal full-context callers retain their existing shape. */
+  async readAgent(identity: ToolIdentity, options: { responseDetail?: "compact" | "full" } = {}) {
+    const full = options.responseDetail === "full";
+    const current = await this.get(identity, true, true, !full);
+    return full ? current : compactRead(current);
+  }
+  /** Presentation is not a business input, so it cannot change a receipt's replay identity. */
+  async writeAgent(identity: ToolIdentity, action: Parameters<AgentService["write"]>[1], raw: unknown) {
+    const { responseDetail, ...input } = agentCallSchema.parse(raw);
+    return responseDetail === "full" ? this.write(identity, action, input) : this.write(identity, action, input, "compact");
+  }
+  private async continuation(identity: ToolIdentity, includeAcceptance: boolean): Promise<Continuation> {
+    const r = await this.resources(identity);
+    const board = await this.store.read();
+    const enabled = workpadEnabled(r.project);
+    const workpad = enabled ? workpadOf(board.workpads, r.task.id) : undefined;
+    const revision = { task: r.task.revision, project: r.project.revision };
+    const finished = ["done", "cancelled"].includes(r.task.status);
+    return {
+      identity, toolVersion: 2,
+      task: { id: r.task.id, status: r.task.status },
+      revision, request: this.secrets.request(identity, revision),
+      setup: setupContext(setupMissing(r.task, workpad, enabled), r.task.status),
+      writable: r.context.available && !finished,
+      reason: r.context.reason || (finished ? "Task is finished; only a human can reopen it." : ""),
+      workpadEnabled: enabled,
+      workpad: workpad ? { revision: workpad.revision, ...(includeAcceptance ? { acceptance: acceptanceOutput(workpad.acceptance) } : {}) } : null,
+    };
+  }
+  async write(identity: ToolIdentity, action: AgentWriteAction, raw: unknown, detail: "compact"): Promise<AgentWriteResult>;
+  async write(identity: ToolIdentity, action: AgentWriteAction, raw: unknown, detail?: "full"): Promise<ToolResult>;
   async write(
     identity: ToolIdentity,
-    action: "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad",
+    action: AgentWriteAction,
     raw: unknown,
-  ): Promise<ToolResult> {
+    detail: "compact" | "full" = "full",
+  ): Promise<ToolResult | AgentWriteResult> {
     const input: StatusInput | ProgressInput | IdeaInput | IdeaUpdateInput | IdeaRemovalInput | RememberInput | ArtifactToolInput | ArtifactRemovalInput | TagsToolInput | TypeToolInput | NextMovesInput | WorkpadInput =
       action === "status"
         ? statusInputSchema.parse(raw)
@@ -982,7 +1016,9 @@ export class AgentService {
     }
     const memoryField = memoryId ? { memoryId } : {};
     try {
-      const current = await this.get(identity, true, false);
+      const current = detail === "compact"
+        ? await this.continuation(identity, action === "workpad")
+        : await this.get(identity, true, false);
       this.accesses.set(identity.agentId, {
         at: new Date(this.clock()).toISOString(),
         action,
@@ -1001,6 +1037,8 @@ export class AgentService {
     }
   }
 }
+
+type AgentWriteAction = "status" | "progress" | "idea" | "idea_update" | "idea_remove" | "remember" | "artifact" | "artifact_remove" | "tags" | "type" | "next_moves" | "workpad";
 
 /** get_task's acceptance list and plans (WORKPAD-SPEC §4.1, GUARDRAILS-SPEC §7.1). */
 function workpadContext(workpads: readonly Workpad[], plans: Board["plans"], taskId: string, agentId: string) {
