@@ -574,11 +574,13 @@ function TaskFormBody({
     : lanes.filter((s) => (s !== "done" && s !== "cancelled") || s === defaultStatus);
   // The agent's first message; required, never prefilled (title and description already reach it as context).
   const [prompt, setPrompt] = useState(restored.prompt ?? "");
+  // Built once per mount (the form remounts per loaded draft), never per keystroke.
+  const [restoredImages] = useState(() => (task ? undefined : draftAttachments(draft.draft)));
   // Description images (web: paste, drop or Add images), uploaded once the card is saved (CARD-IMAGES-SPEC §4.2).
   const images = useImageAttachments(
     cardImageLimit - (task?.images?.length || 0),
     () => t("At most {cardImageLimit} images per card.", { cardImageLimit }),
-    task ? undefined : draftAttachments(draft.draft),
+    restoredImages,
   );
   useDraftChanges(
     draft,

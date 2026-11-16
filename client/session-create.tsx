@@ -79,7 +79,9 @@ function SessionForm({
     // A prepared session survives closing the form, so a retry finds it instead of creating another.
     [creationPending, setCreationPending] = useState(() => !!attempt.current?.prepared);
   // Images with the first message (web: paste, drop or Add images).
-  const attachments = useImageAttachments(maxImages, undefined, draftAttachments(draft.draft));
+  // Built once per mount (the form remounts per loaded draft), never per keystroke.
+  const [restoredImages] = useState(() => draftAttachments(draft.draft));
+  const attachments = useImageAttachments(maxImages, undefined, restoredImages);
   useDraftChanges(
     draft,
     draft.status === "ready",
