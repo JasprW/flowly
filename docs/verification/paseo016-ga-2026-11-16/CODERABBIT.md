@@ -14,3 +14,5 @@ PR #115，基于bdf9804；只改daemon同步、定时回归与契约，客户端
 ## 独立复核发现的绑定读取窗口
 
 Luna在4d8f667末次检查拒绝放行：异步读取绑定时尚未设置running，新事件的定时回调可能在旧pass运行时被合并而丢失新绑定。已新增同时阻塞bindings和agents.list的确定性回归：修复前exit1，1失败/17跳过，实际writes为空；修复后整套聚焦53通过/0失败，typecheck exit0。readingBindings与running统一保护pendingChange，只有两阶段均结束才drain；普通失败不制造pending，原失败不自旋断言保留。
+
+最终363073c：typecheck exit0，53聚焦通过；全量exit0，1501通过/6跳过/0失败。新的独立Luna会话对精确363073c审阅和typecheck/53聚焦后给出PASS，见LUNA-FINAL.md。

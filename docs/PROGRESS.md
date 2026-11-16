@@ -1366,3 +1366,5 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 无新界面、设置或heartbeat字段，不增加tour/tip/What’s new；README与OVERVIEW说明默认本机ID镜像与订阅行为。
 
 - CodeRabbit后续：缺失归档workspace有界复查、用户批准的忙时补轮、失败不自旋均有回归；定时断言覆盖5秒回退与60秒校对。旧实现3回归失败，修复后5文件52项与typecheck通过。见 verification/paseo016-ga-2026-11-16/CODERABBIT.md。
+
+- 最终363073c覆盖绑定读取窗口，确定性回归先红后绿；typecheck与全量1501通过/6skip，独立Luna 53聚焦通过并放行。客户端产品源码未改，既有手机与旧宿主证据不冒充新取样。
