@@ -231,5 +231,422 @@
     "native": true,
     "workspaces": true,
     "agents": true
+  },
+  "coldStartSupplement": {
+    "method": "Force-stop; VIEW intent directly into the existing Flowly board; screenshot OCR confirms Flowly/tasks/Todo without manual navigation. Conservative image bounds retained. Precise/profile samples use first overview React commit with adb clock offset; commit is not native-paint timing. Same client code, server subscription refused versus healthy.",
+    "samples": [
+      {
+        "name": "fallback-direct1",
+        "start": 1794823962233,
+        "cold": true,
+        "shellMs": 1368,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 3716,
+          "upperMs": 5441
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 344",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 59.9
+      },
+      {
+        "name": "healthy-direct1",
+        "start": 1794824003423,
+        "cold": true,
+        "shellMs": 592,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 4067,
+          "upperMs": 5376
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 348",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 56.3
+      },
+      {
+        "name": "fallback-direct2",
+        "start": 1794824070980,
+        "cold": true,
+        "shellMs": 608,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 3870,
+          "upperMs": 5331
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 347",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 102.6
+      },
+      {
+        "name": "healthy-direct2",
+        "start": 1794824228330,
+        "cold": true,
+        "shellMs": 1254,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 5439,
+          "upperMs": 6868
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 347",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 72.5
+      },
+      {
+        "name": "fallback-direct3",
+        "start": 1794824270249,
+        "cold": true,
+        "shellMs": 1110,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 5249,
+          "upperMs": 6464
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 352",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 60.4
+      },
+      {
+        "name": "healthy-direct3",
+        "start": 1794824286996,
+        "cold": true,
+        "shellMs": 655,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 4101,
+          "upperMs": 5215
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 355",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 64.5
+      },
+      {
+        "name": "fallback-direct4",
+        "start": 1794824321817,
+        "cold": true,
+        "shellMs": 682,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 4312,
+          "upperMs": 5789
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 359",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 60.8
+      },
+      {
+        "name": "healthy-direct4",
+        "start": 1794824338886,
+        "cold": true,
+        "shellMs": 743,
+        "commitMs": null,
+        "clockOffset": null,
+        "clockUncertainty": null,
+        "visible": {
+          "lowerMs": 5369,
+          "upperMs": 6844
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 359",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 91.1
+      },
+      {
+        "name": "fallback-precise1",
+        "start": 1794824473293,
+        "cold": true,
+        "shellMs": 1305,
+        "commitMs": null,
+        "clockOffset": 458,
+        "clockUncertainty": 74,
+        "visible": null,
+        "battery": [
+          "  level: 100",
+          "  temperature: 359",
+          "  Capacity level: 5"
+        ],
+        "valid": false,
+        "freshPerf": false,
+        "pluginLoadMs": null,
+        "invalidReason": "No Flowly frame or fresh startup perf report; cause not established. Previous perf report is not reused."
+      },
+      {
+        "name": "healthy-precise1",
+        "start": 1794824510545,
+        "cold": true,
+        "shellMs": 666,
+        "commitMs": 5767,
+        "clockOffset": 418,
+        "clockUncertainty": 31,
+        "visible": {
+          "lowerMs": 4924,
+          "upperMs": 6243
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 361",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 88.8
+      },
+      {
+        "name": "fallback-precise2",
+        "start": 1794824590966,
+        "cold": true,
+        "shellMs": 621,
+        "commitMs": 4294.5,
+        "clockOffset": 438.5,
+        "clockUncertainty": 47.5,
+        "visible": {
+          "lowerMs": 3356,
+          "upperMs": 4765
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 359",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 75.0
+      },
+      {
+        "name": "healthy-precise2",
+        "start": 1794824607605,
+        "cold": true,
+        "shellMs": 654,
+        "commitMs": 4454.5,
+        "clockOffset": 418.5,
+        "clockUncertainty": 25.5,
+        "visible": {
+          "lowerMs": 4241,
+          "upperMs": 5516
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 362",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 84.4
+      },
+      {
+        "name": "fallback-precise3",
+        "start": 1794824643508,
+        "cold": true,
+        "shellMs": 610,
+        "commitMs": 4200,
+        "clockOffset": 435,
+        "clockUncertainty": 43,
+        "visible": {
+          "lowerMs": 3284,
+          "upperMs": 4751
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 365",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 58.7
+      },
+      {
+        "name": "healthy-precise3",
+        "start": 1794824660289,
+        "cold": true,
+        "shellMs": 699,
+        "commitMs": 4576,
+        "clockOffset": 436,
+        "clockUncertainty": 46,
+        "visible": {
+          "lowerMs": 4062,
+          "upperMs": 5611
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 367",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 80.0
+      },
+      {
+        "name": "healthy-precise4",
+        "start": 1794824691558,
+        "cold": true,
+        "shellMs": 775,
+        "commitMs": 4392.5,
+        "clockOffset": 422.5,
+        "clockUncertainty": 29.5,
+        "visible": {
+          "lowerMs": 3860,
+          "upperMs": 5416
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 367",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 58.4
+      },
+      {
+        "name": "fallback-precise4",
+        "start": 1794824708280,
+        "cold": true,
+        "shellMs": 1195,
+        "commitMs": 4339,
+        "clockOffset": 424,
+        "clockUncertainty": 32,
+        "visible": {
+          "lowerMs": 3905,
+          "upperMs": 5233
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 367",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 71.3
+      },
+      {
+        "name": "fallback-profile1",
+        "start": 1794824791011,
+        "cold": true,
+        "shellMs": 1146,
+        "commitMs": 4966,
+        "clockOffset": 440,
+        "clockUncertainty": 51,
+        "visible": {
+          "lowerMs": 4663,
+          "upperMs": 6107
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 364",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 60.5,
+        "segmentsMsFromStart": {
+          "p16.cold.rpc.begin": 3636.0,
+          "p16.cold.rpc.end": 4873.0,
+          "p16.cold.commit": 4966.0
+        }
+      },
+      {
+        "name": "healthy-profile1",
+        "start": 1794824807829,
+        "cold": true,
+        "shellMs": 1139,
+        "commitMs": 4319.5,
+        "clockOffset": 424.5,
+        "clockUncertainty": 29.5,
+        "visible": {
+          "lowerMs": 3881,
+          "upperMs": 5409
+        },
+        "battery": [
+          "  level: 100",
+          "  temperature: 365",
+          "  Capacity level: 5"
+        ],
+        "valid": true,
+        "freshPerf": true,
+        "pluginLoadMs": 59.6,
+        "segmentsMsFromStart": {
+          "p16.cold.rpc.begin": 3193.5,
+          "p16.cold.push": 3838.5,
+          "p16.cold.rpc.end": 4246.5,
+          "p16.cold.commit": 4319.5
+        }
+      }
+    ],
+    "matchedPrecise": {
+      "pairs": [
+        2,
+        3,
+        4
+      ],
+      "fallbackMedianMs": 4294.5,
+      "healthyMedianMs": 4454.5,
+      "medianDifferenceMs": 160,
+      "differencePercent": 3.7257,
+      "acceptance": "Original zero-regression gate was not passed; user explicitly accepted up to 5% variation after seeing the +3.7% result on 2026-11-16. Awaiting independent Luna review under this criterion."
+    },
+    "clientBundleComparison": {
+      "compiler": "isolated Paseo 0.15.4 compiler; identical options for both source trees",
+      "baseCommit": "7f66c31",
+      "candidateCommit": "ba4aa41",
+      "baseBytes": 1028989,
+      "candidateBytes": 1031722,
+      "deltaBytes": 2733
+    },
+    "profilePair": {
+      "fallbackCommitMs": 4966,
+      "healthyCommitMs": 4319.5,
+      "interpretation": "Direction reverses; much of this pair difference precedes the initial overview RPC. Does not override the earlier pairs or establish non-inferiority."
+    }
   }
 }
