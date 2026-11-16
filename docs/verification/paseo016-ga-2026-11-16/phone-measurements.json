@@ -633,7 +633,7 @@
       "healthyMedianMs": 4454.5,
       "medianDifferenceMs": 160,
       "differencePercent": 3.7257,
-      "acceptance": "Original zero-regression gate was not passed; user explicitly accepted up to 5% variation after seeing the +3.7% result on 2026-11-16. Awaiting independent Luna review under this criterion."
+      "acceptance": "Original zero-regression gate was not passed; user explicitly accepted up to 5% paired-median variation after seeing the +3.7% result on 2026-11-16. Independent GPT 6 Luna passed under that scoped criterion at reviewed source 3043bd8; an individual pair is +8.95%, not a per-launch guarantee."
     },
     "clientBundleComparison": {
       "compiler": "isolated Paseo 0.15.4 compiler; identical options for both source trees",
