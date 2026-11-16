@@ -119,3 +119,55 @@ Item 5 duplicate-card claim: **confirmed**, with a caveat.
 - Key binding across a key change; retry after a conflict-read error; the close-vs-create race; per-key prepared attempts; the image-cleanup-failure path.
 - Spec §6 items 1 (Esc/Cancel reopen, reload), 2 (client key use), 4 (`DraftNotice` buttons) are still as in the first report.
 - Part B (live UI) is not run by me in either pass; see `ui.md` for the implementer's probe.
+
+## Run on 92aa208
+
+Commit under test: `92aa208` (branch `fix/form-drafts`, PR #116). Worktree `/tmp/flowly-verify-92aa208` created from the commit; `npm ci` exit 0 (not symlinked). Worktree removed afterwards.
+
+Node: machine `node -v` = v23.11.0; CI-equivalent via `npx -y -p node@24` = v24.22.3.
+
+Model: claude-haiku-5-5 (independent verifier). Session title: not known to me; the requesting session is titled "修复".
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| Typecheck | `npm run typecheck` | 0 | clean |
+| Full suite, Node 24 | `NODE_ENV=test FLOWLY_TELEMETRY=0 npx -y -p node@24 -- node node_modules/vitest/vitest.mjs run` | 0 | files: 168 passed, 1 skipped (169). tests: 1527 passed, 6 skipped (1533). No rerun needed |
+| Full suite, Node 23 | `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test` | 1 | files: 1 failed, 167 passed, 1 skipped (169). tests: 1 failed, 1526 passed, 6 skipped (1533). Only failure: `server/sqlite-store.test.ts` "a write that fails inside the transaction changes neither the database nor the cache" (known Node 23 issue, see below) |
+| Focused suites, Node 24 | `server/form-drafts.test.ts client/form-draft-saver.test.ts client/task-draft.test.ts client/catalog.test.ts server/guardrails.test.ts` | 0 | 5/5 files, 50/50 tests passed |
+
+Note: my first Node 23 run printed `exit=0` because the shell captured the exit code of `$(node -v)` in the echo, not of `npm test`. Rerun with the exit code captured directly: exit 1, same single failure.
+
+Node 23 failure output (only the failing test, raw):
+
+```
+FAIL  server/sqlite-store.test.ts > writes > a write that fails inside the transaction changes neither the database nor the cache
+Error: cannot start a transaction within a transaction
+ ❯ transaction server/sqlite-storage.ts:185:6
+ ❯ SqliteBoard.save server/sqlite-storage.ts:220:18
+```
+
+This is the same known Node 23 failure as in earlier runs. Node 24 passes it.
+
+### Coverage of the behavior changes in `ea6e7f7..92aa208` (client, server, shared)
+
+| Behavior change | Covered by | Verdict |
+|---|---|---|
+| Unread draft not cleared after a failed load (`form-draft.tsx` `clear()` returns when `status !== "ready"`) | none. `useFormDraft` has no test | **Not covered** |
+| operationId kept in memory after a failed load (`unsavedOperations` map, `persist`/`unsavedOperation`) | none | **Not covered** |
+| Cleanup errors logged without masking the save error (`logFailure` `.catch` in `server/form-drafts.ts` temp and image rollback) | none. No test mocks `logFailure` or forces the cleanup to fail | **Not covered** |
+| Cleared revision recorded as revision+1 | `server/form-drafts.test.ts` "revisions never repeat after a clear…" (read returns revision 2 after clearing revision 1) | Covered |
+| Clear only for the matching revision (`clear(key, revision)` returns `ok:false` on mismatch) | `server/form-drafts.test.ts` "a window still holding the cleared revision…" and "a clear naming an older revision keeps the newer draft" | Covered |
+| Over-limit text saved empty (`fitDraftFields`) | `client/form-draft-saver.test.ts` "text longer than a draft holds is saved empty…". Server-side limit not tested here | Covered (client function only) |
+| Retry after a failed load merges typed and loaded content (`mergeAfterFailedLoad`) | `client/form-draft-saver.test.ts` "Retry after a failed load keeps what was typed and what was saved". Pure function only; the hook wiring is not tested | Covered (function only) |
+| Conflict Retry uses `read()`'s revision (`overwriteLatest`) | `client/form-draft-saver.test.ts` "conflict retry after a clear uses the revision read reports, not 0" | Covered |
+
+Also new in `2d53e0c`..`92aa208`: `read()` now returns `{ revision, draft }`; covered by the updated "a saved draft reads back" test. `clearFormDraft` takes an optional `revision` (RPC schema); covered by the clear tests above.
+
+Uncovered, by reading only: the three "not covered" rows. Their code paths were checked by reading `client/form-draft.tsx` and `server/form-drafts.ts` diff; the behavior is not exercised by any test or UI run here.
+
+### Summary
+
+- Typecheck exit 0.
+- Node 24 (CI-equivalent): full suite exit 0, 1527 tests passed, 6 skipped. Focused suites 50/50.
+- Node 23: exit 1, one failure, the known sqlite-store transaction test; nothing else failed.
+- 5 of 8 listed behavior changes have a test (3 of them only at the pure-function level). 3 have none: unread-draft-not-cleared, operationId kept after failed load, and cleanup-error logging without masking.
