@@ -145,8 +145,12 @@ import { parentOf } from "../shared/subagents";
 import { reviewLabel } from "./task-review";
 import { visibleReview } from "../shared/auto-review";
 
+import { chipClient } from "./native-chips";
+import { composersOf } from "./host-support";
+
 /** One-time tip texts (ONBOARDING-SPEC §5). */
 const tipText: Record<TipId, (compact?: boolean) => string> = {
+  "session-composer-fill": () => t("Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent."),
   "first-card": () => t("Your card moves by itself as the agent works. Open it any time to see its sessions, output and summary."),
   "needs-you": () => t("A card is waiting for you. Reply goes straight to the session."),
   "first-idea": () => t("An agent suggested follow-up work. Good idea starts a card or continues here; Dismiss removes it."),
@@ -1254,6 +1258,7 @@ function BoardContent(
           reviewShown: !task && projectTasks.some((x) => !!visibleReview(x)),
           learnedGuideline: !task && !!projectGuardrails?.added,
           laneSwipe: touch && !task && !page && shownStatuses.length > 1 && projectTasks.some((x) => !x.archivedAt),
+          sessionComposerFill: !task && !!composersOf(chipClient()) && projectTasks.some((x) => !x.archivedAt && !!cardIndex.agentsByWorkspace.get(x.workspaceId)?.length),
           imageInput: imageInputSupported && !!task && !task.archivedAt && !task.images?.length,
         },
         blocked: !onboarding.values || welcomeOpen || welcome === "show" || dialogOpen || settingsHint || whatsNewOpen || whatsNewDue === "show",

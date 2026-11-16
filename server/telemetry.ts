@@ -150,6 +150,8 @@ export function modelTable(counts: ReadonlyMap<string, number>): Record<string, 
 /** What the daemon knows about its settings and board when a heartbeat is due (§4.2). */
 export type TelemetrySnapshot = {
   flowlyVersion: string;
+  /** The Paseo host's plain version (§4), "" when unknown; filled in by the service, not by the snapshot. */
+  paseoVersion?: string;
   language: string;
   deviceLocale: string;
   aiLanguage: string;
@@ -179,6 +181,7 @@ export function heartbeatProperties(s: TelemetrySnapshot, counts: WindowCounts, 
     $process_person_profile: false,
     $geoip_disable: true,
     flowly_version: s.flowlyVersion,
+    paseo_version: s.paseoVersion ?? "",
     node_major: Number(process.versions.node.split(".")[0]),
     os: process.platform,
     arch: process.arch,
@@ -251,7 +254,7 @@ export type TelemetryDeps = {
   fetch?: typeof fetch;
   /** Tests only: the folder whose files count as Flowly's own frames (§11). */
   pluginRoot?: string;
-  /** The Paseo version for error reports (§11.3); "" when unknown. Asked again after an empty answer. */
+  /** The Paseo version for the heartbeat (§4) and error reports (§11.3); "" when unknown. Asked again after an empty answer. */
   paseoVersion?(): Promise<string>;
   /** The `telemetry` setting; unreadable settings count as on (the default). */
   enabled(): Promise<boolean>;
@@ -395,8 +398,9 @@ export class TelemetryService {
     const gap = now - start;
     const from = gap > MAX_WINDOW ? now - MAX_WINDOW : start;
     const [snapshot, activity] = await Promise.all([this.deps.snapshot(), this.deps.activity()]);
+    this.paseoVersion ||= (await this.deps.paseoVersion?.().catch(() => "")) ?? "";
     const counts = countWindow(activity.events, activity.memoryConfirmedAt, from, now);
-    const properties = heartbeatProperties(snapshot, counts, gap > MAX_WINDOW ? Math.ceil(gap / DAY) : undefined);
+    const properties = heartbeatProperties({ ...snapshot, paseoVersion: this.paseoVersion }, counts, gap > MAX_WINDOW ? Math.ceil(gap / DAY) : undefined);
     const sent = await this.post({ event: "flowly_heartbeat", distinct_id: state.installId, timestamp: new Date(now).toISOString(), properties });
     if (!sent) return "failed";
     const sentAt = new Date(now).toISOString();

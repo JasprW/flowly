@@ -1,6 +1,6 @@
 # Paseo 0.16 插件能力：调研与接入设计
 
-2026-11-11，卡片「paseo 0.16 plugin」。状态：已设计；§3.1、§3.2 已实现（卡片「Paseo 0.16 接入：后台任务」，基于 0.16.0-beta.1，2026-11-12 升到 beta.2 并在用户本机 0.16.0-beta.2 daemon 上实测）。用户决定（2026-11-11）：重点做后台任务（§3.1、§3.2）和 composer（§3.3、§3.4）；侧栏视图、New workspace 项、按设备的设置和其余低优先级能力暂缓（on hold，§3.8），设计保留。每一项接入都要另开卡片，先在本文件补齐该项的契约再动代码。
+2026-11-11，卡片「paseo 0.16 plugin」。状态：已设计；§2、§3.3 的探测与 timeline composer 填入已实现，§3.4 保留 timeline、不加输入框控件；§3.1、§3.2 已实现（卡片「Paseo 0.16 接入：后台任务」，基于 0.16.0-beta.1，2026-11-12 升到 beta.2 并在用户本机 0.16.0-beta.2 daemon 上实测）。用户决定（2026-11-11）：重点做后台任务（§3.1、§3.2）和 composer（§3.3、§3.4）；侧栏视图、New workspace 项、按设备的设置和其余低优先级能力暂缓（on hold，§3.8），设计保留。每一项接入都要另开卡片，先在本文件补齐该项的契约再动代码。
 
 ## 1. 出处与前提
 
@@ -22,6 +22,8 @@
 | C. 宿主版本号 | 只能整体判断时 | 复用 `server/paseo-version.ts` 读到的版本，`>=0.16.0` 视为支持。只作 B 不可行时的兜底，因为它不能区分功能被关掉的宿主。 |
 
 导入新接口：`@getpaseo/plugin/server`、`@getpaseo/plugin/client` 等模块在运行时由宿主提供（服务端 bundle 把它们当外部模块），0.15 宿主上 0.16 才有的导出（如 `defineSubscription`、`useComposers`、`Combobox`、`useAgents`）是 `undefined`。所以不得在模块加载时调用或渲染它们：先判断 `typeof … === "function"`（或组件存在），不存在就走 0.15 路径。SDK 升级的验收包括：0.16 SDK 构建的插件装在 0.15 宿主上能正常加载，看板、session 页和 pill 行为与升级前一致。
+
+实现（2026-11-12）：daemon 侧 `server/host-support.ts`（`withHostFeature`：方法不存在或遇到 `Update the host to use …` 拒绝都按 daemon 启动缓存“不支持”，记日志不报 `$exception`；`paseoVersionAtLeast` 是方式 C，预发布版算作其正式版）；客户端 `client/host-support.ts`（`composersOf`）。`server/background-agent.ts` 保留自己的一份（它还认 0.15 对 `background` 的拒绝文案）。心跳带 `paseo_version`（`docs/TELEMETRY-SPEC.md` §4.2，用户决定 2026-11-11），用来看 0.16 的普及率。
 
 协议里的服务端标志名（`server_info.features.*`）与 0.16 客户端的守卫，作为对照记录在每项能力里；插件不直接读它们。
 
@@ -70,28 +72,21 @@
 - **API**：`useComposers({agentId} | {focused: true})`（任何插件组件）、`client.composers(selector)`，返回 `PluginComposer`：`context`（`agent` / `draft` / `new-workspace`）、`prompt`、本插件的 `attachments`、`agent{provider, model, mode, thinking, options, metadata}`；方法 `setPrompt`、`insertText`（光标处插入）、`focus({selection})`、`addAttachment`、`removeAttachment`、`setProvider`、`setModel`、`setMode`、`setThinking`、`setOptions`、`setMetadata`。标签页关着也能拿到运行中 agent 的 composer。
 - **`focus()` 行为**（宿主负责，#9207）：在屏幕上只放光标；被 sheet/菜单/弹层挡住先关掉；在别的标签、工作区或手机面板后面先导航过去再聚焦；草稿或 New workspace 不在屏幕上时拒绝，不把用户拉过去；agent 已归档或 15 秒内没出现时拒绝。
 - **探测**：A（`typeof client.composers === "function"`）。
-- **用法**：Next moves 的“填入”（原生 session 页的 Next moves 卡片与 Flowly 内的建议行）改用 `setPrompt` 加 `focus()`，替换 `client/web-composer.ts` 的 DOM 查找；手机上也能填入（现在手机只能复制）。需要用户补写的建议可用 `focus({selection})` 选中待补的那段。图片附件可以改走 `addAttachment`，但 `client/web-images.ts` 的粘贴/拖放监听仍需要，见 §5。
+- **用法**：Next moves 的“填入”（原生 session 页的 Next moves timeline 卡片）使用 `setPrompt` 加 `focus()`，替换 `client/web-composer.ts` 的 DOM 查找；手机上也能填入。当前建议没有待补片段标记，聚焦时光标放在末尾。图片附件可以改走 `addAttachment`，但 `client/web-images.ts` 的粘贴/拖放监听仍需要，见 §5。
 - **约束**：只往输入框里放用户看得见的文字，由用户自己发送；不在发送时追加任何隐藏内容（AGENTS.md：普通跟进只发用户的原文）。
 - **旧宿主**：保留 `client/web-composer.ts` 现有路径（web 填入，其余复制）。
+- **实现（2026-11-12）**：`client/composer-fill.ts`，规则见 `docs/NATIVE-SESSION-SPEC.md` §6.4。与上文的差异：
+  - 只用于原生 session 页的 Next moves timeline 卡片。Flowly 内的建议行填的是 Flowly 自己的输入框（不是 Paseo 的 composer），不变。
+  - `NextMove` 只有一段 `prompt`，没有“待补的那段”的标记，所以不选中任何文字，光标放到末尾；要选中需先给建议加占位符契约。
+  - `focus()` 被拒绝时先把输入框恢复成原来的文字，再复制并提示，避免留下用户看不到的改动。
 - **验收**：0.16 宿主上 web 和手机点 Next move 都把文字填进对应 session 的输入框并聚焦，不发送；输入框已有文字时在其后空一行追加，与 `docs/NATIVE-SESSION-SPEC.md` §6.4 现行规则相同；`focus()` 被拒绝时退回复制并提示；0.15 宿主行为不变。
 
-### 3.4 Composer 控件【重点】
+### 3.4 输入框控件
 
-- **API**：`client.addComposerItem({ id, Component })`，组件里 `useComposer()` 拿到所在的 composer（§3.3 的同一个对象）；`client/ui` 的 `Toggle`、`Select`、`Action`、`Combobox`（带防抖 `search`）。宿主按实际渲染宽度决定行内显示还是收进溢出面板（#9209）；组件返回空时不占位置。`addComposerPill` 仍在且未废弃。
-- **探测**：A。
-- **用法**：
-  - 卡片 session 的 composer 上放“卡片阶段”`Select`（切换泳道）和 “Next moves”（`Action` 或 `Combobox`，选中即按 §3.3 填入）。
-  - 非卡片 session、草稿和 New workspace 的 composer 返回空。判断“是不是卡片 session”用 §3.6 的元数据，元数据不可用时走现有的插件 RPC 查询。
-  - 逐步替换 `client/session-link.ts` 里的 composer pill；0.15 宿主上继续用 pill。
-- **候选（接入卡片里再定）**：
-  - 引用卡片：`Combobox` 搜本项目的卡片、想法、记忆，选中后把摘要作为可见文字插入或作为附件加入。
-  - 草稿接入：在卡片工作区的新 session 草稿上 `setMetadata({ "flowly.taskId": … })`，创建时由 hook 注入 Flowly MCP，省去手动 “Send Kanban work instructions”。需先实测草稿 metadata 是否随创建请求带上。
-- **约束**：
-  - 宿主为量宽度会多渲染一份控件，effect 可能执行两次：控件挂载时不发请求、不写数据，读数据走 `client/queries.ts` 的共享查询，写只在用户操作时发生。
-  - 一张卡的 composer 最多放两个控件，避免手机上全被挤进溢出面板。
-  - 不加说明性文字（AGENTS.md：UI 保持简洁）；所有文字走 `t()`。
-- **旧宿主**：保留 pill。
-- **验收**：0.16 宿主上卡片 session 的 composer 显示阶段选择和 Next moves；非卡片 session 不显示；切换阶段与看板上拖动结果一致（同样校验、同样拒绝过期修改）；窄屏时控件进入溢出面板仍可用；0.15 宿主仍显示 pill。
+- 不注册 `addComposerItem`，不显示阶段 Select 或 Next moves Combobox。Progress 与 Next moves 继续使用原生 session timeline（`docs/NATIVE-SESSION-SPEC.md` §5、§6）。
+- Task pill 与 Ideas chip 保留；阶段操作仍在原来的卡片入口。草稿、New workspace、非卡片 session 不增加输入框控件。
+- 手机端直接填入只使用 §3.3 的 composer API，不改变 timeline 的布局、建议当前性、隐藏、Copy 设置或 Move to Done 行为。
+- 验收：0.16 与 0.15 都保留 timeline 和原有 pill；输入框行内与溢出面板都没有新增阶段或 Next moves 控件；0.16 点击 timeline Next move 填入对应 session 并聚焦，已有文字空一行追加，不发送。
 
 ### 3.5 插件订阅（push）
 
@@ -110,6 +105,8 @@
 - **用法**：在卡片的工作区、Flowly 创建的 session 和 §3.1 的后台 agent 上写入 `flowly.taskId`（只写 ID，不写标题等内容）。它是 Flowly 自己记录的镜像，不是事实来源：卡片与工作区的绑定仍以插件数据为准；镜像让 §3.4 的控件和 hook 不经 RPC 就知道一个 session 属于哪张卡。
 - **旧宿主**：不写，所有判断走插件数据。
 - **验收**：0.16 宿主上新建卡片工作区和 session 后元数据可读到对应 `taskId`；绑定变化（删除卡片、unwrap）时同步更新或清除；元数据与插件数据不一致时以插件数据为准并修正元数据。
+
+- Composer 卡片的 session 部分已实现：daemon 镜像 `flowly.taskId` / `flowly.agentId`，只写 live session 缺少或变化的值；受管集合以插件记录为准，看板写入后清除已解绑的 Flowly 键；旧宿主拒绝后本次运行不再尝试。工作区和后台 agent 的镜像由其余配套卡片实现。
 
 ### 3.7 客户端状态 hook（含 workspace indicator）
 
@@ -159,7 +156,7 @@
 1. 原定先等 0.16.0 正式版。用户决定（2026-11-11，后台任务卡片）：先用 0.16.0-beta.1 实现，SDK 依赖暂锁 beta（2026-11-12 跟随宿主升到 0.16.0-beta.2；beta.2 的 hook agent 多了 `background`，`agent.open.before` 请求的 `background` 为必填），2026-11-16 用户已升级正式版，本卡改锁 0.16.0，并对比 beta.2 的 API、复验后台 agent 与后台任务，通过回归和 PR 检查后合入。`requirements.paseo` 不改。
 2. SDK 升到 0.16.0 后，`requirements.paseo` 仍保持 `>=0.15.0`，所有能力按 §2 探测、0.15 回退。心跳加 `paseo_version`（用户决定 2026-11-11，和 SDK 升级一起做，复用 `server/paseo-version.ts`，同步改 `docs/TELEMETRY-SPEC.md` §4、`heartbeatProperties`、key-set 测试和隐私说明），用来看 0.16 的普及率。只有当用户看过普及率、决定放弃 0.15 宿主时才把 `requirements.paseo` 提到 `>=0.16.0`，并在同一改动里删掉 §5 标为“可删除”的回退代码与例外。
 3. 实施分三个任务（用户决定 2026-11-11，不再按小节拆分）：
-   - **Composer**：SDK 升级与 §2 探测（先做，后两个任务复用）、§3.3、§3.4。§3.4 判断卡片 session 时元数据还没有就走插件 RPC。
+   - **Composer**：SDK 升级与 §2 探测（先做，后两个任务复用）、§3.3、§3.4。§3.4 保留原有 timeline 与 pill，不注册输入框控件。
    - **后台任务**：§3.1、§3.2。§3.2 的自动验收部分和 §3.1 把评审 session 改成后台 agent 一起调整。
    - **其余**：§3.6、§3.5、§3.7，优先级低于前两个。§3.6 做完后，§3.4 和 §3.1 改为优先读元数据。
    §3.8 暂缓。

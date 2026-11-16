@@ -1455,5 +1455,6 @@ const catalog: Catalog = {
   "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "Las tarjetas pueden llevar imágenes: pégalas o suéltalas en la descripción en Editar tarea. Los agentes las ven como parte de la descripción.",
   "Images in descriptions": "Imágenes en descripciones",
   "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "En la web, pega o suelta imágenes en la descripción de una tarjeta. Los agentes las ven con la descripción; los teléfonos las muestran.",
+  "Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent.": "Toca un siguiente paso sugerido en la cronología de la sesión para rellenar el cuadro de mensaje, también en el móvil. No se envía nada.",
 };
 export default catalog;

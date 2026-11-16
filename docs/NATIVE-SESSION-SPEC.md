@@ -29,11 +29,11 @@ P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工�
 
 ## 3. 用户决定
 
-- Next moves 与 Ideas 在原生 pane 上分成**两个独立的 composer chip**。
+- Progress 与 Next moves 在原生 timeline 展示；Ideas 保留独立的 composer chip。
 - Summary 通过**原生 timeline** 展示。
 - 只覆盖 P1。
 - Flowly 内 session 视图不加 Progress 卡片，只在原生 timeline 显示（§5.4，2026-10-20 实现后追加）。
-- **本功能完全不影响 Flowly 内部的行为与样式，只针对原生 session**（2026-10-20 实现后追加）。因此：Flowly 内建议行的 × 不与原生 chip 共享（§6.3）；不加 Flowly 内的一次性提示，欢迎页文案不变（§9）；summary 的写入与 Flowly 内展示不受原生行追加影响（§5.1）。唯一新增的 Flowly 入口是原生 Ideas chip 的 “Start a new task” 打开的 `ideaId` 看板链接（§7.3），不带该参数时看板行为不变。
+- **本功能完全不影响 Flowly 内部的行为与样式，只针对原生 session**（2026-10-20 实现后追加）。因此：Flowly 内建议行的 × 不与原生 timeline 共享（§6.3）；欢迎页文案不变，手机填入的一次性提示见 §9；summary 的写入与 Flowly 内展示不受原生行追加影响（§5.1）。唯一新增的 Flowly 入口是原生 Ideas chip 的 “Start a new task” 打开的 `ideaId` 看板链接（§7.3），不带该参数时看板行为不变。
 - Summary 的原生 timeline 行是**尽力显示**：daemon 重启后旧行消失可以接受，不做补回（§5.2）。
 - ~~原生 pane 上点 next move：弹层内显示可编辑文字，按 Send 才发送~~（2026-10-20 修订：点建议默认预填 Paseo 输入框，可在设置中改为复制，§6.4）。
 
@@ -47,7 +47,7 @@ P3/P4 的建议方向（未决，供以后评估）：不依赖 agent 调用工�
 
 限制：
 
-- **SDK 没有往原生输入框预填文字的接口。** 预填只能像 prompt-suggestions 那样在 web/桌面通过 DOM 找到输入框（`textarea[data-composer-input]`，经 React fiber 的 `agentId` 属性确定所属 session）后设置值；这依赖 Paseo 的内部结构，不是插件 API，因此必须做特性检测并在失败时退回复制（§6.4）。
+- **0.15 及更早的 SDK 没有往原生输入框预填文字的接口。** Paseo 0.16 的 SDK 有了（`client.composers({agentId})` 返回该 session 的 `PluginComposer`，带 `prompt`、`setPrompt`、`focus`；`client.addComposerItem` 往输入框工具栏放控件），0.16 宿主上走它（§6.4、§6.5，`docs/PASEO-0.16-SPEC.md` §3.3、§3.4）。0.15 宿主上预填只能像 prompt-suggestions 那样在 web/桌面通过 DOM 找到输入框（`textarea[data-composer-input]`，经 React fiber 的 `agentId` 属性确定所属 session）后设置值；这依赖 Paseo 的内部结构，不是插件 API，因此必须做特性检测并在失败时退回复制（§6.4）。
 - Paseo 要求 timeline kind 与行 id 匹配 `^[a-z][a-z0-9-]*$`，否则注册时抛错并使整个客户端插件加载失败。
 
 ## 5. Summary：原生 timeline 条目
@@ -136,13 +136,19 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 ### 6.4 交互
 
 - **消息型建议**，按设置 `nextMoveTap`（host 设置 `native-session`，默认 `fill`）：
-  - `fill`（默认）：把 `prompt` 填进**这个 session 的** Paseo 输入框；输入框已有文字时在其后空一行追加（与 Flowly 的 `nextMoveDraft` 相同），光标移到末尾并聚焦。**不发送**，由用户在 Paseo 里发送。仅 web 与桌面可用（`client/web-composer.ts`，见 AGENTS.md 例外）；找不到该 session 的输入框（iOS/Android app、Paseo 改了输入框结构）时退回 `copy`。（退回复制是设计者的决定。）
+  - `fill`（默认）：把 `prompt` 填进**这个 session 的** Paseo 输入框；输入框已有文字时在其后空一行追加（与 Flowly 的 `nextMoveDraft` 相同），光标移到末尾并聚焦。**不发送**，由用户在 Paseo 里发送。0.16 宿主各平台使用 SDK；0.15 宿主仅 web 与桌面可填入（`client/web-composer.ts`，见 AGENTS.md 例外），手机或找不到对应输入框时退回 `copy`。
     - 认定归属（2026-10-22 修正）：只看屏幕上的输入框（不在 `aria-hidden` 子树、有布局）；fiber 的两份副本里**任一**沿 `return` 链找到的 `agentId` 等于本 session 即算属于它。DOM 节点保存的是创建时的 fiber，React 每次更新在两份副本间切换，所以任一副本都可能停在旧的 props 上：在新 session 草稿里创建的输入框会一直带着草稿 id，直到刷新页面。原先“两份副本不一致就不认”的规则因此在长时间不刷新的桌面 app 里一直退回复制。仍有两个可见输入框属于同一 session（分屏）时不猜，退回复制。
+    - Paseo 0.16 宿主（2026-11-12）：先用 SDK 的输入框接口（`client/composer-fill.ts`）。`client.composers({agentId})` 取该 session 的输入框，`setPrompt(nextMoveDraft(prompt, 现有文字))`，再 `focus({selection: 末尾})`；web、桌面和 iOS/Android app 都能填入。找不到该 session 的输入框（未打开它）或 `focus()` 被拒绝（宿主不让聚焦一个看不见的输入框，getpaseo/paseo #9207）时，把输入框恢复成原来的文字并退回 `copy`。宿主没有 `composers` 时（0.15）走上面的 DOM 路径；最低宿主未到 0.16 前不删 `client/web-composer.ts`。
+    - 建议没有占位符（`NextMove` 只有一段 `prompt`），所以不选中“需要补写的部分”，只把光标放到末尾（与 Flowly 内相同）。
   - `copy`：复制 `prompt`，toast “Copied. Paste it into the message box.”。
   - 卡片保留到下一轮开始或用户关闭。
 - **Move to Done**：同前（重新校验建议仍当前、卡片未完成 → 移到 Done；未开 *Auto wrap up* 且有东西可收尾时在卡片内询问 Wrap up / Open in Flowly / Not now，有阻塞或警告时只给 Open in Flowly）。
 - **×**：本机隐藏这一组（`client/hidden-moves.ts`），不影响 Flowly 内建议行。
-- 设置位置：Flowly 设置 → AI features → “Paseo's session view”，选项 “Fill the message box”/“Copy”。这是 Flowly 内唯一新增的界面（用户要求可配置）。
+- 设置位置：Flowly 设置 → AI features → “Paseo's session view”，选项 “Fill the message box”/“Copy”。
+
+### 6.5 保留 timeline，不增加输入框控件
+
+Progress 与 Next moves 继续按 §5、§6.3 在原生 timeline 展示。输入框不注册阶段 Select 或 Next moves Combobox，Task pill 与 Ideas chip 保留。手机上点击 timeline 的 Next move 按 §6.4 通过 SDK 填入、追加并聚焦；找不到输入框或聚焦被拒绝时退回复制，不发送。0.15 宿主继续用原有 web DOM 填入／手机复制路径。
 
 ## 7. Ideas chip
 
@@ -191,9 +197,10 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 ## 9. 文案、引导与文档
 
 - 所有界面文字 `t()`/`tn()`，新文案加入全部语言目录。
-- 不加 Flowly 内的一次性提示，欢迎页文案不变（用户决定本功能不改 Flowly 内部的行为与样式；AGENTS.md “Onboarding upkeep” 允许在交付说明中说明不加）。最初设计的 `native-session` 提示已移除。
+- 欢迎页已有 timeline 建议演示，文案不变；旧 `native-session` 提示不再使用。手机填入的提示见下。
 - README Highlights 补一句（文档，不是 Flowly 界面）。
 - SPEC-OUTLINE 与 PROGRESS 记录本功能。
+- 手机填入加一次性提示 `session-composer-fill`（`docs/ONBOARDING-SPEC.md`），只在支持 composer API 且项目里有带 session 的卡片时出现；不再提示输入框控件。
 
 ## 10. 验收
 
@@ -203,6 +210,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 - Next moves 卡片：回合结束写 ready 行（空列表、非 completed、卡片已完成只剩动作建议时不写）、下一轮开始改写为 past（保留建议、禁用）、插件内存中的行 id 与建议按 session 记录；当前性规则（`chipMoves`）；预填拼接与退回复制。
 - Ideas chip：计数、Ideas 开关、只对管理 session 注册、绑定变化时移除重建、卸载后不再注册；不再注册 Next chip。
 - 新 board 参数 `ideaId` 的校验与一次性消费。
+- 0.16 输入框（§6.4、§6.5）：`setPrompt` + `focus` 填入与追加、`focus` 被拒绝时恢复原文字并退回复制、无 `composers` 时走 DOM 路径；session metadata 只写缺少的、跳过归档、宿主拒绝后不再写；不注册输入框控件。
 
 人工 / Luna（全权限 `codex/gpt-6-luna` 测试 session，按 AGENTS.md 规则在 Tinylink 或临时 fixture 上进行并清理）：
 
@@ -212,6 +220,7 @@ Next steps 没有边框、底色和内边距：小标题（与 Progress 的小�
 - Ideas chip：Continue here、New card（打开预填表单）、Dismiss，Flowly 内状态同步。
 - 非管理 session 不出现两个新 chip，Task chip 照旧。
 - 桌面宽屏与手机紧凑布局都可用（含弹层中的输入框与键盘）。
+- 0.16 宿主：web 与 Android 点 Next move 都填进该 session 的输入框并聚焦；Progress 与 Next moves 保留 timeline；行内、溢出面板、草稿、New workspace、非卡片 session 均没有新增控件；0.15 宿主行为与升级前相同。
 - 在真实实现上复核 §5.5 的 #1、#2（summary 行不进入 agent 上下文、不触发 attention）。
 
 ## 11. 留给实现者的选择

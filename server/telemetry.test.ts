@@ -34,13 +34,13 @@ const event = (action: string, at: string, extra: Partial<FlowEntry> = {}): Flow
 
 /** The exact §4 whitelist (window_days only after a gap of more than 7 days). */
 const expectedKeys = [
-  "$process_person_profile", "$geoip_disable", "flowly_version", "node_major", "os", "arch", "ui_language", "ui_locale", "ai_language",
+  "$process_person_profile", "$geoip_disable", "flowly_version", "paseo_version", "node_major", "os", "arch", "ui_language", "ui_locale", "ai_language",
   "f_memory", "f_insights", "f_ideas", "f_artifacts", "f_outside_sessions", "f_auto_status", "f_auto_wrapup", "f_archive_on_delete", "f_workflow_insights", "f_summary", "f_auto_review",
   "projects", "cards_open", "c_guardrails",
   "c_cards_created", "c_turns", "c_deliveries", "c_next_moves", "c_next_moves_picked", "c_ideas_proposed", "c_ideas_accepted", "c_ideas_dismissed", "c_memory_proposed", "c_memory_confirmed", "c_wrapups", "c_reviews", "c_reviews_failed", "c_user_actions", "models",
 ].sort();
 
-function harness(directory: string, options: { env?: NodeJS.ProcessEnv; enabled?: () => Promise<boolean>; status?: number; throws?: boolean; now?: () => number; events?: FlowEntry[] } = {}) {
+function harness(directory: string, options: { env?: NodeJS.ProcessEnv; enabled?: () => Promise<boolean>; status?: number; throws?: boolean; now?: () => number; events?: FlowEntry[]; paseoVersion?: () => Promise<string> } = {}) {
   const calls: { url: string; body: { api_key: string; event: string; distinct_id: string; properties: Record<string, unknown> } }[] = [];
   let enabled = true;
   const service = new TelemetryService({
@@ -50,6 +50,7 @@ function harness(directory: string, options: { env?: NodeJS.ProcessEnv; enabled?
     now: options.now ?? (() => NOW),
     enabled: options.enabled ?? (async () => enabled),
     snapshot: async () => snapshot,
+    paseoVersion: options.paseoVersion,
     activity: async () => ({ events: options.events ?? [], memoryConfirmedAt: [] }),
     fetch: (async (url: string, init: { body: string }) => {
       calls.push({ url, body: JSON.parse(init.body) });
@@ -74,6 +75,8 @@ test("§9-1, §9-2: a due check sends exactly one heartbeat to PostHog US with e
   expect(Object.keys(calls[0].body.properties).sort()).toEqual(expectedKeys);
   expect(calls[0].body.properties.$process_person_profile).toBe(false);
   expect(calls[0].body.properties.$geoip_disable).toBe(true);
+  // No host version known (the harness gives no reader): sent empty, never missing (§4).
+  expect(calls[0].body.properties.paseo_version).toBe("");
   expect(calls[0].body.properties.projects).toBe("2-5");
   expect(calls[0].body.properties.cards_open).toBe("6-20");
   // Active guidelines across unarchived projects, bucketed like the other snapshot counts (GUARDRAILS-SPEC §10).
@@ -221,4 +224,16 @@ test("§9-8: an invalid telemetry.json is kept aside and replaced", async () => 
 test("buckets", () => {
   expect([0, 1, 2, 5, 6, 20, 21, 100, 101].map(bucket)).toEqual(["0", "1", "2-5", "2-5", "6-20", "6-20", "21-100", "21-100", "100+"]);
   expect(Object.keys(heartbeatProperties(snapshot, countWindow([], [], 0, 1)))).not.toContain("window_days");
+});
+
+test("§4: the heartbeat carries the Paseo host's version, asked again after an empty answer", async () => {
+  const answers = ["", "0.16.0"];
+  let now = NOW;
+  const { service, calls } = harness(await dir(), { now: () => now, paseoVersion: async () => answers.shift() ?? "0.17.0" });
+  expect(await service.check()).toBe("sent");
+  now += 25 * 60 * 60 * 1000;
+  expect(await service.check()).toBe("sent");
+  now += 25 * 60 * 60 * 1000;
+  expect(await service.check()).toBe("sent");
+  expect(calls.map((c) => c.body.properties.paseo_version)).toEqual(["", "0.16.0", "0.16.0"]);
 });

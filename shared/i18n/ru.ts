@@ -1455,5 +1455,6 @@ const catalog: Catalog = {
   "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "В карточки можно добавлять изображения: вставьте или перетащите их в описание в окне «Изменить задачу». Агенты видят их как часть описания.",
   "Images in descriptions": "Изображения в описаниях",
   "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "В веб-версии вставьте или перетащите изображения в описание карточки. Агенты видят их вместе с описанием; на телефоне их можно посмотреть.",
+  "Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent.": "Нажмите на предложенный следующий шаг в ленте сессии, чтобы заполнить поле сообщения, в том числе на телефоне. Ничего не отправляется.",
 };
 export default catalog;

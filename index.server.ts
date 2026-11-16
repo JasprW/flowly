@@ -4,6 +4,7 @@ import type { PaseoApi } from "@getpaseo/client";
 import { BoardStore, columnOrder } from "./server/store";
 import { BoardService, dataDirectory, migrateLegacyPluginData, paseoHome } from "./server/service";
 import { readPaseoVersion } from "./server/paseo-version";
+import { SessionMetadataSync } from "./server/session-metadata";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
 import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
@@ -207,7 +208,11 @@ export default function contribute(host: PluginServerContext) {
   service.connectors = connectors;
   // Each project's board copy in `<root>/.flowly/` (PROJECT-FOLDER-SPEC).
   const folders = new ProjectFolders(() => store.read(), async () => (await summaries.store.read()).entries);
-  store.onCommit = () => folders.schedule();
+  const sessionMetadata = new SessionMetadataSync(Date.now, 2 * 60_000, async () => ({ sessions: await tools.managedSessions() }));
+  store.onCommit = () => {
+    folders.schedule();
+    sessionMetadata.changed();
+  };
   // Existing projects get their folder copy on the first start after the upgrade (and failed ones on every start).
   void folders.migrate(store.directory).catch((e) =>
     logFailure("Flowly project folder migration failed:", e),
@@ -343,12 +348,14 @@ export default function contribute(host: PluginServerContext) {
   });
   server.handle(rpc.readBoardChanged, async (input, { paseo }) => {
     tools.attach(paseo);
+    sessionMetadata.attach(paseo);
     return boardDeltas.read(await store.view(), input);
   });
   const chipDeltas = new BoardDeltas();
   const overviewDeltas = new OverviewDeltas();
   server.handle(rpc.readOverviewChanged, async (input, { paseo }) => {
     tools.attach(paseo);
+    sessionMetadata.attach(paseo);
     return overviewDeltas.read(boardOverview(await store.view()), input);
   });
   server.handle(rpc.readStorageStatus, () => store.storageStatus());
@@ -371,11 +378,13 @@ export default function contribute(host: PluginServerContext) {
     return chipDeltas.read(chipBoard(await store.view()), input);
   });
   server.handle(rpc.managedSessions, () => tools.managedSessions());
-  server.handle(rpc.nativeChips, async () => {
+  server.handle(rpc.nativeChips, async (_, { paseo }) => {
     const [wrap, native] = await Promise.all([wrapupPrefs.read().catch(() => null), nativePrefs.read().catch(() => null)]);
     const values = nativeSessionSettingsValues(native?.status === "ready" ? native.values : {});
+    const managed = await tools.managedSessions();
+    void sessionMetadata.sync(paseo, managed);
     return {
-      managed: await tools.managedSessions(),
+      managed,
       ideas: await tools.agents.ideasOn(),
       autoWrapup: wrapupSettingsValues(wrap?.status === "ready" ? wrap.values : {}).autoWrapup,
       nextMoveTap: values.nextMoveTap,
@@ -826,6 +835,7 @@ export default function contribute(host: PluginServerContext) {
     openKanbanSession(request, tools, store.directory, paseo),
   );
   return () => {
+    sessionMetadata.stop();
     void store.close().catch((e) => logFailure("Flowly storage: close failed:", e));
     workflow.stop();
     telemetry.stop();

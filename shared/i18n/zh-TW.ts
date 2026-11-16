@@ -1455,5 +1455,6 @@ const catalog: Catalog = {
   "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "卡片可以附圖片：在「編輯任務」裡把圖片貼上或拖到描述中。智慧體會把它們當作描述的一部分。",
   "Images in descriptions": "描述中的圖片",
   "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "在網頁端把圖片貼上或拖到卡片描述裡。智慧體隨描述一起看到它們；手機上可以檢視。",
+  "Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent.": "點選 session 時間軸中建議的下一步，即可填入輸入框，手機上也可以。不會傳送訊息。",
 };
 export default catalog;

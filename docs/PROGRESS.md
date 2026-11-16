@@ -1341,3 +1341,15 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 隔离正式版 daemon 实测六类 helper 隐藏并归档；Codex sleep 后台任务阻止 Wrap up，停止后清空阻止；评审输入列出任务，评审通过；summary/digest/outside insight/native row 和 Codex workflow 结果正常。首轮 workflow 默认 Claude 额度失败，隔离环境改模型后重跑成功。测试脚本误读的 RPC/list 形状已修正，未改产品行为。
 - 清理后插件和 native registry 的 fixture 项目/卡片/工作区/agent 全零，隔离 daemon 与独立测试会话已停止/删除；临时数据清除。报告与独立原始报告见 verification/paseo16-ga-2026-11-16/。
 - UNRUN：本轮真实 0.15 宿主、桌面/手机 UI；兼容回退测试通过，历史 beta.2 UI 证据保留。本轮无新字符串/开关，不加 onboarding/tip/遥测/What's new。
+
+
+## Composer: retain timeline and mobile fill — 2026-11-16
+
+- User prefers the original Progress / Next moves timeline. Removed Stage Select and Next moves Combobox registration and implementation; Task pill and Ideas chip stay. This supersedes the 2026-11-12 controls requirement; session metadata and telemetry stay available to the other 0.16 integrations. This commit contains only the card-session mirror; workspace/background metadata and push changes stay with their own card.
+- Timeline message suggestions keep `applyMessageMove` → `client.composers({agentId})` → `setPrompt` + `focus` on 0.16, including phones, with blank-line append, Copy setting and copy fallback. Nothing is sent. The 0.15 web-composer exception stays.
+- Onboarding: replaced the controls tip with `session-composer-fill`, gated by composer access and a card session, translated in all nine catalogs; welcome tour unchanged because it already demonstrates timeline suggestions. README and OVERVIEW aligned. No new telemetry field or switch; What's new unchanged.
+- Checks and limitations: see [verification](verification/composer-timeline-2026-11-16.md). Android unavailable: AndroMeld socket absent and `adb devices -l` empty. Earlier web evidence describes the superseded controls and is not proof of this UI.
+
+- Shipping scope: common host feature detection and heartbeat `paseo_version` with its whitelist, tests and privacy notice. SDK 0.16.0 is inherited from main (#100); the minimum stays 0.15.0. Exact-commit verification is recorded separately.
+
+- Isolated shipping tree on main `fb9e744`: `npm run typecheck` exit 0; `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test` exit 0, 164 files / 1486 tests passed, 1 file / 6 tests skipped. Original shared-tree results above are historical.

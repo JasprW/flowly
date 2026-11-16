@@ -1455,5 +1455,6 @@ const catalog: Catalog = {
   "Cards can hold images: paste or drop them into the description in Edit task. Agents see them as part of the description.": "카드에 이미지를 넣을 수 있습니다. 작업 편집에서 설명란에 이미지를 붙여넣거나 끌어다 놓으세요. 에이전트는 설명의 일부로 이미지를 봅니다.",
   "Images in descriptions": "설명 속 이미지",
   "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "웹에서 카드 설명에 이미지를 붙여넣거나 끌어다 놓으세요. 에이전트는 설명과 함께 이미지를 보고, 휴대폰에서는 볼 수 있습니다.",
+  "Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent.": "세션 타임라인에서 제안된 다음 단계를 누르면 휴대폰에서도 메시지 입력란이 채워집니다. 메시지는 전송되지 않습니다.",
 };
 export default catalog;

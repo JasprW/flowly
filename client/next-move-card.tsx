@@ -1,13 +1,13 @@
 import { memo, useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
-import { copyText, Icon, useToast } from "@getpaseo/plugin/client/react-native";
+import { Icon, useToast } from "@getpaseo/plugin/client/react-native";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import type { NextMove } from "../shared/model";
 import type { NextRowData } from "../shared/native-session";
 import { cardView, chipClient, refreshChipsNow, requestRowRefresh, setWrapPending, useChipState, useOutsideState, useWrapPending, type ChipState } from "./native-chips";
 import { hideMoves, useHiddenMovesVersion } from "./hidden-moves";
 import { moveToDone, wrapupNeed } from "./native-actions";
-import { fillComposer } from "./web-composer";
+import { applyMessageMove } from "./composer-fill";
 import { WrapupQuestion } from "./native-popovers";
 import { SharedMotionProvider } from "./motion";
 import { NativeCardSection } from "./native-card";
@@ -122,20 +122,11 @@ const NextMovesCard = memo(function NextMovesCard({
       return;
     }
     if (!move.prompt) return;
-    if (
-      nextMoveTap === "fill" &&
-      fillComposer(agentId, move.prompt)
-    )
-      return;
-    void copyText(move.prompt)
-      .then(() =>
-        toast.show(
-          nextMoveTap === "fill"
-            ? t("Copied. Paste it into the message box.")
-            : t("Copied"),
-          { variant: "success" },
-        ),
-      )
+    void applyMessageMove({ client, agentId, prompt: move.prompt, tap: nextMoveTap })
+      .then((done) => {
+        if (done === "copied")
+          toast.show(nextMoveTap === "fill" ? t("Copied. Paste it into the message box.") : t("Copied"), { variant: "success" });
+      })
       .catch((e) => setError(message(e)));
   };
   const height = touch ? 32 : 26;

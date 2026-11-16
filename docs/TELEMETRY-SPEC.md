@@ -92,7 +92,7 @@ Content-Type: application/json
 | 字段 | 取值 | 说明 |
 |---|---|---|
 | `flowly_version` | `shared/version.ts` 的常量，测试保证它等于 `package.json` 的 version | |
-| `paseo_version` | 心跳不发送；只随 `$exception` 发（11.3 节） | |
+| `paseo_version` | Paseo 宿主的版本号（如 `0.16.0`），取法同 11.3 节（`server/paseo-version.ts`，与错误上报共用缓存）；取不到时发 `""`，下一次心跳再取 | 用户决定 2026-11-11：看 Paseo 0.16 的普及率，决定何时把最低宿主提到 0.16（`docs/PASEO-0.16-SPEC.md` §4、§7 D2） |
 | `node_major` | `process.versions.node` 的主版本号，如 `24` | |
 | `os` | `process.platform`：`darwin` / `linux` / `win32` / 其他原值 | |
 | `arch` | `process.arch` | |
@@ -200,7 +200,7 @@ Content-Type: application/json
   - 只有在 key 被滥用时才更换：先在 PostHog 项目设置里重置 project token，再改 `POSTHOG_KEY` 并发布新版本。代价是旧版本的安装会停止上报，直到用户升级。
   - capture 接口对任何 key 都返回 200，key 是否正确要在 PostHog 的 Activity 页面看事件有没有到。
 - 建议的看板，全部基于 `flowly_heartbeat`，统计每天的独立 `distinct_id`：
-  - 版本分布：按 `flowly_version` 分组；
+  - 版本分布：按 `flowly_version` 分组；Paseo 宿主版本按 `paseo_version` 分组（2026-11-12 之前的心跳没有这个键）；
   - 升级曲线：新版本发布后各版本的占比；
   - 功能开启率：各 `f_*` 的占比；
   - 使用频率：各 `c_*` 的中位数和 P90，以及 DAU/WAU。
