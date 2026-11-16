@@ -7,6 +7,7 @@ import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { runSummaryModels } from "./summary-models";
 import { logFailure } from "./error-report";
 import type { LlmReview, LlmReviewInput, LlmVerdict } from "./auto-review";
+import { taskMetadata } from "./session-metadata";
 
 /**
  * The review session (GUARDRAILS-SPEC §6.3, AUTO-REVIEW-SPEC §4.4): a temporary session in the card's workspace that
@@ -167,6 +168,7 @@ export function llmReviewer(options: {
           config: { ...readOnlyConfig(model), ...(thinkingOptionId ? { thinkingOptionId } : {}) },
           title: `Flowly review · ${input.task.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-task": input.task.id, "flowly-review": "1" },
+          ...taskMetadata(input.task.id),
           prompt: reviewPrompt(input),
           outputSchema: reviewOutputSchema as unknown as Record<string, unknown>,
         }));

@@ -9,7 +9,8 @@ import type {
   PluginScreenParams,
 } from "@getpaseo/plugin/client";
 import type { RpcOutput } from "@getpaseo/plugin";
-import { archivedSessionRefs, nativeChips, readChipBoardChanged, sessionInsights } from "../shared/rpc";
+import { archivedSessionRefs, boardChanges, nativeChips, readChipBoardChanged, sessionInsights } from "../shared/rpc";
+import { pushRetryDelay } from "./push-retry";
 import type { SessionInsightView } from "../shared/session-insights";
 import { parentOf } from "../shared/subagents";
 import { isSummarizer } from "../shared/summary";
@@ -169,6 +170,53 @@ export function registerSessionChips(
     stopStream: (() => void) | null = null,
     releaseStream: (() => Promise<void>) | null = null;
   const opening = new Set<string>();
+  // Paseo 0.16 pushes "the board changed" (PASEO-0.16-SPEC §3.5): while they arrive, a round runs per change and the
+  // timed round only every `pushedEvery` (live list and archived scan keep their minute). A host without
+  // subscriptions, a failed or closed subscription, and the wait for its first event keep the timed rounds.
+  const pushedEvery = 60_000;
+  let pushLive = false,
+    pushAttempt = 0,
+    pushHandle: (() => void) | null = null,
+    pushTimer: ReturnType<typeof setTimeout> | undefined;
+  function openPush() {
+    // A retry is waiting: the rounds of the timed fallback must not subscribe again before it (a host that refuses at
+    // once would otherwise loop round → subscribe → refuse → round).
+    if (pushHandle || pushTimer || disposed || typeof client.subscribe !== "function") return;
+    const fail = () => {
+      if (disposed || !pushHandle) return;
+      const handle = pushHandle;
+      const wasLive = pushLive;
+      pushHandle = null;
+      pushLive = false;
+      handle();
+      pushTimer = setTimeout(() => {
+        pushTimer = undefined;
+        openPush();
+      }, pushRetryDelay(pushAttempt++));
+      // Back to timed rounds now, not after the long wait (only needed when pushes had replaced them).
+      if (wasLive) refreshNow();
+    };
+    try {
+      const handle = client.subscribe(
+        boardChanges,
+        {},
+        () => {
+          if (disposed) return;
+          if (!pushLive) {
+            pushLive = true;
+            pushAttempt = 0;
+          }
+          refreshNow();
+        },
+        { onClosed: fail },
+      );
+      pushHandle = handle;
+      handle.ready.catch(fail);
+    } catch {
+      pushHandle = () => undefined;
+      fail();
+    }
+  }
   let disposed = false,
     timer: ReturnType<typeof setTimeout> | undefined,
     latestClick = 0;
@@ -425,6 +473,7 @@ export function registerSessionChips(
     const roundStart = perfStart();
     try {
       openStream();
+      openPush();
       const needLive = !streamReady || relist || Date.now() - liveAt >= liveEvery;
       // Only a list that began after the stream was up counts as complete.
       if (needLive && streamReady) relist = false;
@@ -497,7 +546,7 @@ export function registerSessionChips(
         } else
           timer = setTimeout(() => {
             void refresh();
-          }, interval);
+          }, pushLive ? Math.max(interval, pushedEvery) : interval);
       }
     }
   }
@@ -513,6 +562,9 @@ export function registerSessionChips(
     stopHidden();
     stopStream?.();
     void releaseStream?.().catch(() => undefined);
+    clearTimeout(pushTimer);
+    pushHandle?.();
+    pushHandle = null;
     clear();
     lastRound = null;
     if (popovers) {

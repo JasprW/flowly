@@ -1355,3 +1355,12 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - Isolated shipping tree on main `fb9e744`: `npm run typecheck` exit 0; `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test` exit 0, 164 files / 1486 tests passed, 1 file / 6 tests skipped. Original shared-tree results above are historical.
 
 - PR #114 CodeRabbit: reproduced two ordinary error-recovery defects (7 metadata tests passed / 2 new tests failed on the original source). Failed list reads now retain the full reconciliation obligation; failed metadata writes no longer enter the completion cache. Retries use the next existing sync round, with no immediate loop. Typecheck exit 0, metadata suite 9/9 passed, full suite 1488 passed / 6 skipped (164 files passed / 1 skipped). Three low-probability concurrency suggestions are pending the user's Scope control decision and are not implemented.
+
+
+## Paseo 0.16 配套正式版验收 — 2026-11-16
+
+- §3.5 看板变更推送、§3.6 workspace/session/background metadata；§3.7 按用户决定暂缓。SDK 沿用主分支的 0.16.0 正式版，最低宿主仍为 0.15。
+- 手机目标静止读取 51→1（约98%减少），变更 React 提交约306±40ms，订阅关闭/拒绝后回退并自动恢复；冷启动仅分项有效，完整启动路径受宿主失效 workspace 恢复干扰，未冒充通过。
+- 真正创建、改绑、删卡、Wrap up/unwrap、镜像纠正已验证；修复prepare先于agent创建的缓存跳过、缓存正确后不再核对的问题。保留前置任务普通失败重试实现及回归，避免旧共享树覆盖。
+- 真实0.15.4 daemon回退通过，旧客户端UI未跑；独立GPT6Luna候选SHA验收待运行。证据：[总报告](verification/paseo016-ga-2026-11-16/REPORT.md)、[手机](verification/paseo016-ga-2026-11-16/PHONE.md)、[旧宿主](verification/paseo016-ga-2026-11-16/OLD-HOST.md)。
+- 无新界面、设置或heartbeat字段，不增加tour/tip/What’s new；README与OVERVIEW说明默认本机ID镜像与订阅行为。

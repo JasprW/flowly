@@ -1,4 +1,4 @@
-import type { PaseoAgent, PaseoApi } from "@getpaseo/client";
+import type { PaseoAgent, PaseoApi, PaseoWorkspace } from "@getpaseo/client";
 import { logFailure } from "./error-report";
 import { hostSupports, withHostFeature } from "./host-support";
 import { metadataAgentId, metadataSession, metadataTaskId } from "../shared/session-metadata";
@@ -7,18 +7,31 @@ import { metadataAgentId, metadataSession, metadataTaskId } from "../shared/sess
 export const METADATA_FEATURE = "metadata";
 
 type Managed = { agentId: string; taskId: string };
-type Paseo = Pick<PaseoApi, "agents">;
+/** A card's workspace: the plugin's binding, mirrored as `flowly.taskId` (PASEO-0.16-SPEC §3.6). */
+type Bound = { workspaceId: string; taskId: string };
+type Paseo = Pick<PaseoApi, "agents"> & Partial<Pick<PaseoApi, "workspaces">>;
 type Patch = Record<string, string | null>;
 /** What the plugin's own data binds now: read fresh before a pass that follows a board write. */
-export type MetadataBindings = () => Promise<{ sessions: readonly Managed[] }>;
+export type MetadataBindings = () => Promise<{ sessions: readonly Managed[]; workspaces: readonly Bound[] }>;
 
-/** Mirrors card session ids on the daemon. Plugin bindings remain the source of truth.
- * Writes missing/different ids on live sessions, clears stale Flowly bindings after a board write,
- * and skips unsupported hosts for this plugin run. Workspace and background-agent mirrors are separate.
+/**
+ * Mirrors the plugin's card bindings onto Paseo metadata (PASEO-0.16-SPEC §3.4, §3.6): `flowly.taskId` and
+ * `flowly.agentId` on every live card session Flowly manages (so a composer item can tell a card session's
+ * composer from any other: Paseo hands an item its composer but not the session's id), and `flowly.taskId` on
+ * every card's workspace. Only ids, never titles or content. Runs on the daemon, never on a client.
+ *
+ * A mirror, not the source of truth: the binding stays the plugin's data. A pass writes only what is missing or
+ * different and clears a value the plugin no longer has (a deleted card's sessions and workspace, a session that
+ * moved). Passes start after the chip refresh asks who is managed, and after a board write (`changed()`, with the
+ * last connection a handler saw), so a new card or session gets its ids without a client open. A session found
+ * right once is not looked at again in this daemon run unless the board changes. On a host without metadata
+ * (method A or B) nothing is written until the plugin restarts.
  */
 export class SessionMetadataSync {
   /** agentId → taskId written (or found right) in this daemon run. */
   private readonly done = new Map<string, string>();
+  /** workspaceId → taskId written (or found right) in this daemon run. */
+  private readonly doneWorkspaces = new Map<string, string>();
   /** Managed sessions that were not live at the last pass; looked at again after `recheckMs`. */
   private skipped = new Set<string>();
   private skippedAt = 0;
@@ -39,6 +52,13 @@ export class SessionMetadataSync {
     this.paseo = paseo;
   }
 
+  /** A prepared session now exists in Paseo: retry it even if a prepare-time pass found it missing. */
+  created(paseo: Paseo, agentId: string) {
+    this.attach(paseo);
+    this.skipped.delete(agentId);
+    this.changed();
+  }
+
   /** After a board write: one pass soon (writes of one action are gathered), with the last connection seen. */
   changed() {
     if (hostSupports(METADATA_FEATURE) === false) return;
@@ -56,7 +76,7 @@ export class SessionMetadataSync {
     if (!this.bindings || !this.paseo) return;
     try {
       const current = await this.bindings();
-      await this.sync(this.paseo, current.sessions);
+      await this.sync(this.paseo, current.sessions, current.workspaces);
     } catch (error) {
       logFailure("Flowly session metadata sync failed:", error);
     }
@@ -68,15 +88,16 @@ export class SessionMetadataSync {
   }
 
   /** Fire and forget: one pass at a time; a call while one runs is dropped (the next chip round or write asks again). */
-  sync(paseo: Paseo, managed: readonly Managed[]) {
+  sync(paseo: Paseo, managed: readonly Managed[], workspaces?: readonly Bound[]) {
     this.paseo = paseo;
     if (this.running || hostSupports(METADATA_FEATURE) === false) return this.running ?? Promise.resolve();
     if (this.now() - this.skippedAt >= this.recheckMs) this.skipped = new Set();
-    const wanted = managed.filter((m) => this.done.get(m.agentId) !== m.taskId && !this.skipped.has(m.agentId));
-    if (!wanted.length && !this.dirty) return Promise.resolve();
     const full = this.dirty;
+    const wanted = managed.filter((m) => full || (this.done.get(m.agentId) !== m.taskId && !this.skipped.has(m.agentId)));
+    const wantedWorkspaces = (workspaces ?? []).filter((w) => this.doneWorkspaces.get(w.workspaceId) !== w.taskId);
+    if (!wanted.length && !wantedWorkspaces.length && !this.dirty) return Promise.resolve();
     this.dirty = false;
-    this.running = this.pass(paseo, managed, wanted, full)
+    this.running = this.pass(paseo, managed, wanted, workspaces ?? null, full)
       .catch((error) => {
         if (full) this.dirty = true;
         logFailure("Flowly session metadata sync failed:", error);
@@ -96,11 +117,11 @@ export class SessionMetadataSync {
     return result.ok;
   }
 
-  private async pass(paseo: Paseo, managed: readonly Managed[], wanted: readonly Managed[], full: boolean) {
+  private async pass(paseo: Paseo, managed: readonly Managed[], wanted: readonly Managed[], workspaces: readonly Bound[] | null, full: boolean) {
     const live = await liveAgents(paseo);
     for (const m of wanted) {
       const agent = live.get(m.agentId);
-      // Archived (or gone): looked at again later, so a restored session gets its binding.
+      // Archived (or gone): nothing to show a control on. Looked at again later, so a restored session gets it.
       if (!agent) {
         if (!this.skipped.size) this.skippedAt = this.now();
         this.skipped.add(m.agentId);
@@ -127,6 +148,29 @@ export class SessionMetadataSync {
         this.done.delete(agent.id);
       }
     }
+    if (workspaces) await this.workspacePass(paseo, workspaces, full);
+  }
+
+  private async workspacePass(paseo: Paseo, workspaces: readonly Bound[], full: boolean) {
+    if (!paseo.workspaces || typeof paseo.workspaces.list !== "function") return;
+    const binding = new Map(workspaces.map((w) => [w.workspaceId, w.taskId] as const));
+    for (const workspace of await liveWorkspaces(paseo)) {
+      const want = binding.get(workspace.id) ?? null;
+      const known = this.doneWorkspaces.get(workspace.id);
+      if (!full && want !== null && known === want) continue;
+      const raw = (workspace as { metadata?: Record<string, unknown> | null }).metadata?.[metadataTaskId];
+      const have = typeof raw === "string" && raw ? raw : null;
+      if (have === want) {
+        if (want !== null) this.doneWorkspaces.set(workspace.id, want);
+        continue;
+      }
+      // Only a value Flowly wrote is cleared; a workspace without a card and without the key is not touched.
+      if (want === null && (!full || have === null)) continue;
+      const ref = paseo.workspaces.ref(workspace.id) as { setMetadata?: (patch: Patch) => Promise<void> };
+      if (!(await this.write(ref, { [metadataTaskId]: want }))) return;
+      if (want === null) this.doneWorkspaces.delete(workspace.id);
+      else this.doneWorkspaces.set(workspace.id, want);
+    }
   }
 }
 
@@ -139,4 +183,30 @@ async function liveAgents(paseo: Paseo) {
     cursor = page.pageInfo.nextCursor ?? undefined;
   } while (cursor);
   return agents;
+}
+
+/** The host's workspaces (archived ones are not listed by Paseo). */
+async function liveWorkspaces(paseo: Paseo) {
+  const workspaces: PaseoWorkspace[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await paseo.workspaces!.list({ page: { limit: 200, cursor } });
+    workspaces.push(...page.entries);
+    cursor = page.pageInfo.nextCursor ?? undefined;
+  } while (cursor);
+  return workspaces;
+}
+
+/** Every card's workspace and its card, from the plugin's data (one workspace belongs to one card). */
+export function workspaceBindings(board: { tasks: readonly { id: string; workspaceId: string }[] }): Bound[] {
+  return board.tasks.filter((t) => !!t.workspaceId).map((t) => ({ workspaceId: t.workspaceId, taskId: t.id }));
+}
+
+/**
+ * The create option that mirrors a card's id onto a background agent Flowly runs for that card (summary, auto
+ * review; PASEO-0.16-SPEC §3.6). Only once this host was seen to take metadata: an older daemon refuses the field,
+ * and a temporary run must not fail for a mirror.
+ */
+export function taskMetadata(taskId: string): { metadata?: Record<string, string> } {
+  return hostSupports(METADATA_FEATURE) === true ? { metadata: { [metadataTaskId]: taskId } } : {};
 }

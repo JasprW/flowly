@@ -27,9 +27,9 @@ export function useProjectIndexQuery(hostId: string, projectId: string, enabled:
   const client = useQueryClient(), read = useRpc(rpc.readProjectCardIndexChanged), key = projectIndexKey(hostId, projectId);
   return useQuery({ queryKey: key, queryFn: () => readIndexChanged(client, key, etag => read({ projectId, ...(etag ? { etag } : {}) })), enabled: enabled && !!projectId, staleTime: 0, retry: false });
 }
-export function useProjectIdeasQuery(hostId: string, projectId: string, enabled: boolean) {
+export function useProjectIdeasQuery(hostId: string, projectId: string, enabled: boolean, pushLive = false) {
   const client = useQueryClient(), read = useRpc(rpc.readProjectIdeasChanged), key = projectIdeasKey(hostId, projectId);
-  return useQuery({ queryKey: key, queryFn: () => readIdeasChanged(client, key, etag => read({ projectId, ...(etag ? { etag } : {}) })), enabled: enabled && !!projectId, refetchInterval: enabled ? 3000 : undefined, staleTime: 0, retry: false });
+  return useQuery({ queryKey: key, queryFn: () => readIdeasChanged(client, key, etag => read({ projectId, ...(etag ? { etag } : {}) })), enabled: enabled && !!projectId, refetchInterval: enabled && !pushLive ? 3000 : undefined, staleTime: 0, retry: false });
 }
 /** Refresh the appropriate active display readers; disabled full observers do not fetch. */
 export async function invalidateCardViews(client: QueryClient) {

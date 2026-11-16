@@ -32,6 +32,7 @@ import { BackgroundJobs } from "./background-jobs";
 export { availableModels } from "./summary-models";
 import { summaryRow } from "../shared/native-session";
 import { correctionOf, type Correction } from "../shared/guardrails";
+import { taskMetadata } from "./session-metadata";
 
 /** Learning from rework turns (GUARDRAILS-SPEC §4.2); set by the plugin entry. */
 export type SummaryGuardrails = {
@@ -290,6 +291,7 @@ export class SummaryService {
         config: readOnlyConfig(model),
         title: `Kanban summary · ${task.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-task": taskId },
+        ...taskMetadata(taskId),
         prompt,
         outputSchema: (section ? reworkOutputJsonSchema : outputJsonSchema) as unknown as Record<string, unknown>,
       })),

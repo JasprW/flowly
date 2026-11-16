@@ -16,6 +16,8 @@ test("an open card polls its own detail, also under a session preview; a compact
   // The drawer's poll does not depend on layout or an open session: the preview's Next moves and turn state read its events.
   expect(drawerDetailPoll(true)).toBe(3000);
   expect(drawerDetailPoll(false)).toBeUndefined();
+  // Board change pushes (PASEO-0.16-SPEC §3.5): the open card re-reads per change instead of polling.
+  expect(drawerDetailPoll(true, true)).toBeUndefined();
   expect(boardIsActive(true, "t", null, false)).toBe(false);
   expect(boardIsActive(false, "t", null, false)).toBe(true);
 });

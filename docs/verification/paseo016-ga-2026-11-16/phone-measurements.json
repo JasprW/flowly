@@ -1,0 +1,235 @@
+{
+  "device": "Pixel 9 Pro",
+  "appVersion": "0.16.0",
+  "sdkVersion": "0.16.0",
+  "sampling": {
+    "baseline1": {
+      "wallMs": 60530,
+      "afterWarmupMs": 50530,
+      "reportCount": 5,
+      "counts": {
+        "board.read.same": 10,
+        "chips.round": 10,
+        "overview.read.same": 16,
+        "board.render": 1
+      },
+      "battery": [
+        "  level: 100",
+        "  temperature: 349",
+        "  Capacity level: 5"
+      ]
+    },
+    "baseline2": {
+      "wallMs": 61384,
+      "afterWarmupMs": 51384,
+      "reportCount": 5,
+      "counts": {
+        "board.read.same": 10,
+        "chips.round": 10,
+        "chips.archived": 1,
+        "overview.read.same": 15,
+        "board.render": 1
+      },
+      "battery": [
+        "  level: 100",
+        "  temperature: 340",
+        "  Capacity level: 5"
+      ]
+    },
+    "candidate2": {
+      "wallMs": 60376,
+      "afterWarmupMs": 50376,
+      "reportCount": 3,
+      "counts": {
+        "board.read.same": 1,
+        "chips.round": 1,
+        "chips.archived": 1,
+        "board.render": 2
+      },
+      "battery": [
+        "  level: 100",
+        "  temperature: 346",
+        "  Capacity level: 5"
+      ]
+    },
+    "candidate3": {
+      "wallMs": 60433,
+      "afterWarmupMs": 50433,
+      "reportCount": 1,
+      "counts": {
+        "board.render": 1
+      },
+      "battery": [
+        "  level: 100",
+        "  temperature: 339",
+        "  Capacity level: 5"
+      ]
+    },
+    "recovery": {
+      "wallMs": 70469,
+      "afterWarmupMs": 60469,
+      "reportCount": 3,
+      "counts": {
+        "overview.read.same": 6,
+        "board.read.same": 4,
+        "chips.round": 4,
+        "board.render": 2
+      },
+      "battery": [
+        "  level: 100",
+        "  temperature: 340",
+        "  Capacity level: 5"
+      ]
+    }
+  },
+  "cold": {
+    "baseline-cold2": {
+      "name": "baseline-cold2",
+      "before": 1794821637851,
+      "after": 1794821639365,
+      "shellTotalTime": 1428,
+      "shellWaitTime": 1430,
+      "cold": true,
+      "pluginLoadMs": 102.66800898313522,
+      "reportAt": 1794821708762
+    },
+    "baseline-cold3": {
+      "name": "baseline-cold3",
+      "before": 1794822323977,
+      "after": 1794822325336,
+      "shellTotalTime": 1257,
+      "shellWaitTime": 1258,
+      "cold": true,
+      "pluginLoadMs": 56.63224300742149,
+      "reportAt": 1794822371416
+    },
+    "candidate-cold1": {
+      "name": "candidate-cold1",
+      "before": 1794822196231,
+      "after": 1794822197631,
+      "shellTotalTime": 1294,
+      "shellWaitTime": 1296,
+      "cold": true,
+      "pluginLoadMs": 66.96150800585747,
+      "reportAt": 1794822275210
+    },
+    "candidate-cold2": {
+      "name": "candidate-cold2",
+      "before": 1794822495859,
+      "after": 1794822496647,
+      "shellTotalTime": 694,
+      "shellWaitTime": 697,
+      "cold": true,
+      "pluginLoadMs": 60.02657100558281,
+      "reportAt": 1794822599428
+    }
+  },
+  "latency": {
+    "latency-live-first": {
+      "before": 1794821584340,
+      "after": 1794821584376,
+      "revision": 12412,
+      "clockOffset": 380,
+      "clockUncertainty": 40,
+      "clientAt": 1794821585026,
+      "commitLatencyMs": 306,
+      "uncertaintyMs": 40
+    },
+    "latency-fallback": {
+      "before": 1794821865416,
+      "after": 1794821865468,
+      "revision": 12415,
+      "clockOffset": 399.5,
+      "clockUncertainty": 55.5,
+      "clientAt": 1794821866220,
+      "commitLatencyMs": 404.5,
+      "uncertaintyMs": 55.5
+    },
+    "latency-recovered": {
+      "before": 1794822006760,
+      "after": 1794822006806,
+      "revision": 12416,
+      "clockOffset": 408,
+      "clockUncertainty": 61,
+      "clientAt": 1794822007448,
+      "commitLatencyMs": 280,
+      "uncertaintyMs": 61
+    }
+  },
+  "lifecycle": {
+    "lifecycle-results": [
+      {
+        "phase": "repair-mismatched-mirror",
+        "ms": 1284,
+        "value": true
+      },
+      {
+        "phase": "repair-mismatch-after-cache-warmed",
+        "ms": 107,
+        "value": true
+      }
+    ],
+    "wrap-delete-results": [
+      {
+        "phase": "auto-wrap",
+        "result": {
+          "ms": 338,
+          "value": {
+            "id": "7a1d248b-9160-476d-9d10-cae7fcd6b084",
+            "taskId": "b512880e-f1d3-464a-8db0-d86fd04a64ea",
+            "actor": "system",
+            "action": "workspace_auto_archived",
+            "note": "Workspace and 2 session(s) archived; the directory stays on disk.",
+            "at": "2026-11-16T09:50:33.780Z"
+          }
+        }
+      },
+      {
+        "phase": "wrapped-session-metadata",
+        "pass": true,
+        "sessionCount": 2
+      },
+      {
+        "phase": "unwrap-same-ids-and-metadata",
+        "pass": true
+      },
+      {
+        "phase": "delete-clears-live-mirrors",
+        "ms": 4,
+        "value": true
+      }
+    ],
+    "rebind-manual-results": [
+      {
+        "phase": "same-native-workspace-and-sessions-rebound-to-new-card",
+        "ms": 429,
+        "value": true
+      },
+      {
+        "phase": "manual-wrap-retains-linked-workspace-and-metadata",
+        "wrap": {
+          "archivedSessions": 2,
+          "archivedWorkspace": false,
+          "note": "2 session(s) archived; workspace kept"
+        },
+        "pass": true
+      },
+      {
+        "phase": "manual-unwrap-same-native-ids-and-metadata",
+        "pass": true
+      }
+    ],
+    "background-result": {
+      "pass": true,
+      "hidden": true,
+      "archived": true,
+      "taskMetadataPreserved": true
+    }
+  },
+  "cleanup": {
+    "board": true,
+    "native": true,
+    "workspaces": true,
+    "agents": true
+  }
+}

@@ -34,6 +34,8 @@ import { turnTimeline } from "./turn-timeline";
 /** `session-insights.json`: serialized writes, backup, atomic replacement; invalid data is preserved, never reset. */
 export class SessionInsightStore {
   private tail: Promise<unknown> = Promise.resolve();
+  /** Runs after each committed write (clients that subscribe hear of it, PASEO-0.16-SPEC §3.5). */
+  onCommit: (() => void) | null = null;
   constructor(readonly directory: string) {}
   get path() {
     return join(this.directory, "session-insights.json");
@@ -70,6 +72,7 @@ export class SessionInsightStore {
       } finally {
         await unlink(temporary).catch(() => undefined);
       }
+      this.onCommit?.();
       return value;
     });
     this.tail = job.then(

@@ -1,16 +1,35 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { SessionMetadataSync } from "./session-metadata";
+import { SessionMetadataSync, taskMetadata, workspaceBindings } from "./session-metadata";
 import { hostSupports, resetHostSupport } from "./host-support";
 
 afterEach(() => resetHostSupport());
 
 type Agent = { id: string; archivedAt?: string | null; metadata?: Record<string, unknown> | null };
 
+type Workspace = { id: string; metadata?: Record<string, unknown> | null };
 
-function fakePaseo(live: Agent[], setMetadata?: (id: string, patch: Record<string, string>) => Promise<void>) {
+function fakePaseo(live: Agent[], setMetadata?: (id: string, patch: Record<string, string>) => Promise<void>, workspaces?: Workspace[]) {
   const list = vi.fn(async () => ({ entries: live.map((agent) => ({ agent })), pageInfo: { nextCursor: null } }));
   const writes: [string, Record<string, string>][] = [];
+  const workspaceWrites: [string, Record<string, string | null>][] = [];
   const paseo = {
+    ...(workspaces
+      ? {
+          workspaces: {
+            list: async () => ({ entries: workspaces, pageInfo: { nextCursor: null } }),
+            ref: (id: string) => ({
+              setMetadata: async (patch: Record<string, string | null>) => {
+                workspaceWrites.push([id, patch]);
+                // As Paseo does: top-level keys replace, null removes.
+                const workspace = workspaces.find((w) => w.id === id)!;
+                const next: Record<string, unknown> = { ...(workspace.metadata ?? {}) };
+                for (const [key, value] of Object.entries(patch)) if (value === null) delete next[key]; else next[key] = value;
+                workspace.metadata = next;
+              },
+            }),
+          },
+        }
+      : {}),
     agents: {
       list,
       ref: (id: string) =>
@@ -24,7 +43,7 @@ function fakePaseo(live: Agent[], setMetadata?: (id: string, patch: Record<strin
             },
     },
   };
-  return { paseo: paseo as never, list, writes };
+  return { paseo: paseo as never, list, writes, workspaceWrites };
 }
 
 test("writes the card and session ids on live managed sessions only, once per daemon run", async () => {
@@ -102,6 +121,19 @@ test("an archived session is looked at again after the recheck delay", async () 
   expect(writes).toHaveLength(1);
 });
 
+test("a prepared session created after its first pass is retried without waiting for the offline recheck", async () => {
+  const live: Agent[] = [];
+  const { paseo, writes } = fakePaseo(live, async () => undefined);
+  const sync = new SessionMetadataSync(() => 0);
+  const managed = [{ agentId: "new", taskId: "t1" }];
+  await sync.sync(paseo, managed);
+  expect(writes).toEqual([]);
+  live.push({ id: "new" });
+  sync.created(paseo, "new");
+  await sync.sync(paseo, managed);
+  expect(writes).toEqual([["new", { "flowly.taskId": "t1", "flowly.agentId": "new" }]]);
+});
+
 test("after a board write, a session whose card is gone is cleared; background agents are left alone", async () => {
   const { paseo, writes } = fakePaseo(
     [
@@ -113,10 +145,56 @@ test("after a board write, a session whose card is gone is cleared; background a
     async () => undefined,
   );
   const sessions = [{ agentId: "a1", taskId: "t1" }];
-  const sync = new SessionMetadataSync(Date.now, 1000, async () => ({ sessions }), 0);
+  const sync = new SessionMetadataSync(Date.now, 1000, async () => ({ sessions, workspaces: [] }), 0);
   sync.attach(paseo);
   sync.changed();
   await vi.waitFor(() => expect(writes).toEqual([["a2", { "flowly.taskId": null, "flowly.agentId": null }]]));
+});
+
+test("card workspaces get their card's id; a deleted card's workspace is cleared, others are not touched", async () => {
+  const workspaces: Workspace[] = [{ id: "w1" }, { id: "w2", metadata: { "flowly.taskId": "t2" } }, { id: "w3", metadata: { "flowly.taskId": "gone" } }, { id: "w4" }];
+  const { paseo, workspaceWrites } = fakePaseo([], async () => undefined, workspaces);
+  const sync = new SessionMetadataSync();
+  const bound = workspaceBindings({ tasks: [{ id: "t1", workspaceId: "w1" }, { id: "t2", workspaceId: "w2" }] });
+  // The first pass after a start looks at every value (a card may have been deleted while the daemon was down).
+  await sync.sync(paseo, [], bound);
+  expect(workspaceWrites).toEqual([["w1", { "flowly.taskId": "t1" }], ["w3", { "flowly.taskId": null }]]);
+  // Later chip rounds with nothing new do not list again; a value that went stale waits for the next board write.
+  workspaces.push({ id: "w5", metadata: { "flowly.taskId": "gone" } });
+  await sync.sync(paseo, [], bound);
+  expect(workspaceWrites).toHaveLength(2);
+  sync.changed();
+  await sync.sync(paseo, [], bound);
+  expect(workspaceWrites.slice(2)).toEqual([["w5", { "flowly.taskId": null }]]);
+});
+
+test("background agents get the card id at creation only once the host was seen to take metadata", async () => {
+  expect(taskMetadata("t1")).toEqual({});
+  const { paseo } = fakePaseo([{ id: "a1" }], async () => undefined);
+  await new SessionMetadataSync().sync(paseo, [{ agentId: "a1", taskId: "t1" }]);
+  expect(taskMetadata("t1")).toEqual({ metadata: { "flowly.taskId": "t1" } });
+});
+
+test("a full pass repairs session and workspace mirrors even when they were cached as correct", async () => {
+  const agent: Agent = { id: "a1", metadata: { "flowly.taskId": "t1", "flowly.agentId": "a1", other: "keep" } };
+  const workspace: Workspace = { id: "w1", metadata: { "flowly.taskId": "t1", other: "keep" } };
+  const { paseo, writes, workspaceWrites, list } = fakePaseo([agent], async (_id, patch) => {
+    agent.metadata = { ...agent.metadata, ...patch };
+  }, [workspace]);
+  const sync = new SessionMetadataSync();
+  const managed = [{ agentId: "a1", taskId: "t1" }];
+  const bound = [{ workspaceId: "w1", taskId: "t1" }];
+  await sync.sync(paseo, managed, bound);
+  expect(writes).toEqual([]);
+  expect(workspaceWrites).toEqual([]);
+  agent.metadata = { ...agent.metadata, "flowly.taskId": "wrong" };
+  workspace.metadata = { ...workspace.metadata, "flowly.taskId": "wrong" };
+  sync.changed();
+  await sync.sync(paseo, managed, bound);
+  expect(agent.metadata).toEqual({ "flowly.taskId": "t1", "flowly.agentId": "a1", other: "keep" });
+  expect(workspace.metadata).toEqual({ "flowly.taskId": "t1", other: "keep" });
+  await sync.sync(paseo, managed, bound);
+  expect(list).toHaveBeenCalledTimes(2);
 });
 
 test("a failed full-pass listing is retried after the last binding is removed", async () => {

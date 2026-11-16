@@ -1,0 +1,95 @@
+# Paseo 0.16.0 正式版：配套项复验
+
+2026-11-16，卡片 `2b09705c-3c41-4750-81a5-ba63a0c9b9b8`。最新结论：**正式版手机收益、绑定生命周期和订阅关闭/恢复已测；冷启动分项未观察到退化，完整路径尚未有效测出。候选提交及独立 GPT 6 Luna 验收待完成，尚未放行合入。**
+
+## 正式版运行时补验（最新）
+
+- [手机结果](PHONE.md)、[汇总数据](phone-measurements.json)：Pixel 9 Pro / Paseo 0.16.0，两组稳定窗口目标读取 51→1（约98%减少），变更约306±40ms提交；实际关闭/拒绝订阅后回退轮询，无重载恢复，恢复后约280±61ms提交。完整冷启动因宿主恢复 `Workspace unavailable` 路由无效，未写成通过。
+- 元数据真实创建、改绑、删除、Wrap up/unwrap、后台 agent、镜像错误纠正通过；创建后2分钟缓存跳过和完整轮错误跳过均有常规回归。整理候选时保留了主分支普通读写失败重试修复及原有两项回归，未削弱失败断言。
+- [Luna 旧宿主报告](OLD-HOST.md)：真实0.15.4 daemon通过方法缺失回退、项目/卡片RPC与metadata未写入检查；真实旧客户端UI未运行。
+- 所有临时打点已移除，设置恢复，fixture已清理。用户指定GPT6Luna替代额度用尽的Haiku；精确候选验收另记。§3.7仍按用户决定暂缓。
+- 本轮没有新界面、设置或heartbeat字段，不新增引导、tip或What's new；默认本机镜像与推送行为补到README和OVERVIEW。
+
+下文保留早期轮次的结果与当时未跑项，不能把其中的历史状态当作最新结论。
+
+## 修复复验
+
+- 用户本轮要求修复首轮报告中的改绑回归、跟随前置任务锁定正式版并保留回归测试。
+- `server/session-metadata.ts`：清理阶段按当前受管 agent ID 集合判断，只清除已不受管的 session；改绑 session 已在写入阶段更新，不再因列表旧快照的 taskId 不同而被再次清空。
+- 原诊断已迁入常规 `server/session-metadata.test.ts`，覆盖启动首轮和已有缓存后改绑两种情况；同时断言真正解绑后清除两个 Flowly 键并保留其他元数据。移除本目录重复用例和专用配置，避免回归只存在于常规测试排除的证据目录中。
+- 根目录 SDK 跟随前置 PR #100（`refactor/paseo16-background-agents`，检查时 HEAD `524cc67`）同样锁定 `@getpaseo/client`、`plugin`、`protocol` 为 `0.16.0`；传递依赖 `relay` 为 `0.16.0`。本轮相对原 lockfile 只变更根依赖声明及这四个包；`npm ls ... --depth=1` 无依赖冲突。Flowly 自身版本仍为 `1.8.0`，最低宿主仍为 `>=0.15.0`。
+- 同步 §3.6 的清理契约和 §4 的 SDK 锁定；将 §1 的 0.15/npm 信息标明为调研时快照。
+- 验证对象仍为同一共享根目录的未提交工作树（HEAD `9d3b75f33b66c233301fb690575aa207ce8cc3f7`），不是隔离候选提交或独立验收。已保留其他会话的改动；本轮不重载插件、不改真实卡片绑定。
+
+| 命令（均 `NODE_ENV=test FLOWLY_TELEMETRY=0`） | 退出码 | 结果 |
+|---|---:|---|
+| `npx vitest run server/session-metadata.test.ts server/host-support.test.ts --reporter=dot` | 0 | 2 文件 / 14 测试通过，含新增的 2 个改绑回归。 |
+| `npm run typecheck` | 0 | 正式版 SDK 下通过。 |
+| `npm test -- --reporter=dot` | 0 | 162 文件通过 / 1 跳过；1465 测试通过 / 6 跳过 / 0 失败。 |
+
+本轮没有用户界面、开关或遥测字段变化，不新增引导、tip、What's new 或 heartbeat 字段。没有新增 fixture 资源、临时构建目录或隔离缓存。手机、真实 daemon 绑定生命周期、UI 断线恢复、真实 0.15 及候选提交独立验收仍为 UNRUN；下文保留修复前的首轮证据。
+
+## 首轮范围与输入（修复前）
+
+- 工作目录：项目根目录；HEAD `9d3b75f33b66c233301fb690575aa207ce8cc3f7`，**包含多个会话的未提交改动**，不是该提交的独立验收。此卡实现仍在根目录，未发现对应 PR。
+- 使用 `docs/PASEO-0.16-SPEC.md` §2、§3.5–§3.7、§4，`docs/PROGRESS.md` 的 2026-11-12/13 记录，以及 `docs/SINGLE-ROOT-SPEC.md`、`docs/PERFORMANCE-SPEC.md`、`docs/PHONE-TESTING.md`。
+- §3.7 按 2026-11-13 用户决定继续暂缓，不把缺少 hook 替换判为本次回归。
+- 本机 CLI / daemon 均为 `0.16.0`；Flowly 运行目录为本项目根目录。未安装、重载插件或重启 daemon。
+- 仓库三个 SDK 依赖仍为 `0.16.0-beta.2`。为正式版验证，在本任务自己的临时目录隔离安装 `@getpaseo/{plugin,client,protocol}@0.16.0`，未改根目录 manifest、lockfile 或 node_modules。临时 SDK 和测试文件已清理；共享 npm 缓存保留。
+
+## 首轮 PASS
+
+| 检查 | 结果与边界 |
+|---|---|
+| 正式版 daemon 能力 | 使用正式版 client SDK 直接连接；`server_info.version=0.16.0`，`entityMetadata=true`、`pluginSubscriptions=true`。 |
+| 已有卡片元数据 | 本卡 session 的 `flowly.taskId`、`flowly.agentId` 均正确；本卡工作区的 `flowly.taskId` 正确。只是读取已有绑定，不等于新建/删除/改绑端到端验收。 |
+| 真实插件订阅 | `board.changes` 建立成功，收到 `{seq:5, scope:"all"}` 首事件，约 3 ms。已释放订阅并关闭测试连接；此时间不是变更到界面的延迟。 |
+| 正式版 SDK 类型兼容 | `tsc --noEmit -p <临时 tsconfig>`，对根目录代码将 SDK imports 映射到隔离安装的正式版声明，exit 0。没有发现正式版 API 导致的类型错误。 |
+| 正式版 SDK 聚焦测试 | 临时 Vitest 配置映射到正式版 SDK，选择 session-metadata/change-feed/host-support/session-chips/query-activity：exit 0，11 文件、120 测试通过。该配置同时匹配了 3 个已有 worktree 中的 query-activity/session-chips 副本，因此不能把 120 全算作根目录新增覆盖。 |
+| 末次根目录类型检查 | `NODE_ENV=test FLOWLY_TELEMETRY=0 npm run typecheck`：exit 0。 |
+
+## 首轮 FAIL：改绑时把刚写入的新 taskId 清掉（现已修复）
+
+位置：`server/session-metadata.ts:130–143`。
+
+步骤：session `a` 原来绑定 `old`，镜像也是 `old`；插件绑定改为 `new` 后调用 `changed()`，下一轮 `sync()` 执行完整同步。
+
+实际写入顺序：
+
+```json
+[
+  {"flowly.taskId":"new","flowly.agentId":"a"},
+  {"flowly.taskId":null,"flowly.agentId":null}
+]
+```
+
+原因：前半轮根据新绑定写入 `new`；清理逻辑仍使用本轮开始时取到的旧 agent 快照，发现旧 `taskId` 与新绑定不同，又把该 session 当作失去绑定的对象清除。最终元数据为空，违背 §3.6「绑定变化时同步更新」；后续轮次即使补回，也不能把本轮结果视为正确。
+
+这是确定的顺序执行复现，不依赖并发、计时或真实用户资源。已有单测“session moved to another card”没有在第二轮前调用 `changed()`，没有覆盖完整同步的清理路径。
+
+修复后的常规回归命令（当前 exit 0）：
+
+```sh
+NODE_ENV=test FLOWLY_TELEMETRY=0 npx vitest run server/session-metadata.test.ts
+```
+
+首轮的独立诊断曾保存在本目录并排除在常规测试之外；修复时已迁入上述常规测试，首轮失败输出仍保留在本报告中。
+
+## 首轮自动化执行记录（修复前）
+
+- 首轮根目录 `npm run typecheck`：exit 2，composer-fill 测试的 mock 不接受 `PluginComposerSelector` 的全部类型。
+- 首轮根目录 `npm test -- --reporter=dot`：exit 1，161 文件通过 / 1 失败 / 1 跳过；1454 测试通过 / 9 失败 / 6 跳过。9 个失败均为翻译目录残留 `Stage`。
+- 检查期间共享目录中的 composer mock 和上述翻译残留被其他改动修正，因此针对变更后的输入复验；本会话没有修改它们。
+- 末次根目录 `npm test -- --reporter=dot`：exit 1，162 文件通过 / 1 失败 / 1 跳过；1463 测试通过 / 1 失败 / 6 跳过。**唯一失败是本轮放在临时目录的上述改绑诊断用例**；常规测试未再失败。随后已将复现用例移入本报告目录并清理临时目录。不能把此非零退出报告成全量通过。
+- 正式版 SDK 下单独执行改绑诊断：exit 1，0 通过 / 1 失败，`expected undefined to be 'new'`。它验证的是 Flowly 的同步逻辑；不是正式版 SDK 删除了元数据。
+
+## 未运行及放行条件
+
+- 手机收益与冷启动：UNRUN。`adb devices` 无设备；AndroMeld 返回 control socket 不存在；用户本轮明确「暂时无法连接」。没有创建 performance 设置文件，没有驱动手机。按 PERFORMANCE/PHONE-TESTING 的要求，桌面结果不能代替真机收益。
+- 新卡片/session 创建、真实 daemon 删除清除、Wrap up/unwrap、断线后轮询回退及恢复、界面 1 s 内刷新、静止界面读取计数：本轮 UNRUN。11 月 12 日的 beta 证据不冒充正式版新证据。
+- 真实 0.15 宿主回归：UNRUN；现有缺少方法/拒绝/重试的单测通过，不等于真实旧宿主验收。
+- 精确候选提交上的独立 Haiku 验证：UNRUN；尚无可放行候选提交，不进入 PR/合入阶段。
+
+首轮发现的两项文档/代码差异（§3.6 改绑后误清空、§4 SDK 仍锁 beta.2）均已在本轮修复。下一步完成手机及剩余运行时验收，再对隔离候选提交检查并走 PR。
+
+本轮没有用户可见行为、开关或遥测变化，不需要新增引导、tip、What's new 或 heartbeat 字段。没有创建项目、工作区或 session fixture，没有删除既有资源。

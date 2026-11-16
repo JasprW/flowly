@@ -1,6 +1,6 @@
 import { cardDetailSchema, projectCardIndexSchema, projectIdeasSchema } from "./card-detail";
 import { attentionDismissInput, attentionDismissalSchema, attentionRestoreInput } from "./attention-dismiss";
-import { defineRpc } from "@getpaseo/plugin";
+import { defineRpc, type PluginSubscriptionContract } from "@getpaseo/plugin";
 import { overviewResponseSchema } from "./overview";
 import { storageStatusSchema } from "./storage";
 import { sessionInsightViewSchema } from "./session-insights";
@@ -132,6 +132,16 @@ export const readBoardChanged = defineRpc({
   output: z.object({ etag: z.string(), value: boardSchema.optional(), delta: z.boolean().optional(), patch: boardPatchSchema.optional() }),
 });
 /** Read-only native-chip projection: no descriptions/history/workpads; separate etag namespace from the full board. */
+/**
+ * "The board changed" pushes (PASEO-0.16-SPEC §3.5): a sequence number and what changed, no data; the client
+ * re-reads by etag. A plain
+ * object, not `defineSubscription(...)`: that export is missing on a 0.15 host, and this module loads everywhere.
+ */
+export const boardChanges = {
+  name: "board.changes",
+  input: z.strictObject({}),
+  event: z.strictObject({ seq: z.number().int().nonnegative(), scope: z.enum(["all", "board", "sessions"]) }),
+} satisfies PluginSubscriptionContract;
 export const readChipBoardChanged = defineRpc({
   name: "sessions.chip-board-changed",
   input: readBoardChanged.input,

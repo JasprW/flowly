@@ -549,3 +549,51 @@ test("native startup requests the private slim board, never the full board endpo
   expect(x.calls.pills).toBe(2);
   stop();
 });
+
+describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
+  test("a subscription the host refuses at once is retried on its own wait, never in a loop with the rounds", async () => {
+    const { client, calls } = fakeClient();
+    let subscribes = 0;
+    Object.assign(client, {
+      subscribe: vi.fn(() => {
+        subscribes++;
+        const ready = Promise.reject(new Error("unknown subscription"));
+        ready.catch(() => undefined);
+        return Object.assign(() => undefined, { ready });
+      }),
+    });
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(subscribes).toBe(1);
+    const roundsBefore = calls.board.length;
+    expect(roundsBefore).toBeLessThanOrEqual(2);
+    // The first retry waits 5 s; timed rounds (5 s) go on meanwhile.
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(subscribes).toBe(2);
+    expect(calls.board.length - roundsBefore).toBeLessThanOrEqual(2);
+    stop();
+  });
+
+  test("while pushes arrive the timed round runs once a minute and each push runs one round", async () => {
+    const { client, calls } = fakeClient();
+    let emit: (() => void) | null = null;
+    Object.assign(client, {
+      subscribe: vi.fn((_c: unknown, _i: unknown, onEvent: () => void) => {
+        emit = onEvent;
+        return Object.assign(() => undefined, { ready: Promise.resolve() });
+      }),
+    });
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(0);
+    emit!();
+    await vi.advanceTimersByTimeAsync(0);
+    const afterLive = calls.board.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(calls.board.length).toBe(afterLive);
+    emit!();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.board.length).toBe(afterLive + 1);
+    stop();
+  });
+});

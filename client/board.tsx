@@ -99,7 +99,8 @@ import { MotionProvider, MotionReveal, useMotionPresence, lerp } from "./motion"
 import { SortableList } from "./sortable-list";
 import { useBoardView } from "./board-view";
 import { setSweepEnabled } from "./sweep-setting";
-import { BoardOutputActive, boardIsActive } from "./query-activity";
+import { BoardOutputActive, BoardPushLive, boardIsActive } from "./query-activity";
+import { BoardPush } from "./board-push";
 import { OverviewBar } from "./overview-bar";
 import { InsightsPage } from "./insights";
 import { IdeasPage } from "./ideas-page";
@@ -253,6 +254,9 @@ function BoardContent(
     placeTask = useRpc(rpc.placeTask),
     paseo = usePaseo();
   const queryClient = useQueryClient();
+  // Paseo 0.16 pushes "the board changed" (PASEO-0.16-SPEC §3.5): while they arrive, the etag reads below stop polling.
+  const [pushLive, setPushLive] = useState(false);
+  const onBoardPushed = useStableCallback(() => void invalidateCardViews(queryClient));
   const linkMount = useId();
   const [detailTarget, setDetailTarget] = useState<{ id: string; workspaceId: string; projectId: string } | null>(null);
   const input = useMemo(() => {
@@ -485,7 +489,7 @@ function BoardContent(
   const overviewLive = compact ? !taskId : boardActive;
   const overviewData = useOverviewQuery(props.host.id, {
     enabled: overviewLive && (!directCard || resolvedLink.isSuccess || ignoredLink.current === linkKey),
-    refetchInterval: overviewLive ? 3000 : undefined,
+    refetchInterval: overviewLive && !pushLive ? 3000 : undefined,
   });
   const data = overviewData;
   // Prioritize compact first-screen data over auxiliary decode/render work.
@@ -1121,7 +1125,7 @@ function BoardContent(
     const list = (t && cardIndex.agentsByWorkspace.get(t.workspaceId)) || noAgents;
     return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
   });
-  const projectIdeasData = useProjectIdeasQuery(props.host.id, project?.id || "", page === "ideas" && (!compact || !taskId));
+  const projectIdeasData = useProjectIdeasQuery(props.host.id, project?.id || "", page === "ideas" && (!compact || !taskId), pushLive);
   const projectIdeaList = useMemo(() => projectIdeasData.data?.ideas || [], [projectIdeasData.data]);
   const projectOpenIdeas = useMemo(() => projectOpenIdeaCount(projected, project?.id), [projected?.cards, projected?.tasks, project?.id]);
   // Observing commands and guidelines learned this week (GUARDRAILS-SPEC §7.4); the chip hides when the project turned guardrails off.
@@ -1731,7 +1735,9 @@ function BoardContent(
     </Animated.View>
   );
   return (
+    <BoardPushLive.Provider value={pushLive}>
     <BoardOutputActive.Provider value={boardActive}>
+    <BoardPush onChange={onBoardPushed} onLive={setPushLive} />
     <SettingsOpenerContext.Provider value={openSettingsAt}>
     <Theme.Provider value={props.theme}>
       <View
@@ -2667,6 +2673,7 @@ function BoardContent(
     </Theme.Provider>
     </SettingsOpenerContext.Provider>
     </BoardOutputActive.Provider>
+    </BoardPushLive.Provider>
   );
 }
 

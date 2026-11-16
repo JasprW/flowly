@@ -4,7 +4,8 @@ import type { PaseoApi } from "@getpaseo/client";
 import { BoardStore, columnOrder } from "./server/store";
 import { BoardService, dataDirectory, migrateLegacyPluginData, paseoHome } from "./server/service";
 import { readPaseoVersion } from "./server/paseo-version";
-import { SessionMetadataSync } from "./server/session-metadata";
+import { SessionMetadataSync, workspaceBindings } from "./server/session-metadata";
+import { ChangeFeed } from "./server/change-feed";
 import { NativeDirectoryPicker, detectNativePicker, listDirectories } from "./server/directories";
 import * as rpc from "./shared/rpc";
 import { agentHabitsOn, developerSettings, performanceLogOn, performanceSettings, boardViewSettings, ideasSettings, languageSettings, languageSettingsValues, aiLanguageSettings, aiLanguageSettingsValues, deviceLanguageSettings, deviceLanguageValue, modelSettings, onboardingSettings, ideasSettingsValues, statusSettings, statusSettingsValues, wrapupSettings, wrapupSettingsValues, nativeSessionSettings, nativeSessionSettingsValues, featureSettings, featureSettingsValues, telemetrySettings, telemetrySettingsValues } from "./shared/settings";
@@ -129,7 +130,8 @@ export default function contribute(host: PluginServerContext) {
     const state = await nativePrefs.read().catch(() => null);
     return nativeSessionSettingsValues(state?.status === "ready" ? state.values : {});
   };
-  const sessionInsights = new SessionInsightService(new SessionInsightStore(store.directory), nextRows, async () => {
+  const insightStore = new SessionInsightStore(store.directory);
+  const sessionInsights = new SessionInsightService(insightStore, nextRows, async () => {
     const [native, summary] = await Promise.all([nativeValues(), summaries.settings()]);
     return {
       enabled: native.outside,
@@ -208,11 +210,20 @@ export default function contribute(host: PluginServerContext) {
   service.connectors = connectors;
   // Each project's board copy in `<root>/.flowly/` (PROJECT-FOLDER-SPEC).
   const folders = new ProjectFolders(() => store.read(), async () => (await summaries.store.read()).entries);
-  const sessionMetadata = new SessionMetadataSync(Date.now, 2 * 60_000, async () => ({ sessions: await tools.managedSessions() }));
+  // Card sessions and workspaces get their card's id in Paseo metadata (PASEO-0.16-SPEC §3.4, §3.6), and
+  // subscribed clients hear that the board changed (§3.5): both follow every committed board write.
+  const sessionMetadata = new SessionMetadataSync(Date.now, 2 * 60_000, async () => ({
+    sessions: await tools.managedSessions(),
+    workspaces: workspaceBindings(await store.read()),
+  }));
+  const boardFeed = new ChangeFeed();
   store.onCommit = () => {
     folders.schedule();
     sessionMetadata.changed();
+    boardFeed.notify();
   };
+  // Outside-session Next moves and ideas reach the session chips by the same push.
+  insightStore.onCommit = () => boardFeed.notify("sessions");
   // Existing projects get their folder copy on the first start after the upgrade (and failed ones on every start).
   void folders.migrate(store.directory).catch((e) =>
     logFailure("Flowly project folder migration failed:", e),
@@ -377,12 +388,19 @@ export default function contribute(host: PluginServerContext) {
     tools.attach(paseo);
     return chipDeltas.read(chipBoard(await store.view()), input);
   });
+  // A 0.15 host has no subscriptions: its clients never subscribe, and a registration it refuses changes nothing.
+  try {
+    server.handle(rpc.boardChanges, (_input, { push, signal }) => boardFeed.serve(push, signal));
+  } catch (error) {
+    console.log(`Flowly: board change pushes unavailable (${error instanceof Error ? error.message : String(error)}).`);
+  }
   server.handle(rpc.managedSessions, () => tools.managedSessions());
   server.handle(rpc.nativeChips, async (_, { paseo }) => {
     const [wrap, native] = await Promise.all([wrapupPrefs.read().catch(() => null), nativePrefs.read().catch(() => null)]);
     const values = nativeSessionSettingsValues(native?.status === "ready" ? native.values : {});
     const managed = await tools.managedSessions();
-    void sessionMetadata.sync(paseo, managed);
+    // Off the RPC's path (PASEO-0.16-SPEC §3.4, §3.6).
+    void store.read().then((board) => sessionMetadata.sync(paseo, managed, workspaceBindings(board))).catch(() => undefined);
     return {
       managed,
       ideas: await tools.agents.ideasOn(),
@@ -406,11 +424,18 @@ export default function contribute(host: PluginServerContext) {
     await tools.start().catch(() => undefined);
     return tools.health();
   });
+  // A prepared session is a new binding outside the board: mirror it soon (PASEO-0.16-SPEC §3.6).
+  const mirrored = <T>(paseo: PaseoApi, run: Promise<T>) =>
+    run.then((value) => {
+      sessionMetadata.attach(paseo);
+      sessionMetadata.changed();
+      return value;
+    });
   server.handle(rpc.prepareSession, (input, { paseo }) =>
-    tools.prepareSession(input.id, input.operationId, paseo),
+    mirrored(paseo, tools.prepareSession(input.id, input.operationId, paseo)),
   );
   server.handle(rpc.prepareExisting, (input, { paseo }) =>
-    tools.prepareExisting(input.id, input.agentId, paseo),
+    mirrored(paseo, tools.prepareExisting(input.id, input.agentId, paseo)),
   );
   server.handle(rpc.accessState, (input, { paseo }) =>
     tools.accessState(input.id, input.agentId, paseo),
@@ -671,6 +696,9 @@ export default function contribute(host: PluginServerContext) {
     if (!identity || identity.workspaceId !== agent.workspaceId) return null;
     return identity;
   };
+  server.addHook("agent.create.after", async (event, { paseo }) => {
+    if (await managedTask(event.agent)) sessionMetadata.created(paseo, event.agent.id);
+  });
   server.addHook("agent.turn.before", async (event, { paseo }) => {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
@@ -836,6 +864,7 @@ export default function contribute(host: PluginServerContext) {
   );
   return () => {
     sessionMetadata.stop();
+    boardFeed.stop();
     void store.close().catch((e) => logFailure("Flowly storage: close failed:", e));
     workflow.stop();
     telemetry.stop();

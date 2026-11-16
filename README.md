@@ -169,3 +169,5 @@ Root code is limited to `index.client.tsx` and `index.server.ts`; everything els
 [MIT](LICENSE) © 2026 Bofan Wang
 
 The separately installed `paseo-kanban` plugin is a different plugin and is never overwritten.
+
+On Paseo 0.16, Flowly mirrors card IDs into local workspace/session metadata and refreshes boards from change notifications, with polling fallback on older hosts or subscription errors.

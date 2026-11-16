@@ -93,9 +93,15 @@
 - **API**：shared `defineSubscription({ name, input, event })`；server `handle(contract, (input, { push, signal }) => …)`；client `subscribe(contract, input, onEvent, options)` 与 `useSubscription(contract, input, onEvent)`，状态为 `connecting` / `live` / `closed` / `error`。
 - **对照标志**：`features.pluginSubscriptions`；守卫 `requirePluginSubscriptions`。
 - **探测**：A 判断客户端有 `subscribe`，再按订阅状态：进入 `error` 或长时间停在 `connecting` 时回到轮询。
-- **用法**：看板、卡片详情、overview 的变化由 daemon 推送“已变更”事件，客户端收到后再走现有的 etag 读取；替换 `client/queries.ts` 里 5 秒的 overview 轮询和 3–30 秒的若干轮询。事件只带变更标记，不带整份数据（手机 JS 线程解密成本，`docs/PERFORMANCE-SPEC.md`）。§3.2 的后台任务变化也可经此推到卡片。
+- **用法**：看板、卡片详情、overview 的变化由 daemon 推送“已变更”事件，客户端收到后再走现有的 etag 读取；替换 overview、卡片详情与项目 Ideas 的 3 秒轮询和 chip 看板的 5 秒轮询。事件只带变更标记，不带整份数据（手机 JS 线程解密成本，`docs/PERFORMANCE-SPEC.md`）。§3.2 的后台任务变化也可经此推到卡片。
 - **旧宿主**：现有轮询不变。
 - **验收**：0.16 宿主上屏幕静止时不再有周期性读取；变更在 1 秒内反映到界面；订阅断开后自动回到轮询并在恢复后再切回；手机冷启动时间不变差（按 PERFORMANCE-SPEC 测）。
+- **实现契约**（其余配套卡片）：
+  - 订阅 `board.changes`（`shared/rpc.ts`，输入 `{}`，事件 `{ seq, scope: "all" | "board" | "sessions" }`）。契约用普通对象而不是 `defineSubscription`，因为 0.15 宿主上该导出不存在。
+  - daemon（`server/change-feed.ts`）：每个新订阅先推一次 `scope: "all"`（表示订阅已生效，客户端读一次，也补上断线期间的变化）；之后看板写入（`BoardStore.onCommit`）推 `board`，会话外洞察写入推 `sessions`；100 ms 内的多次写入合并成一个事件，作用域不同时合并为 `all`；没有订阅者时什么都不做。
+  - 看板界面（`client/board-push.tsx`）：收到第一个事件后视为在线，overview、卡片详情、项目 Ideas 停止定时轮询，每个 `board`/`all` 事件让这些查询失效一次（`invalidateCardViews`）。订阅 `connecting` 时、`error`/`closed` 后按原来的间隔轮询；失败后按 5 s、30 s、60 s 重试（`client/push-retry.ts`）。
+  - Composer pill（`client/session-link.ts`，命令式，不能用 hook）：用 `client.subscribe`。在线时每个事件跑一轮，定时轮次放宽到 60 s；失败时回到原间隔，并且只由重试计时器重新订阅（轮次本身不重新订阅，否则宿主立即拒绝时会形成循环）。
+  - 不在范围内、仍按原间隔轮询：`attention.count`（原生 attention 不经看板写入）、`summaries.read-changed`（含内存中的运行状态）、`sessions.read-state`、`sessions.managed`、`resources.read-changed`、实时 agent 列表与 session 预览。
 
 ### 3.6 实体元数据（metadata）
 
@@ -105,8 +111,15 @@
 - **用法**：在卡片的工作区、Flowly 创建的 session 和 §3.1 的后台 agent 上写入 `flowly.taskId`（只写 ID，不写标题等内容）。它是 Flowly 自己记录的镜像，不是事实来源：卡片与工作区的绑定仍以插件数据为准；镜像让 §3.4 的控件和 hook 不经 RPC 就知道一个 session 属于哪张卡。
 - **旧宿主**：不写，所有判断走插件数据。
 - **验收**：0.16 宿主上新建卡片工作区和 session 后元数据可读到对应 `taskId`；绑定变化（删除卡片、unwrap）时同步更新或清除；元数据与插件数据不一致时以插件数据为准并修正元数据。
-
-- Composer 卡片的 session 部分已实现：daemon 镜像 `flowly.taskId` / `flowly.agentId`，只写 live session 缺少或变化的值；受管集合以插件记录为准，看板写入后清除已解绑的 Flowly 键；旧宿主拒绝后本次运行不再尝试。工作区和后台 agent 的镜像由其余配套卡片实现。 普通读取或写入失败只记失败日志，保留未完成同步；下一个既有同步轮次重试，不立即循环。只有写成功或读到值已正确时才记录完成；旧宿主拒绝仍缓存为不支持。
+- **实现契约**（`server/session-metadata.ts`）：
+  - 写入：卡片 session 写 `{ flowly.taskId, flowly.agentId }`，卡片工作区写 `{ flowly.taskId }`，Flowly 为卡片运行的后台 agent（summary、自动验收）在创建时带 `{ flowly.taskId }`（`taskMetadata()`，只在本次运行已确认宿主支持元数据后才带，避免旧宿主拒绝创建）。
+  - 同步时机：每次看板写入后 1 s 内跑一轮（合并同一操作的多次写入），用最近一个 RPC 处理器给的连接；chip 轮次询问受管 session 时也会触发。daemon 启动后的第一轮和每次看板写入后的一轮为完整轮：清除插件数据已不再对应的值（删除卡片、session 改绑）。Wrap up 与 unwrap 不改变绑定：归档的工作区与 session 保留镜像，unwrap 用同一 ID 恢复后值仍正确，恢复后的 session 在下一轮补写（未上线的受管 session 每 2 分钟复查）。只清 Flowly 写过的键；只带 `flowly.taskId` 的后台 agent 不清。
+  - 以插件数据为准：每轮从看板读当前绑定，元数据不同就改写。宿主不支持（方法 B 识别拒绝）时本次 daemon 运行内不再写。
+  - 完整轮核对本次读取到的 session/工作区元数据，即使此前已缓存为正确也不能跳过；没有看板变化或新实体的普通轮次仍使用缓存，避免增加读取。
+  - 完整轮的 session 清理只针对已不在当前受管集合中的 session；仍受管但改绑到另一张卡的 session 走更新路径，不得根据本轮写入前的旧元数据快照清除刚写入的新绑定。回归验收同时覆盖启动后的首轮和已有同步缓存后的改绑，并确认真正解绑后仍清除 Flowly 的键、保留其他元数据。
+  - 新 session：prepare 先建立受管关系，native agent 可能稍后才创建。受管 agent 的 `agent.create.after` 事件须清除该 agent 的未上线缓存并触发同步，不能因为 prepare 期间未找到它而等待 2 分钟复查；不增加周期轮询。
+  - 普通读取或写入失败保留未完成状态，下一次既有同步轮次重试，不立即循环；只有写成功或实际值已正确才缓存完成。完整轮失败保留完整同步标记。
+  - 读取方：session 元数据继续保留；composer 不再注册控件，无读取需求。后台 agent 目前没有按卡片归属读取的地方（原 `flowly-task` label 也无读取方），所以“后台 agent 优先读元数据”暂无可改之处。
 
 ### 3.7 客户端状态 hook（含 workspace indicator）
 
@@ -115,6 +128,11 @@
 - **用法**：卡片上的 session 状态、“Needs you”和运行中标记直接读宿主状态，替换 `client/session-link.ts` 每 5 秒的轮询和 `client/queries.ts` 的实时 agent 列表（20 秒流式 / 5 秒兜底）。
 - **旧宿主**：现有查询不变。
 - **验收**：0.16 宿主上 session 状态变化与宿主侧栏同步出现；不再产生上述轮询请求；0.15 宿主不变。
+- **决定：暂时放弃（用户决定 2026-11-13）**。按上述用法替换会丢功能，收窄成只用 `indicator` 收益又小，所以先不做；等 SDK 的 agent 快照补上下列字段（或 Flowly 需要与宿主侧栏一致的卡片标记）时再评估。原因：
+  - `PluginAgentSnapshot` 没有 `pendingPermissions`（卡片抽屉与 session 预览据此直接回答权限请求，`client/session-state.ts` 据此判断 Needs you），也没有 `lastUserMessageAt`（Ready/Idle 标签与排序）和 `archivedAt`。
+  - `registerSessionChips` 在插件加载时以命令式注册，不在 React 组件里，用不了 hook。
+  - `client/session-link.ts` 的 5 s 轮询实际是看板 etag 读取，已由 §3.5 推送替代；剩下的实时 agent 列表本来就走 agent 流（20 s 只做校对）。
+  - 曾考虑的收窄方向（未采用）：只用 `useWorkspaces` 的 `indicator` 显示卡片上的运行/需要处理标记，权限回答和标签仍走现有 agent 列表；只带来界面一致，几乎没有性能收益。
 
 ### 3.8 暂缓（on hold，用户决定 2026-11-11）
 
@@ -158,7 +176,7 @@
 3. 实施分三个任务（用户决定 2026-11-11，不再按小节拆分）：
    - **Composer**：SDK 升级与 §2 探测（先做，后两个任务复用）、§3.3、§3.4。§3.4 保留原有 timeline 与 pill，不注册输入框控件。
    - **后台任务**：§3.1、§3.2。§3.2 的自动验收部分和 §3.1 把评审 session 改成后台 agent 一起调整。
-   - **其余**：§3.6、§3.5、§3.7，优先级低于前两个。§3.6 做完后，§3.4 和 §3.1 改为优先读元数据。
+   - **其余**：§3.6、§3.5；§3.7 按用户 2026-11-13 决定暂缓。元数据为本机绑定镜像；composer 已不注册控件，后台任务目前没有归属读取方。
    §3.8 暂缓。
 
 ## 5. 对 AGENTS.md 例外的影响
