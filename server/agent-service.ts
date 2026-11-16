@@ -447,12 +447,13 @@ export class AgentService {
     const { responseDetail, ...input } = agentCallSchema.parse(raw);
     return responseDetail === "full" ? this.write(identity, action, input) : this.write(identity, action, input, "compact");
   }
-  private async continuation(identity: ToolIdentity, includeAcceptance: boolean): Promise<Continuation> {
+  private async continuation(identity: ToolIdentity, revision: ToolContext["revision"]): Promise<Continuation> {
     const r = await this.resources(identity);
+    if (r.task.revision !== revision.task || r.project.revision !== revision.project)
+      throw new ToolError("REVISION_CONFLICT", "Card or project changed after the write committed. Re-read the task before continuing.");
     const board = await this.store.read();
     const enabled = workpadEnabled(r.project);
     const workpad = enabled ? workpadOf(board.workpads, r.task.id) : undefined;
-    const revision = { task: r.task.revision, project: r.project.revision };
     const finished = ["done", "cancelled"].includes(r.task.status);
     return {
       identity, toolVersion: 2,
@@ -462,7 +463,7 @@ export class AgentService {
       writable: r.context.available && !finished,
       reason: r.context.reason || (finished ? "Task is finished; only a human can reopen it." : ""),
       workpadEnabled: enabled,
-      workpad: workpad ? { revision: workpad.revision, ...(includeAcceptance ? { acceptance: acceptanceOutput(workpad.acceptance) } : {}) } : null,
+      workpad: workpad ? { revision: workpad.revision, acceptance: acceptanceOutput(workpad.acceptance) } : null,
     };
   }
   async write(identity: ToolIdentity, action: AgentWriteAction, raw: unknown, detail: "compact"): Promise<AgentWriteResult>;
@@ -1017,7 +1018,7 @@ export class AgentService {
     const memoryField = memoryId ? { memoryId } : {};
     try {
       const current = detail === "compact"
-        ? await this.continuation(identity, action === "workpad")
+        ? await this.continuation(identity, { task: receipt.taskRevision, project: receipt.projectRevision })
         : await this.get(identity, true, false);
       this.accesses.set(identity.agentId, {
         at: new Date(this.clock()).toISOString(),

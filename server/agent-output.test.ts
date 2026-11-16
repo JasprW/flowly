@@ -79,6 +79,28 @@ test("compact setup reminders and workpad conflicts survive consecutive writes",
   await expect(x.service.writeAgent(x.identity, "progress", { ...next(pad.current!), note: "stale" })).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
 });
 
+test("a fresh workpad revision always carries the matching human acceptance edits", async () => {
+  const x = await setup();
+  await x.store.mutate(board => {
+    board.workpads[0].acceptance[0].done = false;
+    return { value: undefined, changed: true };
+  });
+  const old = await x.service.readAgent(x.identity);
+  await x.store.mutate(board => {
+    board.workpads[0].acceptance[0].done = true;
+    board.workpads[0].revision++;
+    return { value: undefined, changed: true };
+  });
+  const result = await x.service.writeAgent(x.identity, "progress", { ...next(old), note: "checkpoint after a human tick" });
+  expect(old.workpad?.acceptance[0].done).toBe(false);
+  expect(result.current?.workpad).toMatchObject({ revision: 2, acceptance: [{ id: "seeded", done: true }] });
+  await x.service.writeAgent(x.identity, "workpad", {
+    ...next(result.current!), workpadRevision: result.current!.workpad!.revision,
+    acceptance: result.current!.workpad!.acceptance!,
+  });
+  expect((await x.store.read()).workpads[0].acceptance[0].done).toBe(true);
+});
+
 test("detail is presentation only: replay retains original receipt and reports current human completion", async () => {
   const x = await setup();
   const ctx = await x.service.readAgent(x.identity);
@@ -89,7 +111,39 @@ test("detail is presentation only: replay retains original receipt and reports c
   const replay = await x.service.writeAgent(x.identity, "status", { ...input, responseDetail: "full" });
   expect(replay).toMatchObject({ receipt: first.receipt, replayed: true, current: { toolVersion: 1, task: { status: "done" }, writable: false } });
   expect(replay.receipt.status).toBe("development");
+  const compactReplay = await x.service.writeAgent(x.identity, "status", input);
+  expect(compactReplay).toMatchObject({ receipt: first.receipt, replayed: true, current: null });
+  expect(compactReplay.contextError).toContain("Re-read the task");
   await expect(x.service.writeAgent(x.identity, "status", { ...input, responseDetail: "compact", note: "different" })).rejects.toMatchObject({ code: "REQUEST_REUSED" });
+});
+
+test.each(["task", "project"])("an intervening %s edit cannot authorize unseen revisions in compact continuation", async (changed) => {
+  const x = await setup();
+  const ctx = await x.service.readAgent(x.identity);
+  const stale = await x.service.readAgent(x.identity);
+  const original = x.store.transaction.bind(x.store);
+  const mutation = vi.spyOn(x.store, "transaction").mockImplementation(async (...args) => {
+    const value = await original(...args);
+    await original(board => {
+      if (changed === "task") {
+        board.tasks[0].description = "New human instruction";
+        board.tasks[0].revision++;
+      } else {
+        board.projects[0].description = "New project instruction";
+        board.projects[0].revision++;
+      }
+      return { value: undefined, changed: true };
+    });
+    return value;
+  });
+  const input = { ...next(ctx), status: "development", note: "committed before edit" };
+  const result = await x.service.writeAgent(x.identity, "status", input);
+  expect(result).toMatchObject({ current: null, replayed: false, receipt: { action: "status", taskRevision: 2, projectRevision: 1 } });
+  expect(result.contextError).toContain("Re-read the task");
+  mutation.mockRestore();
+  const fresh = await x.service.readAgent(x.identity);
+  expect(changed === "task" ? fresh.task.description : fresh.project.description).toContain("New");
+  await expect(x.service.writeAgent(x.identity, "progress", { ...next(stale), note: "old revision" })).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
 });
 
 test("a committed compact write still returns its receipt when continuation fails", async () => {

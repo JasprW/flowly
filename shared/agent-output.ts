@@ -40,7 +40,7 @@ export const continuationSchema = toolContextSchema.pick({
 }).extend({
   toolVersion: z.literal(2),
   task: toolContextSchema.shape.task.pick({ id: true, status: true }),
-  workpad: z.object({ revision: z.number(), acceptance: z.array(acceptance).optional() }).nullable(),
+  workpad: compactWorkpad,
 });
 export const agentWriteSchema = toolResultSchema.extend({
   current: z.union([toolContextSchema, continuationSchema]).nullable(),
