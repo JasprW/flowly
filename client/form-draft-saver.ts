@@ -46,6 +46,10 @@ export class DraftSaver {
   get dirty() {
     return !!this.pending;
   }
+  /** What is not saved yet (after a failed save, the snapshot it tried). */
+  get unsaved() {
+    return this.pending;
+  }
   /** The revision of the last successful load or save. */
   get currentRevision() {
     return this.revision;
@@ -135,6 +139,28 @@ export async function clearAfterSaves(saver: DraftSaver, clear: (revision: numbe
   saver.disable();
   await saver.flush();
   return (await clear(saver.currentRevision)).ok;
+}
+
+/**
+ * A (re)load: an edit still waiting for its save, or a save on its way, lands
+ * first so the read includes it; then saving stops until the read is applied.
+ * If that save fails nothing is read: `unsaved` is the edit, still pending in
+ * the saver (with its error), for the form to show again. Null when a newer
+ * load (or a close) superseded this one, before or after the read; a read
+ * error is thrown as is.
+ */
+export async function readAfterSaves<T>(
+  saver: DraftSaver,
+  current: () => boolean,
+  read: () => Promise<T>,
+): Promise<{ result: T } | { unsaved: DraftSnapshot } | null> {
+  const saved = await saver.flush().catch(() => false);
+  if (!current()) return null;
+  const unsaved = saver.unsaved;
+  if (!saved && unsaved) return { unsaved };
+  saver.disable();
+  const result = await read();
+  return current() ? { result } : null;
 }
 
 /**

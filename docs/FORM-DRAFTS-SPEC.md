@@ -46,6 +46,10 @@ shows a prefilled form's draft and the reverse.
 
 - The client saves 400 ms after the last change, never in the keystroke path
   (text inputs keep owning their text; see AGENTS.md *Text input*).
+- Opening the form again (or Retry of a failed load) first lets a pending or
+  running save finish, then reads; a load that a newer one or a close replaced
+  applies nothing. If that save fails, nothing is read over it: the form shows the
+  unsaved edit again with the save error, Retry and Close without saving.
 - Closing flushes a pending save first. If that save fails, the form stays open
   with the error and two exits: **Retry** and **Close without saving**. *Close
   without saving* drops only the changes since the last successful save; the saved
@@ -80,7 +84,9 @@ before the JSON that references them and removed after it no longer does.
   `revision` is what the next save must name: the draft's, else the revision
   recorded when that key was cleared (revisions never repeat), else 0. A conflict
   Retry overwrites on top of this `revision`, also when no draft is left.
-  A draft whose project or card is gone or archived reads as `null` and is removed.
+  A draft whose project or card is gone or archived reads as `null` and is removed
+  (also at plugin start); like a clear, it leaves its revision marker, so after the
+  project or card is restored a window still holding that draft gets a conflict.
 - `form-drafts.save({ key, baseRevision, fields, images[{ id, name, mimeType, data? }] })` →
   `{ revision }`. `baseRevision` is the revision the client last read or saved (0
   for none). A different current revision is refused with `This draft was changed

@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import * as rpc from "../shared/rpc";
 import { draftConflictMessage, type ReadDraft } from "../shared/form-drafts";
-import { DraftSaver, FailedLoadEdits, clearAfterSaves, fitDraftFields, overwriteLatest, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
+import { DraftSaver, FailedLoadEdits, clearAfterSaves, readAfterSaves, fitDraftFields, overwriteLatest, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
 import type { Attachment } from "./web-images";
 import { Button, Notice, message, space } from "./ui";
 import { t, tn } from "../shared/i18n";
@@ -47,6 +47,8 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
   const [leftOut, setLeftOut] = useState(0);
   const statusRef = useRef(status);
   statusRef.current = status;
+  // The newest load: an older one (a superseded Retry, a load from before a close) never applies its result.
+  const loadId = useRef(0);
   const saver = useMemo(
     // Bound to this key: a save still pending when the key changes lands under its own key.
     () => new DraftSaver((input) => saveRef.current({ key: key!, ...input }), setSaveState),
@@ -61,42 +63,55 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
     setStatus("loading");
     setLeftOut(0);
     setLoadError("");
-    saver.disable();
-    let live = true;
-    readRef.current({ key })
-      .then((result) => {
-        if (!live || keyRef.current !== key) return;
-        saver.loaded(result.revision, result.draft?.images.map((i) => i.id) || []);
-        const merged = kept ? mergeAfterFailedLoad(result.draft, kept.typed, kept.base, imageLimit) : null;
-        // Restored: the form remounts from here and reports a new starting point.
-        edits.reset();
-        setLeftOut(merged?.leftOut ?? 0);
-        if (merged) {
-          setDraft({ revision: result.revision || 1, fields: merged.fields, images: merged.images.map((i) => ({ ...i })) });
-          // Saved like any change; the merge holds everything the loaded draft had.
-          saver.change({ fields: fitDraftFields(merged.fields), images: merged.images });
-        } else setDraft(result.draft);
-        setGeneration((g) => g + 1);
-        setStatus("ready");
-      })
-      .catch((e) => {
-        if (!live) return;
-        // Never save over a draft that could not be read.
-        saver.disable();
-        setLoadError(message(e));
-        // The form remounts: it shows what was typed so far (kept for the next Retry), else defaults.
-        const shown = edits.shown(key);
-        setDraft(shown ? { revision: 1, fields: shown.fields, images: shown.images.map((i) => ({ ...i })) } : null);
-        setGeneration((g) => g + 1);
-        setStatus("failed");
-      });
-    return () => {
-      live = false;
+    const id = ++loadId.current;
+    const k = key;
+    const current = () => id === loadId.current && keyRef.current === k;
+    const apply = (result: Awaited<ReturnType<typeof read>>) => {
+      if (!current()) return;
+      saver.loaded(result.revision, result.draft?.images.map((i) => i.id) || []);
+      const merged = kept ? mergeAfterFailedLoad(result.draft, kept.typed, kept.base, imageLimit) : null;
+      // Restored: the form remounts from here and reports a new starting point.
+      edits.reset();
+      setLeftOut(merged?.leftOut ?? 0);
+      if (merged) {
+        setDraft({ revision: result.revision || 1, fields: merged.fields, images: merged.images.map((i) => ({ ...i })) });
+        // Saved like any change; the merge holds everything the loaded draft had.
+        saver.change({ fields: fitDraftFields(merged.fields), images: merged.images });
+      } else setDraft(result.draft);
+      setGeneration((g) => g + 1);
+      setStatus("ready");
     };
+    const fail = (e: unknown) => {
+      if (!current()) return;
+      // Never save over a draft that could not be read.
+      saver.disable();
+      setLoadError(message(e));
+      // The form remounts: it shows what was typed so far (kept for the next Retry), else defaults.
+      const shown = edits.shown(k);
+      setDraft(shown ? { revision: 1, fields: shown.fields, images: shown.images.map((i) => ({ ...i })) } : null);
+      setGeneration((g) => g + 1);
+      setStatus("failed");
+    };
+    // An edit still waiting for its save (or a save on its way) lands first, so the read includes it.
+    readAfterSaves(saver, current, () => readRef.current({ key: k })).then((loaded) => {
+      if (!loaded) return;
+      if ("result" in loaded) return apply(loaded.result);
+      // The edit could not be saved: nothing is read over it. The form shows it again with the save error (Retry / Close without saving).
+      const { unsaved } = loaded;
+      setDraft({ revision: saver.currentRevision || 1, fields: unsaved.fields, images: unsaved.images.map((i) => ({ ...i })) });
+      setGeneration((g) => g + 1);
+      setStatus("ready");
+    }, fail);
   }, [key, saver, imageLimit, edits]);
   useEffect(() => {
-    if (active) return load();
-  }, [active, load]);
+    if (!active) return;
+    load();
+    return () => {
+      // Closed (or the key changed): a load still running is dropped, and what was typed is saved now.
+      loadId.current++;
+      if (saver.dirty) void saver.flush();
+    };
+  }, [active, load, saver]);
   // Leaving (navigation, project switch) still saves what is pending.
   useEffect(
     () => () => {

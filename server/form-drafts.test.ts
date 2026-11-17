@@ -94,6 +94,27 @@ test("drafts of archived cards or projects cannot be saved and read as none", as
   expect((await drafts.read("task:q:plain")).draft).toBeNull();
 });
 
+test("a draft dropped with its archived scope keeps its revision marker, so a stale window cannot save after a restore", async () => {
+  const { board, drafts } = await setup();
+  await drafts.save({ key: "session:t:plain", baseRevision: 0, fields: { prompt: "old" }, images: [] }); // a window holds revision 1
+  await drafts.save({ key: "session:u:plain", baseRevision: 0, fields: { prompt: "old" }, images: [] });
+  const archive = (ids: string[], at: string | null) =>
+    board.mutate((b) => {
+      for (const id of ids) b.tasks.find((t) => t.id === id)!.archivedAt = at;
+    });
+  await archive(["t"], new Date().toISOString());
+  expect(await drafts.prune()).toBe(1); // t's draft
+  expect(await drafts.prune()).toBe(0); // its marker stays; nothing left to drop
+  await archive(["u"], new Date().toISOString());
+  expect(await drafts.read("session:u:plain")).toEqual({ revision: 2, draft: null }); // dropped on read instead
+  await archive(["t", "u"], null);
+  for (const key of ["session:t:plain", "session:u:plain"]) {
+    expect(await drafts.read(key)).toEqual({ revision: 2, draft: null });
+    await expect(drafts.save({ key, baseRevision: 1, fields: { prompt: "stale" }, images: [] })).rejects.toThrow(draftConflictMessage);
+    expect((await drafts.save({ key, baseRevision: 2, fields: { prompt: "new" }, images: [] })).revision).toBe(3);
+  }
+});
+
 test("invalid data is preserved, never reset", async () => {
   const { drafts } = await setup();
   await writeFile(drafts.path, "{not json");

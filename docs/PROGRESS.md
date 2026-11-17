@@ -1387,6 +1387,7 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
   - `92aa208`: clear records one past the cleared revision; a conflict Retry overwrites on top of the revision `read()` reports.
   - CodeRabbit's review of `5bd30f1` had 5 points, all fixed in one commit: a merge after a failed load stays within the form's image limit (added images kept, saved ones left out are counted and shown); edits made while a load failed survive failed retries and are never merged into another draft key; the clear after a create waits for a save on its way and reports a draft another window kept; Retry of a failed load is disabled while a create runs, and New session's create also checks the shared busy flag.
   - Follow-ups after `8ab87e1`: the recovered-session path shows the clear-failure toast (`391f74c`), and a create after a failed load says the unread draft was kept instead of skipping the clear silently.
+  - CodeRabbit on `3363875`: a superseded load (old Retry, load from before a close) no longer applies its result; a reload lets a pending save land before it reads; a draft dropped with its archived scope (read or prune) keeps its revision marker, so a stale window gets a conflict after a restore.
 
 ## 2026-11-16 Paseo 0.16 在线 chip 零周期读取返工
 

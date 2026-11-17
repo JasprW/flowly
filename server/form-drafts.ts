@@ -89,10 +89,11 @@ export class FormDraftStore {
       if (!draft) return { revision: revisionOf(state, key), draft: null };
       if (!scopeLive(await this.board.read(), key)) {
         delete state.drafts[key];
-        if (state.cleared) delete state.cleared[key];
+        // Like a clear: a window still holding this draft cannot save over a later one if the scope is restored.
+        (state.cleared ??= {})[key] = draft.revision + 1;
         await this.write(state);
         await this.removeFiles(draft.images.map((i) => i.file));
-        return { revision: 0, draft: null };
+        return { revision: draft.revision + 1, draft: null };
       }
       const images = [];
       for (const image of draft.images) {
@@ -164,7 +165,11 @@ export class FormDraftStore {
     });
   }
 
-  /** Drops drafts whose project or card is gone or archived. */
+  /**
+   * Drops drafts whose project or card is gone or archived. Each keeps its
+   * revision marker (one small entry per scope), so a window still holding the
+   * dropped draft cannot save over a later one if the scope is restored.
+   */
   prune() {
     return this.serialize(async () => {
       const state = await this.load();
@@ -175,11 +180,7 @@ export class FormDraftStore {
         if (!scopeLive(board, key)) {
           files.push(...draft.images.map((i) => i.file));
           delete state.drafts[key];
-          removed++;
-        }
-      for (const key of Object.keys(state.cleared || {}))
-        if (!scopeLive(board, key)) {
-          delete state.cleared![key];
+          (state.cleared ??= {})[key] = draft.revision + 1;
           removed++;
         }
       if (!removed) return 0;

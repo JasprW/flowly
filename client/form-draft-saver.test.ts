@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { DraftSaver, FailedLoadEdits, clearAfterSaves, fitDraftFields, mergeAfterFailedLoad, overwriteLatest } from "./form-draft-saver";
+import { DraftSaver, FailedLoadEdits, clearAfterSaves, readAfterSaves, fitDraftFields, mergeAfterFailedLoad, overwriteLatest } from "./form-draft-saver";
 import { draftConflictMessage } from "../shared/form-drafts";
 
 beforeEach(() => vi.useFakeTimers());
@@ -194,4 +194,42 @@ test("clearing after a create waits for a save on its way and names the revision
   expect(cleared).toEqual([2]);
   // A draft another window saved meanwhile is kept, and the caller is told.
   expect(await clearAfterSaves(saver, async () => ({ ok: false }))).toBe(false);
+});
+
+test("a reload saves pending edits before it reads, and a superseded load applies nothing", async () => {
+  const { saver, calls } = setup();
+  saver.loaded(0, []);
+  saver.change({ fields: { title: "typed before reopening" }, images: [] }); // still inside the 400 ms debounce
+  const order: string[] = [];
+  const loaded = await readAfterSaves(saver, () => true, async () => {
+    order.push(`read after ${calls.length} save(s)`);
+    return "draft";
+  });
+  expect(order).toEqual(["read after 1 save(s)"]);
+  expect(calls[0].fields).toEqual({ title: "typed before reopening" });
+  expect(loaded).toEqual({ result: "draft" });
+  // A Retry that a newer load replaced while it was reading applies nothing.
+  let newest = true;
+  expect(
+    await readAfterSaves(saver, () => newest, async () => {
+      newest = false;
+      return "older draft";
+    }),
+  ).toBeNull();
+  // Superseded before the read: no read at all.
+  let read = false;
+  expect(await readAfterSaves(saver, () => false, async () => (read = true))).toBeNull();
+  expect(read).toBe(false);
+});
+
+test("a reload whose save fails reads nothing and keeps the edit pending", async () => {
+  const { saver } = setup(() => new Error("disk full"));
+  saver.loaded(0, []);
+  saver.change({ fields: { title: "unsaved" }, images: [] });
+  let read = false;
+  const loaded = await readAfterSaves(saver, () => true, async () => (read = true));
+  expect(read).toBe(false);
+  expect(loaded).toEqual({ unsaved: { fields: { title: "unsaved" }, images: [] } });
+  expect(saver.dirty).toBe(true);
+  expect(saver.state.error).toMatch(/disk full/);
 });
