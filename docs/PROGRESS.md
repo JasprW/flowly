@@ -1412,3 +1412,5 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 聚焦7文件91项通过、typecheck exit0（初次绿灯）；最终精确SHA及独立验收见本轮报告。既有§3.7暂缓不变，没有修改旧Luna报告。
 - AndroMeld连接报control socket missing，adb设备列表为空；用户明确暂时无法连接。新手机收益/冷启动为UNRUN，PR#117的旧冷启沿用授权不自动扩展到本轮。
 - 无新UI/设置/核心动作/遥测字段，不需要tour、tip、What's new；README与OVERVIEW同步说明计数推送。既有Wrap up文档worktree-only与自有directory实际归档的差异由已有idea跟踪，本轮不改策略。
+
+- 后续同日：最终产品 `31d9dee` typecheck exit0，全量166文件通过/1skip、1528项通过/6skip。Luna会话26784627对同SHA代码与7文件91聚焦PASS，报告a3af96d，当时因设备未测保留整体验收。用户随后明确授权PR#118本轮计数补丁沿用历史+3.7257%/5%冷启结论；这是决策沿用，不是新采样，不改Luna当时的原报告。新手机/daemon/UI仍未运行。测试agent已删除，native inspect确认AGENT_NOT_FOUND。PR#118待CI与真实CodeRabbit，auto-merge关闭。

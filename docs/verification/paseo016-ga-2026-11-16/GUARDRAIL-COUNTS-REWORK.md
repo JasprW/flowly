@@ -30,9 +30,9 @@ The new client tests capture the production hook options and run real QueryObser
 ## Unrun / open gates
 
 - New candidate phone benefit/cold-start sampling: **UNRUN**. AndroMeld reported missing control socket; `adb devices -l` was empty. User said the phone cannot connect temporarily.
-- Historical `3043bd8` cold-start paired median +3.7257% under the accepted 5% limit remains historical. User's carry-forward authorization explicitly covered PR #117; it has not been extended to this new count rework.
+- Historical `3043bd8` cold-start paired median +3.7257% under the accepted 5% limit remains historical. Initially the carry-forward authorization only covered PR #117. After reviewing this new candidate/checks, the user explicitly extended it to this PR #118 count patch on 2026-11-17. **Accepted by explicit carry-forward; new measurement remains UNRUN.**
 - New runtime daemon, desktop/phone UI, and actual 0.15 client UI: **UNRUN**. Prior evidence remains scoped to its recorded source.
-- Independent GPT 6 Luna review: see verifier-owned `LUNA-GUARDRAIL-COUNTS.md` when available. Parent does not edit independent evidence.
-- CI, actual CodeRabbit review and merge: pending a new PR; auto-merge must remain disabled while device acceptance is unresolved or review rate limited.
+- Independent GPT 6 Luna review: `LUNA-GUARDRAIL-COUNTS.md`, report commit `a3af96d`, verifies product `31d9dee`: code/typecheck/7 files 91 tests pass. Its overall-withheld conclusion records the state before the later user authorization; original evidence remains unchanged. Session `26784627-9826-417c-8ee9-f2f964efad11` was deleted after completion; native inspect returned `AGENT_NOT_FOUND`. Parent does not edit independent evidence.
+- PR: https://github.com/JasprW/flowly/pull/118. CI, actual CodeRabbit review and merge are pending; auto-merge stays disabled until real review passes.
 
 Existing unrelated mismatch retained: manual Wrap up docs say worktree-only; code also archives card-owned directory workspaces. Existing idea `301ae423-333a-446b-b670-24f36113a22f` tracks it. No policy change in this patch.
