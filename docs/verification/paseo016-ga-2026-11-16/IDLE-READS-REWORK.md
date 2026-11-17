@@ -67,3 +67,9 @@
 - 测试会话已hard-delete，inspect返回AGENT_NOT_FOUND；无新fixture/daemon/workspace/隔离缓存。共享根目录两个对应client文件与deca6bd逐字节相同，在保留其他会话改动后typecheck通过；reload仅作本地载入smoke。
 - 用户2026-11-17再次批准本次名单最小修复并继续沿用本补丁旧冷启结论；新手机测量仍UNRUN。真实0.15客户端UI/整机WiFi中断仍无新样本。无新UI、设置、遥测或版本变更，不需tour/tip/What's new。
 - 最终提交推送后继续按CI gate/CodeRabbit真实审查与所有有效意见处理结果合入，不用neutral/skipped代替补审；最终实际状态见PR#117及卡片交付回执。
+
+## 持续agent流setup失败期间的普通读取回退
+
+- CodeRabbit对dd47856补审发现：重试仅openStream，持续拒绝时即使普通列表可用，新session仍无chip。回归先红（1失败/45通过，a2无Task chip）。
+- 最小实现改动是一行既有回调：退避到期触发refreshNow；刷新轮次内部openStream并在streamReady=false时走普通完整列表。没有新增timer。回归覆盖5/30秒两次持续失败仍更新a2/a3，60秒恢复成功后180秒零继续读取。
+- 完整5文件76项与typecheck通过，exit0。新全量/独立证据随后记录；磁盘18Gi下继续复用依赖/缓存，不构建或新增缓存，测试少量临时写入。手机仍无新样本，保持用户明确授权的本补丁冷启沿用。

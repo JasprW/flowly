@@ -289,7 +289,7 @@ export function registerSessionChips(
         stopStream = null;
         streamRetry = setTimeout(() => {
           streamRetry = undefined;
-          openStream();
+          refreshNow();
         }, pushRetryDelay(streamAttempt++));
       });
   }
