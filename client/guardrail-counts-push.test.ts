@@ -93,3 +93,30 @@ test("Memory counts: failed read recovers even with healthy push and no new even
     expect(harness.read).toHaveBeenCalledTimes(4);
   } finally { x.stop(); x.observer.destroy(); }
 });
+
+
+test("a push during the first count read starts a fresh read and keeps the new count", async () => {
+  vi.useFakeTimers();
+  harness.client = new Client({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const oldValue = { p: { observing: 0, added: 0, notes: 1 } };
+  const newValue = { p: { observing: 0, added: 0, notes: 2 } };
+  let release!: (v: { etag: string; value: typeof oldValue }) => void;
+  const oldResponse = new Promise<{ etag: string; value: typeof oldValue }>(resolve => { release = resolve; });
+  harness.read.mockReset().mockImplementationOnce(() => oldResponse).mockResolvedValue({ etag: "new", value: newValue });
+  useGuardrailCountsQuery(true, true);
+  const observer = new QueryObserver(harness.client, harness.options);
+  const stop = observer.subscribe(() => undefined);
+  try {
+    expect(harness.read).toHaveBeenCalledTimes(1);
+    // A committed Memory write pushed after the server computed the first response.
+    const pushed = invalidateCardViews(harness.client);
+    await Promise.resolve();
+    release({ etag: "old", value: oldValue });
+    await pushed;
+    expect(harness.read).toHaveBeenCalledTimes(2);
+    expect(harness.client.getQueryData(guardrailCountsKey)).toEqual(newValue);
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(harness.read).toHaveBeenCalledTimes(2);
+    expect(harness.client.getQueryData(guardrailCountsKey)).toEqual(newValue);
+  } finally { release({ etag: "old", value: oldValue }); stop(); observer.destroy(); }
+});

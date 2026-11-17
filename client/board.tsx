@@ -65,7 +65,7 @@ import { waitingOn } from "../shared/links";
 import { LinkPicker } from "./task-links";
 import { TaskDrawer } from "./drawer";
 import { DeleteTaskDialog } from "./task-delete";
-import { useOverviewQuery, useLiveAgents, useGuardrailCountsQuery, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
+import { useOverviewQuery, useLiveAgents, guardrailCountsKey, useGuardrailCountsQuery, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
 import { projectOpenIdeaCount } from "./overview-query";
 import { useStableCallback, useStableTheme } from "./stable";
 import { isLegacyScope } from "../shared/scope";
@@ -806,7 +806,10 @@ function BoardContent(
     Number(tagFilter.length > 0);
   const refresh = () => {
     if (taskId) void invalidateCardViews(queryClient);
-    else void data.refetch();
+    else {
+      void data.refetch();
+      void queryClient.invalidateQueries({ queryKey: guardrailCountsKey });
+    }
     void resources.refetch();
     void agents.refetch();
     void readState.refetch();

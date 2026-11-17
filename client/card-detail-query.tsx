@@ -33,6 +33,7 @@ export function useProjectIdeasQuery(hostId: string, projectId: string, enabled:
 }
 /** Refresh the appropriate active display readers; disabled full observers do not fetch. */
 export async function invalidateCardViews(client: QueryClient) {
+  await client.cancelQueries({ queryKey: guardrailCountsKey });
   await Promise.all([boardKey, guardrailCountsKey, ["flowly", "card-detail"], ["flowly", "overview"], ["flowly", "project-card-index"], ["flowly", "project-ideas"]].map(queryKey => client.invalidateQueries({ queryKey })));
 }
 export type CardDetailState = { hostId: string; detail?: CardDetail; index?: ProjectCardIndex; error: unknown; indexError: unknown; pending: boolean; retry(): void; retryIndex(): void };
