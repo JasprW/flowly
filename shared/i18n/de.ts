@@ -6,6 +6,8 @@ const catalog: Catalog = {
   "This draft was changed in another window. Retry to keep this version instead.": "Dieser Entwurf wurde in einem anderen Fenster geändert. Erneut versuchen, um stattdessen diese Fassung zu behalten.",
   "The draft was not saved: {error}": "Der Entwurf wurde nicht gespeichert: {error}",
   "The draft was not cleared: {error}": "Der Entwurf wurde nicht gelöscht: {error}",
+  "It was changed in another window and was kept.": "Er wurde in einem anderen Fenster geändert und wurde behalten.",
+  "{n} saved images were left out: this form holds at most {limit} images.": {"one": "{n} gespeichertes Bild wurde weggelassen: Dieses Formular fasst höchstens {limit} Bilder.", "other": "{n} gespeicherte Bilder wurden weggelassen: Dieses Formular fasst höchstens {limit} Bilder."},
   "Command": "Befehl",
   "Review model": "Prüfmodell",
   "{n} s": "{n} s",

@@ -126,6 +126,52 @@ export class DraftSaver {
 }
 
 /**
+ * After a successful create: waits for a save already on its way (so its
+ * revision is the one named), then clears that revision. False when another
+ * window saved a newer draft, which is kept.
+ */
+export async function clearAfterSaves(saver: DraftSaver, clear: (revision: number) => Promise<{ ok: boolean }>) {
+  saver.discard();
+  saver.disable();
+  await saver.flush();
+  return (await clear(saver.currentRevision)).ok;
+}
+
+/**
+ * What the user changed while a draft's load failed (docs/FORM-DRAFTS-SPEC.md §3):
+ * kept over failed retries of the same key, merged into the first load that
+ * succeeds, and never carried to another key.
+ */
+export class FailedLoadEdits {
+  private key: string | null = null;
+  private typed: DraftSnapshot | null = null;
+  private base: DraftSnapshot | null = null;
+  /** A load of `key` starts; what to merge when it retries that key after a failure. */
+  begin(key: string, afterFailure: boolean) {
+    const retrying = afterFailure && this.key === key;
+    if (!retrying) this.reset();
+    this.key = key;
+    return retrying ? { typed: this.typed, base: this.base } : null;
+  }
+  /** The form's content when it mounted; a remount after a failed retry keeps the first one. */
+  started(snapshot: DraftSnapshot) {
+    if (!this.base) this.base = snapshot;
+  }
+  changed(snapshot: DraftSnapshot) {
+    this.typed = snapshot;
+  }
+  /** What a form remounted after a failed load of `key` shows: the edits so far. */
+  shown(key: string) {
+    return this.key === key ? this.typed : null;
+  }
+  /** A load succeeded (the form starts over from it), or the edits were discarded. */
+  reset() {
+    this.typed = null;
+    this.base = null;
+  }
+}
+
+/**
  * Retry after a conflict: save this form's version on top of the current one.
  * Uses the revision the daemon says the next save must name, which is nonzero
  * after a clear even though no draft is left.
@@ -156,12 +202,18 @@ const keepSaved = new Set(["operationId"]);
  * both sides wrote differently are kept as both (saved first, then typed); the
  * saved operationId is kept; images are joined. Returns null when nothing was
  * changed (the loaded draft is used as is).
+ *
+ * Images stay within `imageLimit` (what the form can hold, so the saved
+ * selection is the one the form shows): the images added after the failed
+ * load are all kept, and saved images that no longer fit are left out and
+ * counted in `leftOut`, so the form can say so.
  */
 export function mergeAfterFailedLoad(
   loaded: { fields: FormDraftFields; images: DraftSnapshot["images"] } | null,
   typed: DraftSnapshot | null,
   base: DraftSnapshot | null,
-): DraftSnapshot | null {
+  imageLimit = Number.POSITIVE_INFINITY,
+): (DraftSnapshot & { leftOut?: number }) | null {
   if (!typed) return null;
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   const changed = Object.keys(typed.fields).filter((name) => !same(typed.fields[name], base?.fields[name]));
@@ -182,5 +234,9 @@ export function mergeAfterFailedLoad(
     } else fields[name] = value;
   }
   const ids = new Set(loaded.images.map((i) => i.id));
-  return { fields, images: [...loaded.images, ...added.filter((i) => !ids.has(i.id))] };
+  const fresh = added.filter((i) => !ids.has(i.id)).slice(0, imageLimit);
+  const room = Math.max(0, imageLimit - fresh.length);
+  const images = [...loaded.images.slice(0, room), ...fresh];
+  const leftOut = loaded.images.length - Math.min(room, loaded.images.length);
+  return leftOut > 0 ? { fields, images, leftOut } : { fields, images };
 }

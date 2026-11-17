@@ -3,10 +3,10 @@ import { View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import * as rpc from "../shared/rpc";
 import { draftConflictMessage, type ReadDraft } from "../shared/form-drafts";
-import { DraftSaver, fitDraftFields, overwriteLatest, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
+import { DraftSaver, FailedLoadEdits, clearAfterSaves, fitDraftFields, overwriteLatest, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
 import type { Attachment } from "./web-images";
 import { Button, Notice, message, space } from "./ui";
-import { t } from "../shared/i18n";
+import { t, tn } from "../shared/i18n";
 
 export type FormDraft = ReturnType<typeof useFormDraft>;
 
@@ -21,9 +21,10 @@ const unsavedOperations = new Map<string, string>();
  * Loads and saves one New task / New session draft on the daemon
  * (docs/FORM-DRAFTS-SPEC.md). `key` null means no draft (Edit task). Each
  * time `active` turns on the draft is read again; until then `status` is
- * "loading" and the form should not render its fields.
+ * "loading" and the form should not render its fields. `imageLimit` is how
+ * many images the form holds, so a merged draft never saves more than it shows.
  */
-export function useFormDraft(key: string | null, active = true) {
+export function useFormDraft(key: string | null, active = true, imageLimit = Number.POSITIVE_INFINITY) {
   const read = useRpc(rpc.readFormDraft),
     save = useRpc(rpc.saveFormDraft),
     clearRpc = useRpc(rpc.clearFormDraft);
@@ -40,10 +41,10 @@ export function useFormDraft(key: string | null, active = true) {
   readRef.current = read;
   const saveRef = useRef(save);
   saveRef.current = save;
-  // What the form last reported, also while its load failed (nothing is saved then).
-  const typed = useRef<DraftSnapshot | null>(null);
-  // What the form showed when it mounted, to tell the user's changes from defaults.
-  const base = useRef<DraftSnapshot | null>(null);
+  // What the form reported while its load failed (nothing is saved then), for the next Retry.
+  const edits = useRef(new FailedLoadEdits()).current;
+  // Saved images a merge left out to stay within imageLimit.
+  const [leftOut, setLeftOut] = useState(0);
   const statusRef = useRef(status);
   statusRef.current = status;
   const saver = useMemo(
@@ -54,11 +55,11 @@ export function useFormDraft(key: string | null, active = true) {
   );
   const load = useCallback(() => {
     if (!key) return setStatus("off");
-    // Retry after a failed load keeps what was typed meanwhile.
-    const kept = statusRef.current === "failed" ? { typed: typed.current, base: base.current } : null;
-    typed.current = null;
-    base.current = null;
+    // Retry after a failed load of this same key keeps what was typed meanwhile,
+    // also over several failed retries; edits made under another key never carry over.
+    const kept = edits.begin(key, statusRef.current === "failed");
     setStatus("loading");
+    setLeftOut(0);
     setLoadError("");
     saver.disable();
     let live = true;
@@ -66,7 +67,10 @@ export function useFormDraft(key: string | null, active = true) {
       .then((result) => {
         if (!live || keyRef.current !== key) return;
         saver.loaded(result.revision, result.draft?.images.map((i) => i.id) || []);
-        const merged = kept ? mergeAfterFailedLoad(result.draft, kept.typed, kept.base) : null;
+        const merged = kept ? mergeAfterFailedLoad(result.draft, kept.typed, kept.base, imageLimit) : null;
+        // Restored: the form remounts from here and reports a new starting point.
+        edits.reset();
+        setLeftOut(merged?.leftOut ?? 0);
         if (merged) {
           setDraft({ revision: result.revision || 1, fields: merged.fields, images: merged.images.map((i) => ({ ...i })) });
           // Saved like any change; the merge holds everything the loaded draft had.
@@ -80,14 +84,16 @@ export function useFormDraft(key: string | null, active = true) {
         // Never save over a draft that could not be read.
         saver.disable();
         setLoadError(message(e));
-        setDraft(null);
+        // The form remounts: it shows what was typed so far (kept for the next Retry), else defaults.
+        const shown = edits.shown(key);
+        setDraft(shown ? { revision: 1, fields: shown.fields, images: shown.images.map((i) => ({ ...i })) } : null);
         setGeneration((g) => g + 1);
         setStatus("failed");
       });
     return () => {
       live = false;
     };
-  }, [key, saver]);
+  }, [key, saver, imageLimit, edits]);
   useEffect(() => {
     if (active) return load();
   }, [active, load]);
@@ -106,17 +112,22 @@ export function useFormDraft(key: string | null, active = true) {
     generation,
     loadError,
     saveState,
+    leftOut,
+    imageLimit,
     retryLoad: load,
     /** The form's content when it mounted. */
     started: (snapshot: DraftSnapshot) => {
-      base.current = snapshot;
+      edits.started(snapshot);
     },
     change: (snapshot: DraftSnapshot) => {
-      typed.current = snapshot;
+      edits.changed(snapshot);
       saver.change({ ...snapshot, fields: fitDraftFields(snapshot.fields) });
     },
     flush: () => saver.flush(),
-    discard: () => saver.discard(),
+    discard: () => {
+      saver.discard();
+      edits.reset();
+    },
     retrySave: async () => {
       if (!saver.state.conflict || !key) return saver.flush();
       try {
@@ -148,8 +159,9 @@ export function useFormDraft(key: string | null, active = true) {
       unsavedOperations.delete(key);
       // A draft that could not be read is never deleted unseen.
       if (status !== "ready") return;
-      // Only the revision this form saw: a newer draft from another window is kept.
-      await clearRpc({ key, revision: saver.currentRevision });
+      // Only the revision this form saw (after a save on its way): a newer draft from another window is kept.
+      if (!(await clearAfterSaves(saver, (revision) => clearRpc({ key, revision }))))
+        throw new Error(t("It was changed in another window and was kept."));
     },
   };
 }
@@ -192,22 +204,34 @@ export function useDraftChanges(draft: FormDraft, ready: boolean, fields: DraftS
   }, [ready, fieldsKey, imagesKey, draft.generation]);
 }
 
-/** Load/save problems with their way out: Retry, and Close without saving after a failed save. */
-export function DraftNotice({ draft, onDiscardClose }: { draft: FormDraft; onDiscardClose(): void }) {
+/**
+ * Load/save problems with their way out: Retry, and Close without saving after
+ * a failed save. `busy` (a create running) disables Retry of a failed load,
+ * which would remount the form under that create.
+ */
+export function DraftNotice({ draft, onDiscardClose, busy = false }: { draft: FormDraft; onDiscardClose(): void; busy?: boolean }) {
+  const leftOut = draft.leftOut ? (
+    <Notice>
+      {tn(draft.leftOut, "{n} saved image was left out: this form holds at most {limit} images.", "{n} saved images were left out: this form holds at most {limit} images.", {
+        limit: draft.imageLimit,
+      })}
+    </Notice>
+  ) : null;
   if (draft.status === "failed")
     return (
       <View style={{ gap: space[2] }}>
         <Notice>{t("The saved draft could not be loaded, so changes here are not saved: {error}", { error: draft.loadError })}</Notice>
         <View style={{ flexDirection: "row", gap: space[2] }}>
-          <Button small onPress={() => draft.retryLoad()}>
+          <Button small disabled={busy} onPress={() => draft.retryLoad()}>
             {t("Retry")}
           </Button>
         </View>
       </View>
     );
-  if (!draft.saveState.error) return null;
+  if (!draft.saveState.error) return leftOut;
   return (
     <View style={{ gap: space[2] }}>
+      {leftOut}
       <Notice>
         {draft.saveState.conflict
           ? draft.saveState.error.includes(draftConflictMessage)

@@ -105,7 +105,8 @@ function SessionForm({
     hasInstruction;
   async function perform(action: () => Promise<unknown>) {
     // A close in progress wins; it would unmount the form under a running create.
-    if (lock.current || closing.current) return;
+    // `busy` is shared with the form a draft reload may have mounted meanwhile.
+    if (lock.current || busy.current || closing.current) return;
     lock.current = true;
     busy.current = true;
     setSending(true);
@@ -287,7 +288,7 @@ function SessionForm({
             {t("A session ID is prepared. Retry checks for an existing session before creating it.")}</Notice>
         )}
         {error && <Notice>{error}</Notice>}
-        <DraftNotice draft={draft} onDiscardClose={() => {
+        <DraftNotice draft={draft} busy={sending} onDiscardClose={() => {
           draft.discard();
           onClose();
         }} />
@@ -321,7 +322,7 @@ export function SessionCreate(props: Omit<Parameters<typeof SessionForm>[0], "dr
   const theme = useTheme();
   const { open, onClose, task, seed } = props;
   const key = formDraftKey("session", task.id, seed?.ideaId ? { ideaId: seed.ideaId } : null);
-  const draft = useFormDraft(key, open);
+  const draft = useFormDraft(key, open, maxImages);
   const busy = useRef(false);
   // A prepared session belongs to the draft it was prepared for (card and idea), never to another.
   const attempts = useRef(new Map<string, Attempt>());

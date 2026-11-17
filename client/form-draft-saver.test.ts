@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { DraftSaver, fitDraftFields, mergeAfterFailedLoad, overwriteLatest } from "./form-draft-saver";
+import { DraftSaver, FailedLoadEdits, clearAfterSaves, fitDraftFields, mergeAfterFailedLoad, overwriteLatest } from "./form-draft-saver";
 import { draftConflictMessage } from "../shared/form-drafts";
 
 beforeEach(() => vi.useFakeTimers());
@@ -136,4 +136,62 @@ test("Retry after a failed load keeps what was typed and what was saved", () => 
   expect(mergeAfterFailedLoad(saved, null, base)).toBeNull();
   // No saved draft: what was typed becomes the draft.
   expect(mergeAfterFailedLoad(null, typed, base)).toEqual(typed);
+});
+
+test("a merge never holds more images than the form: added images stay, saved ones that do not fit are counted", () => {
+  const saved = { fields: {}, images: ["s1", "s2", "s3", "s4"].map(image) };
+  const base = { fields: {}, images: [] };
+  const typed = { fields: {}, images: [image("t")] };
+  const merged = mergeAfterFailedLoad(saved, typed, base, 4);
+  expect(merged?.images.map((i) => i.id)).toEqual(["s1", "s2", "s3", "t"]);
+  expect(merged?.leftOut).toBe(1);
+  // Within the limit nothing is left out.
+  expect(mergeAfterFailedLoad(saved, typed, base, 8)).toEqual({ fields: {}, images: [...saved.images, image("t")] });
+});
+
+test("edits made while a load failed survive failed retries and are merged only into the same key", () => {
+  const edits = new FailedLoadEdits();
+  const defaults = { fields: { title: "" }, images: [] };
+  const typed = { fields: { title: "typed" }, images: [image("t")] };
+  expect(edits.begin("task:p:plain", false)).toBeNull(); // first load fails
+  edits.started(defaults);
+  edits.changed(typed);
+  // Retry fails too: the remounted form shows the edits and its mount is not a new starting point.
+  expect(edits.begin("task:p:plain", true)).toEqual({ typed, base: defaults });
+  expect(edits.shown("task:p:plain")).toEqual(typed);
+  edits.started(typed);
+  // The next Retry still has both.
+  expect(edits.begin("task:p:plain", true)).toEqual({ typed, base: defaults });
+  // Another project's draft never receives them, even while the old load had failed.
+  expect(edits.begin("task:q:plain", true)).toBeNull();
+  expect(edits.shown("task:q:plain")).toBeNull();
+  expect(edits.begin("task:p:plain", true)).toBeNull();
+  // A successful load starts over.
+  edits.changed(typed);
+  edits.reset();
+  expect(edits.begin("task:p:plain", true)).toEqual({ typed: null, base: null });
+});
+
+test("clearing after a create waits for a save on its way and names the revision it produced", async () => {
+  vi.useRealTimers();
+  let finish: (() => void) | undefined;
+  const saver = new DraftSaver(() => new Promise((resolve) => (finish = () => resolve({ revision: 2 }))));
+  saver.loaded(1, []);
+  saver.change({ fields: { title: "last" }, images: [] });
+  const saving = saver.flush();
+  for (let i = 0; i < 20 && !finish; i++) await Promise.resolve();
+  expect(finish).toBeTypeOf("function"); // the save is on its way
+  const cleared: number[] = [];
+  const clearing = clearAfterSaves(saver, async (revision) => {
+    cleared.push(revision);
+    return { ok: revision === 2 };
+  });
+  await Promise.resolve();
+  expect(cleared).toEqual([]);
+  finish!();
+  await saving;
+  expect(await clearing).toBe(true);
+  expect(cleared).toEqual([2]);
+  // A draft another window saved meanwhile is kept, and the caller is told.
+  expect(await clearAfterSaves(saver, async () => ({ ok: false }))).toBe(false);
 });

@@ -6,6 +6,8 @@ const catalog: Catalog = {
   "This draft was changed in another window. Retry to keep this version instead.": "この下書きは別のウィンドウで変更されました。再試行すると、こちらの内容で上書きします。",
   "The draft was not saved: {error}": "下書きを保存できませんでした：{error}",
   "The draft was not cleared: {error}": "下書きを消去できませんでした：{error}",
+  "It was changed in another window and was kept.": "別のウィンドウで変更されたため、残しました。",
+  "{n} saved images were left out: this form holds at most {limit} images.": "保存済みの画像 {n} 枚は復元されませんでした：このフォームに入れられる画像は最大 {limit} 枚です。",
   "Command": "コマンド",
   "Review model": "レビューモデル",
   "{n} s": "{n} 秒",

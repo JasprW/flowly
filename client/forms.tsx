@@ -909,6 +909,7 @@ function TaskFormBody({
           {error && <Notice>{error}</Notice>}
           <DraftNotice
             draft={draft}
+            busy={pending}
             onDiscardClose={() => {
               draft.discard();
               onClose();
@@ -939,7 +940,7 @@ type TaskFormProps = Omit<Parameters<typeof TaskFormBody>[0], "draft" | "busy" |
 export function TaskForm(props: TaskFormProps) {
   const theme = useTheme();
   const { task, seed, project, onClose } = props;
-  const draft = useFormDraft(task ? null : formDraftKey("task", project.id, seed));
+  const draft = useFormDraft(task ? null : formDraftKey("task", project.id, seed), true, cardImageLimit);
   const busy = useRef(false);
   const closing = useRef(false);
   // Close, Cancel, Esc and Back save what is pending first; a failed save keeps the form open.

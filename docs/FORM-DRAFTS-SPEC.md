@@ -59,6 +59,12 @@ shows a prefilled form's draft and the reverse.
   changed after the failed load are combined with the loaded draft: changed
   choices win, title/description/instruction written on both sides are kept as
   both (saved text first), the saved `operationId` is kept, images are joined.
+  Joined images stay within the form's image limit: the images added after the
+  failed load are kept, saved images that no longer fit are left out and the form
+  says how many. A Retry that fails again keeps those edits (the form shows them)
+  for the next Retry; they are dropped only by a successful load or *Close without
+  saving*, and never merged into another draft key (another project or card).
+  While a create is running, Retry of a failed load is disabled.
 - A text value longer than 20000 characters is saved as empty; the open form keeps
   it and creating uses it, but it is not kept across a close.
 - A force-quit may lose up to the last ~400 ms of typing.
@@ -102,6 +108,9 @@ what it restores and ignores what it does not understand.
   never recovered for another.
 - **New session**: the draft is cleared after the session is created; a failed
   create keeps it.
+- The clear waits for a save already on its way and names the revision it
+  produced. If another window saved a newer draft meanwhile, that draft is kept
+  and the toast says so.
 - A failed clear is shown as a toast; the created resource is not affected.
 
 ## 6. Acceptance
