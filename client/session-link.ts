@@ -136,7 +136,8 @@ export function registerSessionChips(
   const ideaPills = new Map<string, Extra>();
   type Outside = { enabled: boolean; progress: boolean; nextMoves: boolean; ideas: boolean };
   let chipInfo: { managed: Set<string>; ideas: boolean; autoWrapup: boolean; nextMoveTap: "fill" | "copy"; outside: Outside } | null = null,
-    chipInfoAt = 0;
+    chipInfoAt = 0,
+    chipInfoGen = 0;
   let outsideEtag = "",
     outsideViews = new Map<string, SessionInsightView>();
   if (popovers) setChipClient(client);
@@ -145,35 +146,38 @@ export function registerSessionChips(
   const stopHidden = onMovesHidden(() => {
     if (!disposed && lastRound) syncExtras(lastRound.current, [...live.values()], lastRound.tasks);
   });
-  // This poll runs on every client, phones included, where each response is
+  // This refresh runs on every client, phones included, where each response is
   // decoded on the JS thread while the user may be typing in a composer
   // (PERFORMANCE-SPEC). So: the board is re-read only when its etag changed;
-  // live sessions come from the agent stream (listed once, then every minute to
-  // reconcile; every round only where there is no stream); and the archived scan
+  // live sessions come from the agent stream (reconciled at most once a minute
+  // on active rounds; every round only where there is no stream); and the archived scan
   // (every agent on the host, megabytes) runs after the round, never inside it,
-  // when a chipped session left the live list or once a minute (NATIVE-SESSION-SPEC §8).
+  // when a session left the live list or after a minute on an active round. Live board pushes stop timed rounds.
   let board: LinkBoard | null = null,
     etag = "",
     // Only what the Task chip needs of an archived session.
     archived: { id: string; workspaceId: string | null }[] = [],
     archivedAt = 0,
+    archiveRemovals = 0,
     scanning = false;
   const archivedEvery = 60_000;
   const liveEvery = 60_000;
+  let archiveRetry: ReturnType<typeof setTimeout> | undefined;
   // A pushed change of one session asks for a round soon; the wait gathers the updates of one transition.
   const nudgeAfter = 150;
   const live = new Map<string, PaseoAgent>();
   let liveAt = 0,
+    liveMembershipGen = 0,
     streamReady = false,
     // Set when the stream starts: a list that began earlier may have missed updates, so list once more.
     relist = false,
     stopStream: (() => void) | null = null,
     releaseStream: (() => Promise<void>) | null = null;
+  let streamAttempt = 0,
+    streamRetry: ReturnType<typeof setTimeout> | undefined;
   const opening = new Set<string>();
-  // Paseo 0.16 pushes "the board changed" (PASEO-0.16-SPEC §3.5): while they arrive, a round runs per change and the
-  // timed round only every `pushedEvery` (live list and archived scan keep their minute). A host without
-  // subscriptions, a failed or closed subscription, and the wait for its first event keep the timed rounds.
-  const pushedEvery = 60_000;
+  // Paseo 0.16 pushes "the board changed" (PASEO-0.16-SPEC §3.5): once live, only changes trigger rounds.
+  // A host without subscriptions, a failed/closed subscription, and the wait for its first event keep polling.
   let pushLive = false,
     pushAttempt = 0,
     pushHandle: (() => void) | null = null,
@@ -206,6 +210,9 @@ export function registerSessionChips(
             pushLive = true;
             pushAttempt = 0;
           }
+          // Settings changes use the same feed even when the board's etag is unchanged.
+          chipInfoGen++;
+          chipInfoAt = -Infinity;
           refreshNow();
         },
         { onClosed: fail },
@@ -245,12 +252,20 @@ export function registerSessionChips(
   /** Follows the sessions by push, as the board does (`openAgentStream` in queries.ts); a phone then lists them rarely. */
   function openStream() {
     const agents = client.paseo.agents;
-    if (stopStream || typeof agents.subscribe !== "function") return;
+    if (disposed || stopStream || streamRetry || typeof agents.subscribe !== "function") return;
     let nudge: ReturnType<typeof setTimeout> | undefined;
     const stopListening = agents.subscribe((update) => {
       if (disposed) return;
       const { changed, before, after } = applyLiveUpdate(live, update);
-      if (!changed || !relevantChange(before, after)) return;
+      // A tombstone can arrive before this client's first full list has populated the ID.
+      const removed = update.kind === "remove" || !!update.agent.archivedAt || (!!before && !after);
+      if (removed || (!before && after)) liveMembershipGen++;
+      if (!removed && (!changed || !relevantChange(before, after))) return;
+      // Without a timed round, archiving must refresh the references from this event itself.
+      if (removed) {
+        archivedAt = -Infinity;
+        archiveRemovals++;
+      }
       clearTimeout(nudge);
       nudge = setTimeout(refreshNow, nudgeAfter);
     });
@@ -263,10 +278,20 @@ export function registerSessionChips(
       .then((result) => {
         releaseStream = () => result.subscription.release();
         if (disposed) return void releaseStream().catch(() => undefined);
+        streamAttempt = 0;
         streamReady = true;
         relist = true;
+        if (pushLive) refreshNow();
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (disposed) return;
+        stopStream?.();
+        stopStream = null;
+        streamRetry = setTimeout(() => {
+          streamRetry = undefined;
+          refreshNow();
+        }, pushRetryDelay(streamAttempt++));
+      });
   }
   // Adds, updates in place, or removes one Next/Ideas pill; `button` is null to remove.
   function syncPill(
@@ -387,7 +412,8 @@ export function registerSessionChips(
   }
   // One round at a time: an extra request while a round runs queues exactly one more, right after it.
   let running = false,
-    again = false;
+    again = false,
+    readAttempt = 0;
   function refreshNow() {
     if (disposed) return;
     if (running) {
@@ -451,25 +477,33 @@ export function registerSessionChips(
     );
   /** Every agent on the host, archived ones included: megabytes, so never inside a round (see above). */
   async function scanArchived() {
+    clearTimeout(archiveRetry);
+    archiveRetry = undefined;
     const start = perfStart();
+    const removals = archiveRemovals;
     try {
       // The daemon pages every agent locally and sends back bare ids (a phone took 7-13 s to decode the full list).
       const refs = await client.rpc(archivedSessionRefs, {});
       if (disposed) return;
       archived = refs;
-      archivedAt = Date.now();
+      if (removals === archiveRemovals) archivedAt = Date.now();
       perfEnd("chips.archived", start);
       // New archived sessions of a card get their chip now; the cards themselves were synced by the round.
       if (board) syncTaskChips(board, [...live.values(), ...archived.filter((a) => !live.has(a.id))], taskMap(board));
     } catch {
       // Try again soon, not every round.
-      archivedAt = Date.now() - archivedEvery + 15_000;
+      if (removals === archiveRemovals) {
+        archivedAt = Date.now() - archivedEvery + 15_000;
+        if (!disposed) archiveRetry = setTimeout(refreshNow, 15_000);
+      }
     } finally {
       scanning = false;
+      if (!disposed && removals !== archiveRemovals) refreshNow();
     }
   }
   async function refresh() {
     running = true;
+    let failed = false;
     const roundStart = perfStart();
     try {
       openStream();
@@ -477,6 +511,7 @@ export function registerSessionChips(
       const needLive = !streamReady || relist || Date.now() - liveAt >= liveEvery;
       // Only a list that began after the stream was up counts as complete.
       if (needLive && streamReady) relist = false;
+      const liveGen = liveMembershipGen;
       const [boardResult, liveResult] = await Promise.allSettled([
         // This private projection excludes histories/workpads; never share its etag or value with the board screen.
         readBoardDelta((input) => client.rpc(readChipBoardChanged, input), board ?? undefined, etag && board ? etag : undefined, "chips-first-read"),
@@ -484,6 +519,8 @@ export function registerSessionChips(
       ]);
       if (disposed) return;
       if (boardResult.status !== "fulfilled" || liveResult.status !== "fulfilled" || (!boardResult.value.value && !board)) {
+        if (needLive) relist = true;
+        failed = true;
         board = null;
         etag = "";
         clear();
@@ -492,21 +529,31 @@ export function registerSessionChips(
       const changed = !!boardResult.value.value;
       if (boardResult.value.value) board = boardResult.value.value;
       etag = boardResult.value.etag;
-      if (liveResult.value) reconcileLive(liveResult.value);
+      if (liveResult.value) {
+        if (liveGen === liveMembershipGen) reconcileLive(liveResult.value);
+        else {
+          relist = true;
+          again = true;
+        }
+      }
       const liveAgents = [...live.values()];
-      // Managed sessions and the Ideas switch: when the board changed, else once a minute (a setting change alone).
+      // Managed sessions and preferences: board/settings pushes, or at most once a minute on other active rounds.
       // A session in a card's workspace that is not known as managed yet may just have been prepared: check sooner.
       const unknown =
         !!chipInfo &&
         Date.now() - chipInfoAt >= 15_000 &&
         liveAgents.some((a) => !chipInfo!.managed.has(a.id) && !!a.workspaceId && board!.tasks.some((x) => x.workspaceId === a.workspaceId));
       if (popovers && (changed || unknown || !chipInfo || Date.now() - chipInfoAt >= archivedEvery)) {
+        const settingsGen = chipInfoGen;
         const info = await client.rpc(nativeChips, {}).catch(() => null);
         if (disposed) return;
         chipInfo = info
           ? { managed: new Set(info.managed.map((m) => m.agentId)), ideas: info.ideas, autoWrapup: info.autoWrapup, nextMoveTap: info.nextMoveTap, outside: info.outside ?? { enabled: false, progress: false, nextMoves: false, ideas: false } }
           : chipInfo;
-        chipInfoAt = Date.now();
+        if (!info) {
+          chipInfoAt = -Infinity;
+          failed = true;
+        } else if (settingsGen === chipInfoGen) chipInfoAt = Date.now();
       }
       // Sessions Flowly does not manage (NATIVE-SESSION-SPEC §12.7): read only when switched on, by etag.
       if (popovers && chipInfo?.outside?.enabled) {
@@ -515,7 +562,7 @@ export function registerSessionChips(
         if (result) {
           if (result.value) outsideViews = new Map(result.value.map((v) => [v.agentId, v]));
           outsideEtag = result.etag;
-        }
+        } else failed = true;
       } else if (outsideEtag) {
         outsideEtag = "";
         outsideViews = new Map();
@@ -535,18 +582,20 @@ export function registerSessionChips(
         void scanArchived();
       }
     } catch {
+      failed = true;
       if (!disposed) clear();
     } finally {
       running = false;
+      if (!failed) readAttempt = 0;
       perfEnd("chips.round", roundStart);
       if (!disposed) {
         if (again) {
           again = false;
           void refresh();
-        } else
+        } else if (!pushLive || failed)
           timer = setTimeout(() => {
             void refresh();
-          }, pushLive ? Math.max(interval, pushedEvery) : interval);
+          }, pushLive ? pushRetryDelay(readAttempt++) : interval);
       }
     }
   }
@@ -559,7 +608,9 @@ export function registerSessionChips(
     disposed = true;
     latestClick++;
     clearTimeout(timer);
+    clearTimeout(archiveRetry);
     stopHidden();
+    clearTimeout(streamRetry);
     stopStream?.();
     void releaseStream?.().catch(() => undefined);
     clearTimeout(pushTimer);

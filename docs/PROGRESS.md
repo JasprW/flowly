@@ -1387,3 +1387,35 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
   - `92aa208`: clear records one past the cleared revision; a conflict Retry overwrites on top of the revision `read()` reports.
   - CodeRabbit's review of `5bd30f1` had 5 points, all fixed in one commit: a merge after a failed load stays within the form's image limit (added images kept, saved ones left out are counted and shown); edits made while a load failed survive failed retries and are never merged into another draft key; the clear after a create waits for a save on its way and reports a draft another window kept; Retry of a failed load is disabled while a create runs, and New session's create also checks the shared busy flag.
   - Follow-ups after `8ab87e1`: the recovered-session path shows the clear-failure toast (`391f74c`), and a create after a failed load says the unread draft was kept instead of skipping the clear silently.
+
+## 2026-11-16 Paseo 0.16 在线 chip 零周期读取返工
+
+- 自动验收发现 PR #115 保留的 60 s chip 校对违背「屏幕静止时没有周期性读取」；§3.7 的暂缓不豁免该项。接受意见，保留历史 51→1 手机数据并更正其解释。
+- 先增强回归：静止 180 s 原实现读取 2→5，exit 1；在线时不再安排定时轮次后通过。首事件前、旧宿主、订阅拒绝/关闭继续轮询；恢复首事件后再次停止。
+- 去除分钟触发后，Ideas/Wrap up/native-session 设置通过原有 sessions 通知触发刷新；agent 流建立补一次完整列表、归档事件使归档引用过期。无新增轮询、协议或依赖。
+- 变更后 typecheck exit 0，5 文件 58 聚焦通过；全量 exit 0，165 文件通过/1 跳过，1506 测试通过/6 跳过。独立复核、提交与交付信息见 verification/paseo016-ga-2026-11-16/IDLE-READS-REWORK.md。
+- 本轮 AndroMeld control socket 不存在，adb 无设备；没有新手机或冷启动样本，旧数据保持历史属性。不新增用户操作、设置、引导、遥测字段或版本号。
+
+- CodeRabbit 三条有效补审意见均以确定性回归复现：读取拒绝后chip不恢复、旧设置响应吞新失效、旧归档扫描吞新移除。用户明确批准后两处最小并发保护；各加变化编号，不新增周期轮询。设置旧请求结束保留新失效；归档扫描无论成功/失败都保留新移除并补查。
+- 读取失败用5/30/60 s故障退避，成功即停止；stream初始化未成功应用的完整列表保留relist。该列表路径补回归先红；持续失败不自旋、stop取消、恢复后180秒无周期读取均保留。最终命令、SHA与独立复核记入IDLE-READS-REWORK.md。
+
+- 后续真实CodeRabbit补审又复现三条被catch为null/仅记时间戳的失败路径：归档失败不实际重试、设置失败错误标新鲜、外部insights失败无重试。新回归原3失败/36通过；最小修复后完整聚焦5文件69通过、typecheck exit0。归档仅失败时安排15秒一次性补查，成功/stop取消；设置/insights共用现有故障退避，健康静止仍零读取。
+- 最终候选冷启动门槛目前未满足：本轮AndroMeld socket不存在、adb无设备；3043bd8的历史+3.73%不能自动覆盖之后客户端与server修改。已撤掉卡片冷启动勾选，并向用户请求补测手机或明确接受本次补丁沿用，尚未授权时不合入。
+
+- 随后用户明确回复「授权本次补丁沿用旧冷启动结论」：该决定仅覆盖PR#117当前chip故障恢复补丁/产品531adad，按旧+3.7257%与5%标准接受沿用；没有新候选真机样本，保留UNRUN。此前未满足门槛的时序保留，不再等待连接手机作为本次合入条件。全量本次1517通过/6skip，165文件通过/1skip，exit0。
+
+
+## 2026-11-17 Paseo 0.16 原生agent流恢复与名单合并
+
+- CodeRabbit上轮正文还有两条outside-diff意见，未因check成功或无未解决线程而盲目合入。确定性回归复现setup失败无重试、旧活跃名单覆盖archive/create：原3失败/40通过；修好setup后41通过/2并发失败。
+- 用户明确批准最小名单变化编号，并再次确认本补丁冷启继续沿用旧结论。新增/移除事件递增编号，完整列表返回时若已过期则保留流状态并补读；不再复活已归档session或丢掉新session。setup失败清理本地监听并按既有5/30/60s退避重订阅，成功后停止，stop取消。无新健康周期轮询。
+- 完整5文件聚焦73项通过，typecheck exit0；全量与最终独立报告按冻结源码另记于IDLE-READS-REWORK.md。冷启动仍无新手机样本，严格按用户本补丁沿用授权记录，未扩展到其他功能。
+
+- 独立Luna对3ab5ff8暂缓放行：本地尚无ID时的remove被changed=false提前过滤，旧完整列表仍复活该session。临时诊断已移除、WITHHELD证据单独保留（LUNA-STREAM-RECONCILE.md/86e9198）；原73/1521通过不掩盖此缺口。
+- 在已批准的名单保护内补常规remove-unseen与archive-unseen回归，旧实现2失败/43通过（实测仍有旧session extras）。原始归档/移除现在即使本地尚无ID也递增membership编号、使归档引用失效并触发刷新。修改后完整5文件75项通过，typecheck exit0；重新冻结后复验全量与独立检查。
+
+- 最新最终产品deca6bd：typecheck与75聚焦通过，同一Luna复验PASS；父全量1523通过/6skip、165文件通过/1skip。保留旧WITHHELD时序，新报告LUNA-STREAM-FINAL.md；测试session已清理。最终证据整理后一次推送PR#117，等CI与真实CodeRabbit补审，不改产品源码。
+
+- CodeRabbit对dd47856补审提出持续stream setup失败时普通列表仍需刷新的有效意见。新回归先红（1失败/45通过，新a2无Task chip）；仅将既有stream退避回调从openStream改为refreshNow，使订阅重试同时通过普通列表更新新session。连续5/30秒失败期间a2/a3可见，成功后180秒无继续读取；不新增timer。修改后完整5文件76项与typecheck通过，exit0；全量/独立最终证据随后按冻结SHA记录。
+
+- 持续失败回退最终6be6f31：typecheck与76聚焦、父全量1524/6skip通过，独立Luna PASS，报告LUNA-PERSISTENT-STREAM.md；测试会话已清理。新手机仍UNRUN，按用户明确授权沿用本补丁旧冷启结论。最终证据推送后继续等CI与真实CodeRabbit补审。

@@ -218,6 +218,10 @@ export default function contribute(host: PluginServerContext) {
     workspaces: workspaceBindings(await store.read()),
   }));
   const boardFeed = new ChangeFeed();
+  // Chip preferences used to be found by the minute's reconciliation. Push them even if no board write occurs.
+  const stopChipPrefs = [ideasPrefs, wrapupPrefs, nativePrefs].map((prefs) =>
+    prefs.subscribe(() => boardFeed.notify("sessions")),
+  );
   store.onCommit = () => {
     folders.schedule();
     sessionMetadata.changed();
@@ -870,6 +874,7 @@ export default function contribute(host: PluginServerContext) {
   );
   return () => {
     sessionMetadata.stop();
+    stopChipPrefs.forEach((stop) => stop());
     boardFeed.stop();
     void store.close().catch((e) => logFailure("Flowly storage: close failed:", e));
     workflow.stop();

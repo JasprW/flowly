@@ -430,6 +430,7 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     const state = {
       etag: "e1",
       agents: [live("a1")] as ReturnType<typeof live>[],
+      archived: [{ id: "old", workspaceId: "w1" }],
       events: [{ id: "evp1", taskId: "t1", actor: "agent", action: "next_moves_suggested", agentId: "a1", at: "2026-10-21T00:00:05Z", moves: [{ label: "Verify", prompt: "Verify it" }] }] as unknown[],
     };
     let push: ((u: unknown) => void) | null = null;
@@ -438,8 +439,9 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
       rpc: vi.fn(async (def: { name: string }, input: { etag?: string }) => {
         if (def.name === "sessions.archived-refs") {
           calls.archived++;
-          await options.scanGate;
-          return [{ id: "old", workspaceId: "w1" }];
+          const refs = [...state.archived];
+          if (calls.archived === 1) await options.scanGate;
+          return refs;
         }
         if (def.name === "sessions.native-chips") {
           calls.native++;
@@ -508,6 +510,235 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     stop();
   });
 
+  test("with board pushes, stream startup reconciles and archiving refreshes refs without a timed round", async () => {
+    const x = fake({ stream: true });
+    let emit!: () => void;
+    Object.assign(x.client, {
+      subscribe: (_c: unknown, _i: unknown, onEvent: () => void) => {
+        emit = onEvent;
+        return Object.assign(() => undefined, { ready: Promise.resolve() });
+      },
+    });
+    const read = x.client.rpc.getMockImplementation()!;
+    let archived = false;
+    x.client.rpc.mockImplementation(async (definition, input) => {
+      const result = await read(definition, input);
+      if (definition.name === "sessions.archived-refs" && archived) return [{ id: "a1", workspaceId: "w1" }] as never;
+      return result;
+    });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit(); // board subscription goes live before the initial agent stream list resolves
+    await vi.advanceTimersByTimeAsync(0);
+    expect(x.calls.live).toBe(2);
+    expect(x.calls.archived).toBe(1);
+    archived = true;
+    x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(x.calls.archived).toBe(2);
+    expect(x.client.addComposerPill).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "a1" }));
+    const before = { ...x.calls };
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.calls).toEqual(before);
+    stop();
+    expect(x.released()).toBe(1);
+  });
+
+  test("a failed initial stream reconciliation retries the full list before returning to idle", async () => {
+    const x = fake({ stream: true });
+    const list = x.client.paseo.agents.list.getMockImplementation()!;
+    let fullReads = 0;
+    x.client.paseo.agents.list.mockImplementation(async (input) => {
+      if (!input.subscribe && ++fullReads === 2) throw new Error("initial reconcile failed");
+      return list(input);
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fullReads).toBe(2);
+    x.state.agents.push(live("a2"));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fullReads).toBe(3);
+    expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    const after = { ...x.calls };
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.calls).toEqual(after);
+    stop();
+  });
+
+  test.each([false, true])("an archive during a pending scan survives stale completion (failed=%s)", async (failed) => {
+    let release!: () => void;
+    let reject!: (error: Error) => void;
+    const x = fake({ stream: true, scanGate: new Promise<void>((r, j) => { release = r; reject = j; }) });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    x.state.archived = [{ id: "a1", workspaceId: "w1" }];
+    x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    await vi.advanceTimersByTimeAsync(200);
+    if (failed) reject(new Error("old scan failed"));
+    else release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(x.calls.archived).toBe(2);
+    expect(x.client.addComposerPill).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "a1" }));
+    const after = { ...x.calls };
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.calls).toEqual(after);
+    stop();
+  });
+
+  test.each([false, true])("a failed archive scan retries after its delay or is cancelled on stop (stop=%s)", async (stopFirst) => {
+    const x = fake({ stream: true });
+    const read = x.client.rpc.getMockImplementation()!;
+    let fail = false;
+    x.client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.archived-refs" && fail) throw new Error("archive service unavailable");
+      return read(definition, input);
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    x.state.archived = [{ id: "a1", workspaceId: "w1" }];
+    fail = true;
+    x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    await vi.advanceTimersByTimeAsync(150);
+    const scans = () => x.client.rpc.mock.calls.filter(([d]) => d.name === "sessions.archived-refs").length;
+    expect(scans()).toBe(2);
+    fail = false;
+    if (stopFirst) stop();
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(scans()).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(scans()).toBe(stopFirst ? 2 : 3);
+    if (!stopFirst) expect(x.client.addComposerPill).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "a1" }));
+    const count = x.client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.client.rpc).toHaveBeenCalledTimes(count);
+    if (!stopFirst) stop();
+  });
+
+  test.each([false, true])("a rejected agent stream setup retries or is cancelled on stop (stop=%s)", async (stopFirst) => {
+    const x = fake({ stream: true });
+    const list = x.client.paseo.agents.list.getMockImplementation()!;
+    let attempts = 0;
+    x.client.paseo.agents.list.mockImplementation(async (input) => {
+      if (input.subscribe && ++attempts === 1) throw new Error("stream unavailable");
+      return list(input);
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(attempts).toBe(1);
+    x.state.agents.push(live("a2"));
+    if (stopFirst) stop();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(attempts).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempts).toBe(stopFirst ? 1 : 2);
+    if (!stopFirst) expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    const calls = x.client.paseo.agents.list.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.client.paseo.agents.list).toHaveBeenCalledTimes(calls);
+    if (!stopFirst) stop();
+  });
+
+  test("repeated stream setup failures still refresh ordinary agent reads for new sessions", async () => {
+    const x = fake({ stream: true });
+    const list = x.client.paseo.agents.list.getMockImplementation()!;
+    let fail = true;
+    x.client.paseo.agents.list.mockImplementation(async (input) => {
+      if (input.subscribe && fail) throw new Error("stream unavailable");
+      return list(input);
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    x.state.agents.push(live("a2"));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    x.state.agents.push(live("a3"));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a3" }));
+    fail = false;
+    await vi.advanceTimersByTimeAsync(60_000);
+    const reads = x.client.paseo.agents.list.mock.calls.length;
+    const rpc = x.client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.client.paseo.agents.list).toHaveBeenCalledTimes(reads);
+    expect(x.client.rpc).toHaveBeenCalledTimes(rpc);
+    stop();
+  });
+
+  test.each(["archive", "create", "remove-unseen", "archive-unseen"])("a stale live-list response does not undo a stream %s", async (change) => {
+    const { chipState } = await import("./native-chips");
+    const x = fake({ stream: true });
+    const unseen = change.endsWith("-unseen");
+    if (unseen) x.state.agents = [];
+    const list = x.client.paseo.agents.list.getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let reads = 0;
+    x.client.paseo.agents.list.mockImplementation(async (input) => {
+      if (!input.subscribe && reads === 1 && unseen) x.state.agents = [live("a1")];
+      const snapshot = await list(input);
+      if (!input.subscribe && ++reads === 2) await gate;
+      return snapshot;
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    if (change !== "create") {
+      x.state.agents = [];
+      x.state.archived = change === "remove-unseen" ? [] : [{ id: "a1", workspaceId: "w1" }];
+      x.push(change === "remove-unseen" ? { kind: "remove", agentId: "a1" }
+        : { kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    } else {
+      x.state.agents.push(live("a2"));
+      x.push({ kind: "upsert", agent: live("a2") });
+    }
+    await vi.advanceTimersByTimeAsync(150);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    if (change !== "create") expect(chipState("a1")).toBeNull();
+    else expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    if (change === "remove-unseen") expect(x.client.addComposerPill).not.toHaveBeenCalledWith(expect.objectContaining({ agentId: "a1" }));
+    if (change === "archive-unseen") expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a1" }));
+    expect(reads).toBe(3);
+    const count = x.client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
+
   test("pushed churn that cannot change a card (a title) causes no round", async () => {
     const x = fake({ stream: true });
     const stop = registerSessionChips(x.client as never, 60_000, 0, popovers);
@@ -551,6 +782,200 @@ test("native startup requests the private slim board, never the full board endpo
 });
 
 describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
+  function pushing(client: object) {
+    let emit: (() => void) | undefined;
+    let close: (() => void) | undefined;
+    const release = vi.fn();
+    const subscribe = vi.fn((_c: unknown, _i: unknown, onEvent: () => void, options: { onClosed: () => void }) => {
+      emit = onEvent;
+      close = options.onClosed;
+      return Object.assign(release, { ready: Promise.resolve() });
+    });
+    Object.assign(client, { subscribe });
+    return { emit: () => emit!(), close: () => close!(), release, subscribe };
+  }
+
+  test.each(["settings", "insights"])("a failed %s push read retries without another change and then stops", async (target) => {
+    const { client, state } = fakeClient();
+    const { chipState, outsideState } = await import("./native-chips");
+    state.live.push(Object.assign(agent("o1"), { workspaceId: "wx", status: "idle", pendingPermissions: [], lastUserMessageAt: "2026-10-21T00:00:00Z" }));
+    const read = client.rpc.getMockImplementation()!;
+    let fail = false;
+    let tap = "fill";
+    let suggestion = "s1";
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.native-chips") {
+        if (fail && target === "settings") throw new Error("settings unavailable");
+        return { managed: [{ agentId: "a1" }], ideas: true, autoWrapup: false, nextMoveTap: tap,
+          outside: { enabled: true, progress: true, nextMoves: true, ideas: true } } as never;
+      }
+      if (definition.name === "sessions.insights") {
+        if (fail && target === "insights") throw new Error("insights unavailable");
+        return { etag: suggestion, value: [{ agentId: "o1", workspaceId: "wx", suggestion: {
+          id: suggestion, at: "2026-10-21T00:00:05Z", current: true, moves: [{ label: "Go", prompt: "Go on" }],
+        }, ideas: [] }] } as never;
+      }
+      return read(definition, input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0, { ideas: () => null, outsideIdeas: () => null });
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("fill");
+    expect(outsideState("o1")?.moves?.eventId).toBe("s1");
+    tap = "copy";
+    suggestion = "s2";
+    fail = true;
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(chipState("a1")?.nextMoveTap).toBe("copy");
+    expect(outsideState("o1")?.moves?.eventId).toBe("s2");
+    const count = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
+
+  test.each(["board", "agents"])("a rejected %s read recovers without another change, then returns to zero idle reads", async (target) => {
+    const { client, calls } = fakeClient();
+    const read = client.rpc.getMockImplementation()!;
+    const list = client.paseo.agents.list.getMockImplementation()!;
+    let fail = false;
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (target === "board" && definition.name === "sessions.chip-board-changed" && fail) throw new Error("temporary read failure");
+      return read(definition, input);
+    });
+    client.paseo.agents.list.mockImplementation(async (input) => {
+      if (target === "agents" && fail) throw new Error("temporary agent read failure");
+      return list(input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    fail = true;
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls.pills).toBe(4); // the cleared live and archived chips have been restored
+    const count = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
+
+  test("persistent read failures back off instead of looping, and stop cancels the retry", async () => {
+    const { client } = fakeClient();
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    client.rpc.mockRejectedValue(new Error("read service unavailable"));
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    const failed = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(client.rpc).toHaveBeenCalledTimes(failed);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 1);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 2);
+    stop();
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(failed + 2);
+  });
+
+  test("a settings push during an older native-chips read survives its stale response", async () => {
+    const { client } = fakeClient();
+    const { chipState } = await import("./native-chips");
+    const read = client.rpc.getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let tap = "fill";
+    let nativeReads = 0;
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.native-chips") {
+        const nextMoveTap = tap;
+        if (++nativeReads === 1) await gate;
+        return { managed: [{ agentId: "a1" }], ideas: true, autoWrapup: false, nextMoveTap } as never;
+      }
+      return read(definition, input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0, { ideas: () => null });
+    await vi.advanceTimersByTimeAsync(0);
+    tap = "copy";
+    push.emit();
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("copy");
+    expect(nativeReads).toBe(2);
+    stop();
+  });
+
+  test("connecting polls; live stops; closure resumes polling; first recovery event stops it again", async () => {
+    const { client, calls } = fakeClient();
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.board).toHaveLength(3); // no first event: still connecting
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    const online = calls.board.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls.board).toHaveLength(online);
+    push.close();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.board).toHaveLength(online + 1); // immediate fallback read
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.board).toHaveLength(online + 3);
+    expect(push.subscribe).toHaveBeenCalledTimes(2);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    const recovered = calls.board.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls.board).toHaveLength(recovered);
+    stop();
+    push.emit();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls.board).toHaveLength(recovered);
+  });
+
+  test("a settings push updates chip preferences even when the board etag is unchanged", async () => {
+    const { client } = fakeClient();
+    const { chipState } = await import("./native-chips");
+    const read = client.rpc.getMockImplementation()!;
+    let nextMoveTap = "fill";
+    client.rpc.mockImplementation(async (definition, input) => {
+      if (definition.name === "sessions.native-chips") return {
+        managed: [{ agentId: "a1" }], ideas: true, autoWrapup: false, nextMoveTap,
+      } as never;
+      return read(definition, input);
+    });
+    const push = pushing(client);
+    const stop = registerSessionChips(client as never, 5000, 0, { ideas: () => null });
+    await vi.advanceTimersByTimeAsync(0);
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("fill");
+    nextMoveTap = "copy";
+    push.emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chipState("a1")?.nextMoveTap).toBe("copy");
+    const count = client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
+
   test("a subscription the host refuses at once is retried on its own wait, never in a loop with the rounds", async () => {
     const { client, calls } = fakeClient();
     let subscribes = 0;
@@ -576,8 +1001,8 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     stop();
   });
 
-  test("while pushes arrive the timed round runs once a minute and each push runs one round", async () => {
-    const { client, calls } = fakeClient();
+  test("live pushes stop all timed chip reads beyond a minute; each push still updates the chips", async () => {
+    const { client, calls, state } = fakeClient();
     let emit: (() => void) | null = null;
     Object.assign(client, {
       subscribe: vi.fn((_c: unknown, _i: unknown, onEvent: () => void) => {
@@ -590,15 +1015,22 @@ describe("board pushes (PASEO-0.16-SPEC §3.5)", () => {
     emit!();
     await vi.advanceTimersByTimeAsync(0);
     const afterLive = calls.board.length;
-    await vi.advanceTimersByTimeAsync(30_000);
+    const rpcCalls = client.rpc.mock.calls.length;
+    const listCalls = client.paseo.agents.list.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
     expect(calls.board.length).toBe(afterLive);
+    expect(client.rpc).toHaveBeenCalledTimes(rpcCalls);
+    expect(client.paseo.agents.list).toHaveBeenCalledTimes(listCalls);
+    state.boardEtag = "e2";
+    state.title = "Renamed after idle";
     emit!();
     await vi.advanceTimersByTimeAsync(0);
     expect(calls.board.length).toBe(afterLive + 1);
+    expect(calls.updates).toBe(2);
     await vi.advanceTimersByTimeAsync(59_999);
     expect(calls.board.length).toBe(afterLive + 1);
     await vi.advanceTimersByTimeAsync(1);
-    expect(calls.board.length).toBe(afterLive + 2);
+    expect(calls.board.length).toBe(afterLive + 1);
     stop();
   });
 });
