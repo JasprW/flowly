@@ -59,3 +59,11 @@
 - Luna对3ab5ff8复现本地map尚无ID时的移除漏记，结论WITHHELD，报告LUNA-STREAM-RECONCILE.md（86e9198）保留；73聚焦/1521全量通过不充当该缺口的放行。没有推送此中间候选。
 - 常规回归新增remove-unseen与archive-unseen，旧实现均复活旧session extras（2失败/43通过）。原始移除/归档事件现在不要求本地先有该ID；它使活跃完整列表与归档引用失效，旧响应不能覆盖它。新ID、已知ID的创建/归档回归一并保留。
 - 修改后typecheck exit0、5文件75项通过；新的全量与同一Luna复验按新冻结SHA另记。用户对本补丁的最小修复与冷启继续沿用授权维持，本轮没有新手机测量。
+
+## 最新最终验收 — deca6bd
+
+- 最终产品源码 `deca6bd51c81ea0a01af8729820ebcb143a08515`。同一独立GPT6Luna/full-access会话 `d9ec9508-bc69-46e5-8961-44a09069807d` 复验PASS：typecheck exit0，5文件75项通过；报告 `LUNA-STREAM-FINAL.md`（0f8a473）。旧3ab5ff8的WITHHELD报告不改写、不当作放行。
+- 父任务对本次新源码的全量exit0，165文件通过/1skip，1523项通过/6skip。磁盘16Gi下复用现有283MiB依赖/缓存，未运行构建或创建新缓存，测试仅少量临时写入。
+- 测试会话已hard-delete，inspect返回AGENT_NOT_FOUND；无新fixture/daemon/workspace/隔离缓存。共享根目录两个对应client文件与deca6bd逐字节相同，在保留其他会话改动后typecheck通过；reload仅作本地载入smoke。
+- 用户2026-11-17再次批准本次名单最小修复并继续沿用本补丁旧冷启结论；新手机测量仍UNRUN。真实0.15客户端UI/整机WiFi中断仍无新样本。无新UI、设置、遥测或版本变更，不需tour/tip/What's new。
+- 最终提交推送后继续按CI gate/CodeRabbit真实审查与所有有效意见处理结果合入，不用neutral/skipped代替补审；最终实际状态见PR#117及卡片交付回执。

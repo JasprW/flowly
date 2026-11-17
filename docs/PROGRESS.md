@@ -1397,3 +1397,5 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 
 - 独立Luna对3ab5ff8暂缓放行：本地尚无ID时的remove被changed=false提前过滤，旧完整列表仍复活该session。临时诊断已移除、WITHHELD证据单独保留（LUNA-STREAM-RECONCILE.md/86e9198）；原73/1521通过不掩盖此缺口。
 - 在已批准的名单保护内补常规remove-unseen与archive-unseen回归，旧实现2失败/43通过（实测仍有旧session extras）。原始归档/移除现在即使本地尚无ID也递增membership编号、使归档引用失效并触发刷新。修改后完整5文件75项通过，typecheck exit0；重新冻结后复验全量与独立检查。
+
+- 最新最终产品deca6bd：typecheck与75聚焦通过，同一Luna复验PASS；父全量1523通过/6skip、165文件通过/1skip。保留旧WITHHELD时序，新报告LUNA-STREAM-FINAL.md；测试session已清理。最终证据整理后一次推送PR#117，等CI与真实CodeRabbit补审，不改产品源码。
