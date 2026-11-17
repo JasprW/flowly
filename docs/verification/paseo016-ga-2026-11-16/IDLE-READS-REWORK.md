@@ -73,3 +73,9 @@
 - CodeRabbit对dd47856补审发现：重试仅openStream，持续拒绝时即使普通列表可用，新session仍无chip。回归先红（1失败/45通过，a2无Task chip）。
 - 最小实现改动是一行既有回调：退避到期触发refreshNow；刷新轮次内部openStream并在streamReady=false时走普通完整列表。没有新增timer。回归覆盖5/30秒两次持续失败仍更新a2/a3，60秒恢复成功后180秒零继续读取。
 - 完整5文件76项与typecheck通过，exit0。新全量/独立证据随后记录；磁盘18Gi下继续复用依赖/缓存，不构建或新增缓存，测试少量临时写入。手机仍无新样本，保持用户明确授权的本补丁冷启沿用。
+
+## 持续失败回退的最终验收 — 6be6f31
+
+- 最终产品 `6be6f315e993e7aa4a40096cc2f519af41ebc6d3`。独立GPT6Luna/full-access会话 `1bfba11f-1a47-472c-b66b-b8357dfad94f` 给出PASS：typecheck exit0，完整5文件76项通过；独立报告 `LUNA-PERSISTENT-STREAM.md`（aa195da）。父任务全量exit0：165文件通过/1skip，1524测试通过/6skip。
+- 测试会话已hard-delete，inspect返回AGENT_NOT_FOUND；未创建fixture、daemon、workspace或隔离缓存。根目录两个对应client文件与该产品源码相同，typecheck通过；仅reload本地插件，不重启daemon。
+- 冷启动按用户两次明确授权在本PR补丁内沿用旧+3.7257%/5%结果，新测量UNRUN。无UI、设置、遥测或版本变化。最终推送后继续等CI与真实CodeRabbit补审，不用neutral/skipped代替审查。
