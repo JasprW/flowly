@@ -99,8 +99,8 @@
 - **本次补丁的冷启动决定**（用户明确授权，2026-11-16；2026-11-17批准名单合并最小修复时再次确认）：PR #117 的 chip 零周期读取/故障恢复补丁沿用历史 `3043bd8` 的 +3.7257% 配对中位差结论，按原5%门槛接受；首次沿用决定时产品为 `531adad`，随后同一补丁的agent流setup恢复与名单合并最小修复继续沿用。本次源码没有新手机测量，继续标为UNRUN，不把沿用写成新实测通过。该授权仅适用于本次补丁。
 - **实现契约**（其余配套卡片）：
   - 订阅 `board.changes`（`shared/rpc.ts`，输入 `{}`，事件 `{ seq, scope: "all" | "board" | "sessions" }`）。契约用普通对象而不是 `defineSubscription`，因为 0.15 宿主上该导出不存在。
-  - daemon（`server/change-feed.ts`）：每个新订阅先推一次 `scope: "all"`（表示订阅已生效，客户端读一次，也补上断线期间的变化）；之后看板写入（`BoardStore.onCommit`）推 `board`，会话外洞察写入推 `sessions`；100 ms 内的多次写入合并成一个事件，作用域不同时合并为 `all`；没有订阅者时什么都不做。
-  - 看板界面（`client/board-push.tsx`）：收到第一个事件后视为在线，overview、卡片详情、项目 Ideas 停止定时轮询，每个 `board`/`all` 事件让这些查询失效一次（`invalidateCardViews`）。订阅 `connecting` 时、`error`/`closed` 后按原来的间隔轮询；失败后按 5 s、30 s、60 s 重试（`client/push-retry.ts`）。
+  - daemon（`server/change-feed.ts`）：每个新订阅先推一次 `scope: "all"`（表示订阅已生效，客户端读一次，也补上断线期间的变化）；之后看板写入（`BoardStore.onCommit`）推 `board`，Guardrails/Memory 存储成功提交也推 `board`（计数不依赖看板提交），会话外洞察写入推 `sessions`；100 ms 内的多次写入合并成一个事件，作用域不同时合并为 `all`；没有订阅者时什么都不做。
+  - 看板界面（`client/board-push.tsx`）：收到第一个事件后视为在线，overview、卡片详情、项目 Ideas 和总览 Guardrails/Memory 计数停止定时轮询，每个 `board`/`all` 事件让这些查询失效一次（`invalidateCardViews`）。订阅 `connecting` 时、`error`/`closed` 后按原来的间隔轮询；失败后按 5 s、30 s、60 s 重试（`client/push-retry.ts`）。计数查询自身读取失败时按原 60 s 间隔补读，成功后停止；旧宿主/connecting/断开仍保留原 60 s 计数轮询，隐藏后不读。滚动七天计数在推送、重新进入或显式刷新时按当前时间重算，不为时间流逝安排周期读取。
   - Composer pill（`client/session-link.ts`，命令式，不能用 hook）：用 `client.subscribe`。收到首个事件后停止定时轮次，静止超过一分钟也不做 chip 读取；仅看板/洞察推送、相关 agent 流变化或显式操作触发刷新。agent 流建立后补一次完整列表，session 离开在线列表时刷新归档引用。Ideas、Wrap up、原生 session 设置变化经同一 `sessions` 通知刷新 chip 设置，不依赖分钟校对。失败时立即补读并回到原间隔，恢复首事件后再次停止轮询；只由重试计时器重新订阅（轮次本身不重新订阅，否则宿主立即拒绝时会形成循环）。旧宿主和尚未收到首事件的 connecting 继续原轮询。
   - 不在范围内、仍按原间隔轮询：`attention.count`（原生 attention 不经看板写入）、`summaries.read-changed`（含内存中的运行状态）、`sessions.read-state`、`sessions.managed`、`resources.read-changed`、实时 agent 列表与 session 预览。
   - chip 轮次的看板或在线 agent 读取失败时，即使订阅仍在线，也须按既有 5/30/60 s 退避重试；未成功应用的完整 agent 列表仍须在重试轮补读。一次成功后停止故障重试，正常静止时仍无周期读取。新的推送可提前刷新，停止插件必须取消待重试。

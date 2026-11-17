@@ -1403,3 +1403,12 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - CodeRabbit对dd47856补审提出持续stream setup失败时普通列表仍需刷新的有效意见。新回归先红（1失败/45通过，新a2无Task chip）；仅将既有stream退避回调从openStream改为refreshNow，使订阅重试同时通过普通列表更新新session。连续5/30秒失败期间a2/a3可见，成功后180秒无继续读取；不新增timer。修改后完整5文件76项与typecheck通过，exit0；全量/独立最终证据随后按冻结SHA记录。
 
 - 持续失败回退最终6be6f31：typecheck与76聚焦、父全量1524/6skip通过，独立Luna PASS，报告LUNA-PERSISTENT-STREAM.md；测试会话已清理。新手机仍UNRUN，按用户明确授权沿用本补丁旧冷启结论。最终证据推送后继续等CI与真实CodeRabbit补审。
+
+
+## 2026-11-17 Paseo 0.16 Guardrails/Memory 计数零周期读取返工
+
+- 接受自动验收 goal：启用 Memory 的总览仍每60秒调用 `guardrails.counts`。新客户端回归在180秒静止读数1→4时红灯；独立存储提交的通知回归0次（预期1）红灯。首次服务端fixture缺少noteKind的无效失败已修正后重新确认。
+- GuardrailsStore 的成功原子写入复用 `board.changes` 的board通知（含daemon学习、MCP写入，不要求看板提交）；失败/无改动不通知，停用时解除回调。看板推送失效集合包含counts；健康订阅停止60秒轮询，旧宿主/connecting/断开或计数读取失败时保留60秒回退，成功后停止，隐藏/卸载不读。无新协议、健康timer或依赖。
+- 聚焦7文件91项通过、typecheck exit0（初次绿灯）；最终精确SHA及独立验收见本轮报告。既有§3.7暂缓不变，没有修改旧Luna报告。
+- AndroMeld连接报control socket missing，adb设备列表为空；用户明确暂时无法连接。新手机收益/冷启动为UNRUN，PR#117的旧冷启沿用授权不自动扩展到本轮。
+- 无新UI/设置/核心动作/遥测字段，不需要tour、tip、What's new；README与OVERVIEW同步说明计数推送。既有Wrap up文档worktree-only与自有directory实际归档的差异由已有idea跟踪，本轮不改策略。

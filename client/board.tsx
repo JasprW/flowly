@@ -1129,7 +1129,7 @@ function BoardContent(
   const projectIdeaList = useMemo(() => projectIdeasData.data?.ideas || [], [projectIdeasData.data]);
   const projectOpenIdeas = useMemo(() => projectOpenIdeaCount(projected, project?.id), [projected?.cards, projected?.tasks, project?.id]);
   // Observing commands and guidelines learned this week (GUARDRAILS-SPEC §7.4); the chip hides when the project turned guardrails off.
-  const guardrailCounts = useGuardrailCountsQuery(boardActive && !!project && features.memory);
+  const guardrailCounts = useGuardrailCountsQuery(boardActive && !!project && features.memory, pushLive);
   const guardrailsOn = features.memory && !!project && project.memory !== false;
   const projectGuardrails = guardrailsOn ? guardrailCounts.data?.[project!.id] : undefined;
   const guardrailCount = guardrailsOn ? (projectGuardrails ? projectGuardrails.observing + projectGuardrails.added : 0) : null;

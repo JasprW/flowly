@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { agentFixture } from "./agent-fixture";
@@ -479,4 +479,25 @@ test("reviewInput: commands always; guidelines in scope and the card's open item
   expect([...input.words]).toEqual([["g-in", "latest words"], ["i-1", "滚动位置丢了"]]);
   const off = await x.guardrails.reviewInput(board.tasks[0]!, { ...board.projects[0]!, memory: false }, "m");
   expect([off.commands.length, off.guidelines.length, off.items.length]).toEqual([1, 0, 0]);
+});
+
+
+test("committed guardrail writes notify even without a board write; failed and no-op updates do not", async () => {
+  const x = await setup();
+  const committed = vi.fn();
+  x.guardrails.store.onCommit = committed;
+  const before = (await x.store.read()).revision;
+  await seed(x, [entry("note", { kind: "note", noteKind: "pitfall", by: "agent" })]);
+  expect(committed).toHaveBeenCalledTimes(1);
+  expect((await x.store.read()).revision).toBe(before);
+  expect((await x.guardrails.counts()).p.notes).toBe(1);
+  await x.guardrails.store.update(() => ({ value: undefined, changed: false }));
+  await expect(x.guardrails.store.update(() => { throw new Error("refused"); })).rejects.toThrow("refused");
+  expect(committed).toHaveBeenCalledTimes(1);
+  await x.guardrails.store.update(state => {
+    state.entries[0].state = "archived";
+    return { value: undefined, changed: true };
+  });
+  expect(committed).toHaveBeenCalledTimes(2);
+  expect((await x.guardrails.counts()).p).toBeUndefined();
 });
