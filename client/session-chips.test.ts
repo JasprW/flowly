@@ -661,14 +661,17 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     if (!stopFirst) stop();
   });
 
-  test.each(["archive", "create"])("a stale live-list response does not undo a stream %s", async (change) => {
+  test.each(["archive", "create", "remove-unseen", "archive-unseen"])("a stale live-list response does not undo a stream %s", async (change) => {
     const { chipState } = await import("./native-chips");
     const x = fake({ stream: true });
+    const unseen = change.endsWith("-unseen");
+    if (unseen) x.state.agents = [];
     const list = x.client.paseo.agents.list.getMockImplementation()!;
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
     let reads = 0;
     x.client.paseo.agents.list.mockImplementation(async (input) => {
+      if (!input.subscribe && reads === 1 && unseen) x.state.agents = [live("a1")];
       const snapshot = await list(input);
       if (!input.subscribe && ++reads === 2) await gate;
       return snapshot;
@@ -681,10 +684,11 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
     emit();
     await vi.advanceTimersByTimeAsync(0);
-    if (change === "archive") {
+    if (change !== "create") {
       x.state.agents = [];
-      x.state.archived = [{ id: "a1", workspaceId: "w1" }];
-      x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+      x.state.archived = change === "remove-unseen" ? [] : [{ id: "a1", workspaceId: "w1" }];
+      x.push(change === "remove-unseen" ? { kind: "remove", agentId: "a1" }
+        : { kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
     } else {
       x.state.agents.push(live("a2"));
       x.push({ kind: "upsert", agent: live("a2") });
@@ -692,9 +696,11 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     await vi.advanceTimersByTimeAsync(150);
     release();
     await vi.advanceTimersByTimeAsync(0);
-    expect(reads).toBe(3);
-    if (change === "archive") expect(chipState("a1")).toBeNull();
+    if (change !== "create") expect(chipState("a1")).toBeNull();
     else expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    if (change === "remove-unseen") expect(x.client.addComposerPill).not.toHaveBeenCalledWith(expect.objectContaining({ agentId: "a1" }));
+    if (change === "archive-unseen") expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a1" }));
+    expect(reads).toBe(3);
     const count = x.client.rpc.mock.calls.length;
     await vi.advanceTimersByTimeAsync(180_000);
     expect(x.client.rpc).toHaveBeenCalledTimes(count);

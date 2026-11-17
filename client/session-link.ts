@@ -257,10 +257,12 @@ export function registerSessionChips(
     const stopListening = agents.subscribe((update) => {
       if (disposed) return;
       const { changed, before, after } = applyLiveUpdate(live, update);
-      if (!changed || !relevantChange(before, after)) return;
-      if (!before || !after) liveMembershipGen++;
+      // A tombstone can arrive before this client's first full list has populated the ID.
+      const removed = update.kind === "remove" || !!update.agent.archivedAt || (!!before && !after);
+      if (removed || (!before && after)) liveMembershipGen++;
+      if (!removed && (!changed || !relevantChange(before, after))) return;
       // Without a timed round, archiving must refresh the references from this event itself.
-      if (before && !after) {
+      if (removed) {
         archivedAt = -Infinity;
         archiveRemovals++;
       }

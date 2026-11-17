@@ -1394,3 +1394,6 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - CodeRabbit上轮正文还有两条outside-diff意见，未因check成功或无未解决线程而盲目合入。确定性回归复现setup失败无重试、旧活跃名单覆盖archive/create：原3失败/40通过；修好setup后41通过/2并发失败。
 - 用户明确批准最小名单变化编号，并再次确认本补丁冷启继续沿用旧结论。新增/移除事件递增编号，完整列表返回时若已过期则保留流状态并补读；不再复活已归档session或丢掉新session。setup失败清理本地监听并按既有5/30/60s退避重订阅，成功后停止，stop取消。无新健康周期轮询。
 - 完整5文件聚焦73项通过，typecheck exit0；全量与最终独立报告按冻结源码另记于IDLE-READS-REWORK.md。冷启动仍无新手机样本，严格按用户本补丁沿用授权记录，未扩展到其他功能。
+
+- 独立Luna对3ab5ff8暂缓放行：本地尚无ID时的remove被changed=false提前过滤，旧完整列表仍复活该session。临时诊断已移除、WITHHELD证据单独保留（LUNA-STREAM-RECONCILE.md/86e9198）；原73/1521通过不掩盖此缺口。
+- 在已批准的名单保护内补常规remove-unseen与archive-unseen回归，旧实现2失败/43通过（实测仍有旧session extras）。原始归档/移除现在即使本地尚无ID也递增membership编号、使归档引用失效并触发刷新。修改后完整5文件75项通过，typecheck exit0；重新冻结后复验全量与独立检查。
