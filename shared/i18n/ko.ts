@@ -6,6 +6,7 @@ const catalog: Catalog = {
   "This draft was changed in another window. Retry to keep this version instead.": "이 초안은 다른 창에서 변경되었습니다. 다시 시도하면 이 버전을 대신 유지합니다.",
   "The draft was not saved: {error}": "초안을 저장하지 못했습니다: {error}",
   "The draft was not cleared: {error}": "초안을 지우지 못했습니다: {error}",
+  "It could not be loaded, so it was kept.": "불러오지 못해 그대로 두었습니다.",
   "It was changed in another window and was kept.": "다른 창에서 변경되어 그대로 두었습니다.",
   "{n} saved images were left out: this form holds at most {limit} images.": "저장된 이미지 {n}개를 복원하지 않았습니다: 이 양식에는 이미지를 최대 {limit}개까지 넣을 수 있습니다.",
   "Command": "명령",

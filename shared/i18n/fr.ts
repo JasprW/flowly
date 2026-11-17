@@ -6,6 +6,7 @@ const catalog: Catalog = {
   "This draft was changed in another window. Retry to keep this version instead.": "Ce brouillon a été modifié dans une autre fenêtre. Réessayez pour garder plutôt cette version.",
   "The draft was not saved: {error}": "Le brouillon n’a pas été enregistré : {error}",
   "The draft was not cleared: {error}": "Le brouillon n’a pas été effacé : {error}",
+  "It could not be loaded, so it was kept.": "Il n’a pas pu être chargé, il a donc été conservé.",
   "It was changed in another window and was kept.": "Il a été modifié dans une autre fenêtre et a été conservé.",
   "{n} saved images were left out: this form holds at most {limit} images.": {"one": "{n} image enregistrée a été laissée de côté : ce formulaire contient au plus {limit} images.", "other": "{n} images enregistrées ont été laissées de côté : ce formulaire contient au plus {limit} images."},
   "Command": "Commande",

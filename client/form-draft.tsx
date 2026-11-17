@@ -157,8 +157,8 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
       saver.disable();
       if (!key) return;
       unsavedOperations.delete(key);
-      // A draft that could not be read is never deleted unseen.
-      if (status !== "ready") return;
+      // A draft that could not be read is never deleted unseen; the caller's toast says it was kept.
+      if (status !== "ready") throw new Error(t("It could not be loaded, so it was kept."));
       // Only the revision this form saw (after a save on its way): a newer draft from another window is kept.
       if (!(await clearAfterSaves(saver, (revision) => clearRpc({ key, revision }))))
         throw new Error(t("It was changed in another window and was kept."));

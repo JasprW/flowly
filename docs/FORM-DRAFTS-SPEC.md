@@ -53,7 +53,7 @@ shows a prefilled form's draft and the reverse.
 - If the draft cannot be loaded when the form opens, the form shows the error with
   **Retry** and does not save, so a failed load never overwrites a draft with an
   empty form. Creating still works, and a successful create does not clear the
-  unread draft. New task keeps its `operationId` in client memory for that draft
+  unread draft; the clear-failure toast says the draft was kept. New task keeps its `operationId` in client memory for that draft
   key instead, so a retry after reopening (same client) still reuses it.
 - **Retry** after a failed load keeps what was typed meanwhile. Fields the user
   changed after the failed load are combined with the loaded draft: changed

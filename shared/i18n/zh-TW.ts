@@ -6,6 +6,7 @@ const catalog: Catalog = {
   "This draft was changed in another window. Retry to keep this version instead.": "此草稿已在另一個視窗中修改。重試將改為保留這裡的版本。",
   "The draft was not saved: {error}": "草稿未儲存：{error}",
   "The draft was not cleared: {error}": "草稿未清除：{error}",
+  "It could not be loaded, so it was kept.": "它無法讀取，因此保留。",
   "It was changed in another window and was kept.": "它已在另一個視窗中被修改，因此保留。",
   "{n} saved images were left out: this form holds at most {limit} images.": "有 {n} 張已儲存的圖片未還原：此表單最多容納 {limit} 張圖片。",
   "Command": "命令",
