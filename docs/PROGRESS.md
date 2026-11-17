@@ -1424,3 +1424,5 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 独立Luna会话ec866156对精确93b7a2代码/typecheck/7文件92聚焦PASS，报告dc0da42。澄清disabled指全局features.memory，不改变既有project.memory开关策略；新手机/daemon/UI仍UNRUN，授权沿用不当作新采样。
 
 - CodeRabbit对62b2a74真实补审（03:35UTC）指出短于30秒的无推送重入不重算计数，违反既有re-entry契约。新增10秒隐藏、无隐藏推送、重新显示的真实QueryObserver回归原实现1失败/4通过（预期2读、实际1读）。最小修复仅在线时staleTime设0，重入即补读，旧宿主/断线保留30秒；回归也检查20次重复render与180秒静止不新增读取，无effect/计时器/新并发机制。
+
+- 重入修复产品bacc790：typecheck0、7文件93聚焦、全量166文件/1530通过6skip均exit0；独立Luna会话4befbffa同SHA代码/typecheck/93聚焦PASS，报告661a6ff。父报告记录旧红灯与继承/UNRUN边界；推送后继续真实CodeRabbit补审，若限额按用户决定定时跟进。

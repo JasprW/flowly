@@ -61,3 +61,14 @@ Existing unrelated mismatch retained: manual Wrap up docs say worktree-only; cod
 - Independent exact-SHA evidence belongs to `LUNA-COUNT-RECOVERY.md`; the parent does not edit it or earlier independent reports. Updated CI and actual CodeRabbit re-review remain required before merge.
 
 - Independent Luna result: **PASS for code and requested checks** on exact `93b7a2`; 7 files / 92 tests, typecheck exit0, report commit `dc0da42`, session `ec866156-1b9e-41be-a9b4-680e802bada2`. Full suite remains parent-owned evidence. The report explicitly distinguishes global features.memory disabled from the existing project.memory switch; no project-level feature policy was changed.
+
+
+## CodeRabbit follow-up: quick overview re-entry
+
+- Real CodeRabbit review `5932379450` of `62b2a74` finished at 2026-11-17 03:35 UTC with one outside-diff finding: returning to the overview before the 30-second stale window, without a hidden push, did not re-read the rolling count. This is a correction to the existing re-entry contract, not a new concurrency mechanism.
+- New real QueryObserver regression was RED on the prior source: 1 failed / 4 passed (expected 2 reads, actual 1). It hides for 10 seconds without invalidation, changes the simulated aged count, and returns.
+- Product **`bacc7909afacbe15801cac2545f56f8746f0a12a`** changes only the counts query freshness: live pushes use `staleTime: 0`; old-host/not-live paths keep 30 seconds. Re-enabling therefore reads once; 20 ordinary option/render updates and another 180 seconds idle do not read. No effect, timer, generation counter, dependency or protocol was added.
+- PASS, exit 0: `NODE_ENV=test FLOWLY_TELEMETRY=0 npm run typecheck`; complete seven-file focused command above, **93 tests**; `git diff --check`.
+- PASS, exit 0: `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test -- --reporter=dot`, **166 files passed / 1 skipped, 1530 tests passed / 6 skipped**. Existing 283 MiB dependencies/cache reused; disk available 53 GiB.
+- Independent Luna **PASS** on exact product `bacc790`: typecheck exit0, 7 files / 93 tests. Report `LUNA-COUNT-REENTRY.md`, commit `661a6ff`, session `4befbffa-7332-4ccd-be54-5125f64682d3`; parent full-suite result is explicitly inherited, not rerun by the verifier. Prior independent reports remain unchanged.
+- Current-source UI, daemon, phone/cold-start measurements remain **UNRUN**. This same PR #118 count patch continues the user's explicit historical `3043bd8` +3.7257% / 5% cold-start carry-forward decision; no new sample is claimed. Actual CodeRabbit review of the new head and CI remain required for merge.
