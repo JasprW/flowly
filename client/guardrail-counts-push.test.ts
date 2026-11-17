@@ -120,3 +120,24 @@ test("a push during the first count read starts a fresh read and keeps the new c
     expect(harness.client.getQueryData(guardrailCountsKey)).toEqual(newValue);
   } finally { release({ etag: "old", value: oldValue }); stop(); observer.destroy(); }
 });
+
+
+test("live counts refresh on quick re-entry without a hidden push, but not on rerender or idle", async () => {
+  const x = setup(true);
+  try {
+    await vi.advanceTimersByTimeAsync(1);
+    expect(harness.read).toHaveBeenCalledTimes(1);
+    x.observer.setOptions(x.options(true, false));
+    // The seven-day window can expire without a write or pushed invalidation.
+    x.setNotes(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(harness.read).toHaveBeenCalledTimes(1);
+    x.observer.setOptions(x.options(true));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(harness.read).toHaveBeenCalledTimes(2);
+    expect(harness.client.getQueryData(guardrailCountsKey)).toEqual({ p: { observing: 0, added: 0, notes: 0 } });
+    for (let i = 0; i < 20; i++) x.observer.setOptions(x.options(true));
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(harness.read).toHaveBeenCalledTimes(2);
+  } finally { x.stop(); x.observer.destroy(); }
+});

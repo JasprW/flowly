@@ -376,7 +376,7 @@ export function useGuardrailCountsQuery(enabled: boolean, pushLive = false) {
     queryKey: guardrailCountsKey,
     queryFn: () => readChanged(client, guardrailCountsKey, (etag) => read(etag ? { etag } : {})),
     enabled,
-    staleTime: 30_000,
+    staleTime: pushLive ? 0 : 30_000,
     refetchInterval: (query) => enabled && (!pushLive || query.state.status === "error") ? 60_000 : false,
     placeholderData: (previous) => previous,
   });
