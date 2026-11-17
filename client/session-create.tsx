@@ -152,7 +152,8 @@ function SessionForm({
             existing.agent.id,
             t("Recovered the existing session. Its initial instruction was not sent again; check its output before continuing."),
           );
-          await draft.clear().catch(() => undefined);
+          // The session exists: its draft is done (a failed clear only warns).
+          await draft.clear().catch((e) => toast.error(t("The draft was not cleared: {error}", { error: message(e) })));
           onClose();
           attempt.current = undefined;
           setCreationPending(false);
