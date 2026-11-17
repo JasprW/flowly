@@ -631,6 +631,76 @@ describe("round order and the agent stream (NATIVE-SESSION-SPEC §8)", () => {
     if (!stopFirst) stop();
   });
 
+  test.each([false, true])("a rejected agent stream setup retries or is cancelled on stop (stop=%s)", async (stopFirst) => {
+    const x = fake({ stream: true });
+    const list = x.client.paseo.agents.list.getMockImplementation()!;
+    let attempts = 0;
+    x.client.paseo.agents.list.mockImplementation(async (input) => {
+      if (input.subscribe && ++attempts === 1) throw new Error("stream unavailable");
+      return list(input);
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(attempts).toBe(1);
+    x.state.agents.push(live("a2"));
+    if (stopFirst) stop();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(attempts).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempts).toBe(stopFirst ? 1 : 2);
+    if (!stopFirst) expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    const calls = x.client.paseo.agents.list.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.client.paseo.agents.list).toHaveBeenCalledTimes(calls);
+    if (!stopFirst) stop();
+  });
+
+  test.each(["archive", "create"])("a stale live-list response does not undo a stream %s", async (change) => {
+    const { chipState } = await import("./native-chips");
+    const x = fake({ stream: true });
+    const list = x.client.paseo.agents.list.getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let reads = 0;
+    x.client.paseo.agents.list.mockImplementation(async (input) => {
+      const snapshot = await list(input);
+      if (!input.subscribe && ++reads === 2) await gate;
+      return snapshot;
+    });
+    let emit!: () => void;
+    Object.assign(x.client, { subscribe: (_c: unknown, _i: unknown, event: () => void) => {
+      emit = event;
+      return Object.assign(() => undefined, { ready: Promise.resolve() });
+    } });
+    const stop = registerSessionChips(x.client as never, 5000, 0, popovers);
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    if (change === "archive") {
+      x.state.agents = [];
+      x.state.archived = [{ id: "a1", workspaceId: "w1" }];
+      x.push({ kind: "upsert", agent: live("a1", { archivedAt: "2026-10-21T00:01:00Z" }) });
+    } else {
+      x.state.agents.push(live("a2"));
+      x.push({ kind: "upsert", agent: live("a2") });
+    }
+    await vi.advanceTimersByTimeAsync(150);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads).toBe(3);
+    if (change === "archive") expect(chipState("a1")).toBeNull();
+    else expect(x.client.addComposerPill).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a2" }));
+    const count = x.client.rpc.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(x.client.rpc).toHaveBeenCalledTimes(count);
+    stop();
+  });
+
   test("pushed churn that cannot change a card (a title) causes no round", async () => {
     const x = fake({ stream: true });
     const stop = registerSessionChips(x.client as never, 60_000, 0, popovers);

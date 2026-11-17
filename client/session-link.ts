@@ -167,11 +167,14 @@ export function registerSessionChips(
   const nudgeAfter = 150;
   const live = new Map<string, PaseoAgent>();
   let liveAt = 0,
+    liveMembershipGen = 0,
     streamReady = false,
     // Set when the stream starts: a list that began earlier may have missed updates, so list once more.
     relist = false,
     stopStream: (() => void) | null = null,
     releaseStream: (() => Promise<void>) | null = null;
+  let streamAttempt = 0,
+    streamRetry: ReturnType<typeof setTimeout> | undefined;
   const opening = new Set<string>();
   // Paseo 0.16 pushes "the board changed" (PASEO-0.16-SPEC §3.5): once live, only changes trigger rounds.
   // A host without subscriptions, a failed/closed subscription, and the wait for its first event keep polling.
@@ -249,12 +252,13 @@ export function registerSessionChips(
   /** Follows the sessions by push, as the board does (`openAgentStream` in queries.ts); a phone then lists them rarely. */
   function openStream() {
     const agents = client.paseo.agents;
-    if (stopStream || typeof agents.subscribe !== "function") return;
+    if (disposed || stopStream || streamRetry || typeof agents.subscribe !== "function") return;
     let nudge: ReturnType<typeof setTimeout> | undefined;
     const stopListening = agents.subscribe((update) => {
       if (disposed) return;
       const { changed, before, after } = applyLiveUpdate(live, update);
       if (!changed || !relevantChange(before, after)) return;
+      if (!before || !after) liveMembershipGen++;
       // Without a timed round, archiving must refresh the references from this event itself.
       if (before && !after) {
         archivedAt = -Infinity;
@@ -272,11 +276,20 @@ export function registerSessionChips(
       .then((result) => {
         releaseStream = () => result.subscription.release();
         if (disposed) return void releaseStream().catch(() => undefined);
+        streamAttempt = 0;
         streamReady = true;
         relist = true;
         if (pushLive) refreshNow();
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (disposed) return;
+        stopStream?.();
+        stopStream = null;
+        streamRetry = setTimeout(() => {
+          streamRetry = undefined;
+          openStream();
+        }, pushRetryDelay(streamAttempt++));
+      });
   }
   // Adds, updates in place, or removes one Next/Ideas pill; `button` is null to remove.
   function syncPill(
@@ -496,6 +509,7 @@ export function registerSessionChips(
       const needLive = !streamReady || relist || Date.now() - liveAt >= liveEvery;
       // Only a list that began after the stream was up counts as complete.
       if (needLive && streamReady) relist = false;
+      const liveGen = liveMembershipGen;
       const [boardResult, liveResult] = await Promise.allSettled([
         // This private projection excludes histories/workpads; never share its etag or value with the board screen.
         readBoardDelta((input) => client.rpc(readChipBoardChanged, input), board ?? undefined, etag && board ? etag : undefined, "chips-first-read"),
@@ -513,7 +527,13 @@ export function registerSessionChips(
       const changed = !!boardResult.value.value;
       if (boardResult.value.value) board = boardResult.value.value;
       etag = boardResult.value.etag;
-      if (liveResult.value) reconcileLive(liveResult.value);
+      if (liveResult.value) {
+        if (liveGen === liveMembershipGen) reconcileLive(liveResult.value);
+        else {
+          relist = true;
+          again = true;
+        }
+      }
       const liveAgents = [...live.values()];
       // Managed sessions and preferences: board/settings pushes, or at most once a minute on other active rounds.
       // A session in a card's workspace that is not known as managed yet may just have been prepared: check sooner.
@@ -588,6 +608,7 @@ export function registerSessionChips(
     clearTimeout(timer);
     clearTimeout(archiveRetry);
     stopHidden();
+    clearTimeout(streamRetry);
     stopStream?.();
     void releaseStream?.().catch(() => undefined);
     clearTimeout(pushTimer);

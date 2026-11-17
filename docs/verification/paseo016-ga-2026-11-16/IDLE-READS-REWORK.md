@@ -47,3 +47,9 @@
 - 独立GPT6Luna/full-access 会话 `87138694-ba59-497d-ace6-c9c4b09357ab` 对产品531adad给出代码/聚焦PASS：typecheck exit0，5文件69项通过；完整全量由父任务运行，1517通过/6skip。独立证据LUNA-ALL-READS.md与旧报告澄清提交39190d8，父任务未编辑独立文档。
 - 会话已hard-delete，inspect返回AGENT_NOT_FOUND；没有新建fixture、daemon、workspace或隔离缓存。根目录同范围patch在保留其他工作后typecheck通过，按既有方式reload插件；手机、旧宿主UI与候选冷启动仍无新样本，按本次用户授权沿用冷启结论。
 - 最新源码CI Node22/24与CI gate通过；最终报告提交后的状态及实际CodeRabbit补审/合入以PR#117为准，auto-merge在真实补审前保持关闭。
+
+## 2026-11-17 原生agent流setup与名单合并
+
+- 上轮真实CodeRabbit检查成功，但正文另有两条outside-diff意见；读取全文后继续处理，没有盲目合入。setup失败不重试、旧名单覆盖archive/create回归先红（3失败/40通过）；先修setup后41通过/2并发失败。
+- 用户批准名单合并最小保护，并明确继续沿用本补丁旧冷启结论。名单新增/移除变化编号只使在途旧完整列表失效，保留流状态并补读；不增加周期轮询。setup失败清理监听，沿用5/30/60s重试，成功与stop结束故障重试。
+- 修改后typecheck exit0、完整5文件聚焦73项通过。最终全量及Luna独立报告另记；本轮手机测量仍UNRUN，冷启按本次补丁明确授权沿用。
