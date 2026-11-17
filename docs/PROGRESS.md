@@ -1414,3 +1414,5 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 无新UI/设置/核心动作/遥测字段，不需要tour、tip、What's new；README与OVERVIEW同步说明计数推送。既有Wrap up文档worktree-only与自有directory实际归档的差异由已有idea跟踪，本轮不改策略。
 
 - 后续同日：最终产品 `31d9dee` typecheck exit0，全量166文件通过/1skip、1528项通过/6skip。Luna会话26784627对同SHA代码与7文件91聚焦PASS，报告a3af96d，当时因设备未测保留整体验收。用户随后明确授权PR#118本轮计数补丁沿用历史+3.7257%/5%冷启结论；这是决策沿用，不是新采样，不改Luna当时的原报告。新手机/daemon/UI仍未运行。测试agent已删除，native inspect确认AGENT_NOT_FOUND。PR#118待CI与真实CodeRabbit，auto-merge关闭。
+
+- 额度等待期间补父任务隔离0.16.0运行时：真实guardrails.create/update写入无board revision变化时，board推送分别104.2/104.3ms到达，counts 0→1→0；etag省略及重订阅all通过。fixture项目/原生registry均空后停止owned daemon，删除owned home/project/script；未碰常用daemon。新手机/UI仍UNRUN。详见GUARDRAIL-COUNTS-REWORK报告。
