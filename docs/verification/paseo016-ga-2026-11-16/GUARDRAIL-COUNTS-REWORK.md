@@ -46,3 +46,18 @@ Existing unrelated mismatch retained: manual Wrap up docs say worktree-only; cod
 - Cleanup PASS: exact fixture project removed through `projects.remove(alsoPaseo:true)`. The plugin board had 0 projects / 0 tasks; native project/workspace/agent lists were empty. No agent prompt, UI interaction or existing resource was used.
 - Cleanup PASS: `paseo daemon stop --home <owned fixture home>` succeeded; `daemon status` showed `localDaemon: stopped`, PID null; `ps` found neither owned PID. The entire owned fixture home/project/script/IDs directory was then removed. Only this short report is retained.
 - Setup note: first trying config path `listen` was rejected without saving it; `daemon.listen` was then configured successfully in the owned fixture home. No test result was inferred from that rejected setup command.
+
+
+## CodeRabbit follow-up: first pending read and explicit Refresh
+
+- Real CodeRabbit review of `4de164d` finished at 2026-11-17 02:33 UTC: one inline finding (thread `PRRT_kwDOVL1NI864Pivt`) and one outside-diff finding. Check SUCCESS did not mean its findings were resolved; auto-merge stayed off.
+- First-read race reproduced with real QueryObserver: while the uncached first count response is delayed, a Memory write pushes invalidation but reuses that old promise. Temporary diagnostic: 1 failed / 3 skipped; permanent regression on old source: 1 failed / 3 passed, expected 2 reads / actual 1. Temporary diagnostic file was removed.
+- User explicitly approved the minimal fix and retained regression on 2026-11-17, continuing this patch's old cold-start carry-forward. Product source **`93b7a2feac02414ac06f3c240a186b1cd04ba89f`** now cancels the counts query before board invalidation. Late initial completion cannot leave the old count cached; the regression also checks another 180 seconds with zero additional reads.
+- The overview's explicit Refresh preserves `data.refetch()` and invalidates counts as well. Readers disabled by the global `features.memory` switch remain disabled. Existing project-level `project.memory` behavior is unchanged; that switch is not the query enable guard. No new polling, generation counter, protocol, dependency, setting or UI text. Existing onboarding/telemetry decisions remain unchanged.
+- PASS, exit 0: `NODE_ENV=test FLOWLY_TELEMETRY=0 npm run typecheck`.
+- PASS, exit 0: complete seven-file focused command above, **92 tests**.
+- PASS, exit 0: `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test -- --reporter=dot`, **166 files passed / 1 skipped, 1529 tests passed / 6 skipped**. Disk available 55 GiB; reused existing 283 MiB dependencies/cache.
+- PASS, exit 0: `git diff --check`. New candidate phone, cold start, daemon and UI measurements remain **UNRUN**; the earlier isolated runtime measurements are scoped to `31d9dee`, and the explicitly authorized old cold-start conclusion is inherited, not remeasured.
+- Independent exact-SHA evidence belongs to `LUNA-COUNT-RECOVERY.md`; the parent does not edit it or earlier independent reports. Updated CI and actual CodeRabbit re-review remain required before merge.
+
+- Independent Luna result: **PASS for code and requested checks** on exact `93b7a2`; 7 files / 92 tests, typecheck exit0, report commit `dc0da42`, session `ec866156-1b9e-41be-a9b4-680e802bada2`. Full suite remains parent-owned evidence. The report explicitly distinguishes global features.memory disabled from the existing project.memory switch; no project-level feature policy was changed.

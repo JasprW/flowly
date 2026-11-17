@@ -1418,3 +1418,7 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 额度等待期间补父任务隔离0.16.0运行时：真实guardrails.create/update写入无board revision变化时，board推送分别104.2/104.3ms到达，counts 0→1→0；etag省略及重订阅all通过。fixture项目/原生registry均空后停止owned daemon，删除owned home/project/script；未碰常用daemon。新手机/UI仍UNRUN。详见GUARDRAIL-COUNTS-REWORK报告。
 
 - CodeRabbit真实补审（02:33UTC）给出首次计数pending吞推送与显式Refresh漏读两条有效意见。临时诊断1失败/3skip、永久回归1失败/3通过（预期第二次读、实际一次）。用户明确批准最小修复并保留回归，继续沿用本轮冷启动决定；`invalidateCardViews`在失效前取消旧counts读取，总览Refresh保留原data.refetch并同时失效counts。无新轮询/变化编号。新精确SHA检查见本轮报告，旧Luna证据不改。
+
+- 本轮修复产品93b7a2：typecheck0、完整7文件92聚焦、全量166文件/1529通过6skip均exit0；无新手机采样，继续明确授权沿用旧冷启。独立Luna对同SHA复核，完整记录追加于GUARDRAIL-COUNTS-REWORK，未改旧独立报告。
+
+- 独立Luna会话ec866156对精确93b7a2代码/typecheck/7文件92聚焦PASS，报告dc0da42。澄清disabled指全局features.memory，不改变既有project.memory开关策略；新手机/daemon/UI仍UNRUN，授权沿用不当作新采样。
