@@ -171,3 +171,74 @@ Uncovered, by reading only: the three "not covered" rows. Their code paths were 
 - Node 24 (CI-equivalent): full suite exit 0, 1527 tests passed, 6 skipped. Focused suites 50/50.
 - Node 23: exit 1, one failure, the known sqlite-store transaction test; nothing else failed.
 - 5 of 8 listed behavior changes have a test (3 of them only at the pure-function level). 3 have none: unread-draft-not-cleared, operationId kept after failed load, and cleanup-error logging without masking.
+
+## Run on 15c9d2f
+
+Commit under test: `15c9d2f` (branch `fix/form-drafts`, PR #116). Worktree `/tmp/flowly-verify-15c9d2f` created with `git worktree add --detach`; `npm ci` exit 0 (real install, not symlinked); `git rev-parse HEAD` = `15c9d2f8c1f2c82241411dc781bf356b51633c89`. Worktree removed with `git worktree remove --force`; `git worktree list` shows only the main checkout, the path is gone, and the main checkout is clean.
+
+Node: machine `node -v` = v23.11.0; CI-equivalent `npx -y -p node@24 -- node -v` = v24.22.3.
+
+Model: claude-haiku-5-5 (independent verifier). No Paseo session or workspace was created; no push or commit.
+
+| Check | Command | Exit | Result |
+|---|---|---|---|
+| Typecheck | `npm run typecheck` | 0 | clean |
+| Full suite, Node 24, run 1 | `NODE_ENV=test FLOWLY_TELEMETRY=0 npx -y -p node@24 -- node node_modules/vitest/vitest.mjs run` | 1 | files: 168 passed, 1 skipped (169). tests: 1554 passed, 6 skipped (1560). Vitest reported 1 unhandled error (see raw output below); no test failed |
+| Full suite, Node 24, run 2 (rerun) | same | 0 | files: 168 passed, 1 skipped (169). tests: 1554 passed, 6 skipped (1560). No errors |
+| Full suite, Node 23 | `NODE_ENV=test FLOWLY_TELEMETRY=0 npm test` | 1 | files: 1 failed, 167 passed, 1 skipped (169). tests: 1 failed, 1553 passed, 6 skipped (1560). Only failure: `server/sqlite-store.test.ts` "a write that fails inside the transaction changes neither the database nor the cache" (known Node 23 issue, same as earlier runs) |
+| Focused suites, Node 24 | `NODE_ENV=test FLOWLY_TELEMETRY=0 npx -y -p node@24 -- node node_modules/vitest/vitest.mjs run server/form-drafts.test.ts client/form-draft-saver.test.ts client/task-draft.test.ts shared/i18n.test.ts` | 0 | 4/4 files passed, 74/74 tests passed |
+
+Raw output, failures only:
+
+Node 24 run 1 (exit 1, not reproduced in run 2):
+
+```
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+EnvironmentTeardownError: [vitest-worker]: Closing rpc while "onUserConsoleLog" was pending
+This error originated in "server/summaries.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+```
+
+Node 23 (exit 1):
+
+```
+FAIL  server/sqlite-store.test.ts > writes > a write that fails inside the transaction changes neither the database nor the cache
+Error: cannot start a transaction within a transaction
+ ❯ transaction server/sqlite-storage.ts:185:6
+ ❯ SqliteBoard.save server/sqlite-storage.ts:220:18
+```
+
+### Coverage of the behavior changes in `5bd30f1..15c9d2f` (client, server, shared)
+
+| Behavior change | Covered by | Verdict |
+|---|---|---|
+| Drafts of archived/removed scopes dropped by prune keep a revision marker (`server/form-drafts.ts` prune) | `server/form-drafts.test.ts` "a draft dropped with its archived scope keeps its revision marker…" | Covered |
+| Read of a dropped draft returns revision+1; a stale window cannot save after a restore (`read`, `save`) | same test | Covered |
+| Clear leaves revision+1 marker instead of deleting it (`clear`) | same test; the earlier clear tests still pass | Covered |
+| Temp-file and image rollback cleanup failures logged with `logFailure` (`server/form-drafts.ts`) | none | **Not covered** (code reading only) |
+| `clearAfterSaves`: discard, disable, flush, clear the revision produced; `false` when another window saved newer | `client/form-draft-saver.test.ts` "clearing after a create waits for a save on its way and names the revision it produced" | Covered (function level) |
+| `readAfterSaves`: pending save lands before read; superseded load applies nothing | `client/form-draft-saver.test.ts` "a reload saves pending edits before it reads, and a superseded load applies nothing" | Covered (function level) |
+| `readAfterSaves`: failed save reads nothing and keeps the edit pending | `client/form-draft-saver.test.ts` "a reload whose save fails reads nothing and keeps the edit pending" | Covered (function level) |
+| `FailedLoadEdits`: edits survive failed retries of the same key; never carried to another key | `client/form-draft-saver.test.ts` "edits made while a load failed survive failed retries and are merged only into the same key" | Covered (class level) |
+| `mergeAfterFailedLoad` with `imageLimit`: added images kept, saved ones that do not fit counted in `leftOut` | `client/form-draft-saver.test.ts` "a merge never holds more images than the form…" | Covered (function level) |
+| `useFormDraft` wiring: load id supersedes older loads, closed/keyed-out loads dropped, flush on close, `clear()` throws the "could not be loaded" / "changed in another window" messages | none directly; the functions it calls are covered above | **Not covered** at hook level |
+| `DraftNotice`: Retry disabled while a create is busy; "left out" notice (`client/form-draft.tsx`) | none | **Not covered** |
+| `session-create.tsx` / `forms.tsx`: shared `busy` guard; a failed clear after create shows a toast instead of being silent | none | **Not covered** |
+| `forms.tsx`: image limit passed to `useFormDraft` (`maxImages`, `cardImageLimit`) | none | **Not covered** |
+| Session chips: board pushes drive rounds; stream startup reconciles once; idle means no timed rounds (`client/session-link.ts`) | `client/session-chips.test.ts` "with board pushes, stream startup reconciles and archiving refreshes refs without a timed round" | Covered |
+| Session chips: failed initial stream reconcile retries the full list before going idle | `client/session-chips.test.ts` "a failed initial stream reconciliation retries the full list before returning to idle" | Covered |
+| Session chips: archive during a pending scan survives a stale completion (ok or failed) | `client/session-chips.test.ts` "an archive during a pending scan survives stale completion (failed=…)" | Covered |
+| Session chips: failed archive scan retries after its delay or is cancelled on stop | `client/session-chips.test.ts` "a failed archive scan retries after its delay or is cancelled on stop (stop=…)" | Covered |
+| Session chips: settings changes refresh the managed-session info (`chipInfoGen`) | none found in the new tests | **Not covered** (code reading only) |
+| New i18n strings in 8 locales (`shared/i18n/*.ts`) | `shared/i18n.test.ts` (catalog completeness) in the focused run | Covered (presence only) |
+
+### Summary
+
+- Commit verified: `15c9d2f`.
+- Typecheck exit 0.
+- Node 24 (CI-equivalent): run 1 exit 1 (168 files and 1554 tests passed; one unhandled `EnvironmentTeardownError` from `server/summaries.test.ts` teardown, no test failed); run 2 exit 0 (168 files, 1554 tests passed, 6 skipped).
+- Node 23: exit 1; the only failure is the known `server/sqlite-store.test.ts` transaction test (1553 tests passed).
+- Focused Node 24: exit 0, 4/4 files, 74/74 tests.
+- Coverage: 13 of 19 rows covered (several at function level only); 6 rows not covered, including image-cleanup logging, hook-level load/clear wiring, DraftNotice Retry/notice, the busy guard and failed-clear toast, the image limit wiring, and the settings-change refresh.
