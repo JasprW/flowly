@@ -150,12 +150,30 @@ export async function directory(path: string): Promise<string> {
   return canonical;
 }
 
-/** The create request's content, fixed when the card is made; later edits to the card do not change it. */
+/**
+ * The whole create request except its operationId (project, title, description,
+ * lane, priority, type, tags, workspace choice, source and external items),
+ * fixed when the card is made; later edits to the card do not change it.
+ */
 function createFingerprint(input: TaskInput) {
-  return createHash("sha256")
-    .update(JSON.stringify([input.projectId, input.title.trim(), input.description ?? ""]))
-    .digest("hex")
-    .slice(0, 32);
+  const request = [
+    input.projectId,
+    input.title.trim(),
+    input.description ?? "",
+    input.status ?? "todo",
+    input.priority ?? "normal",
+    input.type ?? null,
+    input.tags ?? [],
+    input.mode,
+    input.workspaceId ?? null,
+    input.baseRef ?? "",
+    input.branchName?.trim() || null,
+    input.ideaId ?? null,
+    input.followUpOf ?? null,
+    input.insightFindingId ?? null,
+    (input.externals ?? []).map((x) => [x.connectionId, x.key, x.itemType ?? null]),
+  ];
+  return createHash("sha256").update(JSON.stringify(request)).digest("hex").slice(0, 32);
 }
 
 /**

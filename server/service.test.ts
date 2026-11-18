@@ -374,6 +374,9 @@ test("a repeated create returns its card, but different content under the same o
   // A stale draft (clear failed, or another window) edited and submitted again: refused, never answered with the old card.
   await expect(x.service.createTask({ ...x.input, title: "Draft title", description: "edited" }, x.paseo)).rejects.toThrow(operationReusedMessage);
   await expect(x.service.createTask({ ...x.input, title: "Edited title", description: "body" }, x.paseo)).rejects.toThrow(operationReusedMessage);
+  // Any other part of the request counts too: priority, tags, lane, workspace mode.
+  for (const change of [{ priority: "high" as const }, { tags: ["ui"] }, { status: "design" as const }, { mode: "worktree" as const }])
+    await expect(x.service.createTask({ ...x.input, title: "Draft title", description: "body", ...change }, x.paseo)).rejects.toThrow(operationReusedMessage);
   expect((await x.store.read()).tasks.filter((t) => t.operationId === "op")).toHaveLength(1);
   // A new operationId creates the edited card.
   const second = await x.service.createTask({ ...x.input, operationId: "op-2", title: "Draft title", description: "edited" }, x.paseo);
