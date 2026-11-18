@@ -65,7 +65,7 @@ import { waitingOn } from "../shared/links";
 import { LinkPicker } from "./task-links";
 import { TaskDrawer } from "./drawer";
 import { DeleteTaskDialog } from "./task-delete";
-import { useOverviewQuery, useLiveAgents, useGuardrailCountsQuery, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
+import { useOverviewQuery, useLiveAgents, guardrailCountsKey, useGuardrailCountsQuery, useResourcesQuery, useWorkflowInsightsQuery } from "./queries";
 import { projectOpenIdeaCount } from "./overview-query";
 import { useStableCallback, useStableTheme } from "./stable";
 import { isLegacyScope } from "../shared/scope";
@@ -806,7 +806,10 @@ function BoardContent(
     Number(tagFilter.length > 0);
   const refresh = () => {
     if (taskId) void invalidateCardViews(queryClient);
-    else void data.refetch();
+    else {
+      void data.refetch();
+      void queryClient.invalidateQueries({ queryKey: guardrailCountsKey });
+    }
     void resources.refetch();
     void agents.refetch();
     void readState.refetch();
@@ -1129,7 +1132,7 @@ function BoardContent(
   const projectIdeaList = useMemo(() => projectIdeasData.data?.ideas || [], [projectIdeasData.data]);
   const projectOpenIdeas = useMemo(() => projectOpenIdeaCount(projected, project?.id), [projected?.cards, projected?.tasks, project?.id]);
   // Observing commands and guidelines learned this week (GUARDRAILS-SPEC §7.4); the chip hides when the project turned guardrails off.
-  const guardrailCounts = useGuardrailCountsQuery(boardActive && !!project && features.memory);
+  const guardrailCounts = useGuardrailCountsQuery(boardActive && !!project && features.memory, pushLive);
   const guardrailsOn = features.memory && !!project && project.memory !== false;
   const projectGuardrails = guardrailsOn ? guardrailCounts.data?.[project!.id] : undefined;
   const guardrailCount = guardrailsOn ? (projectGuardrails ? projectGuardrails.observing + projectGuardrails.added : 0) : null;

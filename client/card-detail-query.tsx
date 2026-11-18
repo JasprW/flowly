@@ -3,7 +3,7 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import { CARD_UNAVAILABLE, type CardDetail, type ProjectCardIndex } from "../shared/card-detail";
-import { createChangedReader, boardKey } from "./queries";
+import { createChangedReader, boardKey, guardrailCountsKey, guardrailsPrefix } from "./queries";
 
 export const detailKey = (hostId: string, taskId: string, workspaceId: string) => ["flowly", "card-detail", hostId, 1, taskId, workspaceId] as const;
 export const projectIndexKey = (hostId: string, projectId: string) => ["flowly", "project-card-index", hostId, 1, projectId] as const;
@@ -33,7 +33,8 @@ export function useProjectIdeasQuery(hostId: string, projectId: string, enabled:
 }
 /** Refresh the appropriate active display readers; disabled full observers do not fetch. */
 export async function invalidateCardViews(client: QueryClient) {
-  await Promise.all([boardKey, ["flowly", "card-detail"], ["flowly", "overview"], ["flowly", "project-card-index"], ["flowly", "project-ideas"]].map(queryKey => client.invalidateQueries({ queryKey })));
+  await Promise.all([guardrailCountsKey, guardrailsPrefix].map(queryKey => client.cancelQueries({ queryKey })));
+  await Promise.all([boardKey, guardrailCountsKey, guardrailsPrefix, ["flowly", "card-detail"], ["flowly", "overview"], ["flowly", "project-card-index"], ["flowly", "project-ideas"]].map(queryKey => client.invalidateQueries({ queryKey })));
 }
 export type CardDetailState = { hostId: string; detail?: CardDetail; index?: ProjectCardIndex; error: unknown; indexError: unknown; pending: boolean; retry(): void; retryIndex(): void };
 export const CardDetailContext = createContext<CardDetailState | null>(null);

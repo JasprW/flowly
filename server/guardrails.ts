@@ -71,6 +71,8 @@ export type MigrationResult = "present" | "migrated" | "failed";
 
 /** `guardrails.json` (GUARDRAILS-SPEC §3.1): serialized writes, `.bak` backup, atomic replacement; invalid data is preserved. */
 export class GuardrailsStore {
+  /** Successful commits notify count readers, including writes made outside the board. */
+  onCommit: (() => void) | null = null;
   private tail: Promise<unknown> = Promise.resolve();
   /** The memory.json a failed migration could not move: writes are refused until a migration succeeds (§3.6). */
   private migrationFailed: string | null = null;
@@ -110,6 +112,7 @@ export class GuardrailsStore {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       await rename(temporary, this.path);
+      this.onCommit?.();
     } finally {
       await unlink(temporary).catch(() => undefined);
     }

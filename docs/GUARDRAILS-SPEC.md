@@ -482,6 +482,10 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 - 空状态：“No memory yet. Agents remember decisions, pitfalls and conventions as they work; you can add one too.”
 - 动效、输入、无障碍沿用 PROJECT-MEMORY-SPEC §8.1。
 
+总览计数在 Paseo 0.16 订阅在线时由 GuardrailsStore 成功提交后的 `board.changes` 通知失效，再走既有 etag 读取；不做 60 s 健康轮询。订阅未就绪、断线、旧宿主或计数读取失败时保留 60 s 回退，读取成功且订阅在线后停止。隐藏的总览不读；七天窗口在通知、重新进入或显式刷新时重算。
+
+Memory / Guardrails 页本身也沿用 `board.changes`：健康在线停用原5/30秒轮询；条目、专属项、错误、review running 开始/结束和全局 memory 开关变化均通知。断线/未就绪/旧宿主或读取失败时恢复原5秒 running / 30秒 idle 读取，成功且在线后停止；隐藏不读，重入补读。
+
 ### 7.5 RPC
 
 | 方法 | 输入 | 行为 |

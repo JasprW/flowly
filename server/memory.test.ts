@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { readFile, readdir, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { PaseoApi } from "@getpaseo/client";
@@ -20,14 +20,14 @@ afterEach(async () => {
 });
 
 type Created = { workspaceId: string; labels: Record<string, string>; prompt: string; config?: { provider: string } };
-async function setup() {
+async function setup(summarySettled: () => Promise<void> = async () => undefined) {
   const f = await agentFixture();
   roots.push(f.root);
   const settings: SummarySettings = { summaryEnabled: true, summaryModel: "claude/claude-haiku-5-5", digestEnabled: true, retroEnabled: true };
   const summaries = new SummaryStore(f.store.directory);
   // The review session is hard-deleted over the local daemon in production; the test records who was removed.
   const removed: string[] = [];
-  const memory = new MemoryService(f.store, summaries, async () => settings, async () => "en", async () => undefined, () => Date.now(), 0, 1000, async (agent) => {
+  const memory = new MemoryService(f.store, summaries, async () => settings, async () => "en", summarySettled, () => Date.now(), 0, 1000, async (agent) => {
     removed.push(agent.id);
   }, new BackgroundWorkspaces(f.store.directory, async () => "live"));
   f.service.memory = memory;
@@ -394,4 +394,38 @@ test("finished-card review tries the ordered summary list and cleans both childr
   expect(x.created.map((a) => a.config?.provider)).toEqual(["claude/claude-sonnet-5-5", "claude/claude-haiku-5-5"]);
   expect(x.removed).toEqual(["review-1", "review-2"]);
   expect((await x.memory.store.read()).errors).toEqual([]);
+});
+
+
+test("memory running notifications cover a cancelled automatic review without a store commit", async () => {
+  let release!: () => void;
+  let reached!: () => void;
+  const settled = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { reached = resolve; });
+  const x = await setup(() => { reached(); return settled; });
+  const states: string[][] = [];
+  x.memory.onRunningChange = () => { states.push(x.memory.runningTasks()); };
+  const commit = vi.fn(); x.memory.store.onCommit = commit;
+  try {
+    await x.store.mutate(board => { board.tasks[0].status = "done"; });
+    x.memory.afterDone("t", x.model);
+    // Summary waiting is reached after running starts, even on the pre-fix source.
+    await started;
+    expect(states).toEqual([["t"]]);
+    await x.store.mutate(board => { board.tasks[0].status = "todo"; });
+    release(); await x.memory.idle();
+    expect(states).toEqual([["t"], []]);
+    expect(commit).not.toHaveBeenCalled();
+  } finally { release(); await x.memory.idle(); x.memory.onRunningChange = null; x.memory.store.onCommit = null; }
+});
+
+test("manual memory review notifies running start and finish", async () => {
+  const x = await setup();
+  const states: string[][] = [];
+  x.memory.onRunningChange = () => states.push(x.memory.runningTasks());
+  try {
+    await x.store.mutate(board => { board.tasks[0].status = "done"; });
+    await x.memory.manual("t", x.model); await x.memory.idle();
+    expect(states).toEqual([["t"], []]);
+  } finally { x.memory.onRunningChange = null; }
 });

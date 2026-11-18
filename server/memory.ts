@@ -122,6 +122,8 @@ async function instructionFiles(root: string) {
 
 export class MemoryService {
   readonly store: GuardrailsStore;
+  /** The page also shows this in-memory state, including runs that make no store write. */
+  onRunningChange: (() => void) | null = null;
   /** Cards whose review is running or waiting (shown as "Reviewing…"). */
   private running = new Set<string>();
   /** One review at a time per project (§4.2). */
@@ -347,6 +349,11 @@ export class MemoryService {
 
   // ---- Finished-card review (§4.2) -------------------------------------------------
 
+  private setRunning(taskId: string, running: boolean) {
+    if (running) this.running.add(taskId);
+    else this.running.delete(taskId);
+    this.onRunningChange?.();
+  }
   isRunning(taskId: string) {
     return this.running.has(taskId);
   }
@@ -359,7 +366,7 @@ export class MemoryService {
       const board = await this.board.read();
       const task = board.tasks.find((t) => t.id === taskId);
       if (!task || !memoryOn(board.projects.find((p) => p.id === task.projectId))) return;
-      this.running.add(taskId);
+      this.setRunning(taskId, true);
       try {
         await sleep(this.delayMs);
         await Promise.race([this.summarySettled(taskId), sleep(RETRO_SUMMARY_WAIT_MS)]);
@@ -367,7 +374,7 @@ export class MemoryService {
         if (now?.status !== "done") return;
         await this.review(taskId, paseo, false);
       } finally {
-        this.running.delete(taskId);
+        this.setRunning(taskId, false);
       }
     })().catch(logError("review")));
   }
@@ -380,11 +387,11 @@ export class MemoryService {
     if (!task || !project) throw new Error("Task not found.");
     if (!memoryOn(project)) throw new Error("Project memory is turned off for this project.");
     if (task.status !== "done" && task.status !== "cancelled") throw new Error("Only finished cards are reviewed for memories.");
-    this.running.add(taskId);
+    this.setRunning(taskId, true);
     this.jobs.track(
       this.review(taskId, paseo, true)
         .catch(logError("review"))
-        .finally(() => this.running.delete(taskId)),
+        .finally(() => this.setRunning(taskId, false)),
     );
     return { queued: true };
   }
