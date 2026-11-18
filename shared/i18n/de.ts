@@ -6,6 +6,7 @@ const catalog: Catalog = {
   "This draft was changed in another window. Retry to keep this version instead.": "Dieser Entwurf wurde in einem anderen Fenster geändert. Erneut versuchen, um stattdessen diese Fassung zu behalten.",
   "The draft was not saved: {error}": "Der Entwurf wurde nicht gespeichert: {error}",
   "The draft was not cleared: {error}": "Der Entwurf wurde nicht gelöscht: {error}",
+  "A card was already created from this draft. Create again to make a new card with these changes.": "Aus diesem Entwurf wurde bereits eine Karte erstellt. Erstelle erneut, um mit diesen Änderungen eine neue Karte anzulegen.",
   "It could not be loaded, so it was kept.": "Er konnte nicht geladen werden und wurde deshalb behalten.",
   "It was changed in another window and was kept.": "Er wurde in einem anderen Fenster geändert und wurde behalten.",
   "{n} saved images were left out: this form holds at most {limit} images.": {"one": "{n} gespeichertes Bild wurde weggelassen: Dieses Formular fasst höchstens {limit} Bilder.", "other": "{n} gespeicherte Bilder wurden weggelassen: Dieses Formular fasst höchstens {limit} Bilder."},

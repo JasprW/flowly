@@ -109,6 +109,15 @@ what it restores and ignores what it does not understand.
   request (a save that fails stops the create and shows the draft error), so a
   retry after reopening reuses the server's idempotent create instead of making a
   duplicate. A failed create keeps the draft.
+- `tasks.create` with an `operationId` that already made a card returns that card
+  only when the request's project, title (trimmed) and description match the
+  request that made it (a fingerprint stored on the card as `createFingerprint`,
+  so later edits to the card do not matter); otherwise it is refused with `This create request already made a card with different content.`
+  (user decision 2026-11-18). This covers a draft whose clear failed and a second
+  window holding the same draft: edits are never answered with the old card. New
+  task then gives the form a new `operationId`, saves it with the draft and says a
+  card was already created from this draft; Create again makes a new card. Cards
+  made before the fingerprint existed return the card as before.
 - A close that is still saving blocks Create, and a create in progress keeps the
   form open until it finishes. A session prepared for one draft (card and idea) is
   never recovered for another.

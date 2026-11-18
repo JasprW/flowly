@@ -36,7 +36,7 @@ import { DraftNotice, draftAttachments, snapshotImages, useDraftChanges, useForm
 import { formDraftKey } from "../shared/form-drafts";
 import { restoredTask } from "./task-draft";
 import { uploadCardImages } from "./card-image-upload";
-import { cardImageLimit } from "../shared/model";
+import { cardImageLimit, operationReusedMessage } from "../shared/model";
 import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
 import { tagValues } from "../shared/tags";
@@ -552,9 +552,8 @@ function TaskFormBody({
     return used;
   }, [index.data]);
   // Kept in the draft: a retry after reopening reuses the server's idempotent create.
-  const [operationId] = useState(
-    () => restored.operationId || draft.unsavedOperation() || `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+  const newOperationId = () => `card-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const [operationId, setOperationId] = useState(() => restored.operationId || draft.unsavedOperation() || newOperationId());
   // Optional first agent for a new task (remembered on/off choice).
   const view = useBoardView();
   const [startAgent, setStartAgentState] = useState<boolean | null>(restored.startAgent ?? null);
@@ -683,7 +682,14 @@ function TaskFormBody({
         onSaved(result.id, { error: message(e) });
       }
     } catch (e) {
-      setError(message(e));
+      if (!task && message(e).includes(operationReusedMessage)) {
+        // This draft's create identity already made a card with other content (a draft whose clear failed, or
+        // another window): the edits get a new identity, saved with the draft, so Create makes a new card.
+        const next = newOperationId();
+        setOperationId(next);
+        await draft.persist({ fields: { ...draftFields, operationId: next }, images: snapshotImages(images.list()) }, next).catch(() => false);
+        setError(t("A card was already created from this draft. Create again to make a new card with these changes."));
+      } else setError(message(e));
     } finally {
       busy.current = false;
       setPending(false);

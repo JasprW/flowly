@@ -6,6 +6,7 @@ const catalog: Catalog = {
   "This draft was changed in another window. Retry to keep this version instead.": "Этот черновик изменён в другом окне. Повторите, чтобы оставить эту версию.",
   "The draft was not saved: {error}": "Черновик не сохранён: {error}",
   "The draft was not cleared: {error}": "Черновик не удалён: {error}",
+  "A card was already created from this draft. Create again to make a new card with these changes.": "Из этого черновика уже создана карточка. Создайте ещё раз, чтобы сделать новую карточку с этими изменениями.",
   "It could not be loaded, so it was kept.": "Его не удалось загрузить, поэтому он сохранён.",
   "It was changed in another window and was kept.": "Он был изменён в другом окне и сохранён.",
   "{n} saved images were left out: this form holds at most {limit} images.": {"one": "{n} сохранённое изображение не восстановлено: в этой форме не больше {limit} изображений.", "few": "{n} сохранённых изображения не восстановлены: в этой форме не больше {limit} изображений.", "many": "{n} сохранённых изображений не восстановлено: в этой форме не больше {limit} изображений.", "other": "{n} сохранённого изображения не восстановлено: в этой форме не больше {limit} изображений."},
