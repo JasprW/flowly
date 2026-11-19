@@ -1372,6 +1372,24 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 删除清理补轮d38c8ab：在drain前重新dirty，冷/热删除回归先红后绿；55聚焦、typecheck、全量1503/6skip与独立Luna通过。旧报告时序已独立注释；按用户决定继续等CodeRabbit额度。
 
 
+## 2026-11-16 新建任务 / 新建会话草稿（分支 fix/form-drafts）
+
+- 问题：New task 关闭即卸载、New session 每次打开重置，填写一半的标题、描述、指令和图片丢失；已有 composer 草稿只覆盖已存在的 session。
+- 实现：daemon 侧 `server/form-drafts.ts`（`form-drafts.json` + `form-draft-images/`，串行写、原子替换、revision 校验、无效文件保留、项目/卡片归档后清理）与 `form-drafts.read/save/clear` RPC；客户端 `DraftSaver` 停止输入 400 ms 后异步保存，关闭先 flush，失败留在表单并提供 Retry / Close without saving；加载失败不保存。任务草稿含 operationId，卡片一建成立即清草稿，agent 启动失败不会重复建卡。spec：[FORM-DRAFTS-SPEC](FORM-DRAFTS-SPEC.md)。
+- 另一台电脑此前做过同一问题的本地修复和验证（无 .git、无 commit SHA），本分支是本机独立重新实现；那份证据只作历史参考，不代表本提交。
+- 新手引导：修复的是用户本来就预期的行为，不加导览文案或 tip。遥测：不加字段。
+- PR #116 (fork `fang-zeqiang:fix/form-drafts`).
+  - CodeRabbit's first round had 8 findings, fixed in `847afb3`.
+  - Its follow-ups had 3 points, fixed in `2d53e0c`: a successful create no longer clears an unread draft; after a failed load, New task keeps its operationId in client memory; cleanup failures no longer hide the save error.
+  - Independent Haiku 5.5 session: typecheck and Node 24 full suite pass on `652cef6` and `ea6e7f7`. Its live UI part did not run.
+  - Implementer's browser probe: 16/16 at `089d115`. At `847afb3`, every check passed across three runs; the failures in those runs were navigation timeouts. See [verification](verification/form-drafts-2026-11-16/).
+  - Local Node 23 full suite: only the `sqlite-store` transaction test fails. It fails on main too and passes under Node 24.
+  - `92aa208`: clear records one past the cleared revision; a conflict Retry overwrites on top of the revision `read()` reports.
+  - CodeRabbit's review of `5bd30f1` had 5 points, all fixed in one commit: a merge after a failed load stays within the form's image limit (added images kept, saved ones left out are counted and shown); edits made while a load failed survive failed retries and are never merged into another draft key; the clear after a create waits for a save on its way and reports a draft another window kept; Retry of a failed load is disabled while a create runs, and New session's create also checks the shared busy flag.
+  - Follow-ups after `8ab87e1`: the recovered-session path shows the clear-failure toast (`391f74c`), and a create after a failed load says the unread draft was kept instead of skipping the clear silently.
+  - CodeRabbit on `3363875`: a superseded load (old Retry, load from before a close) no longer applies its result; a reload lets a pending save land before it reads; a draft dropped with its archived scope (read or prune) keeps its revision marker, so a stale window gets a conflict after a restore.
+  - CodeRabbit on `13ff01d` (merge of main): a reused `operationId` with edited content silently returned the old card (draft clear failed, or a second window). User chose (2026-11-18): the server refuses different content under an `operationId` that already made a card, compared with a `createFingerprint` of the whole original create request (every field except `operationId`; first-agent choices are not part of it, spec §5) stored on the card (later card edits do not cause false refusals; older cards keep the old behavior); New task then switches to a new `operationId` saved with the draft. The independent report's "probably safe" note on that path predates this fix and is left as the verifier wrote it.
+
 ## 2026-11-16 Paseo 0.16 在线 chip 零周期读取返工
 
 - 自动验收发现 PR #115 保留的 60 s chip 校对违背「屏幕静止时没有周期性读取」；§3.7 的暂缓不豁免该项。接受意见，保留历史 51→1 手机数据并更正其解释。

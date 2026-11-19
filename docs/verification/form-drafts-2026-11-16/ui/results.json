@@ -1,0 +1,82 @@
+[
+  {
+    "name": "desktop New task: title restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "desktop New task: description restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "desktop New task: restored in a fresh browser context",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "desktop New task: cleared probe stays cleared",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "desktop New session: instruction restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "desktop New session: image restored after Esc",
+    "ok": true,
+    "detail": "1 thumbnail(s)"
+  },
+  {
+    "name": "desktop New session: restored in a fresh browser context",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "desktop New session: cleared probe stays cleared",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: title restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: description restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: restored in a fresh browser context",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New task: cleared probe stays cleared",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New session: instruction restored after Esc",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New session: image restored after Esc",
+    "ok": true,
+    "detail": "1 thumbnail(s)"
+  },
+  {
+    "name": "compact New session: restored in a fresh browser context",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "compact New session: cleared probe stays cleared",
+    "ok": true,
+    "detail": ""
+  }
+]

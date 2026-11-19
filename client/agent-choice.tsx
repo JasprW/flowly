@@ -74,6 +74,10 @@ export function useAgentChoice({ enabled, cwd, defaults }: { enabled: boolean; c
   const providerAvailable = !!providers.data?.providers.some((p) => p.available && p.provider === provider);
   return {
     provider,
+    /** The user's raw choices (what a draft keeps); `chosen*` are what is usable now. */
+    model,
+    mode,
+    thinking,
     setProvider(next: string) {
       if (next === provider) return;
       setProviderState(next);

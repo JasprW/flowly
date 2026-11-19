@@ -1,6 +1,15 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "保存せずに閉じる",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "保存済みの下書きを読み込めなかったため、ここでの変更は保存されません：{error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "この下書きは別のウィンドウで変更されました。再試行すると、こちらの内容で上書きします。",
+  "The draft was not saved: {error}": "下書きを保存できませんでした：{error}",
+  "The draft was not cleared: {error}": "下書きを消去できませんでした：{error}",
+  "A card was already created from this draft. Create again to make a new card with these changes.": "この下書きからはすでにカードが作成されています。もう一度作成すると、この変更で新しいカードを作成します。",
+  "It could not be loaded, so it was kept.": "読み込めなかったため、残しました。",
+  "It was changed in another window and was kept.": "別のウィンドウで変更されたため、残しました。",
+  "{n} saved images were left out: this form holds at most {limit} images.": "保存済みの画像 {n} 枚は復元されませんでした：このフォームに入れられる画像は最大 {limit} 枚です。",
   "Command": "コマンド",
   "Review model": "レビューモデル",
   "{n} s": "{n} 秒",
