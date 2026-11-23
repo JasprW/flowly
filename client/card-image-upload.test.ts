@@ -40,3 +40,14 @@ test("thumbnails keep the aspect ratio with the long edge at most 320 and never 
   expect(thumbDimensions(5000, 1)).toEqual({ width: 320, height: 1 });
   expect(thumbDimensions(0, 10)).toBeNull();
 });
+
+test("each image's id goes as its upload key; an id the daemon would refuse is left out", async () => {
+  const keys: (string | undefined)[] = [];
+  const add = async (input: { uploadKey?: string }) => {
+    keys.push(input.uploadKey);
+    return { task: { revision: 2 } as Task };
+  };
+  const images = [{ ...image("a.png"), id: "image-1-1" }, { ...image("b.png"), id: "bad id!" }, image("c.png")];
+  await uploadCardImages(add, "t", 1, images, async () => null, String);
+  expect(keys).toEqual(["image-1-1", undefined, undefined]);
+});
