@@ -546,7 +546,7 @@ function BoardContent(
   const projects = projectOrderOverride
     ? serverProjects.slice().sort((a, b) => projectOrderOverride.indexOf(a.id) - projectOrderOverride.indexOf(b.id))
     : serverProjects;
-  const showProjectTabs = desktopHeader && projects.length > 0;
+  const showProjectTabs = !compact && projects.length > 0;
   const boardSort: BoardSort = view.values?.boardSort || "manual";
   // What cards show (CARD-DISPLAY-SPEC); one object for all cards so memoized cards stay put.
   const cardActivity = view.values?.cardActivity, cardHiddenKey = (view.values?.cardHidden || []).join(",");
@@ -1257,7 +1257,7 @@ function BoardContent(
           hasTicket: !task && projectTasks.some(x => factsByTask.get(x.id)?.hasExternal),
           cardOpen: !!task,
           noConnection: !task && projectTasks.some((x) => !x.archivedAt) && connections.data?.connections.length === 0,
-          projectTabs: !task && showProjectTabs && projects.length > 1,
+          projectTabs: !task && desktopHeader && projects.length > 1,
           hasWorkpad: !task && workpadEnabled(project) && projectTasks.some(x => factsByTask.get(x.id)?.hasWorkpad),
           busyBoard: !task && projectTasks.filter((x) => !x.archivedAt).length >= 6,
           hasSubagent: projectHasSubagent,
