@@ -383,6 +383,8 @@ export const addCardImage = defineRpc({
     expectedRevision: z.number().int(),
     image: z.strictObject({ name: z.string().max(200), mimeType: z.enum(cardImageMimeTypes), data: base64(5 * 1024 * 1024) }),
     thumb: z.strictObject({ mimeType: z.enum(cardImageMimeTypes), data: base64(1024 * 1024) }).optional(),
+    /** Retrying the same upload (same key, type and size) returns the card unchanged (CARD-IMAGES-SPEC §3). */
+    uploadKey: z.string().regex(/^[A-Za-z0-9-]{1,80}$/).optional(),
   }),
   output: z.object({ task: taskSchema }),
 });

@@ -21,6 +21,7 @@ export type CardImageAdd = {
   expectedRevision: number;
   image: { name: string; mimeType: Mime; data: string };
   thumb?: { mimeType: Mime; data: string };
+  uploadKey?: string;
 };
 export type CardImageRemove = { taskId: string; expectedRevision: number; id: string };
 export type CardImageRead = { taskId: string; id: string; size: "thumb" | "full" };
@@ -66,12 +67,15 @@ export class CardImageService {
       mimeType: input.image.mimeType,
       bytes: data.length,
       ...(thumbMimeType ? { thumbMimeType } : {}),
+      ...(input.uploadKey ? { uploadKey: input.uploadKey } : {}),
       createdAt: new Date().toISOString(),
     };
     const folder = this.folder(input.taskId);
-    // Cheap checks first, so a refused add writes nothing.
+    // Cheap checks first, so a refused add writes nothing. A retried upload is already there: the card as it is.
     const before = await this.store.read();
-    this.check(before.tasks.find((t) => t.id === input.taskId), input.expectedRevision, true, archivedOf(before, input.taskId));
+    const existing = before.tasks.find((t) => t.id === input.taskId);
+    if (existing && !archivedOf(before, input.taskId) && uploadedBefore(existing, image)) return { task: { ...existing } };
+    this.check(existing, input.expectedRevision, true, archivedOf(before, input.taskId));
     const written = [this.pathOf(input.taskId, image)];
     await mkdir(folder, { recursive: true, mode: 0o700 });
     try {
@@ -81,13 +85,20 @@ export class CardImageService {
         written.push(thumbPath);
         await this.writeAtomic(thumbPath, thumb);
       }
+      let duplicate = false;
       const task = await this.store.mutate((board) => {
         const task = board.tasks.find((t) => t.id === input.taskId);
+        // The same upload landed meanwhile (another window or attempt): keep that one.
+        if (task && !archivedOf(board, input.taskId) && uploadedBefore(task, image)) {
+          duplicate = true;
+          return { ...task };
+        }
         this.check(task, input.expectedRevision, true, archivedOf(board, input.taskId));
         task!.images = [...(task!.images || []), image];
         this.touch(task!);
         return { ...task! };
       });
+      if (duplicate) await Promise.all(written.map((path) => rm(path, { force: true })));
       return { task };
     } catch (error) {
       await Promise.all(written.map((path) => rm(path, { force: true })));
@@ -183,6 +194,11 @@ export class CardImageService {
     task.revision++;
     task.updatedAt = new Date().toISOString();
   }
+}
+
+/** Whether the card already holds this upload: same key, type and size. */
+function uploadedBefore(task: Task, image: CardImage) {
+  return !!image.uploadKey && !!task.images?.some((i) => i.uploadKey === image.uploadKey && i.mimeType === image.mimeType && i.bytes === image.bytes);
 }
 
 /** Whether the card or its project is archived. */

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { DraftSaver, FailedLoadEdits, clearAfterSaves, readAfterSaves, fitDraftFields, mergeAfterFailedLoad, overwriteLatest } from "./form-draft-saver";
+import { DraftSaver, FailedLoadEdits, clearAfterSaves, flushBeforeClose, readAfterSaves, fitDraftFields, mergeAfterFailedLoad, overwriteLatest } from "./form-draft-saver";
 import { draftConflictMessage } from "../shared/form-drafts";
 
 beforeEach(() => vi.useFakeTimers());
@@ -232,4 +232,31 @@ test("a reload whose save fails reads nothing and keeps the edit pending", async
   expect(loaded).toEqual({ unsaved: { fields: { title: "unsaved" }, images: [] } });
   expect(saver.dirty).toBe(true);
   expect(saver.state.error).toMatch(/disk full/);
+});
+
+test("closing after a failed load keeps the form open only while it holds edits nothing saved", async () => {
+  const edits = new FailedLoadEdits();
+  let flushed = 0;
+  // The disabled saver of a failed load reports success without writing.
+  const saver = { flush: async () => (++flushed, true) };
+  const key = "task:p:plain";
+  edits.begin(key, false);
+  edits.started({ fields: { title: "" }, images: [] });
+  // Untouched form: Esc / Cancel close it as usual.
+  expect(await flushBeforeClose(saver, edits, key, true)).toBe(true);
+  edits.changed({ fields: { title: "typed after the failure" }, images: [] });
+  expect(edits.pending(key)).toBe(true);
+  expect(await flushBeforeClose(saver, edits, key, true)).toBe(false);
+  // Typed back to where it started: nothing to lose.
+  edits.changed({ fields: { title: "" }, images: [] });
+  expect(await flushBeforeClose(saver, edits, key, true)).toBe(true);
+  // An added image counts as an edit too.
+  edits.changed({ fields: { title: "" }, images: [image("t")] });
+  expect(await flushBeforeClose(saver, edits, key, true)).toBe(false);
+  // Another key, a loaded form, and Close without saving (reset) all go through the saver.
+  expect(await flushBeforeClose(saver, edits, "task:q:plain", true)).toBe(true);
+  expect(await flushBeforeClose(saver, edits, key, false)).toBe(true);
+  edits.reset();
+  expect(await flushBeforeClose(saver, edits, key, true)).toBe(true);
+  expect(flushed).toBe(5);
 });

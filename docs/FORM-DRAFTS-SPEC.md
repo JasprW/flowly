@@ -59,6 +59,10 @@ shows a prefilled form's draft and the reverse.
   empty form. Creating still works, and a successful create does not clear the
   unread draft; the clear-failure toast says the draft was kept. New task keeps its `operationId` in client memory for that draft
   key instead, so a retry after reopening (same client) still reuses it.
+  Once the user has changed the form after a failed load, Close, Cancel, Esc and
+  Back keep it open (nothing could save those edits): the notice offers **Retry**
+  (load and keep the edits, below) and **Close without saving** (drop them).
+  Without such edits the form closes as usual.
 - **Retry** after a failed load keeps what was typed meanwhile. Fields the user
   changed after the failed load are combined with the loaded draft: changed
   choices win, title/description/instruction written on both sides are kept as
@@ -109,6 +113,11 @@ what it restores and ignores what it does not understand.
   request (a save that fails stops the create and shows the draft error), so a
   retry after reopening reuses the server's idempotent create instead of making a
   duplicate. A failed create keeps the draft.
+- Description images are uploaded after the card exists, each with an upload key
+  (the draft image's id, `card-images.add` `uploadKey`). A card that already holds
+  an image with that key and the same type and size returns the card unchanged,
+  so Create again after a lost response, a partial upload or a kept draft never
+  adds the same image twice; the images not yet on the card still go.
 - `tasks.create` with an `operationId` that already made a card returns that card
   only for the same request: everything it sends except the `operationId`
   (project, trimmed title, description, lane, priority, type, tags, workspace
@@ -143,7 +152,7 @@ what it restores and ignores what it does not understand.
 2. Plain and prefilled forms, different projects and different cards do not share
    drafts.
 3. A stale `baseRevision` is refused; invalid data is preserved.
-4. A failed load does not save; a failed save keeps the form open with Retry and
-   Close without saving.
+4. A failed load does not save; a failed save, or a close after edits made since a
+   failed load, keeps the form open with Retry and Close without saving.
 5. Successful create clears the draft; failed create keeps it; a card created
    while its agent fails to start is not created again.

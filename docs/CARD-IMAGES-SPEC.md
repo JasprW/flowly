@@ -36,11 +36,12 @@ CardImage = { id, name, mimeType, bytes, createdAt }
 
 | RPC | 输入 | 输出 |
 | --- | --- | --- |
-| `card-images.add` | `{ taskId, expectedRevision, image: { name, mimeType, data }, thumb?: { mimeType, data } }`（base64） | `{ task }` |
+| `card-images.add` | `{ taskId, expectedRevision, image: { name, mimeType, data }, thumb?: { mimeType, data }, uploadKey? }`（base64） | `{ task }` |
 | `card-images.remove` | `{ taskId, expectedRevision, id }` | `{ task }` |
 | `card-images.read` | `{ taskId, id, size: "thumb" \| "full" }` | `{ dataUri }` |
 
 - `add` 校验 MIME、解码后大小、张数、卡片存在且未归档、revision；一次一张，客户端多张时依次调用。
+- `uploadKey`（`[A-Za-z0-9-]{1,80}`，New task 用草稿图片的 id）记在 `CardImage.uploadKey`。卡片（未归档）已有同 key、同 MIME、同字节数的图片时，`add` 不写文件、不改 revision，直接返回当前卡片，也不检查 `expectedRevision`；因此从同一草稿再次创建（响应丢失、部分上传后重试、清除草稿失败后另一窗口再建）每张图只存一次，缺的照传（FORM-DRAFTS-SPEC §5）。并发时在看板写事务里再判一次，重复的那次删掉刚写的文件。`flowly_get_task` 不输出 `uploadKey`。
 - `read` 只读 `task.images` 里登记的 id；`thumb` 不存在时返回原图。内容不可变，客户端按 `(taskId, id, size)` 缓存，`staleTime: Infinity`。
 - 已归档卡只读：`add`/`remove` 拒绝。
 
@@ -58,6 +59,7 @@ CardImage = { id, name, mimeType, bytes, createdAt }
 - web 在上传前用 canvas 生成长边 ≤320px 的缩略图（WebP，不支持时 JPEG），随 `add` 一起发送；生成失败则不带缩略图。这扩大了 `client/web-images.ts` 的 web 例外（新增 canvas 使用），同样做功能检测、不渲染 HTML；AGENTS.md 的例外条目一并改写。
 - New task：图片挂在描述上，存到新卡。New task 现有的“首条消息图片”（agent instruction 框）合并进来：表单只保留描述下的一排图片，首个 session 通过 §5 拿到它们，不再另发首条消息图片。侧栏 New session 的首条消息图片不变。
 - 手机：不显示 **Add images**；已有图片照常显示，可在大图里删除。
+- New task / New session 恢复的草稿图片（在 web 上添加后到手机打开）在手机上同样显示缩略图和移除按钮，不显示 **Add images** 与粘贴/拖放提示，手机不监听粘贴/拖放（FORM-DRAFTS-SPEC §2.1）。
 
 ### 4.3 错误
 

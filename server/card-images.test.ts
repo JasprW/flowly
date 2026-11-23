@@ -5,6 +5,7 @@ import { agentFixture } from "./agent-fixture";
 import { CardImageService, cardImageContextLine } from "./card-images";
 import { cardImageLimit } from "../shared/model";
 import { maxImageBytes } from "../shared/composer";
+import { uploadCardImages } from "../client/card-image-upload";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -128,4 +129,56 @@ test("context line lists absolute paths, nothing without images", async () => {
   expect(cardImageContextLine(x.store.directory, task)).toBe(
     `Card images (part of the description; view each with your image tool): ${x.images.pathOf("t", task.images![0])}`,
   );
+});
+
+test("an add retried with the same upload key returns the card unchanged; another key or other bytes add a new image", async () => {
+  const x = await setup();
+  const add = (uploadKey: string | undefined, expectedRevision: number, data = png) =>
+    x.images.add({ taskId: "t", expectedRevision, image: { name: "a.png", mimeType: "image/png", data }, ...(uploadKey ? { uploadKey } : {}) });
+  const first = await add("image-1-1", 1);
+  expect(first.task.revision).toBe(2);
+  // A retry from the same draft (even with the revision it had before the first upload) stores nothing new.
+  const again = await add("image-1-1", 1);
+  expect(again.task.revision).toBe(2);
+  expect(again.task.images!.map((i) => i.id)).toEqual(first.task.images!.map((i) => i.id));
+  expect(await files(join(x.store.directory, "card-images", "t"))).toEqual([`${first.task.images![0].id}.png`]);
+  // Same key, different bytes: not the same upload.
+  const other = Buffer.from("89504e470d0a1a0a0000000d4948445200", "hex").toString("base64");
+  expect((await add("image-1-1", 2, other)).task.images).toHaveLength(2);
+  expect((await add("image-1-2", 3)).task.images).toHaveLength(3);
+  // No key: every add is a new image.
+  expect((await add(undefined, 4)).task.images).toHaveLength(4);
+  // A retried key on an archived card is still refused.
+  await x.store.mutate((board) => {
+    board.tasks[0].archivedAt = new Date().toISOString();
+  });
+  await expect(add("image-1-1", 5)).rejects.toThrow("Archived cards can't be changed.");
+});
+
+test("creating again from the same draft after a partial upload adds only the missing images, once each", async () => {
+  const x = await setup();
+  const draftImages = ["image-1-1", "image-1-2", "image-1-3"].map((id, n) => ({
+    id,
+    name: `${id}.png`,
+    mimeType: "image/png" as const,
+    data: Buffer.from(`89504e470d0a1a0a0${n}`, "hex").toString("base64"),
+  }));
+  // The first attempt: the second image fails (connection lost), the third still goes.
+  let failSecond = true;
+  const add: Parameters<typeof uploadCardImages>[0] = (input) => {
+    if (failSecond && input.uploadKey === "image-1-2") return Promise.reject(new Error("Connection lost."));
+    return x.images.add(input);
+  };
+  const first = await uploadCardImages(add, "t", 1, draftImages, async () => null, (e) => (e as Error).message);
+  expect(first.problems).toEqual(["Connection lost."]);
+  // Create again: the idempotent create returns the card at its current revision, then every draft image is sent again.
+  failSecond = false;
+  const second = await uploadCardImages(add, "t", await revision(x), draftImages, async () => null, (e) => (e as Error).message);
+  expect(second.problems).toEqual([]);
+  const task = (await x.store.read()).tasks[0];
+  expect(task.images!.map((i) => i.uploadKey)).toEqual(["image-1-1", "image-1-3", "image-1-2"]);
+  // A third attempt changes nothing.
+  const third = await uploadCardImages(add, "t", task.revision, draftImages, async () => null, String);
+  expect(third.revision).toBe(task.revision);
+  expect((await x.store.read()).tasks[0].images).toHaveLength(3);
 });

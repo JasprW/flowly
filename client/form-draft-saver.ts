@@ -186,6 +186,10 @@ export class FailedLoadEdits {
   changed(snapshot: DraftSnapshot) {
     this.typed = snapshot;
   }
+  /** Whether the form holds edits made after a failed load of `key` (nothing saves them). */
+  pending(key: string) {
+    return this.key === key && !!this.typed && JSON.stringify(this.typed) !== JSON.stringify(this.base);
+  }
   /** What a form remounted after a failed load of `key` shows: the edits so far. */
   shown(key: string) {
     return this.key === key ? this.typed : null;
@@ -195,6 +199,16 @@ export class FailedLoadEdits {
     this.typed = null;
     this.base = null;
   }
+}
+
+/**
+ * Before a close: saves what is pending. False keeps the form open: the save
+ * failed, or the load of `key` failed and the form holds edits nothing can save
+ * (the user picks Retry or Close without saving, FORM-DRAFTS-SPEC §3).
+ */
+export function flushBeforeClose(saver: Pick<DraftSaver, "flush">, edits: FailedLoadEdits, key: string | null, loadFailed: boolean) {
+  if (key && loadFailed && edits.pending(key)) return Promise.resolve(false);
+  return saver.flush();
 }
 
 /**

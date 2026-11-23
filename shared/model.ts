@@ -273,6 +273,8 @@ export const cardImageSchema = z.object({
   bytes: z.number().int().positive(),
   /** Set when a thumbnail was stored beside the image. */
   thumbMimeType: z.enum(cardImageMimeTypes).optional(),
+  /** The client's key for this upload (a New task draft image's id), so a retried add is not stored twice. */
+  uploadKey: z.string().max(80).optional(),
   createdAt: timestamp,
 });
 export type CardImage = z.infer<typeof cardImageSchema>;

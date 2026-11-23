@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import * as rpc from "../shared/rpc";
 import { draftConflictMessage, type ReadDraft } from "../shared/form-drafts";
-import { DraftSaver, FailedLoadEdits, clearAfterSaves, readAfterSaves, fitDraftFields, overwriteLatest, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
+import { DraftSaver, FailedLoadEdits, clearAfterSaves, flushBeforeClose, readAfterSaves, fitDraftFields, overwriteLatest, mergeAfterFailedLoad, type DraftSaveState, type DraftSnapshot } from "./form-draft-saver";
 import type { Attachment } from "./web-images";
 import { Button, Notice, message, space } from "./ui";
 import { t, tn } from "../shared/i18n";
@@ -45,6 +45,8 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
   const edits = useRef(new FailedLoadEdits()).current;
   // Saved images a merge left out to stay within imageLimit.
   const [leftOut, setLeftOut] = useState(0);
+  // Edits made after a failed load: closing keeps the form open for Retry or Close without saving.
+  const [unsavedEdits, setUnsavedEdits] = useState(false);
   const statusRef = useRef(status);
   statusRef.current = status;
   // The newest load: an older one (a superseded Retry, a load from before a close) never applies its result.
@@ -60,6 +62,7 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
     // Retry after a failed load of this same key keeps what was typed meanwhile,
     // also over several failed retries; edits made under another key never carry over.
     const kept = edits.begin(key, statusRef.current === "failed");
+    setUnsavedEdits(false);
     setStatus("loading");
     setLeftOut(0);
     setLoadError("");
@@ -89,6 +92,7 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
       // The form remounts: it shows what was typed so far (kept for the next Retry), else defaults.
       const shown = edits.shown(k);
       setDraft(shown ? { revision: 1, fields: shown.fields, images: shown.images.map((i) => ({ ...i })) } : null);
+      setUnsavedEdits(edits.pending(k));
       setGeneration((g) => g + 1);
       setStatus("failed");
     };
@@ -129,6 +133,8 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
     saveState,
     leftOut,
     imageLimit,
+    /** Edits made after a failed load, which nothing has saved. */
+    unsavedEdits,
     retryLoad: load,
     /** The form's content when it mounted. */
     started: (snapshot: DraftSnapshot) => {
@@ -136,12 +142,15 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
     },
     change: (snapshot: DraftSnapshot) => {
       edits.changed(snapshot);
+      if (key && statusRef.current === "failed") setUnsavedEdits(edits.pending(key));
       saver.change({ ...snapshot, fields: fitDraftFields(snapshot.fields) });
     },
-    flush: () => saver.flush(),
+    /** Before a close; false keeps the form open (see flushBeforeClose). */
+    flush: () => flushBeforeClose(saver, edits, key, statusRef.current === "failed"),
     discard: () => {
       saver.discard();
       edits.reset();
+      setUnsavedEdits(false);
     },
     retrySave: async () => {
       if (!saver.state.conflict || !key) return saver.flush();
@@ -240,6 +249,11 @@ export function DraftNotice({ draft, onDiscardClose, busy = false }: { draft: Fo
           <Button small disabled={busy} onPress={() => draft.retryLoad()}>
             {t("Retry")}
           </Button>
+          {draft.unsavedEdits && (
+            <Button small quiet disabled={busy} onPress={onDiscardClose}>
+              {t("Close without saving")}
+            </Button>
+          )}
         </View>
       </View>
     );

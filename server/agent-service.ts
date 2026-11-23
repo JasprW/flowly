@@ -328,7 +328,7 @@ export class AgentService {
       turnChecklist: [...turnChecklist],
       task: (({ review: _review, images, ...task }) => ({
         ...task,
-        ...(images ? { images: images.map((image) => ({ ...image, absolutePath: cardImagePath(this.store.directory, task.id, image) })) } : {}),
+        ...(images ? { images: images.map(({ uploadKey: _client, ...image }) => ({ ...image, absolutePath: cardImagePath(this.store.directory, task.id, image) })) } : {}),
       }))(r.task),
       // The card's latest automatic review (AUTO-REVIEW-SPEC §5); state "rework" means its findings come first.
       ...(r.task.review ? { review: reviewContext(r.task.review) } : {}),
