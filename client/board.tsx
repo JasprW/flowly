@@ -111,6 +111,7 @@ import { GuardrailsPage } from "./guardrails";
 import { MemoryPage, type MemoryPrefs } from "./memory";
 import { lastViewedProject, pickProject, rememberViewedProject } from "./project-memory";
 import { ProjectTabs } from "./project-tabs";
+import { ProjectChooserDialog } from "./project-chooser-dialog";
 import { RemoveProjectDialog } from "./project-remove";
 import { boardOverview } from "./overview";
 import { enabledStatuses, laneName } from "../shared/lanes";
@@ -1399,7 +1400,7 @@ function BoardContent(
       }
     />
   );
-  const projectMenuClose = () => setMenu(null);
+  const projectMenuClose = () => setMenu((current) => current === "projects" ? null : current);
   const moveProjectRpc = useRpc(rpc.moveProject);
   const reorderProject = (id: string, move: { direction: "up" | "down" | "top" } | { to: number }) =>
     void doAction(async () => {
@@ -2083,14 +2084,11 @@ function BoardContent(
           </View>
         )}
 
-        <Modal
+        <ProjectChooserDialog
           open={menu === "projects"}
-          title={t("Projects")}
-          onOpenChange={(open) => {
-            if (!open) projectMenuClose();
-          }}
+          nativeWide={touch && !props.layout.compact}
+          onClose={projectMenuClose}
         >
-          <Modal.Content contentContainerStyle={{ padding: space[3], gap: space[1] }}>
             <Theme.Provider value={props.theme}>
               <SortableList
                 items={projects}
@@ -2178,8 +2176,7 @@ function BoardContent(
                 }}
               />
             </Theme.Provider>
-          </Modal.Content>
-        </Modal>
+        </ProjectChooserDialog>
         <Modal
           open={menu === "filters"}
           title={t("Filters")}
