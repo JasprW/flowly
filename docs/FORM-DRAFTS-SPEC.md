@@ -113,11 +113,17 @@ what it restores and ignores what it does not understand.
   request (a save that fails stops the create and shows the draft error), so a
   retry after reopening reuses the server's idempotent create instead of making a
   duplicate. A failed create keeps the draft.
-- Description images are uploaded after the card exists, each with an upload key
-  (the draft image's id, `card-images.add` `uploadKey`). A card that already holds
-  an image with that key and the same type and size returns the card unchanged,
-  so Create again after a lost response, a partial upload or a kept draft never
-  adds the same image twice; the images not yet on the card still go.
+- Description images are uploaded after the card exists (and after its draft is
+  cleared), each with an upload key (the draft image's id, `card-images.add`
+  `uploadKey`). A card that already holds an image with that key and the same
+  type and size returns the card unchanged. This matters when the draft is still
+  there after the card was made: its clear was refused because another window
+  saved it meanwhile, or the clear failed. Create again from that draft returns the
+  same card and adds only the images it does not hold yet, never one twice.
+- An image that fails to upload while the draft was cleared is reported in a
+  toast and is not kept anywhere; the card is complete otherwise, and the user
+  adds the image again in Edit task. The draft is not kept for it: keeping it
+  would leave a draft for a card that already exists.
 - `tasks.create` with an `operationId` that already made a card returns that card
   only for the same request: everything it sends except the `operationId`
   (project, trimmed title, description, lane, priority, type, tags, workspace

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { useRpc } from "@getpaseo/plugin/client";
 import * as rpc from "../shared/rpc";
@@ -34,8 +34,11 @@ export function useFormDraft(key: string | null, active = true, imageLimit = Num
   const [saveState, setSaveState] = useState<DraftSaveState>({ saving: false, error: "", conflict: false });
   // Bumped on every load, so a form can remount its fields from the loaded draft.
   const [generation, setGeneration] = useState(0);
+  // The committed key: a render React discards never makes a running load look superseded.
   const keyRef = useRef(key);
-  keyRef.current = key;
+  useLayoutEffect(() => {
+    keyRef.current = key;
+  }, [key]);
   // A reconnect may hand out a new RPC function; that must not reload (and remount) the form.
   const readRef = useRef(read);
   readRef.current = read;
