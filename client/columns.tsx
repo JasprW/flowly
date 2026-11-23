@@ -7,6 +7,7 @@ import { statusLabels } from "../shared/model";
 import { IconButton, Label, font, noFocusRing, radius, space, touch, useTheme, verticalScroll, verticalContent } from "./ui";
 import { menuHandlers, useMenuOpener } from "./context-menu";
 import { StatusIcon } from "./status";
+import { newTaskFabBottomPadding } from "./new-task-fab";
 import type { CardDrag } from "./card";
 import { Enter, motionDuration, useMotionPresence, useMotionValue, lerp } from "./motion";
 import {
@@ -514,7 +515,7 @@ export function DesktopColumns({
                 contentContainerStyle={{
                   ...verticalContent,
                   paddingHorizontal: space[2],
-                  paddingBottom: space[4],
+                  paddingBottom: touch ? newTaskFabBottomPadding : space[4],
                   gap: cardGap,
                 }}
               >

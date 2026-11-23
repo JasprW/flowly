@@ -5,8 +5,9 @@ import { motionDuration, useMotionValue, lerp } from "./motion";
 import { noFocusRing, radius, space, useTheme } from "./ui";
 import { t } from "../shared/i18n";
 
-/** The phone board's New task button: bottom-right, opposite the Settings button (UI-UX-SPEC §5). */
-export const newTaskFabSize = 52;
+const newTaskFabSize = 52;
+/** Scroll clearance for floating board actions (UI-UX-SPEC §5). */
+export const newTaskFabBottomPadding = newTaskFabSize + space[3] * 2;
 
 export function NewTaskFab({ onPress }: { onPress(): void }) {
   const { colors } = useTheme();

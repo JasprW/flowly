@@ -93,7 +93,7 @@ A tip is a single dismissible banner row (icon, one sentence, **Got it**) under 
 | `ai-language` | a card of the current project has an AI progress summary (AI-LANGUAGE-SPEC §7) | "AI-written text follows Settings → AI features → AI output language. It starts as your interface language." |
 | `summary-models` | the card has a summary; after `ai-language`; seen on visiting Summary models in Settings or the tour | "Choose summary models and their fallback order in Settings → Models. The default is Haiku, then Luna." |
 | `sidebar-order` | a card is open and it has at least one artifact or idea (DRAWER-SPEC, Section order) | "Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar." |
-| `project-menu` | desktop project tabs show two or more projects and no card is open (PROJECT-TABS-SPEC) | "Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove." |
+| `project-menu` | expanded web/desktop project tabs show two or more projects and no card is open (PROJECT-TABS-SPEC) | "Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove." |
 | `jira-connect` | the project has a card, no card is open, and no connection is configured (announces the feature; lowest priority) | "Work from Jira, Confluence, GitHub, GitLab, Azure DevOps, Shortcut or Linear: connect them in Settings → Connections, then start a card with From… or add items with the Artifacts +. Flowly only reads them." |
 
 Tips are the lowest-priority part of this feature and can ship after the tour (see Delivery).

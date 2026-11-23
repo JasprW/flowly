@@ -482,6 +482,7 @@ function BoardContent(
   }, [resolvedLink.data, resolvedLink.dataUpdatedAt, resolvedLink.isFetching, linkKey]);
   const { colors } = props.theme;
   const compact = isCompactLayout(surfaceWidth || routeWidth);
+  const desktopHeader = !touch && !compact;
   // Keep the compact tree/scroll position, but leave hidden work to the visible detail/page.
   const boardActive = boardIsActive(compact, taskId, page, !!taskForm);
   // Every layout reads the overview, never the whole board (LOADING-R2-SPEC §2A). A compact board under an
@@ -544,6 +545,7 @@ function BoardContent(
   const projects = projectOrderOverride
     ? serverProjects.slice().sort((a, b) => projectOrderOverride.indexOf(a.id) - projectOrderOverride.indexOf(b.id))
     : serverProjects;
+  const showProjectTabs = desktopHeader && projects.length > 0;
   const boardSort: BoardSort = view.values?.boardSort || "manual";
   // What cards show (CARD-DISPLAY-SPEC); one object for all cards so memoized cards stay put.
   const cardActivity = view.values?.cardActivity, cardHiddenKey = (view.values?.cardHidden || []).join(",");
@@ -1254,7 +1256,7 @@ function BoardContent(
           hasTicket: !task && projectTasks.some(x => factsByTask.get(x.id)?.hasExternal),
           cardOpen: !!task,
           noConnection: !task && projectTasks.some((x) => !x.archivedAt) && connections.data?.connections.length === 0,
-          projectTabs: !task && !compact && projects.length > 1,
+          projectTabs: !task && showProjectTabs && projects.length > 1,
           hasWorkpad: !task && workpadEnabled(project) && projectTasks.some(x => factsByTask.get(x.id)?.hasWorkpad),
           busyBoard: !task && projectTasks.filter((x) => !x.archivedAt).length >= 6,
           hasSubagent: projectHasSubagent,
@@ -1447,7 +1449,7 @@ function BoardContent(
       { id: "remove", label: t("Remove…"), icon: "Trash2", danger: true, disabled: pending, onPress: () => setRemoving(p) },
     ];
   };
-  const shortcutsOn = Platform.OS === "web" && !compact;
+  const shortcutsOn = desktopHeader;
   const withKey = (text: string, key: string) =>
     shortcutsOn ? `${text} (${key})` : text;
   function runIntent(intent: BoardIntent | Exclude<ShortcutAction, BoardIntent>) {
@@ -1767,7 +1769,7 @@ function BoardContent(
               borderColor: colors.border,
             }}
           >
-            {compact || projects.length === 0 ? (
+            {!showProjectTabs ? (
               <ProjectSwitcher
                 title={project?.title || t("Projects")}
                 archived={!!project?.archivedAt}
@@ -1801,7 +1803,7 @@ function BoardContent(
                 onPress={() => setProjectForm("edit")}
               />
             )}
-            {(compact || projects.length === 0) && <View style={{ flex: 1 }} />}
+            {!showProjectTabs && <View style={{ flex: 1 }} />}
             <View ref={attentionRef} collapsable={false}>
               <AttentionButton
                 count={attention.length}
@@ -1847,7 +1849,7 @@ function BoardContent(
               shortcut={shortcutsOn ? "/" : ""}
               onPress={() => setMenu("filters")}
             />
-            {project && !compact && (
+            {project && desktopHeader && (
               <Button
                 primary
                 icon="Plus"
@@ -2586,7 +2588,7 @@ function BoardContent(
           </CardDetailProvider>
         )}
         {compact && drawerView}
-        {compact && !task && !page && !!project && !project.archivedAt && !!board && (
+        {!desktopHeader && !task && !page && !!project && !project.archivedAt && !!board && (
           <NewTaskFab onPress={() => setTaskForm({ status: "todo" })} />
         )}
         {!(compact && task) && (
