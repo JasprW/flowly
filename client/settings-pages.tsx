@@ -38,7 +38,7 @@ import { SettingRow, SettingSelect, SettingSwitch, SettingsGroup, SettingsPage }
 import { useOnboarding } from "./onboarding-state";
 import { useStored } from "./stored-settings";
 import { whatsNew } from "./whats-new";
-import { Button, IconButton, Notice, space, useTheme } from "./ui";
+import { Button, IconButton, Notice, space, touch, useTheme } from "./ui";
 import { compactNumber } from "../shared/usage";
 import { dollars, roundTokens, runCost, runTokens, type AiRun } from "../shared/ai-cost";
 import * as rpc from "../shared/rpc";
@@ -69,8 +69,7 @@ function Problem({ text }: { text?: string }) {
   return text ? <Notice>{text}</Notice> : null;
 }
 
-/** General: interface language and the welcome tour. */
-export function GeneralPage({ onTour, onWhatsNew }: { onTour(): void; /** Reopens What's new (WHATS-NEW-SPEC §5.1). */ onWhatsNew(): void }) {
+export function GeneralPage({ onTour, onShortcuts, onWhatsNew }: { onTour(): void; onShortcuts(): void; onWhatsNew(): void }) {
   const language = useStored(useSettings(languageSettings), languageSettingsValues);
   const onboarding = useOnboarding();
   const [reset, setReset] = useState(false);
@@ -87,10 +86,9 @@ export function GeneralPage({ onTour, onWhatsNew }: { onTour(): void; /** Reopen
       >
         <SendBehaviorRow />
       </SettingsGroup>
-      <SettingsGroup
-        title={t("Welcome tour")}
-      >
+      <SettingsGroup title={touch ? t("Welcome tour") : undefined}>
         <SettingRow title={t("Show welcome tour")} onPress={onTour} trailing={<ChevronRight />} />
+        {!touch && <SettingRow title={t("Keyboard shortcuts")} onPress={onShortcuts} trailing={<ChevronRight />} />}
         {whatsNew.length > 0 && <SettingRow title={t("What's new")} onPress={onWhatsNew} trailing={<ChevronRight />} />}
         <SettingRow
           title={t("Show tips again")}

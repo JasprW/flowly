@@ -9,4 +9,9 @@ Status: implemented on the user's request (2026-10-16): "ultra kanban设置菜�
 - The first section opens each time the modal is mounted fresh; the selected section is kept while the modal stays mounted. Switching sections fades the content in (`Enter`, honours Reduce Motion).
 - New text goes through `t()`; catalogs gained `General`, `Workflow`, `AI summaries`, `Settings sections`, and `Device ({language})` replaced the longer language label so it fits the narrow right column.
 
+## Desktop help and shortcuts
+
+- The desktop board toolbar omits the Welcome tour and Keyboard shortcuts buttons. **Flowly settings → General** groups **Show welcome tour** and **Keyboard shortcuts** with the other help actions.
+- Each action closes the settings window before opening its existing dialog. There are no new settings fields or RPC calls. The keyboard shortcut list is a desktop setting entry.
+
 Acceptance: [verification/settings-layout.md](verification/settings-layout.md).

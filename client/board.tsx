@@ -1169,8 +1169,11 @@ function BoardContent(
     blocked: dialogOpen || !!taskId,
   });
   const welcomeHandled = useRef("");
-  const tourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (tourTimer.current) clearTimeout(tourTimer.current); }, []);
+  const afterSettingsClose = useAfterModalClose();
+  const openFromSettings = (open: () => void) => {
+    setMenu(null);
+    afterSettingsClose(open);
+  };
   useEffect(() => {
     if (inPanel || welcomeHandled.current === welcome) return;
     if (welcome === "show") {
@@ -1799,15 +1802,8 @@ function BoardContent(
               />
             )}
             {(compact || projects.length === 0) && <View style={{ flex: 1 }} />}
-            {!compact && (
+            {touch && !compact && (
               <IconButton icon="CircleHelp" label={t("Welcome tour")} onPress={() => setWelcomeOpen(true)} />
-            )}
-            {shortcutsOn && (
-              <IconButton
-                icon="Keyboard"
-                label={withKey(t("Keyboard shortcuts"), "?")}
-                onPress={() => setMenu("shortcuts")}
-              />
             )}
             <View ref={attentionRef} collapsable={false}>
               <AttentionButton
@@ -2613,17 +2609,9 @@ function BoardContent(
           section={settingsSection}
           theme={props.theme}
           onClose={() => setMenu(null)}
-          onTour={() => {
-            // One dialog at a time: Settings is its own modal, so let it close before the tour opens.
-            setMenu(null);
-            if (tourTimer.current) clearTimeout(tourTimer.current);
-            tourTimer.current = setTimeout(() => setWelcomeOpen(true), 450);
-          }}
-          onWhatsNew={() => {
-            setMenu(null);
-            if (tourTimer.current) clearTimeout(tourTimer.current);
-            tourTimer.current = setTimeout(() => setWhatsNewOpen(true), 450);
-          }}
+          onTour={() => openFromSettings(() => setWelcomeOpen(true))}
+          onShortcuts={() => openFromSettings(() => setMenu("shortcuts"))}
+          onWhatsNew={() => openFromSettings(() => setWhatsNewOpen(true))}
         />
         <WelcomeTour
           open={welcomeOpen}
