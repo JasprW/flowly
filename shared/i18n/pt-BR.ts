@@ -1,6 +1,15 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "Fechar sem salvar",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "Não foi possível carregar o rascunho salvo, então as alterações aqui não são salvas: {error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "Este rascunho foi alterado em outra janela. Tente de novo para manter esta versão.",
+  "The draft was not saved: {error}": "O rascunho não foi salvo: {error}",
+  "The draft was not cleared: {error}": "O rascunho não foi apagado: {error}",
+  "A card was already created from this draft. Create again to make a new card with these changes.": "Um card já foi criado a partir deste rascunho. Crie novamente para fazer um novo card com estas alterações.",
+  "It could not be loaded, so it was kept.": "Não foi possível carregá-lo, então ele foi mantido.",
+  "It was changed in another window and was kept.": "Ele foi alterado em outra janela e foi mantido.",
+  "{n} saved images were left out: this form holds at most {limit} images.": {"one": "{n} imagem salva ficou de fora: este formulário comporta no máximo {limit} imagens.", "other": "{n} imagens salvas ficaram de fora: este formulário comporta no máximo {limit} imagens."},
   "Command": "Comando",
   "Review model": "Modelo de revisão",
   "{n} s": "{n} s",

@@ -99,7 +99,8 @@ async function clickLeaf(page, text, { minX = 0, maxX = Infinity, yMax = 160, ti
 // or project.
 export async function open(browser, { w, h, scheme = 'light', locale = 'en-US', project = 'Tinylink', url = 'https://app.paseo.sh' }) {
   const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, colorScheme: scheme, locale });
-  await context.grantPermissions(['local-network-access'], { origin: url });
+  // Older Playwright builds do not know this permission; the page still loads without it.
+  await context.grantPermissions(['local-network-access'], { origin: url }).catch(() => undefined);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));

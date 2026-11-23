@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BoardStore } from "./store";
 import { BoardService, resolveWorktreeBaseRef } from "./service";
+import { operationReusedMessage } from "../shared/model";
 import {
   projectInput,
   taskInput,
@@ -353,4 +354,37 @@ test("a new card is appended after fractional or reordered positions in its colu
   const column = (await x.store.read()).tasks.sort((a, b) => a.position - b.position).map((t) => t.id);
   expect(column).toEqual([second.id, first.id, third.id]);
   expect(third.position).toBeGreaterThan(first.position);
+});
+
+test("a repeated create returns its card, but different content under the same operationId is refused (FORM-DRAFTS-SPEC §5)", async () => {
+  const x = await setup();
+  let n = 0;
+  x.create.mockImplementation(async () => ({ id: `workspace-${++n}` }));
+  const first = await x.service.createTask({ ...x.input, title: "Draft title", description: "body" }, x.paseo);
+  // A lost response retried with the same content: the same card, no second workspace.
+  expect((await x.service.createTask({ ...x.input, title: " Draft title ", description: "body" }, x.paseo)).id).toBe(first.id);
+  expect(x.create).toHaveBeenCalledTimes(1);
+  // The card edited after a lost response: the unchanged original request still gets it back.
+  await x.store.mutate((b) => {
+    const card = b.tasks.find((t) => t.id === first.id)!;
+    card.title = "Renamed elsewhere";
+    card.description = "changed elsewhere";
+  });
+  expect((await x.service.createTask({ ...x.input, title: "Draft title", description: "body" }, x.paseo)).id).toBe(first.id);
+  // A stale draft (clear failed, or another window) edited and submitted again: refused, never answered with the old card.
+  await expect(x.service.createTask({ ...x.input, title: "Draft title", description: "edited" }, x.paseo)).rejects.toThrow(operationReusedMessage);
+  await expect(x.service.createTask({ ...x.input, title: "Edited title", description: "body" }, x.paseo)).rejects.toThrow(operationReusedMessage);
+  // Any other part of the request counts too: priority, tags, lane, workspace mode.
+  for (const change of [{ priority: "high" as const }, { tags: ["ui"] }, { status: "design" as const }, { mode: "worktree" as const }])
+    await expect(x.service.createTask({ ...x.input, title: "Draft title", description: "body", ...change }, x.paseo)).rejects.toThrow(operationReusedMessage);
+  expect((await x.store.read()).tasks.filter((t) => t.operationId === "op")).toHaveLength(1);
+  // A new operationId creates the edited card.
+  const second = await x.service.createTask({ ...x.input, operationId: "op-2", title: "Draft title", description: "edited" }, x.paseo);
+  expect(second.id).not.toBe(first.id);
+  expect(second.description).toBe("edited");
+  // A card made before the fingerprint existed keeps the old behavior: its card is returned.
+  await x.store.mutate((b) => {
+    delete b.tasks.find((t) => t.id === second.id)!.createFingerprint;
+  });
+  expect((await x.service.createTask({ ...x.input, operationId: "op-2", title: "Other" }, x.paseo)).id).toBe(second.id);
 });

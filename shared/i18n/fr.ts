@@ -1,6 +1,15 @@
 import type { Catalog } from "../i18n";
 
 const catalog: Catalog = {
+  "Close without saving": "Fermer sans enregistrer",
+  "The saved draft could not be loaded, so changes here are not saved: {error}": "Le brouillon enregistré n’a pas pu être chargé : les modifications ici ne sont pas enregistrées. {error}",
+  "This draft was changed in another window. Retry to keep this version instead.": "Ce brouillon a été modifié dans une autre fenêtre. Réessayez pour garder plutôt cette version.",
+  "The draft was not saved: {error}": "Le brouillon n’a pas été enregistré : {error}",
+  "The draft was not cleared: {error}": "Le brouillon n’a pas été effacé : {error}",
+  "A card was already created from this draft. Create again to make a new card with these changes.": "Une carte a déjà été créée à partir de ce brouillon. Créez à nouveau pour faire une nouvelle carte avec ces modifications.",
+  "It could not be loaded, so it was kept.": "Il n’a pas pu être chargé, il a donc été conservé.",
+  "It was changed in another window and was kept.": "Il a été modifié dans une autre fenêtre et a été conservé.",
+  "{n} saved images were left out: this form holds at most {limit} images.": {"one": "{n} image enregistrée a été laissée de côté : ce formulaire contient au plus {limit} images.", "other": "{n} images enregistrées ont été laissées de côté : ce formulaire contient au plus {limit} images."},
   "Command": "Commande",
   "Review model": "Modèle de revue",
   "{n} s": "{n} s",

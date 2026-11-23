@@ -43,6 +43,7 @@ import {
 import { healthSchema, preparationSchema } from "./tools";
 import { connectionInput, connectionSchema, externalSummarySchema } from "./connectors";
 import { composerStateSchema, composerTarget, maxImages, outgoingImageSchema, queuedMessageSchema } from "./composer";
+import { draftImageInputSchema, formDraftFieldsSchema, formDraftImageLimit, formDraftKeySchema, readDraftOutput } from "./form-drafts";
 import {
   sessionReadStateSchema,
   sessionReadReceiptSchema,
@@ -382,6 +383,8 @@ export const addCardImage = defineRpc({
     expectedRevision: z.number().int(),
     image: z.strictObject({ name: z.string().max(200), mimeType: z.enum(cardImageMimeTypes), data: base64(5 * 1024 * 1024) }),
     thumb: z.strictObject({ mimeType: z.enum(cardImageMimeTypes), data: base64(1024 * 1024) }).optional(),
+    /** Retrying the same upload (same key, type and size) returns the card unchanged (CARD-IMAGES-SPEC §3). */
+    uploadKey: z.string().regex(/^[A-Za-z0-9-]{1,80}$/).optional(),
   }),
   output: z.object({ task: taskSchema }),
 });
@@ -647,6 +650,27 @@ export const sendQueuedNow = defineRpc({
   name: "composer.send-now",
   input: composerTarget.extend({ id: z.string().min(1).max(200) }),
   output: z.object({ sent: z.boolean() }),
+});
+export const readFormDraft = defineRpc({
+  name: "form-drafts.read",
+  input: z.strictObject({ key: formDraftKeySchema }),
+  output: readDraftOutput,
+});
+export const saveFormDraft = defineRpc({
+  name: "form-drafts.save",
+  input: z.strictObject({
+    key: formDraftKeySchema,
+    baseRevision: z.number().int().min(0),
+    fields: formDraftFieldsSchema,
+    images: z.array(draftImageInputSchema).max(formDraftImageLimit),
+  }),
+  output: z.object({ revision: z.number().int().positive() }),
+});
+export const clearFormDraft = defineRpc({
+  name: "form-drafts.clear",
+  /** `revision`: the draft is cleared only while it is still that revision. */
+  input: z.strictObject({ key: formDraftKeySchema, revision: z.number().int().min(0).optional() }),
+  output: z.object({ ok: z.boolean() }),
 });
 export const sessionImage = defineRpc({
   name: "sessions.image",

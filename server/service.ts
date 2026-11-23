@@ -14,8 +14,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { BoardStore } from "./store";
 import { readSnapshot, SnapshotInvalidError, type ProjectSnapshot } from "./project-folder";
-import { linkLimits } from "../shared/model";
-import type { ProjectInput, TaskInput, Board, LinkedProjectInput, ProjectLinksEdit, Project, ProjectRemoval } from "../shared/model";
+import { linkLimits, operationReusedMessage } from "../shared/model";
+import type { ProjectInput, TaskInput, Task, Board, LinkedProjectInput, ProjectLinksEdit, Project, ProjectRemoval } from "../shared/model";
 import { effectiveRepos, sessionContext } from "../shared/scope";
 import { cardImageContextLine } from "./card-images";
 import { setupContextLine, setupMissing } from "../shared/card-setup";
@@ -148,6 +148,44 @@ export async function directory(path: string): Promise<string> {
   if (!(await stat(canonical)).isDirectory())
     throw new Error("Expected an existing directory.");
   return canonical;
+}
+
+/**
+ * The whole create request except its operationId (project, title, description,
+ * lane, priority, type, tags, workspace choice, source and external items),
+ * fixed when the card is made; later edits to the card do not change it.
+ */
+function createFingerprint(input: TaskInput) {
+  const request = [
+    input.projectId,
+    input.title.trim(),
+    input.description ?? "",
+    input.status ?? "todo",
+    input.priority ?? "normal",
+    input.type ?? null,
+    input.tags ?? [],
+    input.mode,
+    input.workspaceId ?? null,
+    input.baseRef ?? "",
+    input.branchName?.trim() || null,
+    input.ideaId ?? null,
+    input.followUpOf ?? null,
+    input.insightFindingId ?? null,
+    (input.externals ?? []).map((x) => [x.connectionId, x.key, x.itemType ?? null]),
+  ];
+  return createHash("sha256").update(JSON.stringify(request)).digest("hex").slice(0, 32);
+}
+
+/**
+ * A create whose operationId already made a card: the same request again (a
+ * lost response, a retry) returns that card, even if the card was edited since;
+ * a request with different content is refused, so edits from a stale draft are
+ * never answered with the old card (FORM-DRAFTS-SPEC §5). Cards made before the
+ * fingerprint existed keep the old behavior.
+ */
+function repeatedCreate(previous: Task, input: TaskInput) {
+  if (!previous.createFingerprint || previous.createFingerprint === createFingerprint(input)) return previous;
+  throw new Error(operationReusedMessage);
 }
 
 export class BoardService {
@@ -481,7 +519,7 @@ export class BoardService {
       const previous = board.tasks.find(
         (t) => t.operationId === input.operationId,
       );
-      if (previous) return previous;
+      if (previous) return repeatedCreate(previous, input);
       const project = board.projects.find((p) => p.id === input.projectId);
       if (!project || project.archivedAt)
         throw new Error("Project is unavailable or archived.");
@@ -577,7 +615,7 @@ export class BoardService {
           const duplicate = current.tasks.find(
             (t) => t.operationId === input.operationId,
           );
-          if (duplicate) return duplicate;
+          if (duplicate) return repeatedCreate(duplicate, input);
           const p = current.projects.find((p) => p.id === project.id);
           if (!p || p.archivedAt || p.primaryPath !== sourcePath)
             throw new Error("Project changed during workspace creation.");
@@ -606,6 +644,7 @@ export class BoardService {
             ) + 1,
             revision: 1,
             operationId: input.operationId,
+            createFingerprint: createFingerprint(input),
             createdAt: now,
             updatedAt: now,
             archivedAt: null,

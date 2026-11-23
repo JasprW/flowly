@@ -32,8 +32,11 @@ import { modelSettings, modelSettingsValues } from "../shared/settings";
 import { launchKanbanSession } from "./session";
 import { ImageAttachments, useImageAttachments } from "./image-attach";
 import { makeThumbnail } from "./web-images";
+import { DraftNotice, draftAttachments, snapshotImages, useDraftChanges, useFormDraft, type FormDraft } from "./form-draft";
+import { formDraftKey } from "../shared/form-drafts";
+import { restoredTask } from "./task-draft";
 import { uploadCardImages } from "./card-image-upload";
-import { cardImageLimit } from "../shared/model";
+import { cardImageLimit, operationReusedMessage } from "../shared/model";
 import { DirectoryChooser } from "./directory-picker";
 import { t, tn } from "../shared/i18n";
 import { tagValues } from "../shared/tags";
@@ -440,7 +443,7 @@ export type TaskSeed = {
   tags?: string[];
 };
 
-export function TaskForm({
+function TaskFormBody({
   hostId,
   boardTasks,
   project,
@@ -450,6 +453,10 @@ export function TaskForm({
   onClose,
   onSaved,
   agentDefaults,
+  draft,
+  busy,
+  closing,
+  requestClose,
 }: {
   hostId: string;
   /** Every card the board knows (its overview), for workspaces already bound in other projects. */
@@ -462,9 +469,15 @@ export function TaskForm({
   /** `launch` reports the optional first agent started with a new task. */
   onSaved: (id: string, launch?: { sessionId?: string; error?: string }, status?: Status) => void;
   agentDefaults?: AgentDefaults;
+  draft: FormDraft;
+  busy: { current: boolean };
+  closing: { current: boolean };
+  requestClose(): void;
 }) {
   const theme = useTheme();
   const [task] = useState(initialTask);
+  // New task starts from its saved draft, else the seed (docs/FORM-DRAFTS-SPEC.md).
+  const saved = task ? undefined : draft.draft?.fields;
   const create = useRpc(rpc.createTask),
     update = useRpc(rpc.updateTask),
     addImage = useRpc(rpc.addCardImage);
@@ -477,27 +490,26 @@ export function TaskForm({
   }, [ready]);
   // This project's cards, tags and external items; never the whole board (LOADING-R2-SPEC §2B).
   const index = useProjectIndexQuery(hostId, project.id, ready);
-  const [title, setTitle] = useState(task?.title || seed?.title || ""),
-    [description, setDescription] = useState(task?.description || seed?.description || ""),
-    [status, setStatus] = useState<Status>(task?.status || startStatus(project, defaultStatus)),
-    [priority, setPriority] = useState(task?.priority || seed?.priority || "normal"),
-    [type, setType] = useState<TaskType | "">(task?.type || seed?.type || ""),
+  const [restored] = useState(() => restoredTask(saved, project, defaultStatus));
+  const [title, setTitle] = useState(task?.title ?? restored.title ?? seed?.title ?? ""),
+    [description, setDescription] = useState(task?.description ?? restored.description ?? seed?.description ?? ""),
+    [status, setStatus] = useState<Status>(task?.status || restored.status || startStatus(project, defaultStatus)),
+    [priority, setPriority] = useState(task?.priority || restored.priority || seed?.priority || "normal"),
+    [type, setType] = useState<TaskType | "">(task?.type ?? restored.type ?? seed?.type ?? ""),
     // What the form opened with: a save applies only the difference (CARD-TAGS-SPEC §2.5).
     [tagsBase] = useState(() => (task ? tagValues(task) : [])),
-    [tags, setTags] = useState<string[]>(() => (task ? tagValues(task) : seed?.tags || [])),
-    [mode, setMode] = useState<"directory" | "worktree" | "existing">(
-      "directory",
-    ),
-    [workspaceId, setWorkspace] = useState(""),
-    [branchName, setBranch] = useState(""),
-    [baseRef, setBase] = useState(""),
+    [tags, setTags] = useState<string[]>(() => (task ? tagValues(task) : restored.tags ?? seed?.tags ?? [])),
+    [mode, setMode] = useState<"directory" | "worktree" | "existing">(restored.mode || "directory"),
+    [workspaceId, setWorkspace] = useState(restored.workspaceId || ""),
+    [branchName, setBranch] = useState(restored.branchName || ""),
+    [baseRef, setBase] = useState(restored.baseRef || ""),
     [pending, setPending] = useState(false),
     [error, setError] = useState("");
   // From… (EXTERNAL-TRACKER-SPEC §5, CONNECTORS-SPEC §8.2): items added as inputs with the new card.
   const resources = useResourcesQuery({ enabled: ready && !task && mode === "existing" });
   const connections = useConnections(ready && !task);
   const byFamily = useMemo(() => connectionsByFamily(connections.data?.connections || []), [connections.data]);
-  const [externals, setExternals] = useState<{ item: ExternalSummary; provider: ConnectorProvider }[]>([]),
+  const [externals, setExternals] = useState<{ item: ExternalSummary; provider: ConnectorProvider }[]>(() => restored.externals),
     [picking, setPicking] = useState<ConnectorFamily | null>(null);
   // The title the last pick filled in: a later pick may replace it only while it is unchanged.
   const prefilled = useRef("");
@@ -539,18 +551,22 @@ export function TaskForm({
       if (titles.has(x.taskId)) used.set(pickKey(familyOf(x.provider), x.key), titles.get(x.taskId)!);
     return used;
   }, [index.data]);
-  const [operationId] = useState(
-    () => `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+  // Kept in the draft: a retry after reopening reuses the server's idempotent create.
+  const newOperationId = () => `card-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const [operationId, setOperationId] = useState(() => restored.operationId || draft.unsavedOperation() || newOperationId());
   // Optional first agent for a new task (remembered on/off choice).
   const view = useBoardView();
-  const [startAgent, setStartAgentState] = useState<boolean | null>(null);
+  const [startAgent, setStartAgentState] = useState<boolean | null>(restored.startAgent ?? null);
   const startChosen = !task && (startAgent ?? view.values?.startAgentOnCreate ?? true);
   const setStartAgent = (next: boolean) => {
     setStartAgentState(next);
     if (view.values && view.values.startAgentOnCreate !== next) void view.update({ startAgentOnCreate: next });
   };
-  const choice = useAgentChoice({ enabled: ready && startChosen, cwd: project.primaryPath, defaults: agentDefaults });
+  const choice = useAgentChoice({
+    enabled: ready && startChosen,
+    cwd: project.primaryPath,
+    defaults: restored.agent ? { ...restored.agent, provider: restored.agent.provider || agentDefaults?.provider || "" } : agentDefaults,
+  });
   // The project's lanes. New tasks start in an active lane (finished ones only
   // when added from that lane); an edited card keeps showing its current lane.
   const lanes = enabledStatuses(project);
@@ -558,11 +574,36 @@ export function TaskForm({
     ? lanes.includes(task.status) ? lanes : [...lanes, task.status]
     : lanes.filter((s) => (s !== "done" && s !== "cancelled") || s === defaultStatus);
   // The agent's first message; required, never prefilled (title and description already reach it as context).
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(restored.prompt ?? "");
+  // Built once per mount (the form remounts per loaded draft), never per keystroke.
+  const [restoredImages] = useState(() => (task ? undefined : draftAttachments(draft.draft)));
   // Description images (web: paste, drop or Add images), uploaded once the card is saved (CARD-IMAGES-SPEC §4.2).
-  const images = useImageAttachments(cardImageLimit - (task?.images?.length || 0), () =>
-    t("At most {cardImageLimit} images per card.", { cardImageLimit }),
+  const images = useImageAttachments(
+    cardImageLimit - (task?.images?.length || 0),
+    () => t("At most {cardImageLimit} images per card.", { cardImageLimit }),
+    restoredImages,
   );
+  const draftFields = {
+      title,
+      description,
+      status,
+      priority,
+      type,
+      tags,
+      mode,
+      workspaceId,
+      branchName,
+      baseRef,
+      ...(startAgent === null ? {} : { startAgent }),
+      provider: choice.provider,
+      model: choice.model,
+      agentMode: choice.mode,
+      thinking: choice.thinking,
+      prompt,
+      externals: externals.length ? JSON.stringify(externals) : "",
+      operationId,
+    };
+  useDraftChanges(draft, !task && draft.status !== "loading", draftFields, images.attachments);
   const contextRead = useRpc(rpc.taskContext),
     prepare = useRpc(rpc.prepareSession),
     paseo = usePaseo();
@@ -577,9 +618,14 @@ export function TaskForm({
   const addTags = useStableCallback((values: string[]) => setTags((current) => [...current, ...values.filter((v) => !current.includes(v))]));
   const removeTag = useStableCallback((tag: string) => setTags((current) => current.filter((x) => x !== tag)));
   async function save() {
+    // A close in progress wins; it would unmount the form under a running create.
+    if (closing.current || busy.current) return;
     setPending(true);
+    busy.current = true;
     setError("");
     try {
+      // The operationId must be on the daemon before the first create, so a retry after a lost response reuses it.
+      if (!task && !(await draft.persist({ fields: draftFields, images: snapshotImages(images.list()) }, operationId))) return;
       const result = task
         ? await update({
             id: task.id,
@@ -611,6 +657,8 @@ export function TaskForm({
               ? { externals: externals.map((x) => ({ connectionId: x.item.connectionId, key: x.item.key, itemType: x.item.itemType })) }
               : {}),
           });
+      // The card exists: its draft is done, so a later retry or an agent that fails to start never makes a second card.
+      if (!task) await draft.clear().catch((e) => toast.error(t("The draft was not cleared: {error}", { error: message(e) })));
       const pendingImages = images.list();
       if (pendingImages.length) {
         // Before the first agent starts, so its context lists them.
@@ -634,8 +682,16 @@ export function TaskForm({
         onSaved(result.id, { error: message(e) });
       }
     } catch (e) {
-      setError(message(e));
+      if (!task && message(e).includes(operationReusedMessage)) {
+        // This draft's create identity already made a card with other content (a draft whose clear failed, or
+        // another window): the edits get a new identity, saved with the draft, so Create makes a new card.
+        const next = newOperationId();
+        setOperationId(next);
+        await draft.persist({ fields: { ...draftFields, operationId: next }, images: snapshotImages(images.list()) }, next).catch(() => false);
+        setError(t("A card was already created from this draft. Create again to make a new card with these changes."));
+      } else setError(message(e));
     } finally {
+      busy.current = false;
       setPending(false);
     }
   }
@@ -650,15 +706,6 @@ export function TaskForm({
   // Enter submits, Shift+Enter is a new line.
   const submit = canSave ? () => void save() : undefined;
   return (
-    <Modal
-      open
-      title={task ? t("Edit task") : seed?.ideaId ? t("Create task from idea") : seed?.followUpOf ? t("Create follow-up task") : t("Create task")}
-      onOpenChange={(open) => {
-        if (!open && !pending) onClose();
-      }}
-    >
-      <Modal.Content>
-        <Theme.Provider value={theme}>
         <View style={{ gap: 16 }}>
           {!!seed?.followUpTitle && (
             <Label muted size={font.sm} lines={1}>{t("Follow-up of {title}", { title: seed.followUpTitle })}</Label>
@@ -866,8 +913,16 @@ export function TaskForm({
           </> : <Label muted>{t("Loading…")}</Label>}
           {resources.error && <Notice>{message(resources.error)}</Notice>}
           {error && <Notice>{error}</Notice>}
+          <DraftNotice
+            draft={draft}
+            busy={pending}
+            onDiscardClose={() => {
+              draft.discard();
+              onClose();
+            }}
+          />
           <Actions>
-            <Button quiet disabled={pending} onPress={onClose}>
+            <Button quiet disabled={pending} onPress={requestClose}>
               {t("Cancel")}</Button>
             <Button
               primary
@@ -879,11 +934,51 @@ export function TaskForm({
             </Button>
           </Actions>
         </View>
+  );
+}
+
+type TaskFormProps = Omit<Parameters<typeof TaskFormBody>[0], "draft" | "busy" | "closing" | "requestClose">;
+
+/**
+ * New task / Edit task. A new task's draft (per project and prefill source) is
+ * saved on the daemon and restored when the form opens again (docs/FORM-DRAFTS-SPEC.md).
+ */
+export function TaskForm(props: TaskFormProps) {
+  const theme = useTheme();
+  const { task, seed, project, onClose } = props;
+  const draft = useFormDraft(task ? null : formDraftKey("task", project.id, seed), true, cardImageLimit);
+  const busy = useRef(false);
+  const closing = useRef(false);
+  // Close, Cancel, Esc and Back save what is pending first; a failed save keeps the form open.
+  const requestClose = () => {
+    if (busy.current || closing.current) return;
+    closing.current = true;
+    void draft.flush().then((saved) => {
+      closing.current = false;
+      if (saved && !busy.current) onClose();
+    });
+  };
+  return (
+    <Modal
+      open
+      title={task ? t("Edit task") : seed?.ideaId ? t("Create task from idea") : seed?.followUpOf ? t("Create follow-up task") : t("Create task")}
+      onOpenChange={(open) => {
+        if (!open) requestClose();
+      }}
+    >
+      <Modal.Content>
+        <Theme.Provider value={theme}>
+          {draft.status === "loading" ? (
+            <Label muted>{t("Loading…")}</Label>
+          ) : (
+            <TaskFormBody key={draft.generation} {...props} draft={draft} busy={busy} closing={closing} requestClose={requestClose} />
+          )}
         </Theme.Provider>
       </Modal.Content>
     </Modal>
   );
 }
+
 
 /** The value after it has been stable for `delay` ms. */
 function useDebounced<T>(value: T, delay: number) {

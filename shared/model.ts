@@ -273,6 +273,8 @@ export const cardImageSchema = z.object({
   bytes: z.number().int().positive(),
   /** Set when a thumbnail was stored beside the image. */
   thumbMimeType: z.enum(cardImageMimeTypes).optional(),
+  /** The client's key for this upload (a New task draft image's id), so a retried add is not stored twice. */
+  uploadKey: z.string().max(80).optional(),
   createdAt: timestamp,
 });
 export type CardImage = z.infer<typeof cardImageSchema>;
@@ -295,6 +297,12 @@ export const taskSchema = z.object({
   position: z.number(),
   revision: z.number().int().positive(),
   operationId: z.string(),
+  /**
+   * Absent on cards made before it. A fingerprint of the create request (project,
+   * trimmed title, description), so a retry of that request is told from a
+   * different one under the same operationId (FORM-DRAFTS-SPEC §5).
+   */
+  createFingerprint: z.string().max(100).optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
   archivedAt: timestamp.nullable(),
@@ -683,6 +691,11 @@ export const projectEdit = z.strictObject({
   agentModel: agentModelSchema.nullable().optional(),
   autoReview: autoReviewInput.optional(),
 });
+/**
+ * Refusal of a create whose operationId already made a card with a different
+ * title, description or project (FORM-DRAFTS-SPEC §5). Compared as an identity.
+ */
+export const operationReusedMessage = "This create request already made a card with different content.";
 export const taskInput = z.strictObject({
   projectId: z.string(),
   operationId: z.string().min(1).max(200),

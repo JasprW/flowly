@@ -6,14 +6,17 @@ type Add = (input: {
   expectedRevision: number;
   image: { name: string; mimeType: OutgoingImage["mimeType"]; data: string };
   thumb?: OutgoingImage;
+  uploadKey?: string;
 }) => Promise<{ task: Task }>;
 
 /**
  * Uploads images to a card one by one after the card is saved
  * (CARD-IMAGES-SPEC §4.2), each with the revision the previous add returned.
- * A failed image is reported and the rest still go; nothing is retried.
+ * A failed image is reported and the rest still go; nothing is retried here.
+ * Each image's id is its upload key, so creating again from the same draft
+ * adds only the images the card does not hold yet.
  */
-export async function uploadCardImages<Image extends OutgoingImage & { name: string }>(
+export async function uploadCardImages<Image extends OutgoingImage & { name: string; id?: string }>(
   add: Add,
   taskId: string,
   revision: number,
@@ -31,6 +34,7 @@ export async function uploadCardImages<Image extends OutgoingImage & { name: str
         expectedRevision: current,
         image: { name: image.name, mimeType: image.mimeType, data: image.data },
         ...(thumb ? { thumb } : {}),
+        ...(image.id && /^[A-Za-z0-9-]{1,80}$/.test(image.id) ? { uploadKey: image.id } : {}),
       });
       current = task.revision;
     } catch (e) {

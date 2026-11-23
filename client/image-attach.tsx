@@ -51,10 +51,11 @@ export function AttachmentThumb({ attachment, onRemove }: { attachment: Attachme
  * drop or the file chooser (`client/web-images.ts`); phones have no
  * plugin-accessible picker (user decision 2026-10-21, SESSION-PANE-SPEC §6).
  */
-export function useImageAttachments(limit = maxImages, tooMany?: () => string) {
+export function useImageAttachments(limit = maxImages, tooMany?: () => string, initial?: readonly Attachment[]) {
   const toast = useToast();
-  const [attachments, setState] = useState<Attachment[]>([]);
-  const current = useRef<Attachment[]>([]);
+  // A restored draft's images (docs/FORM-DRAFTS-SPEC.md), within this form's limit.
+  const [attachments, setState] = useState<Attachment[]>(() => (initial || []).slice(0, Math.max(0, limit)));
+  const current = useRef<Attachment[]>(attachments);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -95,8 +96,9 @@ export function useImageAttachments(limit = maxImages, tooMany?: () => string) {
 
 /**
  * Wraps a message field: pasted or dropped images on it are attached, and an
- * "Add images" button with the thumbnails sits below. Renders only the field
- * where image input is unsupported (phones).
+ * "Add images" button with the thumbnails sits below. Where image input is
+ * unsupported (phones) only attachments already there (a restored draft) show,
+ * each with its remove button, so nothing is sent that the user cannot see.
  */
 export function ImageAttachments({
   state,
@@ -113,15 +115,21 @@ export function ImageAttachments({
   const blocked = useRef(disabled);
   blocked.current = disabled;
   useEffect(() => listenForImages(node, (files) => !blocked.current && void add.current(files)), [node]);
-  if (!imageInputSupported) return <>{children}</>;
+  const thumbs = state.attachments.map((a) => <AttachmentThumb key={a.id} attachment={a} onRemove={() => state.remove(a.id)} />);
+  // One tree whether or not images are shown, so removing the last one never remounts the field.
+  if (!imageInputSupported)
+    return (
+      <View style={{ gap: space[2] }}>
+        {children}
+        {!!thumbs.length && <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>{thumbs}</View>}
+      </View>
+    );
   const full = state.attachments.length >= state.limit;
   return (
     <View ref={setNode} style={{ gap: space[2] }}>
       {children}
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>
-        {state.attachments.map((a) => (
-          <AttachmentThumb key={a.id} attachment={a} onRemove={() => state.remove(a.id)} />
-        ))}
+        {thumbs}
         <Button quiet icon="ImagePlus" disabled={disabled || full} onPress={() => void pickImageFiles().then((files) => state.add(files))}>
           {t("Add images")}
         </Button>
