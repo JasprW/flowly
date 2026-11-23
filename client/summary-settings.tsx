@@ -177,7 +177,7 @@ function SettingsNavRow({ icon, label, selected, stacked, onPress }: { icon: str
 }
 
 /** Left column of sections, right column with the selected section's settings; the sections become a strip on top in narrow windows. */
-function SettingsPanes({ open, initial, onTour, onShortcuts, onWhatsNew, fill = false }: { open: boolean; initial?: SettingsSection; onTour(): void; onShortcuts(): void; onWhatsNew(): void; fill?: boolean }) {
+function SettingsPanes({ open, initial, onTour, onShortcuts, onWhatsNew, fill = false }: { open: boolean; initial?: SettingsSection; onTour(): void; onShortcuts?(): void; onWhatsNew(): void; fill?: boolean }) {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const stacked = Math.min(modalMaxWidth, fill ? width : width - 32) < 560;
@@ -260,7 +260,7 @@ type SettingsWindowProps = {
   section?: SettingsSection;
   onClose(): void;
   onTour(): void;
-  onShortcuts(): void;
+  onShortcuts?(): void;
   onWhatsNew(): void;
 };
 

@@ -56,7 +56,7 @@ Title with detail "Your first three steps." (plus "Nothing is created until you 
 
 ### 4. Re-entry
 
-- Reopen the tour from **Flowly settings → General → Show welcome tour**, the empty-board **Take the tour** link, or the Command Center entry **Flowly: Welcome tour**. Expanded native layouts also offer a **Welcome tour** help icon in the board header. Opening the tour manually leaves `welcomeSeen` as stored. The tour opens only in the full board screen.
+- Reopen the tour from **Flowly settings → General → Show welcome tour** on all layouts, the empty-board **Take the tour** link, or the Command Center entry **Flowly: Welcome tour**. Opening the tour manually leaves `welcomeSeen` as stored. The tour opens only in the full board screen.
 - **Settings → General → Show tips again** clears `tipsSeen` only. Opening the tour from Settings closes Settings first and opens the tour 450 ms later.
 
 ### 5. One-time contextual tips (small, non-modal)

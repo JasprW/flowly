@@ -1802,9 +1802,6 @@ function BoardContent(
               />
             )}
             {(compact || projects.length === 0) && <View style={{ flex: 1 }} />}
-            {touch && !compact && (
-              <IconButton icon="CircleHelp" label={t("Welcome tour")} onPress={() => setWelcomeOpen(true)} />
-            )}
             <View ref={attentionRef} collapsable={false}>
               <AttentionButton
                 count={attention.length}
@@ -2610,7 +2607,7 @@ function BoardContent(
           theme={props.theme}
           onClose={() => setMenu(null)}
           onTour={() => openFromSettings(() => setWelcomeOpen(true))}
-          onShortcuts={() => openFromSettings(() => setMenu("shortcuts"))}
+          onShortcuts={!touch || !compact ? () => openFromSettings(() => setMenu("shortcuts")) : undefined}
           onWhatsNew={() => openFromSettings(() => setWhatsNewOpen(true))}
         />
         <WelcomeTour
