@@ -48,8 +48,8 @@
 
 ### 2.3 可发现性
 
-- 桌面头部新增“Keyboard shortcuts”图标按钮（`Keyboard` 图标），点击或按 `?` 打开帮助弹层，列出所有按键和说明，并说明“焦点需在看板内”与 Command Center 入口。
-- 桌面头部 Projects / Attention / Filter / New task / 帮助按钮的无障碍标签附带快捷键（如 `New task (N)`、`Task filters (/)`）。不使用 RN-Web 专有的 `accessibilityKeyShortcuts`，因为 React Native 类型未声明它。
+- 桌面与原生宽屏（看板可用宽度至少 760）通过 **Flowly settings → General → Keyboard shortcuts** 打开快捷键帮助。设置先关闭，再打开同一个快捷键弹窗。窄桌面窗口也能打开这份列表。原生宽屏上的列表仅供参考，实际按键触发条件见 §2.1。桌面的 `?` 由看板收到时打开 Flowly 快捷键弹窗，Paseo 0.17.3 会优先用它打开宿主自己的快捷键弹窗。Command Center 的 Flowly 快捷键条目直接打开 Flowly 列表。
+- 桌面头部 Projects / Attention / Filter / Search / New task 的无障碍标签附带快捷键（如 `New task (N)`、`Task filters (/)`）。不使用 RN-Web 专有的 `accessibilityKeyShortcuts`，因为 React Native 类型未声明它。
 
 ### 2.4 Command Center 条目（全局）
 
@@ -61,7 +61,7 @@
 | `Ultra Kanban: Search and filter tasks` | 打开看板并打开筛选/搜索 |
 | `Flowly: Search` | 打开看板并打开 Search 页（intent `search`，SEARCH-SPEC §5） |
 | `Ultra Kanban: Needs attention` | 打开看板并打开 Attention |
-| `Ultra Kanban: Keyboard shortcuts` | 打开看板并打开快捷键帮助 |
+| `Flowly: Keyboard shortcuts` | 打开看板并打开快捷键帮助 |
 
 数据契约：`openScreen({ screenId: "board", params: { intent, at } })`。
 

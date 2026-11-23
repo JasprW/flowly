@@ -111,6 +111,7 @@ import { GuardrailsPage } from "./guardrails";
 import { MemoryPage, type MemoryPrefs } from "./memory";
 import { lastViewedProject, pickProject, rememberViewedProject } from "./project-memory";
 import { ProjectTabs } from "./project-tabs";
+import { ProjectChooserDialog } from "./project-chooser-dialog";
 import { RemoveProjectDialog } from "./project-remove";
 import { boardOverview } from "./overview";
 import { enabledStatuses, laneName } from "../shared/lanes";
@@ -482,6 +483,7 @@ function BoardContent(
   }, [resolvedLink.data, resolvedLink.dataUpdatedAt, resolvedLink.isFetching, linkKey]);
   const { colors } = props.theme;
   const compact = isCompactLayout(surfaceWidth || routeWidth);
+  const desktopHeader = !touch && !compact;
   // Keep the compact tree/scroll position, but leave hidden work to the visible detail/page.
   const boardActive = boardIsActive(compact, taskId, page, !!taskForm);
   // Every layout reads the overview, never the whole board (LOADING-R2-SPEC §2A). A compact board under an
@@ -544,6 +546,7 @@ function BoardContent(
   const projects = projectOrderOverride
     ? serverProjects.slice().sort((a, b) => projectOrderOverride.indexOf(a.id) - projectOrderOverride.indexOf(b.id))
     : serverProjects;
+  const showProjectTabs = !compact && projects.length > 0;
   const boardSort: BoardSort = view.values?.boardSort || "manual";
   // What cards show (CARD-DISPLAY-SPEC); one object for all cards so memoized cards stay put.
   const cardActivity = view.values?.cardActivity, cardHiddenKey = (view.values?.cardHidden || []).join(",");
@@ -1169,8 +1172,11 @@ function BoardContent(
     blocked: dialogOpen || !!taskId,
   });
   const welcomeHandled = useRef("");
-  const tourTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (tourTimer.current) clearTimeout(tourTimer.current); }, []);
+  const afterSettingsClose = useAfterModalClose();
+  const openFromSettings = (open: () => void) => {
+    setMenu(null);
+    afterSettingsClose(open);
+  };
   useEffect(() => {
     if (inPanel || welcomeHandled.current === welcome) return;
     if (welcome === "show") {
@@ -1251,7 +1257,7 @@ function BoardContent(
           hasTicket: !task && projectTasks.some(x => factsByTask.get(x.id)?.hasExternal),
           cardOpen: !!task,
           noConnection: !task && projectTasks.some((x) => !x.archivedAt) && connections.data?.connections.length === 0,
-          projectTabs: !task && !compact && projects.length > 1,
+          projectTabs: !task && desktopHeader && projects.length > 1,
           hasWorkpad: !task && workpadEnabled(project) && projectTasks.some(x => factsByTask.get(x.id)?.hasWorkpad),
           busyBoard: !task && projectTasks.filter((x) => !x.archivedAt).length >= 6,
           hasSubagent: projectHasSubagent,
@@ -1394,7 +1400,7 @@ function BoardContent(
       }
     />
   );
-  const projectMenuClose = () => setMenu(null);
+  const projectMenuClose = () => setMenu((current) => current === "projects" ? null : current);
   const moveProjectRpc = useRpc(rpc.moveProject);
   const reorderProject = (id: string, move: { direction: "up" | "down" | "top" } | { to: number }) =>
     void doAction(async () => {
@@ -1444,7 +1450,7 @@ function BoardContent(
       { id: "remove", label: t("Remove…"), icon: "Trash2", danger: true, disabled: pending, onPress: () => setRemoving(p) },
     ];
   };
-  const shortcutsOn = Platform.OS === "web" && !compact;
+  const shortcutsOn = desktopHeader;
   const withKey = (text: string, key: string) =>
     shortcutsOn ? `${text} (${key})` : text;
   function runIntent(intent: BoardIntent | Exclude<ShortcutAction, BoardIntent>) {
@@ -1764,7 +1770,7 @@ function BoardContent(
               borderColor: colors.border,
             }}
           >
-            {compact || projects.length === 0 ? (
+            {!showProjectTabs ? (
               <ProjectSwitcher
                 title={project?.title || t("Projects")}
                 archived={!!project?.archivedAt}
@@ -1798,17 +1804,7 @@ function BoardContent(
                 onPress={() => setProjectForm("edit")}
               />
             )}
-            {(compact || projects.length === 0) && <View style={{ flex: 1 }} />}
-            {!compact && (
-              <IconButton icon="CircleHelp" label={t("Welcome tour")} onPress={() => setWelcomeOpen(true)} />
-            )}
-            {shortcutsOn && (
-              <IconButton
-                icon="Keyboard"
-                label={withKey(t("Keyboard shortcuts"), "?")}
-                onPress={() => setMenu("shortcuts")}
-              />
-            )}
+            {!showProjectTabs && <View style={{ flex: 1 }} />}
             <View ref={attentionRef} collapsable={false}>
               <AttentionButton
                 count={attention.length}
@@ -1854,7 +1850,7 @@ function BoardContent(
               shortcut={shortcutsOn ? "/" : ""}
               onPress={() => setMenu("filters")}
             />
-            {project && !compact && (
+            {project && desktopHeader && (
               <Button
                 primary
                 icon="Plus"
@@ -2088,14 +2084,11 @@ function BoardContent(
           </View>
         )}
 
-        <Modal
+        <ProjectChooserDialog
           open={menu === "projects"}
-          title={t("Projects")}
-          onOpenChange={(open) => {
-            if (!open) projectMenuClose();
-          }}
+          nativeWide={touch && !props.layout.compact}
+          onClose={projectMenuClose}
         >
-          <Modal.Content contentContainerStyle={{ padding: space[3], gap: space[1] }}>
             <Theme.Provider value={props.theme}>
               <SortableList
                 items={projects}
@@ -2183,8 +2176,7 @@ function BoardContent(
                 }}
               />
             </Theme.Provider>
-          </Modal.Content>
-        </Modal>
+        </ProjectChooserDialog>
         <Modal
           open={menu === "filters"}
           title={t("Filters")}
@@ -2593,7 +2585,7 @@ function BoardContent(
           </CardDetailProvider>
         )}
         {compact && drawerView}
-        {compact && !task && !page && !!project && !project.archivedAt && !!board && (
+        {!desktopHeader && !task && !page && !!project && !project.archivedAt && !!board && (
           <NewTaskFab onPress={() => setTaskForm({ status: "todo" })} />
         )}
         {!(compact && task) && (
@@ -2613,17 +2605,9 @@ function BoardContent(
           section={settingsSection}
           theme={props.theme}
           onClose={() => setMenu(null)}
-          onTour={() => {
-            // One dialog at a time: Settings is its own modal, so let it close before the tour opens.
-            setMenu(null);
-            if (tourTimer.current) clearTimeout(tourTimer.current);
-            tourTimer.current = setTimeout(() => setWelcomeOpen(true), 450);
-          }}
-          onWhatsNew={() => {
-            setMenu(null);
-            if (tourTimer.current) clearTimeout(tourTimer.current);
-            tourTimer.current = setTimeout(() => setWhatsNewOpen(true), 450);
-          }}
+          onTour={() => openFromSettings(() => setWelcomeOpen(true))}
+          onShortcuts={!touch || !compact ? () => openFromSettings(() => setMenu("shortcuts")) : undefined}
+          onWhatsNew={() => openFromSettings(() => setWhatsNewOpen(true))}
         />
         <WelcomeTour
           open={welcomeOpen}

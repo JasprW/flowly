@@ -56,8 +56,8 @@ Title with detail "Your first three steps." (plus "Nothing is created until you 
 
 ### 4. Re-entry
 
-- There is no board overflow menu, so the entries are: a **Welcome tour** help icon in the board header (desktop/tablet layout), **Settings → Welcome tour → Show welcome tour** (every layout, including phones), the empty-board **Take the tour** link, and Command Center "Ultra Kanban: Welcome tour". Opening it manually ignores `welcomeSeen` and does not change it. The tour only opens in the full board screen, not in the workspace panel.
-- Settings → Welcome tour also has **Show tips again**: clears `tipsSeen` only (the tour itself is reopened by hand; clearing `welcomeSeen` would make the board silently mark existing users again). Opening the tour from Settings closes Settings first and opens the tour 450 ms later. Settings is a React Native `Modal` and the tour a host `Modal`; swapping two modals in one tick is the suspected cause of a reported whole-app freeze (not reproduced; unverified).
+- Reopen the tour from **Flowly settings → General → Show welcome tour** on all layouts, the empty-board **Take the tour** link, or the Command Center entry **Flowly: Welcome tour**. Opening the tour manually leaves `welcomeSeen` as stored. The tour opens only in the full board screen.
+- **Settings → General → Show tips again** clears `tipsSeen` only. Opening the tour from Settings closes Settings first and opens the tour 450 ms later.
 
 ### 5. One-time contextual tips (small, non-modal)
 
@@ -93,7 +93,7 @@ A tip is a single dismissible banner row (icon, one sentence, **Got it**) under 
 | `ai-language` | a card of the current project has an AI progress summary (AI-LANGUAGE-SPEC §7) | "AI-written text follows Settings → AI features → AI output language. It starts as your interface language." |
 | `summary-models` | the card has a summary; after `ai-language`; seen on visiting Summary models in Settings or the tour | "Choose summary models and their fallback order in Settings → Models. The default is Haiku, then Luna." |
 | `sidebar-order` | a card is open and it has at least one artifact or idea (DRAWER-SPEC, Section order) | "Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar." |
-| `project-menu` | desktop project tabs show two or more projects and no card is open (PROJECT-TABS-SPEC) | "Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove." |
+| `project-menu` | expanded web/desktop project tabs show two or more projects and no card is open (PROJECT-TABS-SPEC) | "Drag a project tab to reorder it. Right-click it for its settings, a new task, Insights, Ideas or Remove." |
 | `jira-connect` | the project has a card, no card is open, and no connection is configured (announces the feature; lowest priority) | "Work from Jira, Confluence, GitHub, GitLab, Azure DevOps, Shortcut or Linear: connect them in Settings → Connections, then start a card with From… or add items with the Artifacts +. Flowly only reads them." |
 
 Tips are the lowest-priority part of this feature and can ship after the tour (see Delivery).

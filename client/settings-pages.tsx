@@ -69,8 +69,7 @@ function Problem({ text }: { text?: string }) {
   return text ? <Notice>{text}</Notice> : null;
 }
 
-/** General: interface language and the welcome tour. */
-export function GeneralPage({ onTour, onWhatsNew }: { onTour(): void; /** Reopens What's new (WHATS-NEW-SPEC §5.1). */ onWhatsNew(): void }) {
+export function GeneralPage({ onTour, onShortcuts, onWhatsNew }: { onTour(): void; onShortcuts?(): void; onWhatsNew(): void }) {
   const language = useStored(useSettings(languageSettings), languageSettingsValues);
   const onboarding = useOnboarding();
   const [reset, setReset] = useState(false);
@@ -87,10 +86,9 @@ export function GeneralPage({ onTour, onWhatsNew }: { onTour(): void; /** Reopen
       >
         <SendBehaviorRow />
       </SettingsGroup>
-      <SettingsGroup
-        title={t("Welcome tour")}
-      >
+      <SettingsGroup title={onShortcuts ? undefined : t("Welcome tour")}>
         <SettingRow title={t("Show welcome tour")} onPress={onTour} trailing={<ChevronRight />} />
+        {onShortcuts && <SettingRow title={t("Keyboard shortcuts")} onPress={onShortcuts} trailing={<ChevronRight />} />}
         {whatsNew.length > 0 && <SettingRow title={t("What's new")} onPress={onWhatsNew} trailing={<ChevronRight />} />}
         <SettingRow
           title={t("Show tips again")}

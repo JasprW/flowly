@@ -177,7 +177,7 @@ function SettingsNavRow({ icon, label, selected, stacked, onPress }: { icon: str
 }
 
 /** Left column of sections, right column with the selected section's settings; the sections become a strip on top in narrow windows. */
-function SettingsPanes({ open, initial, onTour, onWhatsNew, fill = false }: { open: boolean; initial?: SettingsSection; onTour(): void; onWhatsNew(): void; fill?: boolean }) {
+function SettingsPanes({ open, initial, onTour, onShortcuts, onWhatsNew, fill = false }: { open: boolean; initial?: SettingsSection; onTour(): void; onShortcuts?(): void; onWhatsNew(): void; fill?: boolean }) {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const stacked = Math.min(modalMaxWidth, fill ? width : width - 32) < 560;
@@ -189,7 +189,7 @@ function SettingsPanes({ open, initial, onTour, onWhatsNew, fill = false }: { op
   const bodyHeight = fill ? undefined : Math.min(560, Math.max(340, height - 200));
   const pane =
     section === "general" ? (
-      <GeneralPage onTour={onTour} onWhatsNew={onWhatsNew} />
+      <GeneralPage onTour={onTour} onShortcuts={onShortcuts} onWhatsNew={onWhatsNew} />
     ) : section === "cards" ? (
       <CardsPage />
     ) : section === "models" ? (
@@ -237,26 +237,35 @@ function SettingsPanes({ open, initial, onTour, onWhatsNew, fill = false }: { op
 }
 
 /** Flowly settings, in two columns: sections on the left (language and guide, card workflow, AI summaries, ideas), their settings on the right. */
-export function SettingsModal({ open, section, theme, onClose, onTour, onWhatsNew }: { open: boolean; section?: SettingsSection; theme: PluginTheme; onClose(): void; onTour(): void; onWhatsNew(): void }) {
+export function SettingsModal({ open, theme, ...windowProps }: SettingsWindowProps & { theme: PluginTheme }) {
   useShortcutBlock(open);
   // Phones: an overlay inside the board, so Paseo's own frame (status bar, tabs) stays; a host Modal would cover all of it.
   if (touch)
     return open ? (
       <Theme.Provider value={theme}>
-        <SettingsWindow open section={section} onClose={onClose} onTour={onTour} onWhatsNew={onWhatsNew} />
+        <SettingsWindow open {...windowProps} />
       </Theme.Provider>
     ) : null;
   return (
-    <RNModal visible={open} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+    <RNModal visible={open} transparent animationType="fade" onRequestClose={windowProps.onClose} statusBarTranslucent>
       <Theme.Provider value={theme}>
-        <SettingsWindow open={open} section={section} onClose={onClose} onTour={onTour} onWhatsNew={onWhatsNew} />
+        <SettingsWindow open={open} {...windowProps} />
       </Theme.Provider>
     </RNModal>
   );
 }
 
+type SettingsWindowProps = {
+  open: boolean;
+  section?: SettingsSection;
+  onClose(): void;
+  onTour(): void;
+  onShortcuts?(): void;
+  onWhatsNew(): void;
+};
+
 /** Own window instead of the host Modal, whose width is fixed: backdrop, title bar and the two-column body. */
-function SettingsWindow({ open, section, onClose, onTour, onWhatsNew }: { open: boolean; section?: SettingsSection; onClose(): void; onTour(): void; onWhatsNew(): void }) {
+function SettingsWindow({ open, section, onClose, ...actions }: SettingsWindowProps) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   // Phones: fills the plugin's area (above the drawer's layer), instead of a floating window.
@@ -269,7 +278,7 @@ function SettingsWindow({ open, section, onClose, onTour, onWhatsNew }: { open: 
           </Label>
           <IconButton icon="X" label={t("Close")} onPress={onClose} />
         </View>
-        <SettingsPanes open={open} initial={section} onTour={onTour} onWhatsNew={onWhatsNew} fill />
+        <SettingsPanes open={open} initial={section} {...actions} fill />
       </View>
     );
   }
@@ -299,7 +308,7 @@ function SettingsWindow({ open, section, onClose, onTour, onWhatsNew }: { open: 
           </Label>
           <IconButton icon="X" label={t("Close")} onPress={onClose} />
         </View>
-        <SettingsPanes open={open} initial={section} onTour={onTour} onWhatsNew={onWhatsNew} />
+        <SettingsPanes open={open} initial={section} {...actions} />
       </View>
     </View>
   );

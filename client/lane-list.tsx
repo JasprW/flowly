@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { View } from "react-native";
 import { FlatList, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { space, verticalContent, verticalScroll } from "./ui";
-import { newTaskFabSize } from "./new-task-fab";
+import { newTaskFabBottomPadding } from "./new-task-fab";
 
 const separator = () => <View style={{ height: space[2] }} />;
 
@@ -26,7 +26,7 @@ export function LaneList<T>({
     padding: space[3],
     paddingTop: space[1],
     // Clears the floating New task and Settings buttons, so the last card stays reachable.
-    paddingBottom: newTaskFabSize + space[3] * 2,
+    paddingBottom: newTaskFabBottomPadding,
   };
   const common = { ...verticalScroll, style: { flex: 1, minHeight: 0 }, nestedScrollEnabled: true, keyboardShouldPersistTaps: "handled" as const };
   if (typeof FlatList !== "function")

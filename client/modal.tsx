@@ -8,14 +8,16 @@ import {
 } from "@getpaseo/plugin/client/react-native";
 import { useShortcutBlock } from "./shortcuts";
 import { MotionBridge, motionDuration, useMotionValue, useReducedMotion, lerp } from "./motion";
+import { Theme, useTheme } from "./ui";
 
 /** Host Modal that suspends board shortcuts while open; the host keeps Esc and focus. */
 const OpenContext = createContext(true);
 function TrackedModal(props: ModalProps) {
   useShortcutBlock(props.open);
+  const theme = useTheme();
   return (
     <OpenContext.Provider value={props.open}>
-      <HostModal {...props} />
+      <HostModal {...props} icon={props.icon && <Theme.Provider value={theme}>{props.icon}</Theme.Provider>} />
     </OpenContext.Provider>
   );
 }
@@ -40,16 +42,23 @@ function ModalEnter({ gap, fill, children }: { gap: number; fill: boolean; child
 }
 
 TrackedModal.Content = function Content(props: ModalContentProps) {
+  const theme = useTheme();
+  const open = useContext(OpenContext);
   const reduced = useReducedMotion();
   // One wrapper child must keep the container's gap between the caller's children (host default 16).
   const gap = (StyleSheet.flatten(props.contentContainerStyle) as ViewStyle | undefined)?.gap;
   return (
     <HostModal.Content {...props}>
-      <MotionBridge reduced={reduced}>
-        <ModalEnter gap={typeof gap === "number" ? gap : 16} fill={props.scrollable === false}>
-          {props.children}
-        </ModalEnter>
-      </MotionBridge>
+      {/* Native sheets reparent both header and body outside Flowly's context tree. */}
+      <Theme.Provider value={theme}>
+        <OpenContext.Provider value={open}>
+          <MotionBridge reduced={reduced}>
+            <ModalEnter gap={typeof gap === "number" ? gap : 16} fill={props.scrollable === false}>
+              {props.children}
+            </ModalEnter>
+          </MotionBridge>
+        </OpenContext.Provider>
+      </Theme.Provider>
     </HostModal.Content>
   );
 };
