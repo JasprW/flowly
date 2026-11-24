@@ -6,7 +6,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cardImagePath } from "./card-images";
 import { promisify } from "node:util";
 import type { PaseoApi } from "@getpaseo/client";
-import { laneEnabled } from "../shared/lanes";
+import { laneEnabled, laneProblem } from "../shared/lanes";
 import {
   autoReviewLimits,
   type AcceptanceItem,
@@ -599,6 +599,8 @@ export class AutoReviewService {
       if (!found) throw new Error("No agent delivered this card to In review, so there is no session to send rework to.");
       const now = this.now();
       if (task.status !== "in_review") {
+        const lane = laneProblem(project, "in_review");
+        if (lane) throw new Error(lane);
         const from = task.status;
         task.status = "in_review";
         task.revision++;

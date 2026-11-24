@@ -451,6 +451,19 @@ test("Rerun is refused in a work stage, in Blocked without a failed review, and 
   expect((await card(x)).reviewWaiting).toBeUndefined();
 });
 
+test("Rerun from Blocked is refused while the In review lane is off; the card stays in Blocked (§3.5)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await x.deliver("development");
+  const before = await card(x);
+  expect(before).toMatchObject({ status: "blocked", review: { state: "failed" } });
+  await x.store.mutate((b) => {
+    b.projects[0]!.lanes = projectLanes(null).map((l) => (l.status === "in_review" ? { ...l, enabled: false } : l));
+  });
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow("In review is not a lane in this project.");
+  expect(await card(x)).toMatchObject({ status: "blocked", revision: before.revision });
+  expect((await card(x)).reviewWaiting).toBeUndefined();
+});
+
 test("Rerun in In review while another review runs: the card waits and hides the old result until its review starts (§3.5)", async () => {
   const { reviewSignal, visibleReview } = await import("../shared/auto-review");
   const x = await setup({ exits: { "npm test": "spawn" } });

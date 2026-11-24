@@ -39,12 +39,14 @@ async function until(test, what, ms = 240000) {
 try {
   const mode = process.argv[2];
   if (mode === 'setup') {
-    if (state.card && !state.cleanup?.verified) throw new Error('Fixture already exists; run cleanup first');
+    // Any record left by an earlier run (even a partial setup) is kept until its cleanup is verified.
+    if (Object.keys(state).length && !state.cleanup?.verified) throw new Error('Earlier fixture state is not cleaned up; run cleanup first');
     state = {};
     await mkdir(scratch, { recursive: true });
     const b = await board();
     const p = b.projects.find((p) => p.title === 'Tinylink' && !p.archivedAt);
-    state.project = { id: p.id, paseo: p.paseoProjectId, original: p.autoReview }; await save();
+    const before = await rpc('guardrails.read', { projectId: p.id });
+    state.project = { id: p.id, paseo: p.paseoProjectId, original: p.autoReview, originalGuardrails: (before.value?.entries || []).map((e) => e.id) }; await save();
     const updated = await rpc('projects.update', { id: p.id, revision: p.revision, autoReview: { ...p.autoReview, enabled: true, maxRounds: 0 } });
     state.project.changed = true; await save();
     const code = `process.exit(require('node:fs').existsSync(${JSON.stringify(gate)})?0:1)`;
@@ -135,7 +137,7 @@ try {
     state.cleanup = { at: new Date().toISOString(), ...remains }; await save();
     console.log(JSON.stringify(remains, null, 1));
     const restored = JSON.stringify(remains.autoReview) === JSON.stringify(state.project.original);
-    if (remains.card || remains.dismissal || remains.guardrail.length !== (state.project.originalGuardrailEntries ?? 0) || !restored || remains.nativeAgents.length || remains.activeWorkspace.length) throw new Error('Fixture resources remain');
+    if (remains.card || remains.dismissal || remains.guardrail.some((id) => !(state.project.originalGuardrails || []).includes(id)) || !restored || remains.nativeAgents.length || remains.activeWorkspace.length) throw new Error('Fixture resources remain');
     await rm(scratch, { recursive: true, force: true });
     state.cleanup.verified = true; await save();
     console.log('cleanup verified');

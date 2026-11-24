@@ -131,7 +131,7 @@ stateDiagram-v2
 - **从 Blocked 重试**：同一次写入里把卡移到 In review（actor=human，`status_changed`，note “Rerun auto review”，task revision +1）并记下 `task.reviewWaiting`；然后入队评审。之后的一切按 In review 的评审走（§3.1、§3.2）：通过留在 In review；不通过按 R1 退回交付前的阶段并发返工消息；评审本身出错为 Unavailable 留在 In review。不在 Blocked 里原地评审，免得多一套“评审期间在 Blocked、通过后再移动”的状态。
 - **从 In review 重试**也在入队前记下 `task.reviewWaiting`，卡片显示 Waiting for review，不再在排队期间显示上一次的结果。等待中插件重启照 §3.1 记为 Unavailable。
 - **轮次**：Rerun 把 `round` 重置为 1（§3.3 不变）。所以返工到上限后按 Rerun，等于再给 agent 一整轮 `maxRounds` 次自动返工的机会；`maxRounds = 0` 时不通过直接回 Blocked。返工消息发给最近一次交付的 session（§5），它已归档或删除时为 Unavailable。
-- **错误**（daemon，英文，客户端 toast）：卡片不在 In review、也不是 Blocked 中的 failed → “Only a card in In review, or in Blocked after its review failed, can be reviewed again.”；其余沿用现有错误（Auto review 未开启、评审在跑、在等待、没有交付）。并发的两次 Rerun 由评审队列和 `reviewWaiting` 检查挡住第二次。
+- **错误**（daemon，英文，客户端 toast）：卡片不在 In review、也不是 Blocked 中的 failed → “Only a card in In review, or in Blocked after its review failed, can be reviewed again.”；从 Blocked 重试而项目关掉了 In review 栏 → “<栏名> is not a lane in this project.”（`laneProblem`，卡片不动）；其余沿用现有错误（Auto review 未开启、评审在跑、在等待、没有交付）。并发的两次 Rerun 由评审队列和 `reviewWaiting` 检查挡住第二次。
 - **入口**：抽屉 Workpad 的 Review 组标题右侧的 Rerun（同 §9.2，条件按上面放宽）。不加新的文字或按钮；Attention 行点开卡片即可看到 Rerun。
 
 **Attention 消除（D18）**：
@@ -587,7 +587,7 @@ Auto review                                   [开]
 - 接上条，评审仍不通过且 `maxRounds ≥ 1`：按 R1 退回交付前的阶段，返工消息发给最近一次交付的 session（Reworking 1/N）；`maxRounds = 0`：直接回 Blocked、Review failed，重新进入 Attention（新 key）。
 - 接上条，评审通过：留在 In review，Review passed，不进 Done。
 - In review 里按 Rerun：卡片显示 Waiting for review 直到评审开始，不再在排队期间显示上一次的结果。
-- `reviews.rerun` 拒绝：工作阶段里的卡（含 R1 之后投递失败的 Unavailable）、Blocked 但评审不是 failed、Done/Cancelled、Auto review 关闭、评审在跑或在等待、没有交付；错误信息如 §3.5，卡片不动。
+- `reviews.rerun` 拒绝：工作阶段里的卡（含 R1 之后投递失败的 Unavailable）、Blocked 但评审不是 failed、Done/Cancelled、Auto review 关闭、评审在跑或在等待、没有交付、从 Blocked 重试而 In review 栏已关闭；错误信息如 §3.5，卡片不动。
 - 卡片在 Blocked、Review failed：人在这张卡的 session 发一条消息 → 信号消失；那一轮没有 Kanban 汇报、A1r 把卡还原到 Blocked 后，信号**不再**出现，卡面仍是 Review failed。
 - 人把 Review failed 的卡从 Blocked 拖到 In review → 信号消失，卡面 Review failed，Rerun 可用。
 - R1 之后投递失败的 Unavailable（卡在工作阶段）：人给这张卡任一 session 发消息后信号消失；只打开卡片、Mark as read 不消失。
