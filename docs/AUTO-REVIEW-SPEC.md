@@ -2,7 +2,7 @@
 
 > 2026-10-28：本文部分内容被 [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) 取代（§12）。被取代：§1.1 用户路径、§4.1 L1、§4.2 的规则种类与 `types`、§6 全部配置、§7 Insights、§8.1 的 rules / guidance / reviewDraft、§8.4、§8.5 的多数 RPC、§9.2 的“Auto review 在 Workpad 之前、Workpad 默认收起”（评审现在是 Workpad 里的 Review 组，Workpad 默认展开）、§9.3、§9.6 的 What's new、§12 P3 的 2、4、5、D7、D8、D10、D11、D13–D16；仍有效：§2、§3、§4.3、§4.4 的 session 跑法、§4.5、§5、§8.2 骨架、§8.3、§9.1、§9.2 的 Rerun、§9.4、D1–D6、D9、D12、D17。
 
-状态：P1、P2、P3 已实现，未提交（§12）。决定见 §11。卡片 `4286f00a`（Auto Review）。
+状态：P1、P2、P3 已实现，未提交（§12）；§3.5（失败之后的重试与 Attention）已实现。决定见 §11。卡片 `4286f00a`（Auto Review）。
 
 ## 1. 目标与用户路径
 
@@ -86,8 +86,9 @@ stateDiagram-v2
   1. 退回目标 = 触发这次评审的交付事件的 `from`。它是 Design、Development 或 Test 且泳道开启时回到那里；否则（`from` 是非工作阶段、泳道已关闭、事件已被裁剪）按 `resumeStage()` 的 Blocked 分支取最近的工作阶段；仍没有时用第一个开启的工作阶段。
   2. 同一次写入里改状态（actor=system，`rule: "R1"`，task revision +1），**然后**发返工消息（§5）。状态先离开 In review，新一轮开始时 A1 就不会把卡改到 Development。
   3. 项目关闭 autoStatus 时 R1 照常运行。
-- **Failed（R2）**：返工次数已达 `maxRounds` 仍不通过，不再发消息；卡片移到 Blocked（actor=system，`rule: "R2"`，note “Auto review failed after N rework rounds”），进入 Attention。Blocked 泳道关闭时留在 In review。之后用户在该卡 session 里回复，A1 照常把卡拉回最近的工作阶段。
+- **Failed（R2）**：返工次数已达 `maxRounds` 仍不通过，不再发消息；卡片移到 Blocked（actor=system，`rule: "R2"`，note “Auto review failed after N rework rounds”），进入 Attention。Blocked 泳道关闭时留在 In review。之后用户在该卡 session 里回复，A1 照常把卡拉回最近的工作阶段；人也可以按 Rerun 重新评审（§3.5）。
 - **Unavailable**：评审机制本身出错：工作目录不可用、命令起不来或超时、评审 session 失败或输出无法解析、返工 session 已不在、评审进行中 Flowly 重启。卡片不动（R1 之后投递失败时保持退回状态），进入 Attention 并显示原因。不计返工次数。
+- Failed 与 Unavailable 的 Attention 在人对这张卡有动作后消除（§3.5）。
 - **Cancelled**：开始时记录指纹（task revision、workpad revision、HEAD sha、dirty）。写结果前指纹变了就丢弃结果：不改状态、不发消息、不进 Attention。卡片仍在 In review 时显示 “Review cancelled”，可 Rerun。共享工作区里别的卡提交也会让 HEAD 变化而取消。
 - 通过后从不自动移到 Done。
 
@@ -110,6 +111,41 @@ stateDiagram-v2
 - worktree 里要能跑项目命令（依赖已装好），否则命令检查按失败计；skill 和工具说明里写明。
 - **从 PR 自动找**（2026-11-13）：交付没带 `worktree`、卡片工作区不是 worktree、项目开着 Auto review、卡片这次是进入 In review（不是精确重放）时，取本次 `outputs` 和卡片已有的输出里的 PR/MR 链接（GitHub `…/owner/repo/pull/N`，GitLab `…/group/repo/-/merge_requests/N`）。链接的 host 和仓库路径要对上卡片仓库某个 remote 的 URL（读 `remote.*.url` 原值，scp/ssh/https 都认）；用 `git ls-remote <remote> refs/pull/N/head`（GitLab `refs/merge-requests/N/head`，5 秒超时，不弹凭据）取 head 提交，再找 HEAD 包含它（`merge-base --is-ancestor`）的 worktree，仓库自己的目录不算。所有链接加起来正好一个 worktree 时就按它评审（和显式带 `worktree` 一样记在交付事件上），交付结果的 `notice` 写明用了哪个 worktree、来自哪个链接；没有、不止一个、链接不是本仓库的、git 或网络失败时什么都不做，交付和评审照旧，不报错。显式的 `worktree` 总是优先。
 - 不带 `worktree` 也没找到的交付行为不变。Flowly 不创建 worktree（D6 不变），只用 agent 已有的。
+
+### 3.5 失败之后：人工重试与 Attention 消除（2026-11-24）
+
+状态：已实现。卡片 `c42cd541`（auto review优化）。决定见 D18、D19。实现：`rerunnablePlace`、`markReviewHandled`、`reviewSignal`（`shared/auto-review.ts`），`AutoReviewService.rerun`（`server/auto-review.ts`），`BoardStore.event`（`server/store.ts`，所有事件经它写入，回合开始与人改状态在这里记为已处理），`canRerun`（`client/task-review.tsx`）。
+
+**问题**（实现前的行为）：
+
+1. 返工到上限（Failed，R2）后卡片在 Blocked，而 Rerun 只在 In review 出现（`canRerun`，`client/task-review.tsx`；`rerun()` 拒绝 “Only a card in In review can be reviewed again.”，`server/auto-review.ts`）。人修了环境、改了检查或自己改了代码后，只能先把卡拖回 In review 才看得到 Rerun，没人知道这条路。
+2. Review failed / Review unavailable 的 Attention 信号（`reviewSignal`，`shared/auto-review.ts`）只看卡片还停在评审留下的位置，没有“人已经处理过”的概念。Mark as read 不清它；Dismiss 是“暂不处理”，卡片一有新信号（比如新的未读）整行带着 Review failed 回来。人回复 agent 时 A1 把卡拉回工作阶段，信号消失；但那一轮没有 Kanban 汇报（闲聊、提问）时 A1r 把卡还原到 Blocked，信号又出现。人把卡从 Blocked 拖到 In review，failed 在 In review 仍可见，信号也还在。
+3. R1 之后投递失败的 Unavailable 留在工作阶段，那里没有 Rerun，信号要等下一次交付才消失。
+
+**人工重试（Rerun）**：
+
+- **可以重试**：项目开启 Auto review 且有生效的检查、卡片和项目未归档、没有评审在跑或在等待、有可以返工的交付（最近一次 agent 交付到 In review 的事件，被裁剪时用评审记录的 `trigger`；`latestDelivery`，`server/auto-review.ts`），并且卡片满足其一：
+  - 在 In review（不变，任何已结束的评审状态）；
+  - 在 Blocked，且评审记录是 `failed`（即卡面显示 Review failed）。
+- 工作阶段里的 Unavailable 不提供 Rerun：那张卡在 agent 手里，下一次交付会重新评审；人要介入时给 session 发消息。
+- **从 Blocked 重试**：同一次写入里把卡移到 In review（actor=human，`status_changed`，note “Rerun auto review”，task revision +1）并记下 `task.reviewWaiting`；然后入队评审。之后的一切按 In review 的评审走（§3.1、§3.2）：通过留在 In review；不通过按 R1 退回交付前的阶段并发返工消息；评审本身出错为 Unavailable 留在 In review。不在 Blocked 里原地评审，免得多一套“评审期间在 Blocked、通过后再移动”的状态。
+- **从 In review 重试**也在入队前记下 `task.reviewWaiting`，卡片显示 Waiting for review，不再在排队期间显示上一次的结果。等待中插件重启照 §3.1 记为 Unavailable。
+- **轮次**：Rerun 把 `round` 重置为 1（§3.3 不变）。所以返工到上限后按 Rerun，等于再给 agent 一整轮 `maxRounds` 次自动返工的机会；`maxRounds = 0` 时不通过直接回 Blocked。返工消息发给最近一次交付的 session（§5），它已归档或删除时为 Unavailable。
+- **错误**（daemon，英文，客户端 toast）：卡片不在 In review、也不是 Blocked 中的 failed → “Only a card in In review, or in Blocked after its review failed, can be reviewed again.”；其余沿用现有错误（Auto review 未开启、评审在跑、在等待、没有交付）。并发的两次 Rerun 由评审队列和 `reviewWaiting` 检查挡住第二次。
+- **入口**：抽屉 Workpad 的 Review 组标题右侧的 Rerun（同 §9.2，条件按上面放宽）。不加新的文字或按钮；Attention 行点开卡片即可看到 Rerun。
+
+**Attention 消除（D18）**：
+
+- 评审记录加 `handledAt`（§8.2）：这次评审结束后，人第一次对这张卡有动作的时间。`reviewSignal` 在 `handledAt` 存在时不出信号；卡面、抽屉和 `get_task.review` 照常显示 Review failed / Review unavailable（那是卡片状态，不是提醒）。
+- 记为已处理的动作（只对 `failed` / `unavailable` 且已结束、还没有 `handledAt` 的记录，写入不改 task revision）：
+  1. 这张卡 workspace 里任一受管 session 开始一个回合（`agent.turn.before`，与 `agent.turn_started` 记录同一次写入，在 A1 之前）。Failed 和 Unavailable 都不发返工消息，所以评审结束之后开始的回合都来自人（含人新建的 session；Paseo 的定时任务也会算，可以接受）。之后 A1r 把卡还原到 Blocked 时信号不再回来。
+  2. 人改这张卡的状态（拖动、菜单、手机 Actions，任意 `actor: "human"` 的 `status_changed`），与改状态同一次写入。从 Blocked 拖到 In review 后卡面仍是 Review failed，可按 Rerun，但不再提醒。
+  3. Rerun：新评审替换整条记录（从 Blocked 重试时，移动那次写入先按第 2 条处理）。
+- 只打开卡片、看抽屉、Mark as read 不算处理（D18）。想放着不管仍用 Dismiss（ATTENTION-DISMISS-SPEC，规则不变）。
+- 新的评审替换记录，`handledAt` 随之消失，新的 Failed / Unavailable 照常进入 Attention（新的 key）。
+- 不影响卡片的其他 Attention 信号（提问、权限、错误、未读）：它们照旧计数。
+
+**不变**：人拖进 In review 不触发评审；通过不进 Done；返工消息的格式、投递与指纹取消规则不变。遥测不加字段（Rerun 不是新开关，也不是值得单独计数的核心动作）。引导：不改导览，不加提示，Rerun 是已有按钮换了出现的位置；没有新的界面文字，i18n 目录不变。
 
 ## 4. 检查
 
@@ -360,7 +396,7 @@ project.reviewDraft?: {
 
 - `task.reviewSetup?: true`：设置卡片。
 - `task.review`：最近一次评审，新的覆盖旧的；写入不改 task revision。
-- `task.reviewWaiting?: { eventId, agentId, from, since, worktree? }`：已交付、评审还没开始（§3.1）；写入不改 task revision。只清除 `eventId` 与自己相同的标记；交付指定的 worktree 一并保存，重启恢复时复制到 review，避免交付事件被裁剪后 Rerun 回退到共享工作区。
+- `task.reviewWaiting?: { eventId, agentId, from, since, worktree? }`：已交付、评审还没开始（§3.1）；写入不改 task revision。只清除 `eventId` 与自己相同的标记；交付指定的 worktree 一并保存，重启恢复时复制到 review，避免交付事件被裁剪后 Rerun 回退到共享工作区。Rerun 也写它（§3.5）：`eventId` 为 `rerun:<uuid>`（不是交付事件），`agentId`、`from`、`worktree` 取自 Rerun 用的那次交付；等待中重启时恢复出的评审 `trigger.eventId` 为空。
 
 ```
 Review {
@@ -377,6 +413,7 @@ Review {
             detail?, file?, line?,                     // 判定理由，passed 时也保留
             reason? }],                                // skipped/unavailable 的原因
   model?: string,
+  handledAt?: string,                      // 结束后人第一次对这张卡有动作的时间，只用于 failed/unavailable（§3.5）
   startedAt, finishedAt?
 }
 ```
@@ -396,7 +433,7 @@ Review {
 
 | 名称 | 输入 | 输出 |
 | --- | --- | --- |
-| `reviews.rerun` | `{ taskId }` | `{ ok }`；卡片须在 In review、项目开启且有生效的检查、没有评审在跑或在等待 |
+| `reviews.rerun` | `{ taskId }` | `{ ok }`；卡片须在 In review，或在 Blocked 且评审为 failed（先移到 In review）；项目开启且有生效的检查、没有评审在跑或在等待（§3.5） |
 | `reviews.detect-commands` | `{ projectId }` | `{ commands: [{ name, argv, checked }] }` |
 | `reviews.analyze-history` | `{ projectId }` | `{ status: "started" \| "running" \| "insufficient" }` |
 | `reviews.analysis-status` | `{ projectId }` | `{ state: "idle" \| "running" \| "failed", error?, startedAt?, eligible }`（只在内存里，daemon 重启后为 idle；`eligible`：近 90 天 ≥ 5 次 agent 交付，决定是否显示 Suggest checks from past cards） |
@@ -423,7 +460,7 @@ Review {
 - （2026-10-28 删除：原“项目开启 Auto review 时 Auto review 区块放在 Workpad 之前、Workpad 默认收起”。评审现在是 Workpad 里的 **Review** 组，Workpad 按用户的抽屉默认展开，见 GUARDRAILS-SPEC §7.1。）
 - Auto review 区块：分 **Commands** 和 **LLM review** 两组（内置检查在 LLM review 组第一行），每组标题右侧 “通过数/条数”；每行状态图标、名称、耗时。`failed` 行展开显示命令输出末尾或判定理由与文件位置；`passed` 的判断类检查点开可看理由；`skipped`、`unavailable` 行显示原因；共享工作区时注明。评审中逐条更新（沿用卡片详情的 etag 读取，不新增轮询）。
 - 等待评审时 Review 组只显示 “Waiting for review”，不显示上一次的结果。
-- 卡片在 In review、项目开启且有生效的检查、没有评审在跑或在等待时有 **Rerun**（round 重置为 1，返工发给最近一次交付的 session）。
+- 卡片在 In review（或在 Blocked 且评审为 failed，§3.5）、项目开启且有生效的检查、没有评审在跑或在等待时有 **Rerun**（round 重置为 1，返工发给最近一次交付的 session；从 Blocked 按时先把卡移到 In review）。
 - 设置卡片的抽屉显示项目草案（§6.4）。
 
 ### 9.3 项目设置（Edit project → Auto review）
@@ -449,7 +486,7 @@ Auto review                                   [开]
 
 ### 9.4 Attention
 
-- 新原因：review failed、review unavailable（只在卡片还停在该评审留下的位置时）。信号 key `review:<state>:<startedAt>`，供 Dismiss 判断“有新信号”（ATTENTION-DISMISS-SPEC §2.2）。Review failed 与提问、权限一样排在前面。
+- 新原因：review failed、review unavailable（只在卡片还停在该评审留下的位置、且人还没对这张卡有动作时，§3.5）。信号 key `review:<state>:<startedAt>`，供 Dismiss 判断“有新信号”（ATTENTION-DISMISS-SPEC §2.2）。Review failed 与提问、权限一样排在前面。
 - 通过不是单独的原因：评审期间压住的未读在通过后放开，Mark as read 照常清掉。
 
 ### 9.5 Insights 页
@@ -498,6 +535,8 @@ Auto review                                   [开]
 | D15 | 老用户怎么接触 | What's new 1.8.0 带按钮，用过往卡片生成门禁总结和预选检查（2026-10-28） |
 | D16 | AI 怎么推荐规则 | 一个历史分析：升级按钮、设置按钮、返工提示进入同一分析；Insights 定期运行推荐增量检查（2026-10-28） |
 | D17 | 开启后用户读什么 | 抽屉以评审结果为主，Workpad 默认收起（2026-10-28） |
+| D18 | Review failed / unavailable 的 Attention 何时消除 | 人对这张卡有动作后消除：重试、给这张卡的 session 发消息、手动改状态；只打开看过不算，想放着不管用 Dismiss（用户 2026-11-24）。否决：打开卡片看到结果即消除（误点也会清掉，且每次打开多一次写入） |
+| D19 | 从 Blocked 重试时卡片在哪 | 先移到 In review 再评审，之后完全按 In review 的评审走（2026-11-24，设计选择）。否决：在 Blocked 原地评审、通过后再移动（多一套状态） |
 
 ## 12. 分期
 
@@ -541,3 +580,17 @@ Auto review                                   [开]
 - 抽屉：项目开启时 Auto review 区块在 Workpad 之前、Workpad 收起；项目关闭时 Workpad 展开。
 - What's new 1.8.0 的按钮打开当前项目的 Edit project 并开始分析；新用户不看到 What's new，导览只有被动介绍；`review-suggest` 提示只在有返工提示时出现一次。
 - `f_auto_review_llm` 在只开内置检查时为 true。
+
+### 13.3 失败之后的重试与 Attention（§3.5）
+
+- 返工到上限后卡片在 Blocked、Review failed：抽屉 Review 组有 Rerun；按下后卡片在同一次写入里移到 In review（actor=human）并显示 Waiting for review，Attention 里这张卡的 Review failed 立即消失；评审开始后 round 为 1。
+- 接上条，评审仍不通过且 `maxRounds ≥ 1`：按 R1 退回交付前的阶段，返工消息发给最近一次交付的 session（Reworking 1/N）；`maxRounds = 0`：直接回 Blocked、Review failed，重新进入 Attention（新 key）。
+- 接上条，评审通过：留在 In review，Review passed，不进 Done。
+- In review 里按 Rerun：卡片显示 Waiting for review 直到评审开始，不再在排队期间显示上一次的结果。
+- `reviews.rerun` 拒绝：工作阶段里的卡（含 R1 之后投递失败的 Unavailable）、Blocked 但评审不是 failed、Done/Cancelled、Auto review 关闭、评审在跑或在等待、没有交付；错误信息如 §3.5，卡片不动。
+- 卡片在 Blocked、Review failed：人在这张卡的 session 发一条消息 → 信号消失；那一轮没有 Kanban 汇报、A1r 把卡还原到 Blocked 后，信号**不再**出现，卡面仍是 Review failed。
+- 人把 Review failed 的卡从 Blocked 拖到 In review → 信号消失，卡面 Review failed，Rerun 可用。
+- R1 之后投递失败的 Unavailable（卡在工作阶段）：人给这张卡任一 session 发消息后信号消失；只打开卡片、Mark as read 不消失。
+- 只打开卡片抽屉、Mark as read：Review failed 信号不变。Dismiss 规则不变；之后的新未读来自人发起的回合，所以这张卡回到 Attention 时已不带 Review failed。
+- 同一张卡的其他信号（提问、权限、错误、未读）不受 `handledAt` 影响。
+- 新评审替换记录后 `handledAt` 不再存在；旧数据没有该字段时按未处理读，不迁移。

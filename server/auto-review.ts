@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { deliveringBackgroundWork } from "./background-work";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cardImagePath } from "./card-images";
@@ -40,12 +40,16 @@ import {
   reworkMessage,
   reworkRule,
   reworkStage,
+  rerunnablePlace,
 } from "../shared/auto-review";
 import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
 import { logFailure } from "./error-report";
 import { resolveWorktree, worktreeBase } from "./review-worktree";
+
+/** The waiting marker of a person's Rerun (§3.5) carries this id prefix instead of a delivery event id. */
+const rerunWaitPrefix = "rerun:";
 
 /** An agent delivery to In review that starts a review (AUTO-REVIEW-SPEC §3.1). */
 export type DeliveredReview = {
@@ -577,19 +581,40 @@ export class AutoReviewService {
     });
   }
 
-  /** A person's Rerun from the drawer (§7): the card is in In review, round starts at 1. */
+  /**
+   * A person's Rerun from the drawer (§3.5): the card is in In review, or in Blocked after its review failed, which
+   * first moves it to In review in the same write. Round starts at 1; the card waits for the review like a delivery.
+   */
   async rerun(taskId: string, paseo: PaseoApi) {
-    const board = await this.store.read();
-    const task = board.tasks.find((t) => t.id === taskId);
-    const project = task && board.projects.find((p) => p.id === task.projectId);
-    if (!task || !project || task.archivedAt || project.archivedAt) throw new Error("Task is unavailable or archived.");
-    if (task.status !== "in_review") throw new Error("Only a card in In review can be reviewed again.");
-    if (!autoReviewRuns(project)) throw new Error("Turn on Auto review in the project settings first.");
-    if (task.review?.state === "running") throw new Error("A review of this card is already running.");
-    if (task.reviewWaiting) throw new Error("A review of this card is waiting to start.");
-    const delivery = latestDelivery(board, task);
-    if (!delivery) throw new Error("No agent delivered this card to In review, so there is no session to send rework to.");
-    void this.enqueue(project.id, task.id, () => this.review(delivery, true, paseo));
+    const waitId = `${rerunWaitPrefix}${randomUUID()}`;
+    const delivery = await this.store.transaction<DeliveredReview>((b) => {
+      const task = b.tasks.find((t) => t.id === taskId);
+      const project = task && b.projects.find((p) => p.id === task.projectId);
+      if (!task || !project || task.archivedAt || project.archivedAt) throw new Error("Task is unavailable or archived.");
+      if (!rerunnablePlace(task)) throw new Error("Only a card in In review, or in Blocked after its review failed, can be reviewed again.");
+      if (!autoReviewRuns(project)) throw new Error("Turn on Auto review in the project settings first.");
+      if (task.review?.state === "running") throw new Error("A review of this card is already running.");
+      if (task.reviewWaiting) throw new Error("A review of this card is waiting to start.");
+      const found = latestDelivery(b, task);
+      if (!found) throw new Error("No agent delivered this card to In review, so there is no session to send rework to.");
+      const now = this.now();
+      if (task.status !== "in_review") {
+        const from = task.status;
+        task.status = "in_review";
+        task.revision++;
+        task.updatedAt = now;
+        this.store.event(b, { taskId: task.id, actor: "human", action: "status_changed", from, to: "in_review", note: "Rerun auto review" });
+      }
+      task.reviewWaiting = { eventId: waitId, agentId: found.agentId, from: found.from, since: now, ...(found.worktree ? { worktree: found.worktree } : {}) };
+      return { value: found, changed: true };
+    });
+    void this.enqueue(delivery.projectId, taskId, async () => {
+      try {
+        await this.review(delivery, true, paseo, undefined, waitId);
+      } finally {
+        await this.clearWaiting(taskId, waitId);
+      }
+    });
     return { ok: true as const };
   }
 
@@ -610,7 +635,8 @@ export class AutoReviewService {
             const reason = "Flowly restarted before the review started.";
             const now = this.now();
             t.review = {
-              trigger: { eventId: waiting.eventId, agentId: waiting.agentId, from: waiting.from },
+              // A person's Rerun has no delivery event of its own (§8.2).
+              trigger: { eventId: waiting.eventId.startsWith(rerunWaitPrefix) ? "" : waiting.eventId, agentId: waiting.agentId, from: waiting.from },
               ...(waiting.worktree ? { worktree: waiting.worktree } : {}),
               round: 1,
               maxRounds: autoReviewOf(project).maxRounds,
@@ -660,7 +686,7 @@ export class AutoReviewService {
     return new Date(this.clock()).toISOString();
   }
 
-  private async review(delivery: DeliveredReview, manual: boolean, paseo: PaseoApi, lifecycleRecorded?: Promise<boolean>) {
+  private async review(delivery: DeliveredReview, manual: boolean, paseo: PaseoApi, lifecycleRecorded?: Promise<boolean>, waitId?: string) {
     const board = await this.store.read();
     const task = board.tasks.find((t) => t.id === delivery.taskId);
     const project = task && board.projects.find((p) => p.id === task.projectId);
@@ -704,7 +730,7 @@ export class AutoReviewService {
       const t = b.tasks.find((x) => x.id === delivery.taskId);
       if (!t || t.archivedAt || t.status !== "in_review") return { value: null, changed: false };
       // Waiting ends in the same write the review starts in, so the card never shows the previous result meanwhile.
-      if (!manual && t.reviewWaiting?.eventId === delivery.eventId) delete t.reviewWaiting;
+      if (t.reviewWaiting?.eventId === (manual ? waitId : delivery.eventId)) delete t.reviewWaiting;
       const previous = t.review;
       const round = !manual && continuesRound(b.events, t.id, previous) ? previous!.round + 1 : 1;
       const disputes = new Map((t.disputes || []).map((d) => [d.id, d.reason]));

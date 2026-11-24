@@ -5,7 +5,7 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import type { Project, Review, ReviewItem, ReviewItemState, Task } from "../shared/model";
-import { autoReviewRuns, outputTail } from "../shared/auto-review";
+import { autoReviewRuns, outputTail, rerunnablePlace } from "../shared/auto-review";
 import { invalidateCardViews } from "./card-detail-query";
 import { IconButton, Label, font, message, noFocusRing, space, useTheme } from "./ui";
 import { t } from "../shared/i18n";
@@ -149,9 +149,9 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
   );
 });
 
-/** Whether a person can rerun the card's review now (AUTO-REVIEW-SPEC §9.2). */
+/** Whether a person can rerun the card's review now (AUTO-REVIEW-SPEC §3.5, §9.2): in In review, or in Blocked after it failed. */
 export const canRerun = (task: Task, project: Project, disabled: boolean) =>
-  !!task.review && !disabled && task.status === "in_review" && task.review.state !== "running" && !task.reviewWaiting && autoReviewRuns(project);
+  !!task.review && !disabled && rerunnablePlace(task) && task.review.state !== "running" && !task.reviewWaiting && autoReviewRuns(project);
 
 /** Rerun the card's review; failures toast. */
 export function useRerun(taskId: string) {

@@ -1,0 +1,12 @@
+{
+  "step": "9-rerun-in-review-desktop",
+  "attention": null,
+  "cardLabel": "Open task QA review rerun (temporary). In review. Progress: 已移至 In review，工作完成. Acceptance 1/1. Checked. Normal priority, Chore. 0 running, 1 finished turns, 1 unread sessions, 2 need attention.",
+  "cardText": "Chore\nQA review rerun (temporary)\n已移至 In review，工作完成\njust now\n1 error\n1 unread\nChecked",
+  "rerunVisible": true,
+  "menu": [],
+  "did": "rerun",
+  "afterLabel": "Open task QA review rerun (temporary). In review. Progress: 已移至 In review，工作完成. Acceptance 1/1. Reviewing. Normal priority, Chore. 0 running, 1 finished turns, 1 unread sessions, 2 need attention.",
+  "errors": [],
+  "drawerText": "Flowly\nTinylink\nAttention\n2\nRecent activity\nFilter\nNew task\n7\ntasks\n· 1 done\nIdle\n1 unread\n1 error\nIn review\n3\nIdeas 3\nGuardrails\nMemory\nInsights\nTest\n0\nNo tasks\nIn review\n3\nChore\nQA review rerun (temporary)\n已移至 In review，工作完成\njust now\n1 error\n1 unread\nChecked\nHigh\nFeature\nAdd rate limiting to POST /shorten\nDelivered to In review; 13/13 tests passing\n10/19/2026\n1\n2\nFeature\nAdd click counter and GET /stats/:code\nDone and delivered to In review; 13/13 tests pass on HEAD\n10/19/2026\n1\n1\nBlocked\n0\nNo tasks\nDone\n1\nNo recent tasks\nShow 1 older task\nCancelled\n0\nNo tasks\nTinylink\nQA review rerun (temporary)\nIn review\nNormal\nChore\n#testing\nAdd\nDisposable verification card for AUTO-REVIEW-SPEC §3.5. No implementation work; it is deleted after the test.\nProgress\nRefresh\n已移至 In review，工作完成\nRecap\n- 已移至 In review，并备注无需开展工作\n- 未添加输出或后续动作\n- 未修改任何文件\nNext\n无后续动作。\nShow more\nUpdated just now\n·\nGPT-6-Luna\nSessions\n2\nStart session\nQA review rerun codex\nFinished turn · Unread\n· codex · gpt-6-luna\njust now\nQA review rerun\nError\n· claude · claude-haiku-5-5\n7m ago\nWorkpad\nAcceptance\nUpdated 8m ago by QA review rerun\nDisposable verification fixture\nReview\nChecked · Round 1 · codex/gpt-6.2-sol\nRan in a shared workspace, with other cards' uncommitted changes.\nTests\n1 s\nQA gate (temporary)\n1 s\nDoes what you asked\nArtifacts\n0\nLinks\n0\nDetails & workspace\nQA review rerun (temporary)\nUsage\n236K tokens · 75.2% cached · 3 turns\nActivity\n28"
+}
