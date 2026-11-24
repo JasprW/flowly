@@ -6,6 +6,15 @@
 
 # Implementation progress
 
+## Auto review retry and Attention after a failure (card "auto review优化") — 2026-11-24
+
+- Spec: [AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md) §3.5, D18, D19, §13.3; §3.2, §8.2, §8.5, §9.2 and §9.4 updated.
+- Implemented: `rerunnablePlace` / `markReviewHandled` / `reviewSignal` in `shared/auto-review.ts`; `review.handledAt` in `shared/model.ts`; `AutoReviewService.rerun` moves a Blocked failed card to In review (actor human, note "Rerun auto review") and writes `reviewWaiting` (`rerun:<uuid>`) in one transaction, from In review too; restart recovery maps a rerun wait to an empty trigger event id; `BoardStore.event` marks the review handled on `agent.turn_started` and human `status_changed`; `canRerun` in `client/task-review.tsx` uses the shared check.
+- Found: after the rework limit (R2) the card sits in Blocked but Rerun is offered only in In review (`canRerun`, `server/auto-review.ts` `rerun()`); the Review failed/unavailable Attention signal (`reviewSignal`) has no handled state, so Mark as read never clears it, Dismiss brings it back with the next new signal, and A1r restoring Blocked after a reply without a report raises it again.
+- Designed: Rerun also from Blocked after a failed review (moves the card to In review first, round back to 1, writes `reviewWaiting`); `review.handledAt` set by the first human action after the review (a turn on any card session, a human status change, Rerun) hides the Attention signal while the card face keeps the result. User decision D18: only actions clear it, opening the card does not.
+- Live check 2026-11-24 on Tinylink (temporary card, cleaned up): Blocked failure → Dismiss → reply (A1, handled, A1r back to Blocked without the signal) → UI Rerun from Blocked (fails again with a new signal) → pass, and Rerun in In review hides the old result; desktop web only. See [report](verification/auto-review-rerun-2026-11-24/REPORT.md).
+- No new UI strings, tip, tour copy or telemetry field.
+
 ## Review reasoning selection (card "auto review模型reasoning选择") — 2026-11-14
 
 - PR follow-up: hunks separated from shared SDK 0.16/image-removal work onto main’s SDK 0.15. User-authorized GPT Luna independently verified `5042806`: typecheck exit 0, focused 128/128 tests passed, no reproducible defects. See [independent report](verification/review-reasoning-2026-11-14/independent.md).

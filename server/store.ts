@@ -9,6 +9,7 @@ import { ideaTitleKey } from "../shared/ideas";
 import { otherEnd, relationLabels, relationOf, touches } from "../shared/links";
 import { changeTags, mergeTagEdit, normalizeTags, tagChangeNote } from "../shared/tags";
 import { attentionDismissLimits, dismissalSignals, type AttentionDismissInput, type AttentionRestoreInput } from "../shared/attention-dismiss";
+import { markReviewHandled } from "../shared/auto-review";
 import type { FlowLog } from "./flow-log";
 import type { ProjectSnapshot } from "./project-folder";
 import {
@@ -570,6 +571,11 @@ export class BoardStore {
     };
     board.events.push(event);
     this.pending.push(event);
+    // A person acting on the card ends its failed or unavailable review's Attention signal (AUTO-REVIEW-SPEC §3.5).
+    if (input.taskId && (input.action === "agent.turn_started" || (input.actor === "human" && input.action === "status_changed"))) {
+      const task = board.tasks.find((t) => t.id === input.taskId);
+      if (task) markReviewHandled(task, input, event.at);
+    }
     const relevant = board.events.filter((e) => e.taskId === input.taskId);
     if (relevant.length > 100) {
       const remove = new Set(relevant.slice(0, -100).map((e) => e.id));

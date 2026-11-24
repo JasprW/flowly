@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { autoReviewOf, autoReviewRuns, continuesRound, conversationForReview, hasEvidence, joinCommand, reviewContext, reviewProgress, reviewVerdict, reworkMessage, splitCommand, visibleReview } from "./auto-review";
+import { autoReviewOf, autoReviewRuns, continuesRound, conversationForReview, hasEvidence, joinCommand, reviewContext, reviewProgress, reviewVerdict, reworkMessage, splitCommand, visibleReview, markReviewHandled, rerunnablePlace, reviewSignal } from "./auto-review";
 import { projectSchema, reviewSchema, type BoardEvent, type Review, type ReviewItem } from "./model";
 
 const review = (state: Review["state"], extra: Partial<Review> = {}): Review => ({
@@ -52,6 +52,35 @@ test("the card shows a review only where that review left it", () => {
 });
 
 const item = (id: string, kind: ReviewItem["kind"], state: ReviewItem["state"], extra: Partial<ReviewItem> = {}): ReviewItem => ({ id, kind, name: id, gating: true, state, ...extra });
+
+test("a failed or unavailable review is handled by a turn or a person's status change, once; the signal ends, the card face stays (§3.5)", () => {
+  const at = "2026-10-28T00:02:00.000Z";
+  for (const state of ["failed", "unavailable"] as const) {
+    const task = { status: "in_review" as const, archivedAt: null, review: review(state) };
+    expect(markReviewHandled(task, { actor: "human", action: "edited" }, at)).toBe(false);
+    expect(markReviewHandled(task, { actor: "agent", action: "status_changed" }, at)).toBe(false);
+    expect(reviewSignal(task)).toMatchObject({ state });
+    expect(markReviewHandled(task, { actor: "system", action: "agent.turn_started" }, at)).toBe(true);
+    expect(markReviewHandled(task, { actor: "human", action: "status_changed" }, "2026-10-28T00:03:00.000Z")).toBe(false);
+    expect(task.review.handledAt).toBe(at);
+    expect(reviewSignal(task)).toBeNull();
+    expect(visibleReview(task)).toMatchObject({ state });
+  }
+  const moved = { review: review("failed") };
+  expect(markReviewHandled(moved, { actor: "human", action: "status_changed" }, at)).toBe(true);
+  for (const r of [review("passed"), review("rework"), review("cancelled"), review("failed", { finishedAt: undefined }), undefined])
+    expect(markReviewHandled({ review: r }, { actor: "system", action: "agent.turn_started" }, at)).toBe(false);
+  // Older records have no handledAt: still a signal.
+  expect(reviewSchema.parse(review("failed")).handledAt).toBeUndefined();
+});
+
+test("Rerun starts from In review, or from Blocked only after a failed review (§3.5)", () => {
+  expect(rerunnablePlace({ status: "in_review", review: review("cancelled") })).toBe(true);
+  expect(rerunnablePlace({ status: "blocked", review: review("failed") })).toBe(true);
+  expect(rerunnablePlace({ status: "blocked", review: review("passed") })).toBe(false);
+  expect(rerunnablePlace({ status: "development", review: review("unavailable") })).toBe(false);
+  expect(rerunnablePlace({ status: "done", review: review("failed") })).toBe(false);
+});
 
 test("settings narrow to the switch and the rounds; stored rules, goal and guidance are kept on disk but ignored (GUARDRAILS-SPEC §8)", () => {
   const stored = { enabled: true, maxRounds: 3, rules: [{ id: "a", name: "A", kind: "command", argv: ["x"] }], goal: false, guidance: "g", checks: [] };

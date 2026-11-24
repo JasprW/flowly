@@ -1,0 +1,13 @@
+{
+  "step": "2-dismiss-desktop",
+  "cardLabel": "Open task QA review rerun (temporary). Blocked. Acceptance 1/1. Review failed. Normal priority, Chore. 0 running, 0 finished turns, 0 unread sessions, 0 need attention.",
+  "cardText": "Chore\nQA review rerun (temporary)\n1\nReview failed",
+  "rerunVisible": true,
+  "menu": [
+    "Dismiss from Attention"
+  ],
+  "did": "dismissed",
+  "afterLabel": "Open task QA review rerun (temporary). Blocked. Acceptance 1/1. Review failed. Dismissed from Attention. Normal priority, Chore. 0 running, 0 finished turns, 0 unread sessions, 0 need attention.",
+  "errors": [],
+  "drawerText": "Flowly\nTinylink\nAttention\n3\nRecent activity\nFilter\nNew task\n7\ntasks\n· 1 done\nIdle\nIn review\n2\nBlocked\n1\nIdeas 3\nGuardrails 1\nMemory\nInsights\nIn review\n2\nHigh\nFeature\nDelivered to In review; 13/13 tests passing\n10/19/2026\n1\n2\nFeature\nDone and delivered to In review; 13/13 tests pass on HEAD\n10/19/2026\n1\n1\nBlocked\n1\nChore\nQA review rerun (temporary)\n1\nReview failed\nDone\n1\nNo recent tasks\nShow 1 older task\nCancelled\n0\nNo tasks\nTinylink\nQA review rerun (temporary)\nBlocked\nNormal\nChore\n#testing\nAdd\nDisposable verification card for AUTO-REVIEW-SPEC §3.5. No implementation work; it is deleted after the test.\nProgress\nRefresh\nUpdates after each agent turn.\nSessions\n1\nStart session\nQA review rerun\nReady\n· claude · claude-haiku-5-5\n1m ago\nWorkpad\nAcceptance\nUpdated 1m ago by QA review rerun\nDisposable verification fixture\nReview\nReview failed · Round 1\nRan in a shared workspace, with other cards' uncommitted changes.\nQA gate (temporary)\nExit 1\n/Users/bofan.wang/.hermes/node/bin/node -e process.exit(require('node:fs').existsSync(\"/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/.test-data/ar-rerun-live/pass\")?0:1)\nTests\nobserving\n1 s\nDoes what you asked\nSkipped\nArtifacts\n0\nLinks\n0\nDetails & workspace\nQA review rerun (temporary)\nUsage\nNo token data\nActivity\n6"
+}

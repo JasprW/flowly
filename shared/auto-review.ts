@@ -100,9 +100,27 @@ export function visibleReview(task: Pick<Task, "status" | "review" | "reviewWait
  */
 export function reviewSignal(task: Pick<Task, "status" | "review" | "reviewWaiting" | "archivedAt">): { state: "failed" | "unavailable"; key: string } | null {
   const review = visibleReview(task);
-  if (!review || (review.state !== "failed" && review.state !== "unavailable")) return null;
+  // Once a person acted on the card after the review, the card face still shows the result but it no longer calls (§3.5).
+  if (!review || (review.state !== "failed" && review.state !== "unavailable") || review.handledAt) return null;
   return { state: review.state, key: `review:${review.state}:${review.startedAt}` };
 }
+
+/**
+ * A person acted on the card (§3.5, D18): a turn started in one of its sessions (a failed or unavailable review sends
+ * no rework message, so such a turn comes from a person) or a person changed its status. Marks the finished failed or
+ * unavailable review handled, once; true when it changed. Opening the card or Mark as read is not an action.
+ */
+export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardEvent, "actor" | "action">, at: string): boolean {
+  const review = task.review;
+  if (!review || review.handledAt || !review.finishedAt || (review.state !== "failed" && review.state !== "unavailable")) return false;
+  if (event.action !== "agent.turn_started" && !(event.actor === "human" && event.action === "status_changed")) return false;
+  review.handledAt = at;
+  return true;
+}
+
+/** Where a person's Rerun may start (§3.5): In review, or Blocked after the review failed (it moves to In review first). */
+export const rerunnablePlace = (task: Pick<Task, "status" | "review">) =>
+  task.status === "in_review" || (task.status === "blocked" && task.review?.state === "failed");
 
 /** While a review waits to start or runs, the card's unread sessions are not counted (§3.2). */
 export const reviewing = (task: Pick<Task, "status" | "review" | "reviewWaiting" | "archivedAt">) =>

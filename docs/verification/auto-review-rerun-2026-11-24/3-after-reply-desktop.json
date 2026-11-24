@@ -1,0 +1,13 @@
+{
+  "step": "3-after-reply-desktop",
+  "cardLabel": "Open task QA review rerun (temporary). Design. Acceptance 1/1. Normal priority, Chore. 0 running, 0 finished turns, 1 unread sessions, 1 need attention. Latest agent output just now: [System Error] Not logged in · Please run /login.",
+  "cardText": "Chore\nQA review rerun (temporary)\n[System Error] Not logged in · Please run /login\njust now\n1 error\n1 unread",
+  "rerunVisible": false,
+  "menu": [
+    "Dismiss from Attention"
+  ],
+  "did": null,
+  "afterLabel": null,
+  "errors": [],
+  "drawerText": "Flowly\nTinylink\nAttention\n2\nRecent activity\nFilter\nNew task\n7\ntasks\n· 1 done\nIdle\n1 error\nIn review\n2\nIdeas 3\nGuardrails 1\nMemory\nInsights\nTodo\n1\nFeature\nDesign\n2\nChore\nQA review rerun (temporary)\n[System Error] Not logged in · Please run /login\njust now\n1 error\n1 unread\nUrgent\nBug fix\nExpired links crash the server instead of returning an error\nBug reproduced; waiting for user to choose 410 or 404\n10/19/2026\nNeeds you\nDismissed\nDevelopment\n0\nNo tasks\nTest\n0\nNo tasks\nIn review\n2\nHigh\nFeature\nAdd rate limiting to POST /shorten\nDelivered to In review; 13/13 tests passing\n10/19/2026\n1\n2\nFeature\nAdd click counter and GET /stats/:code\nDone and delivered to In review; 13/13 tests pass on HEAD\n10/19/2026\n1\n1\nBlocked\n0\nNo tasks\nDone\n1\nNo recent tasks\nShow 1 older task\nCancelled\n0\nNo tasks\nTinylink\nQA review rerun (temporary)\nDesign\nNormal\nChore\n#testing\nAdd\nDisposable verification card for AUTO-REVIEW-SPEC §3.5. No implementation work; it is deleted after the test.\nProgress\nRefresh\nUpdates after each agent turn.\nSessions\n1\nStart session\nQA review rerun\nError\n· claude · claude-haiku-5-5\njust now\nWorkpad\nAcceptance\nUpdated 2m ago by QA review rerun\nDisposable verification fixture\nReview\nReview failed · Round 1\nRan in a shared workspace, with other cards' uncommitted changes.\nQA gate (temporary)\nExit 1\n/Users/bofan.wang/.hermes/node/bin/node -e process.exit(require('node:fs').existsSync(\"/Users/bofan.wang/Developer/personal/paseo-utlra-kanban/.test-data/ar-rerun-live/pass\")?0:1)\nTests\nobserving\n1 s\nDoes what you asked\nSkipped\nArtifacts\n0\nLinks\n0\nDetails & workspace\nQA review rerun (temporary)\nUsage\nNo token data\nActivity\n8"
+}

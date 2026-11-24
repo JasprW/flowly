@@ -29,6 +29,9 @@ import type { ChangeShape, Lane } from "../shared/model";
 import { emptyCounts, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import { projectLanes } from "../shared/lanes";
 import { attentionItems } from "../shared/attention";
+import { nativeAttentionToken } from "../shared/session-attention";
+import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./progress-rules";
+import { SessionReadService, SessionReadStore } from "./session-reads";
 
 const roots: string[] = [];
 /** Waits for each setup's review (started by a delivery) to finish, so it is not still writing when the data dir is removed. */
@@ -359,11 +362,9 @@ test("cancelled: a card that changed during the review drops the result", async 
   expect(x.sent).toEqual([]);
 });
 
-test("Rerun: only in In review, from round 1, with the latest delivering session", async () => {
+test("Rerun: in In review, from round 1, with the latest delivering session", async () => {
   const x = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
   await x.deliver("development");
-  expect((await card(x)).status).toBe("blocked");
-  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow("Only a card in In review");
   await x.store.mutate((b) => {
     b.tasks[0]!.status = "in_review";
   });
@@ -371,6 +372,272 @@ test("Rerun: only in In review, from round 1, with the latest delivering session
   await x.reviews.rerun("t", x.paseo);
   await x.reviews.idle();
   expect(await card(x)).toMatchObject({ status: "in_review", review: { state: "passed", round: 1, trigger: { agentId: "actor", eventId: "" } } });
+  expect((await card(x)).review!.handledAt).toBeUndefined();
+});
+
+test("Rerun from Blocked after a failed review: moves to In review and waits in one write, ends the Attention signal (§3.5)", async () => {
+  const { reviewSignal } = await import("../shared/auto-review");
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await x.deliver("development");
+  let task = await card(x);
+  expect(task).toMatchObject({ status: "blocked", review: { state: "failed" } });
+  expect(reviewSignal(task)).toMatchObject({ state: "failed" });
+  const revision = task.revision;
+  x.exits["npm test"] = 0;
+  await x.reviews.rerun("t", x.paseo);
+  // Before the review starts: In review, waiting, the old failure hidden and handled.
+  task = await card(x);
+  expect(task).toMatchObject({ status: "in_review", revision: revision + 1, reviewWaiting: { agentId: "actor", from: "development" } });
+  expect(task.reviewWaiting!.eventId).toMatch(/^rerun:/);
+  expect(reviewSignal(task)).toBeNull();
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(/waiting to start/);
+  const board = await x.store.read();
+  expect(board.events.filter((e) => e.action === "status_changed").at(-1)).toMatchObject({ actor: "human", from: "blocked", to: "in_review", note: "Rerun auto review" });
+  await x.reviews.idle();
+  task = await card(x);
+  expect(task.reviewWaiting).toBeUndefined();
+  expect(task).toMatchObject({ status: "in_review", review: { state: "passed", round: 1, trigger: { eventId: "" } } });
+});
+
+test("Rerun past the rework limit gives the agent a whole new round budget; maxRounds 0 goes back to Blocked (§3.5)", async () => {
+  const { reviewSignal } = await import("../shared/auto-review");
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 1 });
+  await x.deliver("development");
+  await x.turnStarted();
+  await x.deliver();
+  expect(await card(x)).toMatchObject({ status: "blocked", review: { state: "failed", round: 2 } });
+  expect(x.sent).toHaveLength(1);
+  await x.reviews.rerun("t", x.paseo);
+  await x.reviews.idle();
+  expect(await card(x)).toMatchObject({ status: "development", review: { state: "rework", round: 1 } });
+  expect(x.sent).toHaveLength(2);
+  expect(x.sent[1]!.text).toMatch(/^\[Flowly auto review/);
+
+  const zero = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await zero.deliver("development");
+  const first = (await card(zero)).review!.startedAt;
+  await zero.reviews.rerun("t", zero.paseo);
+  await zero.reviews.idle();
+  const task = await card(zero);
+  expect(task).toMatchObject({ status: "blocked", review: { state: "failed", round: 1 } });
+  expect(task.review!.handledAt).toBeUndefined();
+  // A new failure is a new signal.
+  expect(reviewSignal(task)!.key).not.toBe(`review:failed:${first}`);
+  expect(zero.sent).toEqual([]);
+});
+
+test("Rerun is refused in a work stage, in Blocked without a failed review, and in Done; the card stays (§3.5)", async () => {
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.setDuring(async () => {
+    x.actors.actor!.archivedAt = new Date().toISOString();
+  });
+  // R1, then the rework could not be delivered: Unavailable in Development.
+  await x.deliver("development");
+  expect(await card(x)).toMatchObject({ status: "development", review: { state: "unavailable" } });
+  const message = "Only a card in In review, or in Blocked after its review failed, can be reviewed again.";
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(message);
+  for (const status of ["blocked", "done"] as const) {
+    await x.store.mutate((b) => {
+      b.tasks[0]!.status = status;
+    });
+    await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(message);
+    expect((await card(x)).status).toBe(status);
+  }
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "in_review";
+    b.projects[0]!.autoReview!.enabled = false;
+  });
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow("Turn on Auto review");
+  expect((await card(x)).reviewWaiting).toBeUndefined();
+});
+
+test("Rerun from Blocked is refused while the In review lane is off; the card stays in Blocked (§3.5)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await x.deliver("development");
+  const before = await card(x);
+  expect(before).toMatchObject({ status: "blocked", review: { state: "failed" } });
+  await x.store.mutate((b) => {
+    b.projects[0]!.lanes = projectLanes(null).map((l) => (l.status === "in_review" ? { ...l, enabled: false } : l));
+  });
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow("In review is not a lane in this project.");
+  expect(await card(x)).toMatchObject({ status: "blocked", revision: before.revision });
+  expect((await card(x)).reviewWaiting).toBeUndefined();
+});
+
+test("Rerun in In review while another review runs: the card waits and hides the old result until its review starts (§3.5)", async () => {
+  const { reviewSignal, visibleReview } = await import("../shared/auto-review");
+  const x = await setup({ exits: { "npm test": "spawn" } });
+  await x.deliver("development");
+  let task = await card(x);
+  expect(task).toMatchObject({ status: "in_review", review: { state: "unavailable" } });
+  expect(reviewSignal(task)).toMatchObject({ state: "unavailable" });
+  // Another card of the project is being reviewed: this one queues behind it.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const queue = x.reviews as unknown as { enqueue(key: string, taskId: string, job: () => Promise<void>): Promise<void> };
+  const blocked = queue.enqueue(task.projectId, "other", () => gate);
+  x.exits["npm test"] = 0;
+  const runs = x.runs.length;
+  await x.reviews.rerun("t", x.paseo);
+  task = await card(x);
+  expect(task.status).toBe("in_review");
+  expect(task.reviewWaiting?.eventId).toMatch(/^rerun:/);
+  expect(visibleReview(task)).toBeNull();
+  expect(reviewSignal(task)).toBeNull();
+  expect(x.runs.length).toBe(runs);
+  release();
+  await blocked;
+  await x.reviews.idle();
+  task = await card(x);
+  expect(task.reviewWaiting).toBeUndefined();
+  expect(task.review).toMatchObject({ state: "passed", round: 1 });
+});
+
+test("Rerun is refused while a review runs, without a delivery, or with Auto review off in Blocked; nothing is written (§3.5)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await x.deliver("development");
+  const unchanged = async (run: () => Promise<unknown>, message: string | RegExp) => {
+    const before = await x.store.read();
+    await expect(run()).rejects.toThrow(message);
+    const after = await x.store.read();
+    expect(after.revision).toBe(before.revision);
+    expect(after.tasks[0]).toEqual(before.tasks[0]);
+    expect(after.events.length).toBe(before.events.length);
+  };
+  // Blocked after a failure, but Auto review is off: the card does not move to In review.
+  await x.store.mutate((b) => {
+    b.projects[0]!.autoReview!.enabled = false;
+  });
+  expect((await card(x)).status).toBe("blocked");
+  await unchanged(() => x.reviews.rerun("t", x.paseo), "Turn on Auto review");
+  await x.store.mutate((b) => {
+    b.projects[0]!.autoReview!.enabled = true;
+    b.tasks[0]!.status = "in_review";
+    b.tasks[0]!.review!.state = "running";
+  });
+  await unchanged(() => x.reviews.rerun("t", x.paseo), "A review of this card is already running.");
+
+  // A person dragged a card into In review that no agent ever delivered.
+  const never = await setup();
+  await never.store.mutate((b) => {
+    b.tasks[0]!.status = "in_review";
+  });
+  const before = await never.store.read();
+  await expect(never.reviews.rerun("t", never.paseo)).rejects.toThrow("No agent delivered this card");
+  const after = await never.store.read();
+  expect(after.revision).toBe(before.revision);
+  expect(after.tasks[0]).toEqual(before.tasks[0]);
+});
+
+test("handled (§3.5, D18): a turn on the card or a person's move ends the review's Attention signal; A1r back to Blocked does not raise it again", async () => {
+  const { reviewSignal, visibleReview } = await import("../shared/auto-review");
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await x.deliver("development");
+  let board = await x.store.read();
+  const finished = board.tasks[0]!;
+  const unread = [{ id: "actor", workspaceId: "w", status: "idle", archivedAt: null, requiresAttention: true, attentionReason: "finished", updatedAt: "2026-10-28T00:00:00.000Z" }];
+  expect(attentionItems(board, [] as never, [], false)[0]).toMatchObject({ review: "failed" });
+  expect(finished.review!.handledAt).toBeUndefined();
+  // Mark as read on the card's session clears its unread, not the review's signal.
+  Object.assign(x.actors.actor!, { requiresAttention: true, attentionReason: "finished", attentionTimestamp: "2026-10-28T00:00:00.000Z" });
+  const reads = new SessionReadService(x.store, new SessionReadStore(join(x.root, "reads")));
+  const receipt = await reads.mark({ taskId: "t", agentId: "actor", token: nativeAttentionToken(x.actors.actor as never)! }, x.paseo);
+  expect(receipt).toBeTruthy();
+  board = await x.store.read();
+  expect(board.tasks[0]!.review!.handledAt).toBeUndefined();
+  expect(attentionItems(board, [x.actors.actor] as never, (await reads.reads.read()).receipts, false)[0]).toMatchObject({ review: "failed", unread: 0 });
+
+  // The person replies: A1 moves the card to a work stage; the agent answers without a report and A1r restores Blocked.
+  await x.store.mutate((b) => {
+    recordLifecycle(x.store, b, x.identity, "agent.turn_started");
+    expect(applyTurnStarted(x.store, b, x.identity, "First actor")).toBe(true);
+  });
+  board = await x.store.read();
+  expect(board.tasks[0]!.status).toBe("development");
+  expect(board.tasks[0]!.review!.handledAt).toBeTruthy();
+  await x.store.mutate((b) => {
+    recordLifecycle(x.store, b, x.identity, "agent.turn_ended", { kind: "completed" } as never);
+    expect(applyTurnEnded(x.store, b, x.identity, { kind: "completed" } as never)).toBe(true);
+  });
+  board = await x.store.read();
+  expect(board.events.filter((e) => e.action === "status_changed").map((e) => e.rule).slice(-2)).toEqual(["A1", "A1r"]);
+  let task = board.tasks[0]!;
+  expect(task.status).toBe("blocked");
+  expect(task.review!.handledAt).toBeTruthy();
+  expect(visibleReview(task)).toMatchObject({ state: "failed" });
+  expect(reviewSignal(task)).toBeNull();
+  expect(attentionItems(board, [] as never, [], false)).toEqual([]);
+  // Other signals of the card still count.
+  expect(attentionItems(board, unread as never, [], false)[0]).toMatchObject({ review: null, unread: 1 });
+  // The first action is kept.
+  const handledAt = task.review!.handledAt;
+  await x.turnStarted();
+  expect((await card(x)).review!.handledAt).toBe(handledAt);
+
+  // A person's drag from Blocked to In review: the card face keeps the failure, Attention does not.
+  const moved = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await moved.deliver("development");
+  task = await card(moved);
+  await moved.store.placeTask({ id: "t", revision: task.revision, status: "in_review", beforeId: null, afterId: null });
+  task = await card(moved);
+  expect(task.review!.handledAt).toBeTruthy();
+  expect(visibleReview(task)).toMatchObject({ state: "failed" });
+  expect(reviewSignal(task)).toBeNull();
+
+  // Unavailable after R1 could not deliver the rework, in Development: a turn on the card ends it too.
+  const gone = await setup({ exits: { "npm test": 1 } });
+  gone.setDuring(async () => {
+    gone.actors.actor!.archivedAt = new Date().toISOString();
+  });
+  await gone.deliver("development");
+  expect(reviewSignal(await card(gone))).toMatchObject({ state: "unavailable" });
+  await gone.turnStarted();
+  expect(reviewSignal(await card(gone))).toBeNull();
+
+  // A pass is never marked.
+  const passed = await setup();
+  await passed.deliver("development");
+  await passed.turnStarted();
+  expect((await card(passed)).review!.handledAt).toBeUndefined();
+});
+
+test("handled (§3.5, §13.3): after Dismiss, the next unread brings the card back without Review failed; handledAt leaves questions, permissions and errors alone", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 0 });
+  await x.deliver("development");
+  const idle = { id: "actor", workspaceId: "w", status: "idle", archivedAt: null, requiresAttention: false, attentionReason: null };
+  let board = await x.store.read();
+  const failed = attentionItems(board, [idle] as never, [], false)[0]!;
+  expect(failed).toMatchObject({ review: "failed", dismissed: false });
+  // Dismiss: the card is set aside while the failure is all it waits on.
+  await x.store.dismissAttention({ taskId: "t", signals: failed.signals });
+  board = await x.store.read();
+  expect(attentionItems(board, [idle] as never, [], false)[0]).toMatchObject({ review: "failed", dismissed: true });
+
+  // The person replies in the session (A1 → handled); the agent's answer is a new unread, so the card comes back without the failure.
+  await x.store.mutate((b) => {
+    recordLifecycle(x.store, b, x.identity, "agent.turn_started");
+    applyTurnStarted(x.store, b, x.identity, "First actor");
+  });
+  const later = new Date(Date.now() + 60_000).toISOString();
+  const answered = { ...idle, requiresAttention: true, attentionReason: "finished", attentionTimestamp: later, lastUserMessageAt: stamp, updatedAt: later };
+  board = await x.store.read();
+  expect(board.tasks[0]!.review!.handledAt).toBeTruthy();
+  const back = attentionItems(board, [answered] as never, [], false)[0]!;
+  expect(back).toMatchObject({ review: null, unread: 1, dismissed: false });
+  expect(back.signals.some((k) => k.startsWith("review:"))).toBe(false);
+
+  // Same card, review handled: a Kanban question, a permission request and a session error each still count.
+  await x.store.mutate((b) => {
+    x.store.event(b, { taskId: "t", actor: "agent", action: "progress_reported", agentId: "actor", reportKind: "question", note: "Which one?" });
+  });
+  board = await x.store.read();
+  expect(board.tasks[0]!.review!.handledAt).toBeTruthy();
+  const asking = attentionItems(board, [idle] as never, [], false)[0]!;
+  expect(asking).toMatchObject({ review: null, questions: 1, dismissed: false });
+  const permission = { ...idle, requiresAttention: true, attentionReason: "permission", attentionTimestamp: later, pendingPermissions: [{ id: "req-1", kind: "tool" }] };
+  expect(attentionItems(board, [permission] as never, [], false)[0]).toMatchObject({ review: null, permissions: 1 });
+  const error = { ...idle, status: "error", requiresAttention: true, attentionReason: "error", attentionTimestamp: later };
+  expect(attentionItems(board, [error] as never, [], false)[0]).toMatchObject({ review: null, errors: 1 });
 });
 
 test("attention: a running review holds back unread sessions; a pass only releases them; failed and unavailable are signals", async () => {

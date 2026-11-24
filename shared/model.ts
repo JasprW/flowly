@@ -231,6 +231,8 @@ export const reviewSchema = z.preprocess(legacyReview, z.object({
   model: z.string().max(200).optional(),
   startedAt: timestamp,
   finishedAt: timestamp.optional(),
+  /** A failed or unavailable review: when a person first acted on the card after it, which ends its Attention signal (AUTO-REVIEW-SPEC §3.5). */
+  handledAt: timestamp.optional(),
 }));
 export type Review = z.infer<typeof reviewSchema>;
 
