@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
+import type { TextInput as NativeTextInput } from "react-native";
 import type { PluginTheme } from "@getpaseo/plugin";
 import {
   Animated,
   Platform,
   Pressable,
   Text,
+  StyleSheet,
   View,
   type GestureResponderEvent,
   type PressableStateCallbackType,
@@ -362,54 +364,68 @@ export function Field({
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
   useShortcutBlock(focused);
+  const input = useRef<NativeTextInput>(null);
+  // Phones: an unfocused multiline field is covered by a press layer, so a drag
+  // that starts on it scrolls the host sheet and a tap focuses it (UI-UX-SPEC §5).
+  const cover = multiline && touch && editable && !focused;
   return (
     <View style={{ gap: space[1.5] }}>
       <Label medium size={font.sm} muted>
         {title}
       </Label>
-      <TextBox
-        accessibilityLabel={title}
-        value={value}
-        onChangeText={onChange}
-        commitDelay={commitDelay}
-        multiline={multiline}
-        editable={editable}
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        placeholderTextColor={colors.foregroundMuted}
-        {...(secure ? { secureTextEntry: true, autoCorrect: false, autoCapitalize: "none" as const } : {})}
-        {...(onSubmit
-          ? Platform.OS === "web"
-            ? {
-                onKeyPress: (event: { nativeEvent: unknown; preventDefault(): void }) => {
-                  const action = composerEnterAction(event.nativeEvent as ComposerKey);
-                  if (action === "native") return;
-                  event.preventDefault();
-                  if (action !== "suppress") onSubmit();
-                },
-              }
-            : // A phone's return key is a new line in a multiline field; in a single line it submits.
-              multiline
-              ? {}
-              : { onSubmitEditing: () => onSubmit(), returnKeyType: "done" as const, blurOnSubmit: false }
-          : {})}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        style={{
-          borderWidth: 1,
-          borderColor: focused ? colors.foregroundMuted : colors.border,
-          borderRadius: radius.md,
-          paddingHorizontal: space[3],
-          paddingVertical: multiline ? space[2] + 2 : 0,
-          color: editable ? colors.foreground : colors.foregroundMuted,
-          backgroundColor: editable ? colors.surface0 : colors.surface1,
-          fontSize: font.base,
-          height: multiline ? undefined : touch ? 44 : 36,
-          minHeight: multiline ? 96 : undefined,
-          textAlignVertical: multiline ? "top" : "center",
-          outlineStyle: "none",
-        } as never}
-      />
+      <View>
+        <TextBox
+          ref={input}
+          accessibilityLabel={title}
+          value={value}
+          onChangeText={onChange}
+          commitDelay={commitDelay}
+          multiline={multiline}
+          editable={editable}
+          autoFocus={autoFocus}
+          placeholder={placeholder}
+          placeholderTextColor={colors.foregroundMuted}
+          {...(secure ? { secureTextEntry: true, autoCorrect: false, autoCapitalize: "none" as const } : {})}
+          {...(onSubmit
+            ? Platform.OS === "web"
+              ? {
+                  onKeyPress: (event: { nativeEvent: unknown; preventDefault(): void }) => {
+                    const action = composerEnterAction(event.nativeEvent as ComposerKey);
+                    if (action === "native") return;
+                    event.preventDefault();
+                    if (action !== "suppress") onSubmit();
+                  },
+                }
+              : // A phone's return key is a new line in a multiline field; in a single line it submits.
+                multiline
+                ? {}
+                : { onSubmitEditing: () => onSubmit(), returnKeyType: "done" as const, blurOnSubmit: false }
+            : {})}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{
+            borderWidth: 1,
+            borderColor: focused ? colors.foregroundMuted : colors.border,
+            borderRadius: radius.md,
+            paddingHorizontal: space[3],
+            paddingVertical: multiline ? space[2] + 2 : 0,
+            color: editable ? colors.foreground : colors.foregroundMuted,
+            backgroundColor: editable ? colors.surface0 : colors.surface1,
+            fontSize: font.base,
+            height: multiline ? undefined : touch ? 44 : 36,
+            minHeight: multiline ? 96 : undefined,
+            textAlignVertical: multiline ? "top" : "center",
+            outlineStyle: "none",
+          } as never}
+        />
+        {cover && (
+          <Pressable
+            accessible={false}
+            style={[StyleSheet.absoluteFill, noFocusRing]}
+            onPress={() => input.current?.focus()}
+          />
+        )}
+      </View>
       {!!hint && (
         <Label muted size={font.sm}>
           {hint}

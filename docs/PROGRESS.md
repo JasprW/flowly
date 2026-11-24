@@ -1459,3 +1459,12 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 产品9170380：typecheck exit0，9文件115聚焦、全量167文件通过/1跳过，1536项通过/6跳过。独立GPT6Luna同SHA审阅与115项检查通过；报告LUNA-MEMORY-PAGE.md，验收会话已精确删除并确认AGENT_NOT_FOUND。
 - 真实隔离0.16 daemon的Memory新增/删除与全局开关推送104–109ms，页面数据和etag通过；所有fixture与owned daemon已清理。新手机/UI/冷启动仍UNRUN。
 - 用户明确授权本轮页面补丁沿用3043bd8历史+3.7257%/5%冷启结论，随后明确小改动可直接合入、不走PR流程。按本次指示正常快进push main并关闭草稿119；CodeRabbit的NEUTRAL限额不当作通过。原独立报告保留授权之前的边界，不改旧证据。
+
+## 2026-11-24 手机端长文本表单无法滚动
+
+- 问题：手机上 New task 的描述或 New session 的指令写得很长时，从文本框上开始拖动会让文本框获得焦点且不滚动，只有文本框两侧的窄条能滚动弹窗，底部按钮和 Agent 选择器展开的选项难以够到。
+- 走过的弯路：前三轮（含两轮自动复审）给输入框限高并在框内滚动，方向相反，已撤回；第四轮关闭 iOS 内部滚动并固定行高（推测 Android 测量偏差），用户真机实测无效，已撤回。
+- 根因：手机端宿主 Modal 是 Gorhom 底部弹层，正文是 RNGH 包装的 `BottomSheetScrollView`。Android 的 `ReactEditText` 按下时就调用 `requestDisallowInterceptTouchEvent(true)`（RN 0.81 `ReactEditText.onTouchEvent`），RNGH 根视图收到后会取消所有手势（`RNGestureHandlerRootHelper.requestDisallowInterceptTouchEvent` → `tryCancelAllHandlers`），所以从输入框开始的拖动永远滚不动弹层；两侧普通 View 不会这样，所以能滚。
+- 修复（[UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts)）：iOS/Android 上未获得焦点、可编辑的多行 `Field` 上盖一层透明 `Pressable`：拖动落在它上面时由弹层滚动，轻点则让输入框获得焦点；获得焦点后遮罩移除，点按放光标、选择文字照常。Web 不变。
+- 取舍：轻点获得焦点时光标不在点按位置，需再点一次定位；编辑中在输入框上拖动不滚动弹层（点框外结束编辑后恢复）。
+- 无新 UI/设置/核心动作，不需要 tour、tip、遥测字段。
