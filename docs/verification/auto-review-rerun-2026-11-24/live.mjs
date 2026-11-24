@@ -111,9 +111,10 @@ try {
       const r = await rpc('tasks.delete', { id: t.id, revision: t.revision, archive: true, acknowledgeWarnings: true });
       console.log('deleted card', JSON.stringify(r));
     }
-    if (state.guardrail) {
+    const temporary = [state.guardrail?.id, ...(state.extraGuardrails || [])].filter(Boolean);
+    if (temporary.length) {
       const g = await rpc("guardrails.read", { projectId: state.project.id });
-      for (const id of [state.guardrail.id, ...(state.extraGuardrails || [])]) {
+      for (const id of temporary) {
         const e = g.value?.entries?.find((e) => e.id === id);
         if (e) await rpc("guardrails.delete", { id: e.id, revision: e.revision });
       }
@@ -128,7 +129,11 @@ try {
     Object.assign(remains, {
       card: b.tasks.some((t) => t.id === state.card?.id),
       dismissal: (b.attentionDismissals || []).some((d) => d.taskId === state.card?.id),
-      guardrail: (g.value?.entries || []).map((e) => e.id),
+      // Only the guardrails this script created must be gone; others (added by a person, or detected when Auto review
+      // was turned on) are listed for a person to check and never fail cleanup.
+      guardrail: (g.value?.entries || []).map((e) => e.id).filter((id) => temporary.includes(id)),
+      // Without a recorded baseline (state from an older version of this script) every other guardrail is listed.
+      otherGuardrails: (g.value?.entries || []).map((e) => e.id).filter((id) => !temporary.includes(id) && !(state.project.originalGuardrails || []).includes(id)),
       autoReview: b.projects.find((p) => p.id === state.project.id).autoReview,
       nativeAgents: agents.entries.map((e) => (e.agent ?? e).id),
       activeWorkspace: ws.entries.filter((w) => w.id === state.card?.workspaceId && !w.archivedAt).map((w) => w.id),
@@ -136,8 +141,9 @@ try {
     });
     state.cleanup = { at: new Date().toISOString(), ...remains }; await save();
     console.log(JSON.stringify(remains, null, 1));
+    if (remains.otherGuardrails.length) console.log(state.project.originalGuardrails ? 'guardrails added since setup (not removed, check by hand):' : 'guardrails present, no baseline recorded so they may predate setup (not removed, check by hand):', remains.otherGuardrails.join(', '));
     const restored = JSON.stringify(remains.autoReview) === JSON.stringify(state.project.original);
-    if (remains.card || remains.dismissal || remains.guardrail.some((id) => !(state.project.originalGuardrails || []).includes(id)) || !restored || remains.nativeAgents.length || remains.activeWorkspace.length) throw new Error('Fixture resources remain');
+    if (remains.card || remains.dismissal || remains.guardrail.length || !restored || remains.nativeAgents.length || remains.activeWorkspace.length) throw new Error('Fixture resources remain');
     await rm(scratch, { recursive: true, force: true });
     state.cleanup.verified = true; await save();
     console.log('cleanup verified');
