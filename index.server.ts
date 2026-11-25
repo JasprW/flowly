@@ -161,7 +161,8 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.refreshDigest, (input, { paseo }) => insights.refresh(input, paseo));
   server.handle(rpc.readSummaries, () => summaries.overview());
   server.handle(rpc.readSummariesChanged, async (input) => ifChanged(await summaries.overview(), input.etag));
-  const usage = new UsageService(store);
+  const archivedSessions = new ArchivedSessionsService(store);
+  const usage = new UsageService(store, undefined, (taskId, paseo) => archivedSessions.workspaceAgents(taskId, paseo));
   insights.usage = usage;
   // Agent habits only for Flowly developers (INSIGHTS-REDESIGN-SPEC §6).
   insights.agentHabits = async () => {
@@ -199,7 +200,7 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.installSkill, (input) => workflow.installSkill(input));
   server.handle(rpc.workflowInsightsOverview, () => workflow.overview());
   server.handle(rpc.purgeWorkflowCommands, async () => ({ deletedProjects: await workflow.purge() }));
-  const service = new BoardService(store);
+  const service = new BoardService(store, { resourcesTtlMs: 8_000 });
   service.insightFindings = { check: (p, id) => workflow.check(p, id), accept: (p, id, taskId) => workflow.accept(p, id, taskId) };
   // Read-only external inputs (CONNECTORS-SPEC): credentials and requests stay in the daemon.
   try {
@@ -248,6 +249,8 @@ export default function contribute(host: PluginServerContext) {
     void insights.reconcile().catch(() => undefined);
     folders.forget(restored.project.id);
     folders.schedule();
+    archivedSessions.invalidate();
+    service.invalidateResources();
     return restored;
   });
   server.handle(rpc.projectFolderState, async (input) => {
@@ -289,9 +292,8 @@ export default function contribute(host: PluginServerContext) {
   const images = new SessionImageService(store);
   server.handle(rpc.sessionImage, (input, { paseo }) => images.read(input, paseo));
   const tails = new SessionTailService(store);
-  const archived = new ArchivedSessionsService(store);
-  server.handle(rpc.archivedSessions, (input, { paseo }) => archived.list(input.taskId, paseo));
-  server.handle(rpc.archivedSessionRefs, (_, { paseo }) => archived.refs(paseo));
+  server.handle(rpc.archivedSessions, (input, { paseo }) => archivedSessions.list(input.taskId, paseo, { fresh: input.fresh }));
+  server.handle(rpc.archivedSessionRefs, (_, { paseo }) => archivedSessions.refs(paseo));
   server.handle(rpc.sessionTail, (input, { paseo }) => tails.tail(input, paseo));
   const wrapups = new WrapupService(store, undefined, (taskId) => summaries.settled(taskId));
   const restores = new WorkspaceRestoreService(store);
@@ -300,10 +302,21 @@ export default function contribute(host: PluginServerContext) {
   server.handle(rpc.wrapupCheck, (input, { paseo }) =>
     wrapups.check(input.id, paseo),
   );
-  server.handle(rpc.wrapup, (input, { paseo }) => wrapups.run(input, paseo));
-  server.handle(rpc.unwrap, (input) => restores.unwrap(input.id));
+  server.handle(rpc.wrapup, async (input, { paseo }) => {
+    const result = await wrapups.run(input, paseo);
+    archivedSessions.invalidate();
+    service.invalidateResources();
+    return result;
+  });
+  server.handle(rpc.unwrap, async (input) => {
+    const result = await restores.unwrap(input.id);
+    archivedSessions.invalidate();
+    service.invalidateResources();
+    return result;
+  });
   const tools = new ToolServer(store);
   tools.agents.connectors = connectors;
+  tools.agents.workspaceAgents = (taskId, paseo) => archivedSessions.workspaceAgents(taskId, paseo);
   // Project memory (PROJECT-MEMORY-SPEC): confirmed knowledge shared across a project's cards.
   const memory = new MemoryService(store, summaries.store, summaries.settings, aiLanguage, (taskId) => summaries.settled(taskId));
   memoryRunning = () => memory.runningTasks();
@@ -465,9 +478,11 @@ export default function contribute(host: PluginServerContext) {
     detectCommands(project.id);
     return project;
   });
-  server.handle(rpc.createTask, (input, { paseo }) =>
-    service.createTask(input, paseo),
-  );
+  server.handle(rpc.createTask, async (input, { paseo }) => {
+    const task = await service.createTask(input, paseo);
+    service.invalidateResources();
+    return task;
+  });
   server.handle(rpc.taskContext, (input, { paseo }) =>
     service.context(input.id, paseo),
   );
@@ -539,6 +554,8 @@ export default function contribute(host: PluginServerContext) {
     await Promise.all([flow.removeProject(input.id), insights.digests.removeProject(input.id), workflow.removeProject(input.id)]).catch((e) =>
       logFailure("Kanban insights data not removed:", e),
     );
+    archivedSessions.invalidate();
+    service.invalidateResources();
     return removed;
   });
   server.handle(rpc.deleteCheck, (input, { paseo }) => wrapups.check(input.id, paseo, "delete"));
@@ -663,15 +680,22 @@ export default function contribute(host: PluginServerContext) {
     await tools.pruneContexts().catch((e) =>
       logFailure("Kanban session bindings not cleaned:", e),
     );
+    archivedSessions.invalidate();
+    service.invalidateResources();
     return archived ? { ...deleted, archived: { sessions: archived.archivedSessions, workspace: archived.archivedWorkspace } } : deleted;
   });
   server.handle(rpc.removeProjectCheck, (input, { paseo }) => service.removeCheck(input.id, paseo));
   server.handle(rpc.createLinkedProject, async (input, { paseo }) => {
     const project = await service.createLinked(input, paseo);
+    service.invalidateResources();
     detectCommands(project.id);
     return project;
   });
-  server.handle(rpc.setProjectLinks, (input) => service.setLinks(input));
+  server.handle(rpc.setProjectLinks, async (input) => {
+    const project = await service.setLinks(input);
+    service.invalidateResources();
+    return project;
+  });
   const picker = new NativeDirectoryPicker(detectNativePicker());
   server.handle(rpc.listDirectories, async (input) => listDirectories(input.path, await picker.available()));
   server.handle(rpc.pickNativeDirectory, (input) => picker.pick(input.multiple));
@@ -711,9 +735,26 @@ export default function contribute(host: PluginServerContext) {
     if (!identity || identity.workspaceId !== agent.workspaceId) return null;
     return identity;
   };
+  const invalidateBoardWorkspace = async (workspaceId: string | null | undefined) => {
+    if (!workspaceId) return;
+    const board = await store.read().catch(() => null);
+    if (!board) return;
+    const task = board.tasks.find((t) => t.workspaceId === workspaceId);
+    if (!task) return;
+    const project = board.projects.find((p) => p.id === task.projectId);
+    archivedSessions.invalidateWorkspace(workspaceId, project?.paseoProjectId);
+  };
   server.addHook("agent.create.after", async (event, { paseo }) => {
     if (await managedTask(event.agent)) sessionMetadata.created(paseo, event.agent.id);
+    void invalidateBoardWorkspace(event.agent.workspaceId);
   });
+  try {
+    server.addHook("agent.archive.after", async (event) => {
+      void invalidateBoardWorkspace(event.agent.workspaceId);
+    });
+  } catch {
+    // Older Paseo hosts may not expose agent.archive.after; short TTL still reconciles.
+  }
   server.addHook("agent.turn.before", async (event, { paseo }) => {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);

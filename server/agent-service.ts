@@ -3,7 +3,7 @@ import { actionableEvent, acceptanceOutput, agentCallSchema, compactRead, type A
 import { outputLanguage } from "../shared/ai-language";
 import type { LocaleCode } from "../shared/i18n";
 import { enabledStatuses, laneEnabled, laneName } from "../shared/lanes";
-import type { PaseoApi } from "@getpaseo/client";
+import type { PaseoAgent, PaseoApi } from "@getpaseo/client";
 import { randomUUID } from "node:crypto";
 import { ideaTitleKey } from "../shared/ideas";
 import { nextMovesAction, noMovesNote } from "../shared/next-moves";
@@ -222,6 +222,8 @@ export class AgentService {
   }
   /** Per-session last read of the card's artifacts, for `unread` (CARD-ARTIFACTS-SPEC §4.2). */
   readonly artifactReads: ArtifactReadStore;
+  /** Shared cached workspace-session lookup (set by the plugin entry to avoid full-host scans in `get`). */
+  workspaceAgents?: (taskId: string, paseo: PaseoApi) => Promise<readonly PaseoAgent[]>;
   attach(paseo: PaseoApi) {
     this.paseo = paseo;
   }
@@ -293,26 +295,54 @@ export class AgentService {
       scanned = 0,
       unavailableReason = "",
       partial = false;
-    try {
-      do {
-        const page = await r.paseo.agents.list({
-          filter: { includeArchived: true },
-          page: { limit: 200, cursor },
-        });
-        scanned += page.entries.length;
-        entries.push(
-          ...page.entries
-            .map((e) => e.agent)
-            .filter((a) => a.workspaceId === identity.workspaceId && !isSummarizer(a))
-            .map((a) => ({
-              id: a.id,
-              title: a.title || a.id,
-              status: a.archivedAt ? "archived" : a.status,
-            })),
+    const SESSION_SUMMARY_TIMEOUT_MS = 5_000;
+    const bounded = <T>(run: Promise<T>): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Session summary timed out.")), SESSION_SUMMARY_TIMEOUT_MS);
+        timer.unref?.();
+        run.then(
+          (value) => { clearTimeout(timer); resolve(value); },
+          (error) => { clearTimeout(timer); reject(error); },
         );
-        cursor = page.pageInfo.nextCursor ?? undefined;
-      } while (cursor && entries.length < 20 && scanned < 2000);
-      partial = !!cursor || entries.length > 20;
+      });
+    try {
+      if (this.workspaceAgents) {
+        const all = await bounded(this.workspaceAgents(identity.taskId, r.paseo));
+        const visible = all.filter((a) => a.workspaceId === identity.workspaceId && !isSummarizer(a));
+        partial = visible.length > 20;
+        entries.push(
+          ...visible.slice(0, 20).map((a) => ({
+            id: a.id,
+            title: a.title || a.id,
+            status: a.archivedAt ? "archived" : a.status,
+          })),
+        );
+      } else {
+        const projectKey =
+          (r.workspace as { project?: { projectKey?: string | null }; projectId?: string | null }).project?.projectKey ||
+          (r.workspace as { projectId?: string | null }).projectId ||
+          undefined;
+        const deadline = Date.now() + SESSION_SUMMARY_TIMEOUT_MS;
+        do {
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) throw new Error("Session summary timed out.");
+          const filter = projectKey ? { includeArchived: true as const, projectKeys: [projectKey] } : { includeArchived: true as const };
+          const page = await bounded(r.paseo.agents.list({ filter, page: { limit: 200, cursor } }));
+          scanned += page.entries.length;
+          entries.push(
+            ...page.entries
+              .map((e) => e.agent)
+              .filter((a) => a.workspaceId === identity.workspaceId && !isSummarizer(a))
+              .map((a) => ({
+                id: a.id,
+                title: a.title || a.id,
+                status: a.archivedAt ? "archived" : a.status,
+              })),
+          );
+          cursor = page.pageInfo.nextCursor ?? undefined;
+        } while (cursor && entries.length < 20 && scanned < 2000);
+        partial = !!cursor || entries.length > 20;
+      }
     } catch {
       partial = true;
       unavailableReason = "Session summary is currently unavailable.";

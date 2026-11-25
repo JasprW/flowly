@@ -190,11 +190,24 @@ function repeatedCreate(previous: Task, input: TaskInput) {
 
 export class BoardService {
   private provision = Promise.resolve<unknown>(undefined);
+  private readonly resourcesTtlMs: number;
+  private readonly now: () => number;
+  private resourcesCache?: { at: number; value: Awaited<ReturnType<BoardService["loadResources"]>> };
+  private resourcesInflight?: Promise<Awaited<ReturnType<BoardService["loadResources"]>>>;
   /** Reads external items added at creation (EXTERNAL-TRACKER-SPEC §5.4); set by the plugin entry. */
   connectors?: ConnectorService;
   /** Workflow-insights suggestions a card can be created from (WORKFLOW-INSIGHTS-SPEC §5.2); set by the plugin entry. */
   insightFindings?: { check(projectId: string, id: string): Promise<void>; accept(projectId: string, id: string, taskId: string): Promise<void> };
-  constructor(readonly store: BoardStore) {}
+  constructor(
+    readonly store: BoardStore,
+    options: { resourcesTtlMs?: number; now?: () => number } = {},
+  ) {
+    this.resourcesTtlMs = options.resourcesTtlMs ?? 0;
+    this.now = options.now ?? Date.now;
+  }
+  invalidateResources() {
+    this.resourcesCache = undefined;
+  }
   private serialize<T>(action: () => Promise<T>) {
     const result = this.provision.then(action);
     this.provision = result.then(
@@ -203,9 +216,10 @@ export class BoardService {
     );
     return result;
   }
-  async resources(paseo: PaseoApi) {
-    const projects = (await paseo.projects.list()).projects;
-    const board = await this.store.read();
+  private async loadResources(paseo: PaseoApi) {
+    const [projectsResult, board] = await Promise.all([paseo.projects.list(), this.store.read()]);
+    const projects = projectsResult.projects;
+    const projectById = new Map(projects.map((p) => [p.projectId, p]));
     const match = repoMatcher([
       ...new Set(board.projects.flatMap((p) => p.repos)),
     ]);
@@ -218,29 +232,50 @@ export class BoardService {
       workspaces.push(...page.entries);
       cursor = page.pageInfo.nextCursor ?? undefined;
     } while (cursor);
+    // Match each unique workspace directory once with bounded concurrency rather than fanning out per workspace.
+    const uniqueDirs = [...new Set(workspaces.map((w) => w.workspaceDirectory))];
+    const repoPathsByDir = new Map<string, string[]>();
+    const CONCURRENCY = 8;
+    for (let i = 0; i < uniqueDirs.length; i += CONCURRENCY) {
+      const chunk = uniqueDirs.slice(i, i + CONCURRENCY);
+      const resolved = await Promise.all(chunk.map((dir) => match(dir)));
+      chunk.forEach((dir, idx) => repoPathsByDir.set(dir, resolved[idx]));
+    }
     return {
       projects: projects.map((p) => ({
         id: p.projectId,
         name: p.projectDisplayName,
         path: p.projectRootPath,
       })),
-      workspaces: await Promise.all(
-        workspaces.map(async (w) => ({
-          id: w.id,
-          projectId: w.projectId,
-          name: w.name || w.id,
-          path: w.workspaceDirectory,
-          status: w.status,
-          repoPaths: await match(w.workspaceDirectory),
-          owner:
-            projects.find((p) => p.projectId === w.projectId)
-              ?.projectDisplayName || w.projectId,
-        })),
-      ),
+      workspaces: workspaces.map((w) => ({
+        id: w.id,
+        projectId: w.projectId,
+        name: w.name || w.id,
+        path: w.workspaceDirectory,
+        status: w.status,
+        repoPaths: repoPathsByDir.get(w.workspaceDirectory) ?? [],
+        owner: projectById.get(w.projectId)?.projectDisplayName || w.projectId,
+      })),
     };
   }
+  async resources(paseo: PaseoApi) {
+    if (this.resourcesTtlMs > 0 && this.resourcesCache && this.now() - this.resourcesCache.at < this.resourcesTtlMs) {
+      return this.resourcesCache.value;
+    }
+    if (this.resourcesInflight) return this.resourcesInflight;
+    const job = this.loadResources(paseo).then((value) => {
+      if (this.resourcesTtlMs > 0) this.resourcesCache = { at: this.now(), value };
+      return value;
+    });
+    this.resourcesInflight = job;
+    try {
+      return await job;
+    } finally {
+      if (this.resourcesInflight === job) this.resourcesInflight = undefined;
+    }
+  }
   createProject(input: ProjectInput, paseo: PaseoApi) {
-    return this.serialize(() => this.registerProject(input, paseo));
+    return this.serialize(() => this.registerProject(input, paseo)).finally(() => this.invalidateResources());
   }
   /**
    * Linked multi-repo project: a new, plugin-owned directory holding one

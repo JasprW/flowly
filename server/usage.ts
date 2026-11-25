@@ -295,6 +295,7 @@ export class UsageService {
   constructor(
     readonly store: BoardStore,
     readonly locator = new LogLocator(),
+    private readonly listWorkspaceAgents?: (taskId: string, paseo: PaseoApi) => Promise<readonly AgentLike[]>,
   ) {}
 
   private async cached(paths: string[], read: () => Promise<LogUsage>) {
@@ -374,15 +375,24 @@ export class UsageService {
   }
 
   async task(taskId: string, paseo: PaseoApi): Promise<TaskUsage> {
-    const task = (await this.store.read()).tasks.find((t) => t.id === taskId);
+    const board = await this.store.read();
+    const task = board.tasks.find((t) => t.id === taskId);
     if (!task) throw new Error("Task not found.");
-    const agents: AgentLike[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await paseo.agents.list({ filter: { includeArchived: true }, page: { limit: 200, cursor } });
-      for (const { agent } of page.entries) if (agent.workspaceId === task.workspaceId) agents.push(agent as AgentLike);
-      cursor = page.pageInfo.nextCursor ?? undefined;
-    } while (cursor);
+    let agents: AgentLike[];
+    if (this.listWorkspaceAgents) {
+      agents = [...(await this.listWorkspaceAgents(taskId, paseo))];
+    } else {
+      agents = [];
+      const project = board.projects.find((p) => p.id === task.projectId);
+      const projectKey = project?.paseoProjectId && task.repoPaths.length <= 1 ? project.paseoProjectId : undefined;
+      let cursor: string | undefined;
+      do {
+        const filter = projectKey ? { includeArchived: true as const, projectKeys: [projectKey] } : { includeArchived: true as const };
+        const page = await paseo.agents.list({ filter, page: { limit: 200, cursor } });
+        for (const { agent } of page.entries) if (agent.workspaceId === task.workspaceId) agents.push(agent as AgentLike);
+        cursor = page.pageInfo.nextCursor ?? undefined;
+      } while (cursor);
+    }
     const sessions = await Promise.all(agents.map((a) => this.session(a)));
     return summarize(sessions);
   }
