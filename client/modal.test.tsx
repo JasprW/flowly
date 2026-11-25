@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createElement, Fragment, type Context, type ReactElement, type ReactNode } from "react";
 import type { PluginTheme } from "@getpaseo/plugin";
@@ -6,6 +7,7 @@ const harness = vi.hoisted(() => ({
   contexts: new Map<unknown, unknown>(),
   platform: "ios",
   motion: [] as number[],
+  reduced: true,
 }));
 
 vi.mock("react", async original => ({
@@ -14,20 +16,33 @@ vi.mock("react", async original => ({
     ? harness.contexts.get(context)
     : (context as Context<T> & { _currentValue: T })._currentValue,
 }));
-vi.mock("react-native", () => ({
-  Platform: { OS: "ios" },
-  Animated: { View: "view" },
-  View: "view", Text: "text", Pressable: "pressable", Image: "image",
-  StyleSheet: { flatten: (style: unknown) => style },
-}));
+vi.mock("react-native", async () => {
+  const React = await import("react");
+  return {
+    Platform: { OS: "ios" },
+    Animated: { View: "view" },
+    Modal: ({ children, ...props }: { children: ReactNode }) =>
+      React.createElement(harness.platform === "web" ? "dialog" : "native-portal", props, children),
+    View: "view", Text: "text", Pressable: "pressable", Image: "image",
+    StyleSheet: {
+      flatten: (style: unknown) => style,
+      absoluteFillObject: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },
+    },
+  };
+});
 vi.mock("./shortcuts", () => ({ useShortcutBlock: () => {} }));
-vi.mock("./motion", () => ({
-  MotionBridge: ({ children }: { children: ReactNode }) => children,
-  useReducedMotion: () => true,
-  useMotionValue: (target: number) => { harness.motion.push(target); return target; },
-  motionDuration: { forward: 220, reverse: 160 },
-  lerp: () => 0,
-}));
+vi.mock("./motion", async () => {
+  const React = await import("react");
+  return {
+    MotionBridge: ({ reduced, children }: { reduced: boolean; children: ReactNode }) =>
+      React.createElement("motion-bridge", { reduced }, children),
+    useReducedMotion: () => harness.reduced,
+    useMotionValue: (target: number) => { harness.motion.push(target); return target; },
+    useMotionPresence: (open: boolean) => ({ item: open ? "projects" : undefined, active: open, progress: open ? 1 : 0, settled: open }),
+    motionDuration: { forward: 220, reverse: 160 },
+    lerp: () => 0,
+  };
+});
 vi.mock("@getpaseo/plugin/client/react-native", async () => {
   const React = await import("react");
   const ModalContext = React.createContext<{ icon?: ReactNode } | null>(null);
@@ -43,11 +58,12 @@ vi.mock("@getpaseo/plugin/client/react-native", async () => {
         React.createElement("body", null, children));
     } },
   );
-  return { Modal, Icon: "icon", TextInput: "input" };
+  return { Modal, Icon: "icon", TextInput: "input", ScrollView: "scroll-view" };
 });
 
 import { Modal as HostModal } from "@getpaseo/plugin/client/react-native";
 import { Modal } from "./modal";
+import { ProjectChooserDialog } from "./project-chooser-dialog";
 import { BrandIcon } from "./brand-icons";
 import { Button, Theme, useTheme } from "./ui";
 
@@ -88,9 +104,9 @@ function ThemedValue() {
 }
 const themed = (theme: PluginTheme, children: ReactNode) => <Theme.Provider value={theme}>{children}</Theme.Provider>;
 const buttons = (nodes: HostNode[]) => nodes.filter(node => node.type === "pressable")
-  .map(node => node.props.style({}).backgroundColor);
+  .map(node => (typeof node.props.style === "function" ? node.props.style({}) : node.props.style)?.backgroundColor);
 
-beforeEach(() => { harness.platform = "ios"; harness.motion = []; });
+beforeEach(() => { harness.platform = "ios"; harness.motion = []; harness.reduced = true; });
 
 test("the native host boundary reproduces Theme missing in Button despite a body-only provider", () => {
   expect(() => render(themed(light,
@@ -134,4 +150,47 @@ test("closed modal content keeps its captured open state after reparenting", () 
 
 test("a theme consumer outside a provider still fails instead of using a stale global palette", () => {
   expect(() => render(<Probe />)).toThrow("Theme missing");
+});
+
+test("ProjectChooserDialog bridges theme and motion on both compact and wide native paths", () => {
+  harness.reduced = false;
+  for (const nativeWide of [true, false]) {
+    const chooser = (theme: PluginTheme) => themed(theme,
+      <ProjectChooserDialog open nativeWide={nativeWide} onClose={noop}>
+        <Probe />
+        <ThemedValue />
+      </ProjectChooserDialog>,
+    );
+    const lightNodes = render(chooser(light));
+    const darkNodes = render(chooser(dark));
+    expect(lightNodes.find(node => node.type === "theme")?.props.value).toBe(light);
+    expect(darkNodes.find(node => node.type === "theme")?.props.value).toBe(dark);
+    expect(buttons(lightNodes)).toContain(light.colors.accent);
+    expect(buttons(darkNodes)).toContain(dark.colors.accent);
+    expect(lightNodes.find(node => node.type === "motion-bridge")?.props.reduced).toBe(false);
+  }
+});
+
+test("every client modal routes host Modal through ./modal and bridges Theme.Provider inside React Native Modal", () => {
+  const clientDir = new URL(".", import.meta.url);
+  const files = readdirSync(clientDir).filter(name => name.endsWith(".tsx") && !name.endsWith(".test.tsx"));
+  const directHostModalImports: string[] = [];
+  const unbridgedNativeModals: string[] = [];
+  for (const name of files) {
+    const source = readFileSync(new URL(name, clientDir), "utf8");
+    if (name !== "modal.tsx" && /import\s*\{[^}]*\bModal\b[^}]*\}\s*from\s*["']@getpaseo\/plugin\/client\/react-native["']/.test(source)) {
+      directHostModalImports.push(name);
+    }
+    const rnModalImport = /import\s*\{[^}]*\bModal(?:\s+as\s+(\w+))?[^}]*\}\s*from\s*["']react-native["']/.exec(source);
+    if (rnModalImport) {
+      const localName = rnModalImport[1] || "Modal";
+      const tag = new RegExp(`<${localName}\\b[^>]*>([\\s\\S]*?)<\\/${localName}>`, "g");
+      let match: RegExpExecArray | null;
+      while ((match = tag.exec(source))) {
+        if (!/<Theme\.Provider\b/.test(match[1]!)) unbridgedNativeModals.push(name);
+      }
+    }
+  }
+  expect(directHostModalImports).toEqual([]);
+  expect(unbridgedNativeModals).toEqual([]);
 });
