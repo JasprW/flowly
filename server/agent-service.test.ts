@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { readFile, rm, writeFile, stat } from "node:fs/promises";
 import { AgentService } from "./agent-service";
 import { BoardStore } from "./store";
@@ -1174,4 +1174,41 @@ test("get_task gives each card image its absolute path, and the context names th
   const path = images.pathOf("t", task.images![0]);
   expect(ctx.task.images).toEqual([{ ...task.images![0], absolutePath: path }]);
   expect(toolContextSchema.parse(ctx).task.images![0].absolutePath).toBe(path);
+});
+
+test("fallback session summary shares the 5s budget across pages", async () => {
+  const x = await setup();
+  let pageCall = 0;
+  let markPage1!: () => void;
+  const page1Started = new Promise<void>((resolve) => { markPage1 = resolve; });
+  let markPage2!: () => void;
+  const page2Started = new Promise<void>((resolve) => { markPage2 = resolve; });
+  x.paseo.agents.list = (async () => {
+    pageCall += 1;
+    if (pageCall === 1) {
+      markPage1();
+      await new Promise((resolve) => setTimeout(resolve, 4_800));
+      return {
+        entries: [{ agent: x.actors.actor }],
+        pageInfo: { nextCursor: "page-2" },
+      };
+    }
+    markPage2();
+    return await new Promise<never>(() => {});
+  }) as typeof x.paseo.agents.list;
+
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    const pending = x.service.get(x.identity, false, false);
+    await page1Started;
+    await vi.advanceTimersByTimeAsync(4_800);
+    await page2Started;
+    await vi.advanceTimersByTimeAsync(250);
+    const ctx = await pending;
+    expect(pageCall).toBe(2);
+    expect(ctx.sessions.partial).toBe(true);
+    expect(ctx.sessions.unavailableReason).toBe("Session summary is currently unavailable.");
+  } finally {
+    vi.useRealTimers();
+  }
 });

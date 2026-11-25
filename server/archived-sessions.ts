@@ -31,6 +31,8 @@ export class ArchivedSessionsService {
   private readonly workspaceProjectKeys = new Map<string, string>();
   private readonly projectCache = new Map<string, CachedProject>();
   private readonly projectInflight = new Map<string, Promise<Map<string, PaseoAgent[]>>>();
+  private globalGeneration = 0;
+  private readonly keyGenerations = new Map<string, number>();
 
   constructor(
     readonly store: BoardStore,
@@ -40,13 +42,23 @@ export class ArchivedSessionsService {
     this.now = options.now ?? Date.now;
   }
 
-  /** Drops cached snapshots (all projects when `projectKey` is omitted). */
+  private scanToken(cacheKey: string): string {
+    return `${this.globalGeneration}:${this.keyGenerations.get(cacheKey) ?? 0}`;
+  }
+
+  /** Drops cached snapshots and detaches affected in-flight scans (all projects when `projectKey` is omitted). */
   invalidate(projectKey?: string) {
     if (projectKey) {
       this.projectCache.delete(projectKey);
       this.projectCache.delete("*");
+      this.projectInflight.delete(projectKey);
+      this.projectInflight.delete("*");
+      this.keyGenerations.set(projectKey, (this.keyGenerations.get(projectKey) ?? 0) + 1);
+      this.keyGenerations.set("*", (this.keyGenerations.get("*") ?? 0) + 1);
     } else {
       this.projectCache.clear();
+      this.projectInflight.clear();
+      this.globalGeneration += 1;
     }
   }
 
@@ -99,8 +111,11 @@ export class ArchivedSessionsService {
       if (inflight) return inflight;
     } else {
       this.projectCache.delete(cacheKey);
+      this.projectInflight.delete(cacheKey);
+      this.keyGenerations.set(cacheKey, (this.keyGenerations.get(cacheKey) ?? 0) + 1);
     }
 
+    const token = this.scanToken(cacheKey);
     const job = (async () => {
       const byWorkspace = new Map<string, PaseoAgent[]>();
       let cursor: string | undefined;
@@ -120,7 +135,9 @@ export class ArchivedSessionsService {
         }
         cursor = page.pageInfo.nextCursor ?? undefined;
       } while (cursor);
-      if (this.ttlMs > 0) this.projectCache.set(cacheKey, { at: this.now(), byWorkspace });
+      if (this.ttlMs > 0 && this.scanToken(cacheKey) === token) {
+        this.projectCache.set(cacheKey, { at: this.now(), byWorkspace });
+      }
       return byWorkspace;
     })();
 
@@ -154,20 +171,26 @@ export class ArchivedSessionsService {
     if (!board.tasks.length) return [];
     const workspaces = new Set(board.tasks.map((t) => t.workspaceId));
     const projectsById = new Map(board.projects.map((p) => [p.id, p]));
+    const tasksByWorkspace = new Map<string, Task>();
+    for (const task of board.tasks) {
+      if (!tasksByWorkspace.has(task.workspaceId)) tasksByWorkspace.set(task.workspaceId, task);
+    }
+    const uniqueTasks = [...tasksByWorkspace.values()];
     const keys = new Set<string>();
     let allScoped = true;
-    for (const task of board.tasks) {
-      const cachedKey = this.workspaceProjectKeys.get(task.workspaceId);
-      if (cachedKey) {
-        keys.add(cachedKey);
-        continue;
-      }
-      const project = projectsById.get(task.projectId);
-      if (project?.paseoProjectId && !isLegacyScope(task, project)) {
-        keys.add(project.paseoProjectId);
-      } else {
-        allScoped = false;
-        break;
+    const RESOLVE_CONCURRENCY = 8;
+    for (let i = 0; i < uniqueTasks.length && allScoped && keys.size <= MAX_SCOPED_PROJECT_KEYS; i += RESOLVE_CONCURRENCY) {
+      const chunk = uniqueTasks.slice(i, i + RESOLVE_CONCURRENCY);
+      const resolved = await Promise.all(
+        chunk.map((task) => this.resolveProjectKey(task, projectsById.get(task.projectId), paseo)),
+      );
+      for (const key of resolved) {
+        if (!key) {
+          allScoped = false;
+          break;
+        }
+        keys.add(key);
+        if (keys.size > MAX_SCOPED_PROJECT_KEYS) break;
       }
     }
 

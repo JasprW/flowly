@@ -194,6 +194,7 @@ export class BoardService {
   private readonly now: () => number;
   private resourcesCache?: { at: number; value: Awaited<ReturnType<BoardService["loadResources"]>> };
   private resourcesInflight?: Promise<Awaited<ReturnType<BoardService["loadResources"]>>>;
+  private resourcesGeneration = 0;
   /** Reads external items added at creation (EXTERNAL-TRACKER-SPEC §5.4); set by the plugin entry. */
   connectors?: ConnectorService;
   /** Workflow-insights suggestions a card can be created from (WORKFLOW-INSIGHTS-SPEC §5.2); set by the plugin entry. */
@@ -207,6 +208,8 @@ export class BoardService {
   }
   invalidateResources() {
     this.resourcesCache = undefined;
+    this.resourcesGeneration++;
+    this.resourcesInflight = undefined;
   }
   private serialize<T>(action: () => Promise<T>) {
     const result = this.provision.then(action);
@@ -263,8 +266,11 @@ export class BoardService {
       return this.resourcesCache.value;
     }
     if (this.resourcesInflight) return this.resourcesInflight;
+    const generation = this.resourcesGeneration;
     const job = this.loadResources(paseo).then((value) => {
-      if (this.resourcesTtlMs > 0) this.resourcesCache = { at: this.now(), value };
+      if (this.resourcesTtlMs > 0 && generation === this.resourcesGeneration) {
+        this.resourcesCache = { at: this.now(), value };
+      }
       return value;
     });
     this.resourcesInflight = job;

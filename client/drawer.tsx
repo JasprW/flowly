@@ -346,20 +346,22 @@ function TaskDrawerView({
   });
   // Archived ones come from the daemon (project-scoped and cached per project).
   const archivedRead = useRpc(rpc.archivedSessions);
-  const freshArchivedRef = useRef(false);
+  const freshArchivedSeq = useRef(0);
   const workspaceSessions = useQuery({
     queryKey: ["flowly", "sessions", "archived", task.id],
     queryFn: async () => {
-      const fresh = freshArchivedRef.current;
-      freshArchivedRef.current = false;
-      return (await archivedRead(fresh ? { taskId: task.id, fresh: true } : { taskId: task.id })) as unknown as PaseoAgent[];
+      const seq = freshArchivedSeq.current;
+      const fresh = seq > 0;
+      const result = (await archivedRead(fresh ? { taskId: task.id, fresh: true } : { taskId: task.id })) as unknown as PaseoAgent[];
+      if (fresh && freshArchivedSeq.current === seq) freshArchivedSeq.current = 0;
+      return result;
     },
     enabled: ready,
     refetchInterval: 30000,
     retry: 1,
   });
   const refetchArchived = (fresh = false) => {
-    if (fresh) freshArchivedRef.current = true;
+    if (fresh) freshArchivedSeq.current += 1;
     return workspaceSessions.refetch();
   };
   const liveHere = liveAgents.data;

@@ -137,6 +137,35 @@ test("task usage lists every workspace session; summarizers are a separate subto
   await expect(service.task("missing", paseo as never)).rejects.toThrow(/not found/);
 });
 
+test("task usage fallback skips projectKeys filter for legacy non-primary single-repo cards", async () => {
+  const r = await root();
+  const store = new BoardStore(join(r, "data"));
+  const now = new Date().toISOString();
+  const primary = join(r, "r1"),
+    other = join(r, "r2");
+  await store.mutate((b) => {
+    b.projects.push({ id: "p", paseoProjectId: "prj_board", title: "P", description: "", primaryPath: primary, repos: [primary, other], revision: 1, createdAt: now, updatedAt: now, archivedAt: null });
+    b.tasks.push({ id: "t", projectId: "p", workspaceId: "w", sourcePath: other, repoPaths: [other], title: "Legacy single repo", description: "", status: "todo", priority: "normal", position: 0, revision: 1, operationId: "o", createdAt: now, updatedAt: now, archivedAt: null });
+  });
+  const seenFilters: unknown[] = [];
+  const paseo = {
+    agents: {
+      list: async (options: { filter?: { projectKeys?: string[] } }) => {
+        seenFilters.push(options.filter);
+        // Simulate a workspace belonging to another native project: projectKeys=["prj_board"] would miss it.
+        const entries = options.filter?.projectKeys
+          ? []
+          : [{ agent: { id: "a1", title: "Worker", provider: "claude", workspaceId: "w", labels: {}, runtimeInfo: null } }];
+        return { entries, pageInfo: { nextCursor: null } };
+      },
+    },
+  };
+  const service = new UsageService(store, new LogLocator(join(r, "claude"), join(r, "codex")));
+  const usage = await service.task("t", paseo as never);
+  expect(seenFilters).toEqual([{ includeArchived: true }]);
+  expect(usage.sessions.map((s) => s.agentId)).toEqual(["a1"]);
+});
+
 test("summary ordering and number formatting", () => {
   expect(summarize([]).total).toEqual({ input: 0, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0 });
   expect(compactNumber(999)).toBe("999");

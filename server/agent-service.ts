@@ -296,9 +296,13 @@ export class AgentService {
       unavailableReason = "",
       partial = false;
     const SESSION_SUMMARY_TIMEOUT_MS = 5_000;
-    const bounded = <T>(run: Promise<T>): Promise<T> =>
+    const bounded = <T>(run: Promise<T>, timeoutMs = SESSION_SUMMARY_TIMEOUT_MS): Promise<T> =>
       new Promise<T>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Session summary timed out.")), SESSION_SUMMARY_TIMEOUT_MS);
+        if (timeoutMs <= 0) {
+          reject(new Error("Session summary timed out."));
+          return;
+        }
+        const timer = setTimeout(() => reject(new Error("Session summary timed out.")), timeoutMs);
         timer.unref?.();
         run.then(
           (value) => { clearTimeout(timer); resolve(value); },
@@ -327,7 +331,7 @@ export class AgentService {
           const remaining = deadline - Date.now();
           if (remaining <= 0) throw new Error("Session summary timed out.");
           const filter = projectKey ? { includeArchived: true as const, projectKeys: [projectKey] } : { includeArchived: true as const };
-          const page = await bounded(r.paseo.agents.list({ filter, page: { limit: 200, cursor } }));
+          const page = await bounded(r.paseo.agents.list({ filter, page: { limit: 200, cursor } }), remaining);
           scanned += page.entries.length;
           entries.push(
             ...page.entries

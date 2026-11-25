@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { PaseoApi } from "@getpaseo/client";
 import type { BoardStore } from "./store";
+import { isLegacyScope } from "../shared/scope";
 import { isSummarizer } from "../shared/summary";
 import { TOKEN_SLOT_MS, addUsage, zeroUsage, type SessionUsage, type TaskUsage, type TokenUsage } from "../shared/usage";
 
@@ -384,7 +385,8 @@ export class UsageService {
     } else {
       agents = [];
       const project = board.projects.find((p) => p.id === task.projectId);
-      const projectKey = project?.paseoProjectId && task.repoPaths.length <= 1 ? project.paseoProjectId : undefined;
+      const projectKey =
+        project?.paseoProjectId && !isLegacyScope(task, project) ? project.paseoProjectId : undefined;
       let cursor: string | undefined;
       do {
         const filter = projectKey ? { includeArchived: true as const, projectKeys: [projectKey] } : { includeArchived: true as const };
