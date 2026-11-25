@@ -10,7 +10,7 @@ import type { BoardStore } from "./store";
 import type { FlowLog } from "./flow-log";
 import type { GitStats } from "./git-stats";
 import type { SummaryStore } from "./summaries";
-import { runSummaryModels } from "./summary-models";
+import { outputSchemaFor, runSummaryModels } from "./summary-models";
 import { BackgroundJobs } from "./background-jobs";
 import type { AgentLike, UsageService } from "./usage";
 import { modelId } from "./agent-model";
@@ -386,8 +386,9 @@ export class InsightsService {
         title: `Kanban digest · ${project.title} · ${input.day}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
         prompt,
-        outputSchema: digestJsonSchema as unknown as Record<string, unknown>,
+        ...outputSchemaFor(model, digestJsonSchema as unknown as Record<string, unknown>),
       })),
+      prompt,
       parse: (text) => parseDigest(text, taskIds),
       remove: this.removeAgent,
       timeoutMs: this.timeoutMs,

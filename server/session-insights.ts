@@ -24,7 +24,7 @@ import {
 } from "../shared/session-insights";
 import { sessionSummaryRow } from "../shared/native-session";
 import { within } from "./summaries";
-import { runSummaryModels, isWorkspaceGone } from "./summary-models";
+import { runSummaryModels, isWorkspaceGone, outputSchemaFor } from "./summary-models";
 import type { NextMoveRows } from "./next-move-rows";
 import { generatedBranchName, resolveWorktreeBaseRef } from "./service";
 import { logFailure } from "./error-report";
@@ -238,8 +238,9 @@ export class SessionInsightService {
         title: `Flowly insights · ${agent.title || "session"}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-session": agent.id },
         prompt,
-        outputSchema: insightJsonSchema(parts) as unknown as Record<string, unknown>,
+        ...outputSchemaFor(model, insightJsonSchema(parts) as unknown as Record<string, unknown>),
       })),
+      prompt,
       parse: (text) => parseInsightOutput(text, parts),
       remove: this.remove,
       timeoutMs: this.timeoutMs,

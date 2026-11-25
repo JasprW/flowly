@@ -15,7 +15,7 @@ import { validZone } from "../shared/insights";
 import { SUMMARIZER_LABELS, readOnlyConfig, isSummarizer, resolveModel, summaryModelsOf, type SummarySettings } from "../shared/summary";
 import type { Board, Project } from "../shared/model";
 import { catchUpJsonSchema, catchUpPrompt, parseCatchUp, type Correction } from "../shared/guardrails";
-import { finishRefusingPermissions, runSummaryModels } from "./summary-models";
+import { finishStructuredTurn, isOutputSchemaRefusal, markOutputSchemaUnsupported, outputSchemaFor, runSummaryModels, supportsOutputSchema } from "./summary-models";
 import { readSkillBody, scanSkills, skillPath, writeSkill, type InstallResult } from "./project-skills";
 import {
   BACKFILL_DAYS,
@@ -557,20 +557,33 @@ export class WorkflowInsightsService {
       }) + (guardrails ? `\n\n${guardrails}` : "");
       const { usage, parsed } = await this.background.use(project, paseo, async (workspaceId) => {
         const prompt = workflowPrompt(days, material, await this.language(), !!guardrails);
-        const agent = await createHidden((hidden) => paseo.workspaces.ref(workspaceId).agents.create({
+        const deadline = Date.now() + this.timeoutMs;
+        const createAgent = () => createHidden((hidden) => paseo.workspaces.ref(workspaceId).agents.create({
           ...hidden,
           config: readOnlyConfig(model),
           title: `Flowly workflow insights · ${project.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id, ...WORKFLOW_LABEL },
           prompt,
-          outputSchema: workflowJsonSchema as unknown as Record<string, unknown>,
+          ...outputSchemaFor(model, workflowJsonSchema as unknown as Record<string, unknown>),
         }));
+        const hadSchema = supportsOutputSchema(model);
+        let agent;
+        try {
+          agent = await createAgent();
+        } catch (error) {
+          if (!hadSchema || !isOutputSchemaRefusal(error)) throw error;
+          markOutputSchemaUnsupported(model);
+          agent = await createAgent();
+        }
         this.summarizer.set(agent.id, true);
         let usage: RunUsage | undefined;
         let parsed;
         try {
-          const result = await finishRefusingPermissions(agent, this.timeoutMs);
-          if (result.status !== "idle")
+          const remaining = deadline - Date.now();
+          const result = remaining <= 0
+            ? { status: "timeout" as const, error: null, lastMessage: null }
+            : await finishStructuredTurn(agent, model, prompt, remaining);
+          if (result.status !== "idle" || result.error)
             throw new Error(
               result.status === "timeout"
                 ? "The workflow insights model timed out."
@@ -638,6 +651,7 @@ export class WorkflowInsightsService {
     if (summary.summaryEnabled) return;
     const input = await guardrails.catchUpInput(project.id);
     if (!input) return;
+    const catchUp = catchUpPrompt(input.clues, input.section);
     const corrections = await this.background.use(project, paseo, async (workspaceId) => {
       const { output } = await runSummaryModels(paseo, summaryModelsOf(summary), {
         create: async (model) => {
@@ -646,12 +660,13 @@ export class WorkflowInsightsService {
             config: readOnlyConfig(model),
             title: `Flowly guardrails · ${project.title}`.slice(0, 120),
             labels: { ...SUMMARIZER_LABELS, "flowly-project": project.id },
-            prompt: catchUpPrompt(input.clues, input.section),
-            outputSchema: catchUpJsonSchema as unknown as Record<string, unknown>,
+            prompt: catchUp,
+            ...outputSchemaFor(model, catchUpJsonSchema as unknown as Record<string, unknown>),
           }));
           this.summarizer.set(agent.id, true);
           return agent;
         },
+        prompt: catchUp,
         parse: (text) => parseCatchUp(text, input.clues.length),
         remove: this.removeAgent,
         timeoutMs: this.timeoutMs,

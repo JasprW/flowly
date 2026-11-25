@@ -126,6 +126,12 @@ export function parseInsightOutput(textOut: string | null | undefined, parts: In
     const parsed = progressOutput.safeParse(raw);
     if (parsed.success && (!parsed.data.update || parsed.data.state)) progress = parsed.data;
   }
+  const hasProgress = parts.progress && progress !== null;
+  const hasMoves = parts.nextMoves && Array.isArray(raw.moves);
+  const hasIdeas = parts.ideas && Array.isArray(raw.ideas);
+  if ((parts.progress || parts.nextMoves || parts.ideas) && !hasProgress && !hasMoves && !hasIdeas) {
+    throw new Error("The insight model returned no usable fields.");
+  }
   return {
     progress,
     moves: parts.nextMoves ? items(raw.moves, moveOutput, nextMoveLimits.count) : [],
