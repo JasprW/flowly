@@ -372,3 +372,17 @@ GitLab issue 或 MR…     （有 GitLab 连接时）
 - 遥测：不加心跳字段，理由同 §14。What's new：由 release 任务维护，本功能 PR 不加条目。
 
 官方 API 契约：[GraphQL 与 API key](https://linear.app/developers/graphql)、[分页](https://linear.app/developers/pagination)、[过滤](https://linear.app/developers/filtering)。`Issue.comments.orderBy` 的公开 introspection 描述确认 first 按最新在前返回。
+
+## 16. Notion（2026-11-25，只读页面输入）
+
+第八个 provider 族 `notion`（provider id `notion`），沿用本 spec 的全部规则：只读、外部状态不驱动卡片、默认 input、令牌只在 daemon。范围是 **Notion 页面**（含数据库条目页面，数据库名作为 `container` 显示）。New task 的 **From Notion** 与 Artifacts 的 + 菜单都会出现这个服务。
+
+- **连接**：Notion 只有云端，一个 provider，无自建变体。`providerInfo.notion` 设为 `defaultBaseUrl: "https://www.notion.so"` 且 `cloudOnly: true`，设置页不再显示“自建”切换或多余地址栏，只需填写内部集成密钥（`notion.so/profile/integrations`，开启 Read content，可选 Read comments，并把页面或数据库共享给该集成）与可选显示名。API 根固定为 `https://api.notion.com`，请求头为 `Authorization: Bearer <secret>` 与 `Notion-Version: 2022-06-28`。校验调用 `GET /v1/users/me`，账户显示 `工作区名 (集成名)`。
+- **只读**：`ReadOnlyHttp` 的 GET 白名单仅允许 `/v1/users/me`、`/v1/pages/<uuid>`、`/v1/blocks/<uuid>/children`、`/v1/databases/<uuid>`、`/v1/comments`；POST `queryEndpoints` 仅放行 `/v1/search`（与 Azure DevOps WIQL、Linear GraphQL 同一机制），所有写路径一律拒绝。
+- **条目类型与 key**：沿用 `page`（`readBytes = connectorLimits.pageBytes` = 64 KB，卡片面不显示 key）。规范 key 为小写连字符 UUID（`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）；`parseKey` 同时接受 32 位十六进制与连字符 UUID，裸数字仍作为文字搜索。
+- **链接识别**：识别 `notion.so`、`www.notion.so`、`app.notion.com` 与 `*.notion.site` 下的页面链接（带或不带 workspace 段与标题 slug），以及数据库侧栏预览链接中的 `?p=<32hex|uuid>`（`?p=` 优先于路径中的数据库 ID）；非 Notion 域名一律拒绝。
+- **最近与搜索**：`POST /v1/search` 过滤 `object = page` 并按 `last_edited_time` 降序，过滤掉已归档或回收站页面，必要时按 `next_cursor` 分页补齐。
+- **完整读取与 Markdown**：读取页面属性（标题、状态/类别、优先级、负责人及其他非空属性）、父数据库名称（按连接缓存 10 分钟，失败静默忽略）、分页递归块内容（遵循 `has_more`/`next_cursor`，深度上限 2、总块数上限 200，转换段落、各级标题、无序/有序/待办列表、引用、callout、折叠块、代码块、分割线、公式、表格、书签/附件与子页面/子数据库引用），以及分页评论（最多保留最新 20 条，按时间升序显示；若集成未开 Read comments 返回 403，静默回落为空评论而不阻断页面读取）。
+- **指纹**：标题 + 内容属性（排除 status/priority/assignee）+ 转换后的块正文 + 评论，评论单独作为 discussion 部分；`updatedCoversContent = false`（评论不一定推进 `last_edited_time`）。
+- **错误**：401 与 `/v1/users/me`、`/v1/search` 上的 403 → `EXTERNAL_AUTH`；单页/块/数据库/评论上的 403 与 404 → `EXTERNAL_NOT_FOUND`（避免单个未共享页面或未开评论权限把整个连接标为失效）；429/5xx → `EXTERNAL_UNAVAILABLE` 并读取 `Retry-After`。
+- **界面与文档**：品牌图标使用 Simple Icons 的 Notion 标志（CC0），渲染为 48 px 深浅双色透明 PNG（跟随主题）。同步更新 9 个语言目录、欢迎页功能行、`jira-connect` tip、skill 与 README；不改版本号、遥测和 What's new。

@@ -42,7 +42,7 @@ export function useConnections(enabled = true) {
 }
 
 /** Service names are brands: shown as written in every language. */
-export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps", shortcut: "Shortcut", linear: "Linear" };
+export const familyNames: Record<ConnectorFamily, string> = { jira: "Jira", confluence: "Confluence", github: "GitHub", gitlab: "GitLab", azure: "Azure DevOps", shortcut: "Shortcut", linear: "Linear", notion: "Notion" };
 
 /** The row icon of an item: its kind, not its service. */
 export function itemIcon(provider: ConnectorProvider, itemType: ItemType) {
@@ -61,6 +61,7 @@ export function itemKindLabel(provider: ConnectorProvider, itemType: ItemType) {
   if (family === "azure") return t("Azure DevOps work item");
   if (family === "shortcut") return itemType === "epic" ? t("Shortcut epic") : t("Shortcut story");
   if (family === "linear") return t("Linear issue");
+  if (family === "notion") return t("Notion page");
   const service = familyNames[family];
   if (itemType === "pull") return t("{service} pull request", { service });
   if (itemType === "merge_request") return t("{service} merge request", { service });
@@ -76,6 +77,7 @@ export const linkTitles: Record<ConnectorFamily, string> = {
   azure: msg("Azure DevOps work item"),
   shortcut: msg("Shortcut story or epic"),
   linear: msg("Linear issue"),
+  notion: msg("Notion page"),
 };
 
 const searchHints: Record<ConnectorFamily, string> = {
@@ -86,6 +88,7 @@ const searchHints: Record<ConnectorFamily, string> = {
   azure: msg("Work item number, AB#123, a link or words from the title"),
   shortcut: msg("Story number, sc-123, a link or words from the title"),
   linear: msg("ENG-123, a link or words from the title"),
+  notion: msg("Page link, id or words from the title"),
 };
 
 const recentTitles: Record<ConnectorFamily, string> = {
@@ -96,6 +99,7 @@ const recentTitles: Record<ConnectorFamily, string> = {
   azure: msg("Open work items assigned to me"),
   shortcut: msg("My open stories"),
   linear: msg("Open issues assigned to me"),
+  notion: msg("Recently edited Notion pages"),
 };
 
 const emptyRecent: Record<ConnectorFamily, string> = {
@@ -106,6 +110,7 @@ const emptyRecent: Record<ConnectorFamily, string> = {
   azure: msg("No open work items are assigned to you."),
   shortcut: msg("You have no open stories."),
   linear: msg("No open issues are assigned to you."),
+  notion: msg("No Notion pages are shared with this integration yet."),
 };
 
 /** Identity of an item across connections of one service: keys repeat between services (team/app#12 on GitHub and GitLab). */
@@ -516,6 +521,7 @@ const providerLabels: Record<ConnectorProvider, string> = {
   "azure-devops": "Azure DevOps",
   shortcut: "Shortcut",
   linear: "Linear",
+  notion: "Notion",
 };
 
 const addTitles: Record<ConnectorFamily, string> = {
@@ -526,6 +532,7 @@ const addTitles: Record<ConnectorFamily, string> = {
   azure: msg("Add an Azure DevOps connection"),
   shortcut: msg("Add a Shortcut connection"),
   linear: msg("Add a Linear connection"),
+  notion: msg("Add a Notion connection"),
 };
 
 /**
@@ -584,6 +591,8 @@ function tokenHint(provider: ConnectorProvider, hosted: boolean) {
       return t("Create one in Shortcut → Settings → API Tokens.");
     case "linear":
       return t("Create a personal API key in Linear → Settings → Security & access, with read access.");
+    case "notion":
+      return t("Create an internal integration at notion.so/profile/integrations with Read content (and optionally Read comments), then share the pages or databases with it.");
     default:
       return t("Create one in GitLab → Preferences → Access tokens with the read_api scope.");
   }
@@ -599,6 +608,7 @@ const addressPlaceholders: Record<ConnectorProvider, string> = {
   "azure-devops": "https://dev.azure.com/your-organization",
   shortcut: "https://app.shortcut.com/your-workspace",
   linear: "https://linear.app/your-workspace",
+  notion: "https://www.notion.so",
 };
 
 function ConnectionEditor({ family, connection, onClose }: { family: ConnectorFamily; connection: Connection | null; onClose(): void }) {
@@ -615,8 +625,9 @@ function ConnectionEditor({ family, connection, onClose }: { family: ConnectorFa
   const [provider, setProvider] = useState<ConnectorProvider>(connection?.provider ?? providers[0]!);
   const info = providerInfo[provider];
   const defaultBase = info.defaultBaseUrl || "";
-  // GitHub/GitLab: the hosted service, or a self-hosted address.
-  const [hosted, setHosted] = useState(() => !!defaultBase && (!connection || connection.baseUrl === defaultBase));
+  const canSelfHost = !!defaultBase && !info.cloudOnly;
+  // GitHub/GitLab: the hosted service, or a self-hosted address; cloudOnly providers always use their default address.
+  const [hosted, setHosted] = useState(() => !!defaultBase && (!!info.cloudOnly || !connection || connection.baseUrl === defaultBase));
   const [baseUrl, setBaseUrl] = useState(connection && connection.baseUrl !== defaultBase ? connection.baseUrl : "");
   const [name, setName] = useState(connection?.name ?? "");
   const [email, setEmail] = useState("");
@@ -695,7 +706,7 @@ function ConnectionEditor({ family, connection, onClose }: { family: ConnectorFa
       </View>
       {!!error && <Notice>{error}</Notice>}
       {providers.length > 1 && <Choices title={t("{service} type", { service })} value={provider} options={typeOptions} onChange={setProvider} />}
-      {!!defaultBase && <Choices title={t("Where")} value={hosted ? "hosted" : "self"} options={hostedOptions} onChange={(v) => setHosted(v === "hosted")} />}
+      {canSelfHost && <Choices title={t("Where")} value={hosted ? "hosted" : "self"} options={hostedOptions} onChange={(v) => setHosted(v === "hosted")} />}
       {!hosted && (
         <Field title={t("{service} address", { service })} value={baseUrl} onChange={setBaseUrl} placeholder={addressPlaceholders[provider]} />
       )}

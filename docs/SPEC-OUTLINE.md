@@ -310,3 +310,6 @@ releases from validated version tags. [Spec](CI-CD-SPEC.md),
 
 2026-11-12 Linear connector：第七个只读 provider 族，覆盖 issue，`TEAM-123` key，GraphQL 只发常量 query
 （`queryEndpoints` 放行 `/graphql`），issue 的 Markdown 带子 issue 与评论。见 [spec](CONNECTORS-SPEC.md) §15。
+
+2026-11-25 Notion connector：第八个只读 provider 族，覆盖 Notion 页面，小写连字符 UUID key，
+`queryEndpoints` 仅放行 `POST /v1/search`，块内容与评论分页读取并转换为 Markdown。见 [spec](CONNECTORS-SPEC.md) §16。
