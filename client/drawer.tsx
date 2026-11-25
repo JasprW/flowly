@@ -344,14 +344,26 @@ function TaskDrawerView({
     poll: false,
     select: useCallback((agents: PaseoAgent[]) => agents.filter((a) => a.workspaceId === workspaceId), [workspaceId]),
   });
-  // Archived ones come from the daemon (it pages every agent on the host).
+  // Archived ones come from the daemon (project-scoped and cached per project).
   const archivedRead = useRpc(rpc.archivedSessions);
+  const freshArchivedSeq = useRef(0);
   const workspaceSessions = useQuery({
     queryKey: ["flowly", "sessions", "archived", task.id],
-    queryFn: async () => (await archivedRead({ taskId: task.id })) as unknown as PaseoAgent[],
+    queryFn: async () => {
+      const seq = freshArchivedSeq.current;
+      const fresh = seq > 0;
+      const result = (await archivedRead(fresh ? { taskId: task.id, fresh: true } : { taskId: task.id })) as unknown as PaseoAgent[];
+      if (fresh && freshArchivedSeq.current === seq) freshArchivedSeq.current = 0;
+      return result;
+    },
     enabled: ready,
     refetchInterval: 30000,
+    retry: 1,
   });
+  const refetchArchived = (fresh = false) => {
+    if (fresh) freshArchivedSeq.current += 1;
+    return workspaceSessions.refetch();
+  };
   const liveHere = liveAgents.data;
   const sessionsData = useMemo(() => {
     if (!liveHere && !workspaceSessions.data) return undefined;
@@ -365,13 +377,13 @@ function TaskDrawerView({
   useEffect(() => {
     const before = previousLive.current.split(",").filter(Boolean);
     previousLive.current = liveIds;
-    if (active && before.some((id) => !liveIds.split(",").includes(id))) void workspaceSessions.refetch();
+    if (active && before.some((id) => !liveIds.split(",").includes(id))) void refetchArchived(true);
   }, [liveIds]);
   const sessions = {
     data: sessionsData,
     error: liveAgents.error ?? workspaceSessions.error,
     isPending: sessionsData === undefined && (liveAgents.isPending || workspaceSessions.isPending),
-    refetch: () => Promise.all([liveAgents.refetch(), workspaceSessions.refetch()]),
+    refetch: () => Promise.all([liveAgents.refetch(), refetchArchived(true)]),
   };
   const unavailable =
     !workspace.data ||

@@ -42,6 +42,7 @@ test("matches canonical subdirectories and external Git worktrees without path-p
   expect(await match(join(repo, "subdir"))).toEqual([repo]);
   expect(await match(other)).toEqual([]);
   expect(await match(join(root, "missing"))).toEqual([]);
+  expect(await repoMatcher([])(worktree)).toEqual([]);
 });
 test("repo filters include unrestricted tasks and selected memberships, independent of startup source", () => {
   const project = { repos: ["a", "b", "c"] };

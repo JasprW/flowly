@@ -388,3 +388,59 @@ test("a repeated create returns its card, but different content under the same o
   });
   expect((await x.service.createTask({ ...x.input, operationId: "op-2", title: "Other" }, x.paseo)).id).toBe(second.id);
 });
+
+test("resources() caches within TTL, coalesces concurrent reads, and ignores stale loads across invalidateResources()", async () => {
+  const x = await setup();
+  let clock = 1_000;
+  const service = new BoardService(x.store, { resourcesTtlMs: 8_000, now: () => clock });
+  let calls = 0;
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  let releaseSecond!: () => void;
+  const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
+  const paseo = {
+    projects: {
+      list: async () => {
+        calls += 1;
+        const n = calls;
+        if (n === 1) {
+          await firstGate;
+          return { projects: [{ projectId: "p1", projectDisplayName: "Old", projectRootPath: x.a }] };
+        }
+        if (n === 2) {
+          await secondGate;
+          return { projects: [{ projectId: "p2", projectDisplayName: "New", projectRootPath: x.a }] };
+        }
+        return { projects: [{ projectId: "p3", projectDisplayName: "Expired", projectRootPath: x.a }] };
+      },
+    },
+    workspaces: {
+      list: async () => ({ entries: [], pageInfo: { nextCursor: null } }),
+    },
+  } as unknown as PaseoApi;
+
+  const p1 = service.resources(paseo);
+  const p1Coalesced = service.resources(paseo);
+  await Promise.resolve();
+  expect(calls).toBe(1);
+
+  // Mutation invalidates resources while load 1 is still in flight; load 2 starts independently.
+  service.invalidateResources();
+  const p2 = service.resources(paseo);
+  await Promise.resolve();
+  expect(calls).toBe(2);
+
+  // Load 2 completes first, then stale load 1 finishes later: cache must keep p2, not revert to p1.
+  releaseSecond();
+  expect((await p2).projects.map((p) => p.id)).toEqual(["p2"]);
+  releaseFirst();
+  expect((await p1).projects.map((p) => p.id)).toEqual(["p1"]);
+  expect((await p1Coalesced).projects.map((p) => p.id)).toEqual(["p1"]);
+  expect((await service.resources(paseo)).projects.map((p) => p.id)).toEqual(["p2"]);
+  expect(calls).toBe(2);
+
+  // After TTL expires, resources() reloads.
+  clock += 8_001;
+  expect((await service.resources(paseo)).projects.map((p) => p.id)).toEqual(["p3"]);
+  expect(calls).toBe(3);
+});

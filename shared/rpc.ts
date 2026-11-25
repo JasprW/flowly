@@ -722,7 +722,7 @@ export const sessionTail = defineRpc({
 });
 export const archivedSessions = defineRpc({
   name: "sessions.archived",
-  input: z.strictObject({ taskId: z.string().min(1).max(200) }),
+  input: z.strictObject({ taskId: z.string().min(1).max(200), fresh: z.boolean().optional() }),
   // Paseo agent snapshots, passed through as the daemon returns them.
   output: z.array(z.looseObject({ id: z.string(), archivedAt: z.string().nullish() })),
 });

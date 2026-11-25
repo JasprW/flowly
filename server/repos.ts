@@ -44,18 +44,31 @@ export function repoMatcher(repos: string[]) {
     return git.get(path)!;
   };
   return async (workspacePath: string): Promise<string[]> => {
+    if (!repos.length) return [];
     const path = await canonical(workspacePath);
     if (!path) return [];
-    const identity = await common(path);
     const matches: string[] = [];
+    const unmatched: { repo: string; root: string }[] = [];
     for (const repo of repos) {
       const root = await canonical(repo);
       if (!root) continue;
-      if (
-        contains(root, path) ||
-        (identity && identity === (await common(root)))
-      )
-        matches.push(repo);
+      if (contains(root, path)) matches.push(repo);
+      else unmatched.push({ repo, root });
+    }
+    if (unmatched.length) {
+      const repoCommons: { repo: string; commonDir: string }[] = [];
+      for (const item of unmatched) {
+        const commonDir = await common(item.root);
+        if (commonDir) repoCommons.push({ repo: item.repo, commonDir });
+      }
+      if (repoCommons.length) {
+        const identity = await common(path);
+        if (identity) {
+          for (const item of repoCommons) {
+            if (identity === item.commonDir) matches.push(item.repo);
+          }
+        }
+      }
     }
     return matches.sort((a, b) => b.length - a.length);
   };
