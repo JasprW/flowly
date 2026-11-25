@@ -7,10 +7,10 @@ import { z } from "zod";
  * picker searches. Nothing here talks to a service.
  */
 
-export const connectorFamilies = ["jira", "confluence", "github", "gitlab", "azure", "shortcut", "linear"] as const;
+export const connectorFamilies = ["jira", "confluence", "github", "gitlab", "azure", "shortcut", "linear", "notion"] as const;
 export type ConnectorFamily = (typeof connectorFamilies)[number];
 
-export const connectorProviders = ["jira-dc", "jira-cloud", "confluence-dc", "confluence-cloud", "github", "gitlab", "azure-devops", "shortcut", "linear"] as const;
+export const connectorProviders = ["jira-dc", "jira-cloud", "confluence-dc", "confluence-cloud", "github", "gitlab", "azure-devops", "shortcut", "linear", "notion"] as const;
 export type ConnectorProvider = (typeof connectorProviders)[number];
 export const connectorProviderSchema = z.enum(connectorProviders);
 
@@ -21,7 +21,7 @@ export const itemTypeSchema = z.enum(itemTypes);
 /** What a provider needs to connect (CONNECTORS-SPEC §4.1). */
 export const providerInfo: Record<
   ConnectorProvider,
-  { family: ConnectorFamily; email: boolean; defaultBaseUrl?: string }
+  { family: ConnectorFamily; email: boolean; defaultBaseUrl?: string; cloudOnly?: boolean }
 > = {
   "jira-dc": { family: "jira", email: false },
   "jira-cloud": { family: "jira", email: true },
@@ -34,6 +34,8 @@ export const providerInfo: Record<
   shortcut: { family: "shortcut", email: false },
   // Same as Shortcut: one connection is one workspace (linear.app/<url key>).
   linear: { family: "linear", email: false },
+  // Cloud only; one integration token scopes the pages shared with it.
+  notion: { family: "notion", email: false, defaultBaseUrl: "https://www.notion.so", cloudOnly: true },
 };
 export const familyOf = (provider: ConnectorProvider) => providerInfo[provider].family;
 export const familyProviders = (family: ConnectorFamily) => connectorProviders.filter((p) => providerInfo[p].family === family);
@@ -393,6 +395,73 @@ export const linearItemUrl = (baseUrl: string, key: string) => {
   return valid ? `${baseUrl}/issue/${valid}` : "";
 };
 
+/* ---------- Notion ---------- */
+
+const notionDashedUuid = /^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})$/i;
+const notionCompactUuid = /^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12})$/i;
+
+/** Normalizes a Notion 32-hex or dashed UUID page id to lowercase dashed UUID form. */
+export function notionPageId(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  const dashed = notionDashedUuid.exec(trimmed);
+  if (dashed) return `${dashed[1]}-${dashed[2]}-${dashed[3]}-${dashed[4]}-${dashed[5]}`.toLowerCase();
+  const compact = notionCompactUuid.exec(trimmed);
+  return compact ? `${compact[1]}-${compact[2]}-${compact[3]}-${compact[4]}-${compact[5]}`.toLowerCase() : null;
+}
+
+/** True for official Notion web hosts (notion.so, www.notion.so, app.notion.com, *.notion.site). */
+export function isNotionHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "notion.so" || host === "www.notion.so" || host === "app.notion.com" || /^[a-z0-9-]+\.notion\.site$/.test(host);
+}
+
+/**
+ * Recognizes Notion page links across notion.so, www.notion.so, app.notion.com and *.notion.site:
+ * - /<optional-workspace>/<Title>-<32hex> or /<32hex> or /<dashed-uuid>
+ * - Database peek links carrying ?p=<32hex|uuid> (peek target takes precedence over the view path).
+ */
+export function notionFromUrl(value: string, baseUrl?: string): { itemType: "page"; key: string } | null {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  let allowed = isNotionHost(url.hostname);
+  if (!allowed && baseUrl) {
+    try {
+      allowed = url.host.toLowerCase() === new URL(baseUrl).host.toLowerCase();
+    } catch {
+      allowed = false;
+    }
+  }
+  if (!allowed) return null;
+  const peek = notionPageId(url.searchParams.get("p"));
+  if (peek) return { itemType: "page", key: peek };
+  const segments = url.pathname.split("/").filter(Boolean);
+  const last = segments.at(-1);
+  if (!last) return null;
+  const decoded = decode(last);
+  const dashedTail = /(?:^|-)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(decoded);
+  if (dashedTail) {
+    const id = notionPageId(dashedTail[1]);
+    return id ? { itemType: "page", key: id } : null;
+  }
+  const compactTail = /(?:^|-)([0-9a-f]{32})$/i.exec(decoded);
+  if (compactTail) {
+    const id = notionPageId(compactTail[1]);
+    return id ? { itemType: "page", key: id } : null;
+  }
+  return null;
+}
+
+export const notionPageUrl = (baseUrl: string, key: string) => {
+  const id = notionPageId(key);
+  return id ? `${baseUrl}/${id.replace(/-/g, "")}` : "";
+};
+
 /* ---------- Dispatch ---------- */
 
 /** The item a link of `connection` points at; null when it is not one. Display-name page links need a lookup. */
@@ -414,6 +483,7 @@ export function recognizeUrl(
   if (family === "azure") return azureFromUrl(value, connection.baseUrl);
   if (family === "shortcut") return shortcutFromUrl(value, connection.baseUrl);
   if (family === "linear") return linearFromUrl(value, connection.baseUrl);
+  if (family === "notion") return notionFromUrl(value, connection.baseUrl);
   return gitlabFromUrl(value, connection.baseUrl);
 }
 
@@ -455,6 +525,10 @@ export function parseKey(value: string, provider: ConnectorProvider): { itemType
     const key = linearKey(text);
     return key ? { itemType: "issue", key } : null;
   }
+  if (family === "notion") {
+    const id = notionPageId(text);
+    return id ? { itemType: "page", key: id } : null;
+  }
   const parts = splitRepoKey(text);
   if (!parts) return null;
   if (family === "github") return parts.sep === "#" ? { itemType: "issue", key: `${parts.repo}#${parts.number}` } : null;
@@ -470,6 +544,7 @@ export function itemUrl(connection: Pick<Connection, "provider" | "baseUrl">, it
   if (family === "azure") return azureItemUrl(connection.baseUrl, key);
   if (family === "shortcut") return shortcutItemUrl(connection.baseUrl, key, itemType);
   if (family === "linear") return linearItemUrl(connection.baseUrl, key);
+  if (family === "notion") return notionPageUrl(connection.baseUrl, key);
   return gitlabItemUrl(connection.baseUrl, key, itemType);
 }
 
@@ -517,8 +592,8 @@ export function classifyQuery(raw: string, connection: Pick<Connection, "provide
     const id = shortcutId(/^(?:sc-)?(\d+)$/i.exec(value)?.[1]);
     return id ? { kind: "key", itemType: "story", key: shortcutKey("story", id) } : { kind: "text", text: value.slice(0, connectorLimits.query) };
   }
-  // A bare number names no Linear issue without its team key, so it is searched as text.
-  if (family === "linear") return { kind: "text", text: value.slice(0, connectorLimits.query) };
+  // A bare number names no Linear issue or Notion page, so it is searched as text.
+  if (family === "linear" || family === "notion") return { kind: "text", text: value.slice(0, connectorLimits.query) };
   if (family !== "confluence") {
     const number = /^([#!]?)(\d{1,9})$/.exec(value);
     if (number && (family === "gitlab" || number[1] !== "!"))
@@ -547,6 +622,7 @@ export function itemLabel(provider: ConnectorProvider, itemType: ItemType) {
   if (family === "azure") return "Azure DevOps work item";
   if (family === "shortcut") return itemType === "epic" ? "Shortcut epic" : "Shortcut story";
   if (family === "linear") return "Linear issue";
+  if (family === "notion") return "Notion page";
   const name = family === "github" ? "GitHub" : "GitLab";
   return `${name} ${itemType === "pull" ? "pull request" : itemType === "merge_request" ? "merge request" : "issue"}`;
 }

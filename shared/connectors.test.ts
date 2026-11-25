@@ -278,3 +278,38 @@ describe("Linear keys and links", () => {
     expect(externalTarget("https://linear.app/acme/issue/ENG-123", [lin, jira])).toMatchObject({ connectionId: "lin" });
   });
 });
+
+describe("Notion pages and links", () => {
+  const nt = { id: "nt", provider: "notion" as const, baseUrl: "https://www.notion.so" };
+  const compact = "354e1b432393813f9e56eba89a43bbad";
+  const dashed = "354e1b43-2393-813f-9e56-eba89a43bbad";
+
+  test("recognizes notion.so, www.notion.so, app.notion.com, *.notion.site, slugs, and ?p= database peeks", () => {
+    expect(recognizeUrl(`https://www.notion.so/Design-Spec-${compact}`, nt)).toEqual({ itemType: "page", key: dashed });
+    expect(recognizeUrl(`https://notion.so/acme/Design-Spec-${compact}?v=1234`, nt)).toEqual({ itemType: "page", key: dashed });
+    expect(recognizeUrl(`https://app.notion.com/Design-Spec-${compact}`, nt)).toEqual({ itemType: "page", key: dashed });
+    expect(recognizeUrl(`https://acme.notion.site/${dashed}`, nt)).toEqual({ itemType: "page", key: dashed });
+    expect(recognizeUrl(`https://www.notion.so/acme/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?v=bbb&p=${compact}&pm=s`, nt)).toEqual({
+      itemType: "page",
+      key: dashed,
+    });
+    expect(recognizeUrl(`https://evil.example.org/Design-Spec-${compact}`, nt)).toBeNull();
+    expect(recognizeUrl(`https://notion.so.evil.com/${compact}`, nt)).toBeNull();
+    expect(recognizeUrl("https://www.notion.so/acme/not-a-page-id", nt)).toBeNull();
+  });
+
+  test("UUID/32-hex keys, picker queries, urls, card face, and labels", () => {
+    expect(parseKey(compact.toUpperCase(), "notion")).toEqual({ itemType: "page", key: dashed });
+    expect(parseKey(dashed, "notion")).toEqual({ itemType: "page", key: dashed });
+    expect(parseKey("12345", "notion")).toBeNull();
+    expect(classifyQuery("12345", nt)).toEqual({ kind: "text", text: "12345" });
+    expect(classifyQuery(compact, nt)).toEqual({ kind: "key", itemType: "page", key: dashed });
+    expect(classifyQuery(`https://app.notion.com/Plan-${compact}`, nt)).toEqual({ kind: "key", itemType: "page", key: dashed });
+    expect(classifyQuery("launch checklist", nt)).toEqual({ kind: "text", text: "launch checklist" });
+    expect(itemUrl(nt, "page", dashed)).toBe(`https://www.notion.so/${compact}`);
+    expect(faceKey({ key: dashed, itemType: "page" })).toBeNull();
+    expect(itemLabel("notion", "page")).toBe("Notion page");
+    expect(externalTarget(compact, [nt])).toMatchObject({ connectionId: "nt", itemType: "page", key: dashed });
+    expect(externalTarget(`https://app.notion.com/Plan-${compact}`, [nt])).toMatchObject({ connectionId: "nt", itemType: "page", key: dashed });
+  });
+});

@@ -6,6 +6,14 @@
 
 # Implementation progress
 
+## Notion page connector — 2026-11-25
+
+- Added Notion as the eighth read-only provider family (`CONNECTORS-SPEC §16`). Each connection binds a Notion internal integration secret held only by the daemon (`https://api.notion.com`, `Notion-Version: 2022-06-28`).
+- Recognizes Notion page URLs across `notion.so`, `www.notion.so`, `app.notion.com`, and `*.notion.site` (including workspace paths, title slugs, compact 32-hex / dashed UUIDs, and database peek `?p=<id>` links) plus bare UUID/32-hex keys.
+- Picker lists recently edited pages shared with the integration and searches by title via `POST /v1/search` (the sole allowlisted POST endpoint; all other paths are GET-only and mutating endpoints are refused). Full reads fetch paginated block children (depth 2, up to 200 blocks) converted to Markdown, parent database names, rich properties, and paginated comments (latest 20, gracefully degrading on 403 when Read comments is disabled).
+- Fingerprints cover title, non-status properties, rendered blocks, and comments (with separate discussion hash); status, priority, and assignee changes do not trigger unread.
+- Updated nine translation catalogs, onboarding copy, skill text, and docs; no version, telemetry, or What's new changes.
+
 ## Auto review retry and Attention after a failure (card "auto review优化") — 2026-11-24
 
 - Spec: [AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md) §3.5, D18, D19, §13.3; §3.2, §8.2, §8.5, §9.2 and §9.4 updated.
