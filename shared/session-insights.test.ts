@@ -28,11 +28,14 @@ test("parses progress, moves and ideas; caps moves at 3 and ideas at 2; tolerate
   expect(only.progress?.update).toBe(false);
 });
 
-test("drops malformed moves and ideas instead of failing the whole run; rejects missing JSON", () => {
+test("drops malformed moves and ideas instead of failing the whole run; rejects missing JSON or unusable fields", () => {
   const out = parseInsightOutput(JSON.stringify({ moves: [{ label: "" }, { label: "Ok", prompt: "Go" }, "bad"], ideas: [{ title: "" }, { title: "T", detail: "D" }] }), { progress: false, nextMoves: true, ideas: true });
   expect(out.moves).toEqual([{ label: "Ok", prompt: "Go" }]);
   expect(out.ideas).toEqual([{ title: "T", detail: "D", rationale: "", scope: "new" }]);
   expect(() => parseInsightOutput("no json here", parts)).toThrow(/no JSON/);
+  expect(() => parseInsightOutput(JSON.stringify({ unrelated: true }), { progress: true, nextMoves: false, ideas: false })).toThrow(/no usable fields/);
+  expect(() => parseInsightOutput(JSON.stringify({}), { progress: false, nextMoves: true, ideas: false })).toThrow(/no usable fields/);
+  expect(parseInsightOutput(JSON.stringify({ moves: [] }), { progress: false, nextMoves: true, ideas: false })).toEqual({ progress: null, moves: [], ideas: [] });
 });
 
 test("the prompt and schema only ask for enabled parts; open idea titles are listed to avoid repeats; a full idea list asks for none", () => {

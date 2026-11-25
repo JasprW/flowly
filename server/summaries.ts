@@ -26,7 +26,7 @@ import {
   type SummaryState,
 } from "../shared/summary";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
-import { runSummaryModels, isWorkspaceGone } from "./summary-models";
+import { runSummaryModels, isWorkspaceGone, outputSchemaFor } from "./summary-models";
 import { logFailure } from "./error-report";
 import { BackgroundJobs } from "./background-jobs";
 export { availableModels } from "./summary-models";
@@ -293,8 +293,9 @@ export class SummaryService {
         labels: { ...SUMMARIZER_LABELS, "flowly-task": taskId },
         ...taskMetadata(taskId),
         prompt,
-        outputSchema: (section ? reworkOutputJsonSchema : outputJsonSchema) as unknown as Record<string, unknown>,
+        ...outputSchemaFor(model, (section ? reworkOutputJsonSchema : outputJsonSchema) as unknown as Record<string, unknown>),
       })),
+      prompt,
       parse: (text) => ({ ...parseModelOutput(text), correction: section ? correctionOf(text) : null }),
       remove: this.remove,
       timeoutMs: this.timeoutMs,

@@ -40,7 +40,7 @@ summary 是系统写的描述文字，**不改**卡片业务状态（lane），�
 - `recap`：截至目前对判断进度有用的结果（不只本轮），最多 4 行 `- ` 要点，每行 ≤15 词或 30 个汉字；超出时合并或丢弃旧要点；只写决策和结果，不写读文件、跑命令等过程。
 - `next`：唯一的下一步或在等谁，一句话（≤20 词或 40 个汉字）。
 - 语言与对话一致。
-- 解析 `lastMessage`：容忍 ```json 代码块包裹与前后多余文字（取第一个完整 JSON 对象）。不截断任何字段；仅当单个字段超过 4000 字符（存储安全上限）时视为错误，保留旧版本。Claude provider 不强制 `outputSchema`，实测会返回数组形式的 recap：字符串数组按 `- ` 行拼接；`update` 接受字符串 "true"/"false"；`update=false` 时允许缺字段。
+- 解析 `lastMessage`：容忍 ```json 代码块包裹与前后多余文字（取第一个完整 JSON 对象）。不截断任何字段；仅当单个字段超过 4000 字符（存储安全上限）时视为错误，保留旧版本。Claude provider 不强制 `outputSchema`，实测会返回数组形式的 recap：字符串数组按 `- ` 行拼接；`update` 接受字符串 "true"/"false"；`update=false` 时允许缺字段。不支持 Paseo `prompt.output_schema` 能力的 provider（如 Antigravity 及部分插件 provider）会在首轮被拒绝时于同一超时预算内在当前 session 上以纯文本重跑一次，并将该 provider 记入内存直到插件重载，后续调用直接省略 `outputSchema`（与 `background` 能力探测一致）。
 
 ## 4. 设置
 

@@ -36,7 +36,7 @@ import {
 import { emptyCounts, guardrailContext, memoryStateOf, recallGuidelines, setState, toMemoryEntry, type GuardrailEntry, type GuardrailsState } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import type { SummaryStore } from "./summaries";
-import { runSummaryModels } from "./summary-models";
+import { outputSchemaFor, runSummaryModels } from "./summary-models";
 import { backgroundWorkspaces, type BackgroundWorkspaces } from "./background-workspace";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { logFailure } from "./error-report";
@@ -476,8 +476,9 @@ export class MemoryService {
         title: `Flowly memory review · ${m.task.title}`.slice(0, 120),
         labels: { ...SUMMARIZER_LABELS, "flowly-project": m.project.id, "flowly-task": m.task.id, ...RETRO_LABEL },
         prompt,
-        outputSchema: retroJsonSchema as unknown as Record<string, unknown>,
+        ...outputSchemaFor(model, retroJsonSchema as unknown as Record<string, unknown>),
       })),
+      prompt,
       parse: (text) => parseRetroOutput(text).map(fitCandidate),
       remove: this.removeAgent,
       timeoutMs: this.timeoutMs,

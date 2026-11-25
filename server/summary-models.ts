@@ -29,15 +29,60 @@ export function isWorkspaceGone(error: unknown): boolean {
   return segments.length > 0 && segments.every((segment) => WORKSPACE_GONE.test(segment));
 }
 
+export type ModelAgentTurn = {
+  status: string;
+  error?: string | null;
+  lastMessage?: string | null;
+  final?: { pendingPermissions?: readonly { id: string }[] } | null;
+};
+
 type ModelAgent = RemovableAgent & {
-  waitForFinish(timeout: number): Promise<{
-    status: string;
-    error?: string | null;
-    lastMessage?: string | null;
-    final?: { pendingPermissions?: readonly { id: string }[] } | null;
-  }>;
+  waitForFinish(timeout: number): Promise<ModelAgentTurn>;
+  run?(text: string, options?: { timeoutMs?: number }): Promise<ModelAgentTurn>;
   respondToPermission?(options: { requestId: string; response: { behavior: "deny"; message?: string } }): Promise<void>;
 };
+
+/**
+ * Providers without Paseo's `prompt.output_schema` capability (for example Antigravity,
+ * Cursor, or plugin providers) reject structured turns before starting. Because Flowly's
+ * prompts already specify the JSON shape in prose and its parsers tolerate plain/fenced
+ * JSON, we remember unsupported providers until plugin reload/restart (like `background`
+ * in `background-agent.ts`) and recover the first turn without `outputSchema`.
+ */
+export const OUTPUT_SCHEMA_ERROR = /prompt\.output_schema/;
+const unsupportedOutputSchemaProviders = new Set<string>();
+
+function providerOf(model: string): string {
+  const slash = model.indexOf("/");
+  return (slash >= 0 ? model.slice(0, slash) : model).trim();
+}
+
+export function isOutputSchemaRefusal(error: unknown): boolean {
+  if (!error) return false;
+  const text = error instanceof Error ? error.message : String(error);
+  return OUTPUT_SCHEMA_ERROR.test(text);
+}
+
+export function supportsOutputSchema(model: string): boolean {
+  const provider = providerOf(model);
+  return !provider || !unsupportedOutputSchemaProviders.has(provider);
+}
+
+export function markOutputSchemaUnsupported(model: string): void {
+  const provider = providerOf(model);
+  if (!provider || unsupportedOutputSchemaProviders.has(provider)) return;
+  unsupportedOutputSchemaProviders.add(provider);
+  console.log(`Flowly: provider ${provider} does not support prompt.output_schema; omitting structured output schema for this provider.`);
+}
+
+export function outputSchemaFor<T extends Record<string, unknown>>(model: string, schema: T): { outputSchema?: T } {
+  return supportsOutputSchema(model) ? { outputSchema: schema } : {};
+}
+
+/** Tests only. */
+export function resetOutputSchemaSupport(): void {
+  unsupportedOutputSchemaProviders.clear();
+}
 
 /** Times a temporary session may be refused a permission before the run counts as failed. */
 const MAX_PERMISSION_DENIALS = 20;
@@ -48,10 +93,10 @@ const DENIED = "Read-only review: this tool is not available. Continue without i
  * and the turn carries on; the model then answers without that tool. Without this a Codex session (no read-only mode)
  * stopped on its first tool call and the whole run failed. Gives up when the request cannot be refused.
  */
-export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: number) {
+export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: number, initial?: ModelAgentTurn) {
   // One deadline for the whole run: refusing a permission does not restart the clock.
   const deadline = Date.now() + timeoutMs;
-  let result = await agent.waitForFinish(timeoutMs);
+  let result = initial ?? (await agent.waitForFinish(timeoutMs));
   for (let denied = 0; result.status === "permission" && denied < MAX_PERMISSION_DENIALS; denied++) {
     const pending = result.final?.pendingPermissions ?? [];
     if (!pending.length || !agent.respondToPermission) break;
@@ -63,11 +108,42 @@ export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: nu
   return result;
 }
 
+/**
+ * Waits for a temporary structured turn, refusing permissions and falling back once on the
+ * already-open handle without `outputSchema` when the provider lacks `prompt.output_schema`.
+ * Initial wait, schema-free retry, and permission denials share one timeout budget.
+ */
+export async function finishStructuredTurn(
+  agent: ModelAgent,
+  model: string,
+  prompt: string | undefined,
+  timeoutMs: number,
+): Promise<ModelAgentTurn> {
+  const deadline = Date.now() + timeoutMs;
+  let result = await finishRefusingPermissions(agent, timeoutMs);
+  if ((result.status !== "idle" || result.error) && isOutputSchemaRefusal(result.error)) {
+    markOutputSchemaUnsupported(model);
+    if (prompt && agent.run) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return { ...result, status: "timeout" };
+      const retry = await agent.run(prompt, { timeoutMs: remaining });
+      const afterRun = deadline - Date.now();
+      if (retry.status === "permission") {
+        if (afterRun <= 0) return { ...retry, status: "timeout" };
+        result = await finishRefusingPermissions(agent, afterRun, retry);
+      } else {
+        result = retry;
+      }
+    }
+  }
+  return result;
+}
+
 /** Only model create/wait/parse/cleanup are retried; the caller persists after this returns. */
 export async function runSummaryModels<T>(
   paseo: PaseoApi,
   configured: SummaryModelChoice,
-  options: { create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number },
+  options: { create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number; prompt?: string },
 ): Promise<{ model: string; output: T }> {
   const available = await availableModels(paseo, configured);
   let models: ReturnType<typeof resolveModels>;
@@ -79,20 +155,48 @@ export async function runSummaryModels<T>(
   const failures: string[] = [];
   for (const model of models) {
     try {
-      const agent = await options.create(model);
-      let output: T;
-      try {
-        const result = await finishRefusingPermissions(agent, options.timeoutMs);
-        if (result.status !== "idle" || result.error) throw new Error(
-          result.status === "timeout" ? "The summary model timed out."
-            : result.status === "permission" ? "The summary model asked for a permission."
-              : result.error || "The summary model failed.",
-        );
-        output = options.parse(result.lastMessage);
-      } finally {
-        await options.remove(agent);
+      const deadline = Date.now() + options.timeoutMs;
+      let retriedSchema = false;
+      for (;;) {
+        const hadSchema = supportsOutputSchema(model);
+        let agent: ModelAgent;
+        try {
+          agent = await options.create(model);
+        } catch (error) {
+          if (hadSchema && !retriedSchema && isOutputSchemaRefusal(error)) {
+            markOutputSchemaUnsupported(model);
+            retriedSchema = true;
+            continue;
+          }
+          throw error;
+        }
+        let output: T;
+        let retryWithoutSchema = false;
+        try {
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) throw new Error("The summary model timed out.");
+          const result = await finishStructuredTurn(agent, model, options.prompt, remaining);
+          if ((result.status !== "idle" || result.error) && hadSchema && !retriedSchema && isOutputSchemaRefusal(result.error)) {
+            markOutputSchemaUnsupported(model);
+            if (!options.prompt || !agent.run) {
+              retryWithoutSchema = true;
+              retriedSchema = true;
+            }
+          }
+          if (!retryWithoutSchema) {
+            if (result.status !== "idle" || result.error) throw new Error(
+              result.status === "timeout" ? "The summary model timed out."
+                : result.status === "permission" ? "The summary model asked for a permission."
+                  : result.error || "The summary model failed.",
+            );
+            output = options.parse(result.lastMessage);
+          }
+        } finally {
+          await options.remove(agent);
+        }
+        if (retryWithoutSchema) continue;
+        return { model, output: output! };
       }
-      return { model, output };
     } catch (error) {
       failures.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
     }

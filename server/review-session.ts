@@ -4,7 +4,7 @@ import { SUMMARIZER_LABELS, readOnlyConfig, type SummarySettings } from "../shar
 import { autoReviewLimits } from "../shared/model";
 import { GOAL_ID } from "../shared/auto-review";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
-import { runSummaryModels } from "./summary-models";
+import { outputSchemaFor, runSummaryModels } from "./summary-models";
 import { logFailure } from "./error-report";
 import type { LlmReview, LlmReviewInput, LlmVerdict } from "./auto-review";
 import { taskMetadata } from "./session-metadata";
@@ -147,6 +147,7 @@ export function llmReviewer(options: {
     const chosen = settings.reviewModel;
     const models = chosen ? [chosen] : await options.summaryModels();
     const ids = input.checks.map((c) => c.id);
+    const prompt = reviewPrompt(input);
     const { model, output } = await runSummaryModels(paseo, models, {
       create: async (model) => {
         let thinkingOptionId: string | undefined;
@@ -169,10 +170,11 @@ export function llmReviewer(options: {
           title: `Flowly review · ${input.task.title}`.slice(0, 120),
           labels: { ...SUMMARIZER_LABELS, "flowly-task": input.task.id, "flowly-review": "1" },
           ...taskMetadata(input.task.id),
-          prompt: reviewPrompt(input),
-          outputSchema: reviewOutputSchema as unknown as Record<string, unknown>,
+          prompt,
+          ...outputSchemaFor(model, reviewOutputSchema as unknown as Record<string, unknown>),
         }));
       },
+      prompt,
       parse: (text) => parseReviewOutput(text, ids),
       remove,
       timeoutMs: options.timeoutMs ?? 15 * 60 * 1000,

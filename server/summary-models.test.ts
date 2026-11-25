@@ -1,6 +1,19 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import type { PaseoApi } from "@getpaseo/client";
-import { availableModels, finishRefusingPermissions, runSummaryModels, SummaryModelError } from "./summary-models";
+import {
+  availableModels,
+  finishRefusingPermissions,
+  finishStructuredTurn,
+  outputSchemaFor,
+  resetOutputSchemaSupport,
+  runSummaryModels,
+  SummaryModelError,
+  supportsOutputSchema,
+} from "./summary-models";
+
+afterEach(() => {
+  resetOutputSchemaSupport();
+});
 
 const paseo = {
   providers: {
@@ -87,4 +100,129 @@ test("refusing permissions does not restart the timeout: every wait shares one d
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("provider lacking prompt.output_schema recovers on the open handle and remembers the provider for later runs", async () => {
+  const actions: string[] = [];
+  const create = async (model: string) => {
+    const schema = outputSchemaFor(model, { type: "object" });
+    actions.push(`create ${model} schema=${!!schema.outputSchema}`);
+    return {
+      id: model,
+      archive: async () => undefined,
+      waitForFinish: async () =>
+        schema.outputSchema
+          ? { status: "error", error: "Provider does not support prompt.output_schema" }
+          : { status: "idle", lastMessage: '["direct"]' },
+      run: async (text: string) => {
+        actions.push(`run ${text}`);
+        return { status: "idle", lastMessage: '["recovered"]' };
+      },
+    };
+  };
+  const first = await runSummaryModels(paseo, ["one/a"], {
+    create,
+    prompt: "json prose",
+    parse: (text) => JSON.parse(text!),
+    remove: async (agent) => { actions.push(`remove ${agent.id}`); },
+    timeoutMs: 100,
+  });
+  expect(first).toEqual({ model: "one/a", output: ["recovered"] });
+  expect(supportsOutputSchema("one/b")).toBe(false);
+  expect(supportsOutputSchema("two/c")).toBe(true);
+  // Subsequent run on any model from the same provider omits outputSchema upfront (zero dead turns).
+  const second = await runSummaryModels(paseo, ["one/b"], {
+    create,
+    prompt: "json prose",
+    parse: (text) => JSON.parse(text!),
+    remove: async (agent) => { actions.push(`remove ${agent.id}`); },
+    timeoutMs: 100,
+  });
+  expect(second).toEqual({ model: "one/b", output: ["direct"] });
+  expect(actions).toEqual([
+    "create one/a schema=true",
+    "run json prose",
+    "remove one/a",
+    "create one/b schema=false",
+    "remove one/b",
+  ]);
+});
+
+test("synchronous create refusal of prompt.output_schema retries once without schema", async () => {
+  const seenSchemas: boolean[] = [];
+  const create = async (model: string) => {
+    const schema = outputSchemaFor(model, { type: "object" });
+    seenSchemas.push(!!schema.outputSchema);
+    if (schema.outputSchema) throw new Error("Provider does not support prompt.output_schema");
+    return {
+      id: model,
+      archive: async () => undefined,
+      waitForFinish: async () => ({ status: "idle", lastMessage: '["ok"]' }),
+    };
+  };
+  const result = await runSummaryModels(paseo, ["one/a"], {
+    create,
+    prompt: "json prose",
+    parse: (text) => JSON.parse(text!),
+    remove: async () => {},
+    timeoutMs: 100,
+  });
+  expect(result).toEqual({ model: "one/a", output: ["ok"] });
+  expect(seenSchemas).toEqual([true, false]);
+});
+
+test("schema-free fallback shares one timeout budget and still refuses permissions", async () => {
+  vi.useFakeTimers({ now: 0 });
+  try {
+    const timeouts: number[] = [];
+    const denied: string[] = [];
+    const agent = {
+      id: "one/a",
+      archive: async () => undefined,
+      waitForFinish: async (timeout: number) => {
+        timeouts.push(timeout);
+        vi.setSystemTime(Date.now() + 30);
+        if (timeouts.length === 1) return { status: "error", error: "Provider does not support prompt.output_schema" };
+        return { status: "idle", lastMessage: '["ok"]' };
+      },
+      run: async (_text: string, opts?: { timeoutMs?: number }) => {
+        timeouts.push(opts?.timeoutMs ?? -1);
+        vi.setSystemTime(Date.now() + 40);
+        return { status: "permission", final: { pendingPermissions: [{ id: "p1" }] } };
+      },
+      respondToPermission: async (o: { requestId: string }) => {
+        denied.push(o.requestId);
+      },
+    };
+    const result = await finishStructuredTurn(agent, "one/a", "prose", 100);
+    expect(result).toEqual({ status: "idle", lastMessage: '["ok"]' });
+    expect(denied).toEqual(["p1"]);
+    expect(timeouts).toEqual([100, 70, 30]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("unrelated first-wait errors are not retried as schema fallbacks and do not poison cache", async () => {
+  const ran = vi.fn();
+  const create = async (model: string) => ({
+    id: model,
+    archive: async () => undefined,
+    waitForFinish: async () => ({ status: "error", error: "engine overloaded" }),
+    run: async () => {
+      ran();
+      return { status: "idle", lastMessage: "[]" };
+    },
+  });
+  const error = await runSummaryModels(paseo, ["one/a"], {
+    create,
+    prompt: "p",
+    parse: () => null,
+    remove: async () => {},
+    timeoutMs: 100,
+  }).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(SummaryModelError);
+  expect((error as Error).message).toBe("one/a: engine overloaded");
+  expect(ran).not.toHaveBeenCalled();
+  expect(supportsOutputSchema("one/a")).toBe(true);
 });
