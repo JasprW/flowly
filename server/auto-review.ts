@@ -364,17 +364,13 @@ export async function readConversation(
       .ref(id)
       .timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" })
       .catch(() => null);
-    // Codex async question calls this session's user answered (permission hooks, by call id).
-    const known = answered(id);
-    for (const entry of (res?.entries || []) as { timestamp?: string; item?: TurnItem }[]) {
-      if (!entry.item) continue;
+    const entries = ((res?.entries || []) as { timestamp?: string; item?: TurnItem }[]).filter((e) => e.item);
+    const calls = answeredCalls(entries, answered(id));
+    for (const [index, entry] of entries.entries()) {
       const at = entry.timestamp || "";
-      const item = entry.item;
+      const item = entry.item!;
       if (item.type === "user_message" && typeof item.text === "string") {
-        // A Codex async answers message is split only as the answer of the call it was sent for: the message Paseo
-        // built from that call's titles and answers, character for character. Otherwise it stays the user's whole message.
-        const text = item.text.trim();
-        const call = text.startsWith(CODEX_ANSWERS_PREFIX) ? known.find((a) => a.message === text) : undefined;
+        const call = calls.get(index);
         if (call) for (const qa of call.pairs) messages.push({ at, text: qa.text, ask: qa.ask });
         else messages.push({ at, text: item.text });
         continue;
@@ -386,6 +382,30 @@ export async function readConversation(
   return conversationForReview(messages);
 }
 
+
+/**
+ * Which Codex async answers message of a session was sent for which answered call (§4.2, E2): a message is read as a
+ * call's answers only when it is the message Paseo built from that call's titles and answers, character for character.
+ * Two calls can build the same text (a later answer that spans what looks like the earlier call's next question), so
+ * they are paired in order: the timeline shows the answers messages in the order the user answered, and the calls
+ * are kept in that order too. Pairing runs from the newest message back, each call used once and never one answered
+ * after the newer message's call, so messages that fell out of the read window do not shift the rest.
+ */
+function answeredCalls(entries: readonly { item?: TurnItem }[], answeredNewestFirst: readonly AnsweredQuestions[]): Map<number, AnsweredQuestions> {
+  const out = new Map<number, AnsweredQuestions>();
+  let pool = answeredNewestFirst;
+  for (let i = entries.length - 1; i >= 0 && pool.length; i--) {
+    const item = entries[i]!.item!;
+    if (item.type !== "user_message" || typeof item.text !== "string") continue;
+    const text = item.text.trim();
+    if (!text.startsWith(CODEX_ANSWERS_PREFIX)) continue;
+    const at = pool.findIndex((a) => a.message === text);
+    if (at < 0) continue;
+    out.set(i, pool[at]!);
+    pool = pool.slice(at + 1);
+  }
+  return out;
+}
 
 export type CheckRun = { exitCode: number | null; timedOut: boolean; spawnError?: string; ms: number; output: string };
 /** Runs one check as an argument array in `cwd`, never through a shell. */

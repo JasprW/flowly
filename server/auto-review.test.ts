@@ -1363,6 +1363,55 @@ test("a Codex answers message is read as the answers of the call it was sent for
   expect(await judged("Follow the card", [two], "a2")).toMatchObject({ state: "failed", quote: "Follow the card" });
 });
 
+test("two answered Codex calls that build the same message text are paired with their messages in timeline order (§4.2, E2)", async () => {
+  // Call A asks two questions; call B later asks one with A's first title, and its multi-line answer reads like A's
+  // whole answer, so both answers messages are the same text.
+  const q = new AsyncQuestionTitles();
+  const request = (callId: string, ...titles: string[]) =>
+    q.remember("a1", { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
+  const answer = (callId: string, ...answers: string[]) =>
+    q.resolved("a1", `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } });
+  request("A", "Which label?", "Where?");
+  request("B", "Which label?");
+  answer("A", "Rerun", "Drawer only");
+  answer("B", "Rerun\n\nWhere?\nDrawer only");
+  const same = "Answers to your questions:\n\nWhich label?\nRerun\n\nWhere?\nDrawer only";
+  expect(q.answers("a1").map((a) => a.message)).toEqual([same, same]);
+  const paseo = (texts: string[]) =>
+    ({
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({ timeline: { refetch: async () => ({ entries: texts.map((text, i) => ({ timestamp: `2026-11-26T10:0${i}:00.000Z`, item: { type: "user_message", text } })) }) } }),
+      },
+    }) as unknown as Parameters<typeof readConversation>[1];
+  const read = (texts: string[]) => readConversation({ workspaceId: "w" }, paseo(texts), (id) => q.answers(id));
+  const a = [
+    { ask: "Which label?", answer: "Rerun" },
+    { ask: "Where?", answer: "Drawer only" },
+  ];
+  const b = { ask: "Which label?", answer: "Rerun\n\nWhere?\nDrawer only" };
+  // The earlier message is A's two answers, the later one B's single answer.
+  expect(await read([same, "Thanks", same])).toEqual([...a, "Thanks", b]);
+  // A's message fell out of the read window: the one left is still B's, the newest.
+  expect(await read(["Thanks", same])).toEqual(["Thanks", b]);
+
+  let seen: LlmReviewInput | undefined;
+  const judged = async (quote: string) => {
+    const x = await setup({
+      conversation: () => read([same, same]),
+      llm: async (input) => {
+        seen = input;
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] };
+      },
+    });
+    return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
+  };
+  expect(await judged("Drawer only")).toMatchObject({ state: "failed", quote: "Drawer only" });
+  expect(seen!.conversation).toEqual([...a, b]);
+  // A's titles are questions; only B's answer, which the user typed, contains "Where?" as their own words.
+  expect(await judged("Which label")).toMatchObject({ state: "na", reason: "no evidence" });
+});
+
 test("only the user's answer in a question tool counts as quoted evidence, not the agent's question (§4.2, B1)", async () => {
   let said: ConversationEntry[] = [{ ask: "Should I add a rerun button?", answer: "No" }];
   const run = async (quote: string) => {
