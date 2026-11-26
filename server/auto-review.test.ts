@@ -1413,7 +1413,7 @@ test("two answered Codex calls that build the same message text are paired with 
   expect(q.answers("a1").map((a) => a.message)).toEqual([same, same]);
   // `hasOlder` false: the read holds the whole timeline; true: older entries lie before the window; "missing": Paseo
   // left it out, which may also mean older entries.
-  // `epoch`: the timeline's now; the hooks read "e1" right after each answer, and a rewind since gives a new one.
+  // `epoch`: the timeline's now; the hooks read "e1" when each question is asked, and a rewind since gives a new one.
   const paseo = (lines: CodexLine[], hasOlder: boolean | "missing", epoch: string) =>
     ({
       agents: {
