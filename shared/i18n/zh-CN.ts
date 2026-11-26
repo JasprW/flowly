@@ -1429,6 +1429,7 @@ const catalog: Catalog = {
   "Sent back": "已退回",
   "Disputed": "有争议",
   "observing": "观察中",
+  "flaky": "不稳定",
   "Round {round}": "第 {round} 轮",
   "Now a project guideline": "已成为项目准则",
   "Sent back {n} times": "退回 {n} 次",

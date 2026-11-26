@@ -26,6 +26,8 @@ import {
   autoReviewRuns,
   continuesRound,
   conversationForReview,
+  userWords,
+  type ConversationEntry,
   conversationLimits,
   defaultCheckTimeoutSec,
   failureSummary,
@@ -45,6 +47,7 @@ import {
 import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
+import { questionAnswers, type TurnItem } from "../shared/memory";
 import { logFailure } from "./error-report";
 import { resolveWorktree, worktreeBase } from "./review-worktree";
 
@@ -72,14 +75,16 @@ export type JudgedCheck = {
   quote?: string;
   /** Round ≥ 2: its result in the previous round. */
   previous?: { state: string; detail?: string };
+  /** The agent disputed an earlier finding of this check (§6.3 step 2, E1): judge it, but not on that finding again without new evidence. */
+  dispute?: { finding?: string; reason: string; round: number };
 };
 /** What the review session reads (GUARDRAILS-SPEC §6.3). */
 export type LlmReviewInput = {
   task: { id: string; title: string; description: string; type?: TaskType; workspaceId: string; /** Absolute paths of the card's images (CARD-IMAGES-SPEC §5). */ images?: string[] };
   checks: JudgedCheck[];
-  /** The user's messages in the card's sessions, oldest first (§4.2); null when they could not be read. */
-  conversation?: string[] | null;
-  /** The workspace is not a worktree: the diff may hold other cards' uncommitted changes (§2 limit 3). */
+  /** What the user said in the card's sessions, oldest first: messages and answers to question tools (§4.2); null when they could not be read. */
+  conversation?: ConversationEntry[] | null;
+  /** The workspace is not a worktree: the diff may hold other cards' uncommitted changes (§2 limit 3), and commands do not decide (§6.3 step 1). */
   shared?: boolean;
   /** The card's acceptance list: the agent's own claim, context only. */
   acceptance: AcceptanceItem[];
@@ -331,10 +336,11 @@ export function repoPath(directory: string, file: string): string | null {
 }
 
 /**
- * The user's messages in the card's sessions (§4.2): the projected tail of each session in its workspace, Flowly's own
- * temporary sessions left out. null when Paseo could not list them; one unreadable session is skipped.
+ * What the user said in the card's sessions (§4.2): their messages and their answers in a question tool (as
+ * "question → answer", E2), from the projected tail of each session in its workspace, Flowly's own temporary sessions
+ * left out. null when Paseo could not list them; one unreadable session is skipped.
  */
-export async function readConversation(task: Pick<Task, "workspaceId">, paseo: PaseoApi): Promise<string[] | null> {
+export async function readConversation(task: Pick<Task, "workspaceId">, paseo: PaseoApi): Promise<ConversationEntry[] | null> {
   const ids: string[] = [];
   let cursor: string | undefined;
   try {
@@ -347,17 +353,24 @@ export async function readConversation(task: Pick<Task, "workspaceId">, paseo: P
     logFailure("Flowly auto review could not list the card's sessions:", e);
     return null;
   }
-  const messages: { at: string; text: string }[] = [];
+  const messages: { at: string; text: string; ask?: string }[] = [];
   for (const id of ids) {
     const res = await paseo.agents
       .ref(id)
       .timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" })
       .catch(() => null);
-    for (const entry of (res?.entries || []) as { timestamp?: string; item?: { type?: unknown; text?: unknown } }[])
-      if (entry.item?.type === "user_message" && typeof entry.item.text === "string") messages.push({ at: entry.timestamp || "", text: entry.item.text });
+    for (const entry of (res?.entries || []) as { timestamp?: string; item?: TurnItem }[]) {
+      if (!entry.item) continue;
+      const at = entry.timestamp || "";
+      // Answers given in AskUserQuestion or Codex request_user_input; a Codex answers message is replaced by its answers.
+      const answers = questionAnswers([entry.item]);
+      if (answers.length) for (const qa of answers) messages.push({ at, text: qa.text, ask: qa.ask });
+      else if (entry.item.type === "user_message" && typeof entry.item.text === "string") messages.push({ at, text: entry.item.text });
+    }
   }
   return conversationForReview(messages);
 }
+
 
 export type CheckRun = { exitCode: number | null; timedOut: boolean; spawnError?: string; ms: number; output: string };
 /** Runs one check as an argument array in `cwd`, never through a shell. */
@@ -504,7 +517,7 @@ export type AutoReviewDeps = {
   /** The project's guardrails; absent: only the built-in check runs. */
   guardrails?: ReviewGuardrails;
   /** The user's messages in the card's sessions (§4.2), for the built-in check; null when unreadable. */
-  conversation?: (task: Task, paseo: PaseoApi) => Promise<string[] | null>;
+  conversation?: (task: Task, paseo: PaseoApi) => Promise<ConversationEntry[] | null>;
   /** The diff the review session reads; `reviewDiff` by default. */
   diff?: (directory: string, since?: string, baseRef?: string) => Promise<string>;
   /** The delivery's shape; `reviewShape` by default. */
@@ -735,23 +748,30 @@ export class AutoReviewService {
       if (t.reviewWaiting?.eventId === (manual ? waitId : delivery.eventId)) delete t.reviewWaiting;
       const previous = t.review;
       const round = !manual && continuesRound(b.events, t.id, previous) ? previous!.round + 1 : 1;
-      const disputes = new Map((t.disputes || []).map((d) => [d.id, d.reason]));
-      // A disputed finding is not checked again: it is recorded as disputed with the agent's reason (§6.3, B7).
-      const queued = (id: string) =>
-        disputes.has(id) ? { state: "disputed" as const, disputeReason: clip(disputes.get(id)!, 300) } : { state: "queued" as const };
+      const disputes = new Map((t.disputes || []).map((d) => [d.id, d]));
+      // A dispute is about one finding, not the whole check (E1): a judged check is judged again with the dispute in its
+      // input; a deciding command is skipped as disputed only at the commit it failed on. A command that does not decide
+      // (observing, or in a shared directory) always runs, so its result stays visible.
+      const queued = (id: string, gating: boolean) => {
+        const d = disputes.get(id);
+        return gating && d?.sha && d.sha === head?.sha ? { state: "disputed" as const, disputeReason: clip(d.reason, 300) } : { state: "queued" as const };
+      };
+      const judgedState = (id: string) => ({ state: "queued" as const, ...(disputes.has(id) ? { disputeReason: clip(disputes.get(id)!.reason, 300) } : {}) });
+      // In a shared directory commands run and show their result but do not decide (§6.3 step 1, E3).
+      const shared = !where?.worktree;
       const items: ReviewItem[] = [
         ...(guard?.commands || []).map((c) => ({
           id: c.id,
           kind: "command" as const,
           name: clip(c.text, 200),
           // An observing command runs and shows its result but never decides the review (§4.5).
-          gating: c.state === "active",
+          gating: c.state === "active" && !shared,
           argv: [...(c.argv || [])],
-          ...queued(c.id),
+          ...queued(c.id, c.state === "active" && !shared),
         })),
-        { id: GOAL_ID, kind: "goal" as const, name: GOAL_NAME, gating: true, ...queued(GOAL_ID) },
-        ...(guard?.guidelines || []).map((g) => ({ id: g.id, kind: "guideline" as const, name: clip(g.text, 200), gating: true, ...queued(g.id) })),
-        ...(guard?.items || []).map((i) => ({ id: i.id, kind: "item" as const, name: clip(i.text, 200), gating: true, ...queued(i.id) })),
+        { id: GOAL_ID, kind: "goal" as const, name: GOAL_NAME, gating: true, ...judgedState(GOAL_ID) },
+        ...(guard?.guidelines || []).map((g) => ({ id: g.id, kind: "guideline" as const, name: clip(g.text, 200), gating: true, ...judgedState(g.id) })),
+        ...(guard?.items || []).map((i) => ({ id: i.id, kind: "item" as const, name: clip(i.text, 200), gating: true, ...judgedState(i.id) })),
       ].slice(0, 40);
       t.review = {
         trigger: { eventId: manual ? "" : delivery.eventId, agentId: delivery.agentId, from: delivery.from },
@@ -765,7 +785,7 @@ export class AutoReviewService {
           ...(repoShas && Object.keys(repoShas).length ? { repos: repoShas } : {}),
           dirty: !!head?.dirty,
         },
-        shared: !where?.worktree,
+        shared,
         ...(delivery.worktree ? { worktree: delivery.worktree } : {}),
         ...(measured ? { shape: measured.shape } : {}),
         items,
@@ -787,12 +807,23 @@ export class AutoReviewService {
         const entry = guard?.commands.find((c) => c.id === item.id);
         await set(item.id, { state: "running" });
         const timeout = (entry?.timeoutSec ?? defaultCheckTimeoutSec) * 1000;
-        const run: (CheckRun & { ran?: string[] }) | null = linked.length ? await runInRepos(this.run, item.argv || [], runIn, timeout) : await this.run(item.argv || [], where.directory, timeout);
+        const once = () => (linked.length ? runInRepos(this.run, item.argv || [], runIn, timeout) : this.run(item.argv || [], where.directory, timeout));
+        let run: (CheckRun & { ran?: string[] }) | null = await once();
         if (!run) {
           await set(item.id, { state: "skipped", reason: runIn.length < linked.length ? "No repository this delivery changed has this command." : "No repository in this workspace has this command." });
           continue;
         }
-        const tail = outputTail(run.output, autoReviewLimits.tail);
+        let flaky: { ms: number; output: string } | undefined;
+        // A gating command that failed runs once more at the same commit; passing then is flaky, not a failure (§6.3 step 1, E3).
+        if (item.gating && run.exitCode !== 0 && !run.timedOut && !run.spawnError && head?.sha) {
+          const now = linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now());
+          const again = now?.sha === head.sha ? await once() : null;
+          if (again) {
+            if (again.exitCode === 0 && !again.timedOut && !again.spawnError) flaky = { ms: run.ms, output: run.output };
+            run = { ...again, ms: run.ms + again.ms };
+          }
+        }
+        const tail = outputTail(flaky ? flaky.output : run.output, autoReviewLimits.tail);
         const passed = run.exitCode === 0 && !run.timedOut && !run.spawnError;
         // A command that cannot start or times out is the review's problem, not the agent's (§3.2 Unavailable).
         const state = passed ? "passed" : run.spawnError || run.timedOut ? "unavailable" : "failed";
@@ -801,7 +832,8 @@ export class AutoReviewService {
           exitCode: run.exitCode,
           ...(run.timedOut ? { timedOut: true } : {}),
           ms: Math.max(0, Math.round(run.ms)),
-          ...(!passed && tail ? { tail } : {}),
+          ...((!passed || flaky) && tail ? { tail } : {}),
+          ...(flaky ? { flaky: true, reason: "Failed once and passed when run again at the same commit." } : {}),
           ...(run.ran ? { detail: `Ran in ${run.ran.join(", ")}.`.slice(0, autoReviewLimits.detail) } : {}),
           ...(run.spawnError ? { reason: `Could not start: ${run.spawnError}`.slice(0, autoReviewLimits.reason) } : {}),
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
@@ -815,7 +847,14 @@ export class AutoReviewService {
     // The three signals and retirement (§6.6, §6.7); a failure here never changes the review.
     if (this.deps.guardrails)
       await this.deps.guardrails
-        .reviewed({ projectId: outcome.task.projectId, taskId: outcome.task.id, items: outcome.review.items, previous: started.previous?.items, disputed: (outcome.task.disputes || []).map((d) => d.id) })
+        .reviewed({
+          projectId: outcome.task.projectId,
+          taskId: outcome.task.id,
+          items: outcome.review.items,
+          // Only a gating failure was sent back, so only it can be caught (§6.6).
+          previous: started.previous?.items.filter((i) => i.gating),
+          disputed: (outcome.task.disputes || []).map((d) => d.id),
+        })
         .catch((e) => logFailure("Flowly guardrail counts not updated:", e, outcome.task.id));
     if (!outcome.rework) return;
     // Compute the review immediately, but never start a rework turn before its predecessor is recorded.
@@ -894,12 +933,14 @@ export class AutoReviewService {
       checks: judged.map((i) => {
         const quote = guard?.words.get(i.id);
         const prior = incremental ? before.get(i.id) : undefined;
+        const dispute = task.disputes?.find((d) => d.id === i.id);
         return {
           id: i.id,
           kind: i.kind as JudgedCheck["kind"],
           text: text(i),
           ...(quote ? { quote } : {}),
           ...(prior ? { previous: { state: prior.state, ...(prior.detail ? { detail: prior.detail } : {}) } } : {}),
+          ...(dispute ? { dispute: { reason: dispute.reason, round: dispute.round, ...(dispute.finding ? { finding: dispute.finding } : {}) } } : {}),
         };
       }),
       ...(ids.includes(GOAL_ID) ? { conversation: this.deps.conversation ? await this.deps.conversation(task, paseo).catch(() => null) : null } : {}),
@@ -907,7 +948,9 @@ export class AutoReviewService {
       acceptance: board.workpads.find((w) => w.taskId === task.id)?.acceptance ?? [],
       deliveryNote: deliveryEvent?.note ?? "",
       outputs: board.artifacts.filter((a) => a.taskId === task.id && a.role === "output").map((a) => a.target),
-      commands: now.items.filter((r) => r.kind === "command").map((r) => `${r.name}: ${r.state}${r.gating ? "" : " (observing)"}`),
+      commands: now.items
+        .filter((r) => r.kind === "command")
+        .map((r) => `${r.name}: ${r.state}${r.flaky ? " (failed once, passed when run again)" : ""}${r.gating ? "" : now.shared ? " (ran in a shared directory; does not decide)" : " (observing)"}`),
       diff: linked.length
         ? await linkedReviewDiff(linked, { since: incremental ? previous!.fingerprint.repos : undefined, baseRef: task.baseRef }, this.git)
         : await (this.deps.diff ?? ((d: string, since?: string, baseRef?: string) => reviewDiff(d, { since, baseRef }, this.git)))(
@@ -950,12 +993,14 @@ export class AutoReviewService {
           if (!ids.includes(r.id)) return r;
           const v = verdicts.get(r.id);
           if (!v) {
-            // Round ≥ 2 re-checks only what failed; a check that passed before and was not judged again keeps its pass.
+            // Round ≥ 2 re-checks only what failed; a check that passed before and was not judged again keeps its pass,
+            // unless it is still disputed: a disputed check always needs a verdict of its own (§6.3 step 2, E1).
             const prior = incremental ? before.get(r.id) : undefined;
-            if (prior && itemPassed(prior)) return { ...r, state: prior.state, ms, ...(prior.detail ? { detail: prior.detail } : {}), reason: "Passed in the previous round; not judged again." };
+            if (prior && itemPassed(prior) && !r.disputeReason) return { ...r, state: prior.state, ms, ...(prior.detail ? { detail: prior.detail } : {}), reason: "Passed in the previous round; not judged again." };
             return { ...r, state: "unavailable" as const, ms, reason: "The review session gave no verdict for this check." };
           }
-          const quoteSources = [task.title, task.description, ...(input.conversation ?? []), guard?.words.get(r.id)];
+          // An answer in a question tool counts by the user's answer only; the agent's question is context (§4.2, E2).
+          const quoteSources = [task.title, task.description, ...(input.conversation ?? []).map(userWords), guard?.words.get(r.id)];
           const evidence = v.verdict !== "fail" || hasEvidence(v, diffFiles, existing, quoteSources);
           return {
             ...r,
@@ -1010,6 +1055,14 @@ export class AutoReviewService {
         // No results: a cancelled review judged nothing.
         this.store.event(b, { taskId: t.id, actor: "system", action: reviewFinishedAction, agentId: r.trigger.agentId, note: "Auto review cancelled: the card changed during the review" });
         return { value: null, changed: true };
+      }
+      // A disputed finding that failed again (judged with the dispute, or a command on new code) ends that dispute (§6.1, E1).
+      if (t.disputes?.length) {
+        const kept = t.disputes.filter((d) => !r.items.some((i) => i.id === d.id && i.state === "failed" && i.gating));
+        if (kept.length !== t.disputes.length) {
+          if (kept.length) t.disputes = kept;
+          else delete t.disputes;
+        }
       }
       const verdict = reviewVerdict(r.items);
       const done = (review: NonNullable<Task["review"]>, rework = false) => ({ value: { task: { ...t, review }, review, rework }, changed: true });

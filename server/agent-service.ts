@@ -25,7 +25,7 @@ import { projectScripts } from "./workflow-insights";
 import { mergeWorkpad, plansOf, workpadEnabled, workpadNote, workpadOf, workpadUpdatedAction } from "../shared/workpad";
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
-import { autoReviewOf, autoReviewRuns, reviewContext } from "../shared/auto-review";
+import { autoReviewOf, autoReviewRuns, findingText, reviewContext } from "../shared/auto-review";
 import { prWorktree, resolveWorktree } from "./review-worktree";
 import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
@@ -1071,22 +1071,31 @@ function parseWorkpadInput(raw: unknown): WorkpadInput {
  */
 export function disputedFindings(task: Pick<Task, "review" | "disputes">, given: readonly { id: string; reason: string }[], at: string): Dispute[] {
   const out = [...(task.disputes || [])];
-  const failed = (task.review?.items || []).filter((i) => i.state === "failed");
+  // Only a failure that decided the review can be disputed: an observing or shared-directory command sent nothing back (E1, E3).
+  const failed = (task.review?.items || []).filter((i) => i.state === "failed" && i.gating);
   const unknown = given.filter((d) => !out.some((x) => x.id === d.id) && !failed.some((i) => i.id === d.id)).map((d) => d.id);
   if (unknown.length)
     throw new ToolError(
       "INVALID_INPUT",
-      `disputes can only name findings that failed in this card's latest auto review${failed.length ? ` (${failed.map((i) => i.id).join(", ")})` : " (it has none)"}; unknown: ${unknown.join(", ")}.`,
+      `disputes can only name findings that failed and decided this card's latest auto review${failed.length ? ` (${failed.map((i) => i.id).join(", ")})` : " (it has none)"}; unknown: ${unknown.join(", ")}.`,
     );
+  // The finding the dispute is about and the commit it failed on (E1): a command's dispute holds only at that sha.
+  const about = (item: (typeof failed)[number]) => ({
+    round: task.review!.round,
+    ...(task.review!.fingerprint.sha ? { sha: task.review!.fingerprint.sha } : {}),
+    finding: findingText(item),
+  });
   for (const d of given) {
     const reason = d.reason.trim().slice(0, disputeLimits.reason);
-    const known = out.find((x) => x.id === d.id);
-    if (known) {
-      known.reason = reason;
+    const index = out.findIndex((x) => x.id === d.id);
+    const item = failed.find((i) => i.id === d.id);
+    if (index >= 0) {
+      // Disputed again: the reason is updated; a finding that failed again replaces the old one.
+      const { sha: _sha, finding: _finding, ...known } = out[index];
+      out[index] = item ? { ...known, reason, ...about(item) } : { ...out[index], reason };
       continue;
     }
-    const item = failed.find((i) => i.id === d.id)!;
-    out.push({ id: item.id, kind: item.kind, name: item.name, reason, round: task.review!.round, at });
+    out.push({ id: item!.id, kind: item!.kind, name: item!.name, reason, at, ...about(item!) });
   }
   if (out.length > disputeLimits.perTask) throw new ToolError("INVALID_INPUT", `A card keeps at most ${disputeLimits.perTask} disputed findings.`);
   return out;

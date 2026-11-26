@@ -272,6 +272,9 @@ describe("native question answers (timelines checked 2026-10-22)", () => {
       ["请恢复公司网络后告知。", "已恢复内网连接"],
       ["Which alphabet?", "base58, because people type them by hand"],
     ]);
+    // A typed answer may span lines: the title is the first line, the rest is the answer.
+    const typed = { type: "user_message", text: "Answers to your questions:\n\nWhich alphabet?\nbase58\nbecause people type them by hand" };
+    expect(questionAnswers([typed]).map((a) => [a.ask, a.text])).toEqual([["Which alphabet?", "base58\nbecause people type them by hand"]]);
   });
   it("keeps short answers but never secrets", () => {
     expect(answerText(" 6 ")).toBe("6");

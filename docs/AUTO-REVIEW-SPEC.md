@@ -176,7 +176,7 @@ stateDiagram-v2
 - 没有生效的检查时只有 L1，交付不启动评审。
 - **内置检查的尺子**（按这个顺序给评审 session）：
   1. 卡片标题和描述；
-  2. 用户在这张卡各 session 里发的消息：每个 session 的 projected timeline 末尾 200 条里的 `user_message`，去掉以 `[Flowly auto review` 开头的返工消息，按时间排列，保留最新的 30 条、合计不超过 12 000 字、每条不超过 1 500 字；读不到时写 “(conversation unavailable)”，照样评审；
+  2. 用户在这张卡各 session 里说的话：每个 session 的 projected timeline 末尾 200 条里的 `user_message`，以及问题工具里的问答（2026-11-26 加，GUARDRAILS-SPEC E2）：Claude `AskUserQuestion` 与 Codex `request_user_input` 的已完成调用、Codex 异步问题以 “Answers to your questions:” 开头的回答消息（每段第一行是问题标题，其后各行都是回答），解析与记忆的 `answer` 线索相同（`questionAnswers`，`shared/memory.ts`），每个回答一条，问题和完整回答分开保存（`{ ask, answer }`），给评审时写成 `Answered the agent's question: "<问题>" → <回答>`（Codex 的回答消息以这些条目代替原文；被关掉或失败的提问没有条目）。去掉以 `[Flowly auto review` 开头的返工消息，消息和问答一起按时间排列，保留最新的 30 条、合计不超过 12 000 字、每条不超过 1 500 字（问答按回答计，问题另截到 500 字）；读不到时写 “(conversation unavailable)”，照样评审。问答里只有用户的回答可以作为 `quote` 证据的出处，用保存下来的回答字段整条核对，不从拼好的那一行里切分（回答本身可能含 “→”，例如 `Rename "Retry" → "Rerun" in the drawer`，引用其中任一段都算）；agent 的问题只作上下文（例如用户对“要加重跑按钮吗？”答“不要”，引用“加重跑按钮”不算证据；GUARDRAILS-SPEC §6.3）；
   3. workpad（验收、验证、困惑点）与交付 note，标明 “the agent's own report, context only”。
 - 内置检查的判定要求：较新的指示覆盖较早的；对话里说过先不做的不算缺；请求太含糊无法判断时判 `na`；不对照 workpad 判定。共享工作区（非 worktree，评审记录 `shared`）时另加一句：diff 里与本卡无关的改动可能属于别的卡，不据此判 fail，只在用户要求的事没做到或做错时判 fail。
 - 内置检查不能删除，只能暂停（`goal: false`）。它的结果 id 固定为 `goal`，其他检查不能用这个 id。
@@ -186,13 +186,13 @@ stateDiagram-v2
 - 评审开始时把生效的检查快照进评审记录；评审中改规则不影响这一次。
 - 命令检查按列表顺序逐条执行，**全部跑完**，每条结束立即写回结果。
 - daemon 在卡片 workspace 目录下用 `spawn`（参数数组，不经 shell，单独的进程组，超时整组 SIGTERM，5 秒后 SIGKILL）。环境变量加 `CI=1`、`NO_COLOR=1`、`FORCE_COLOR=0`。默认超时 600 秒（10–3600）。
-- 退出码 0 为 `passed`；非 0 为 `failed`；超时或起不来为 `unavailable`（不算不通过）。
+- 退出码 0 为 `passed`；非 0 为 `failed`；超时或起不来为 `unavailable`（不算不通过）。参与判定的命令 `failed` 后，HEAD 仍是本次评审的 sha 时自动重跑一次，重跑通过记 `passed` 加 `flaky`，不退回；共享目录（`shared`）里命令不参与判定；被争议的命令只在争议时的 sha 上跳过（2026-11-26，GUARDRAILS-SPEC §6.3 步骤 1、E1、E3）。
 - 不通过或 unavailable 的那条保留最后 4 KiB 输出（去掉颜色码），只存在评审记录里，不写日志（可能含 token）。结果不写进 agent 的 workpad。
 - 确实需要 shell 时由规则写成 `["sh","-c","…"]`；那是用户确认过的规则内容，不是 Flowly 拼接的。
 
 ### 4.4 评审 session（内置检查与 LLM 检查）
 
-- 只在所有命令检查都 `passed`（或没有命令检查）时跑（D9）。有命令检查 `failed` 时，内置检查和 LLM 检查全部 `skipped`，原因 “Command rules failed.”；有 `unavailable` 时原因 “A command rule could not run.”。
+- 只在所有参与判定的命令检查都 `passed`（或没有）时跑（D9；共享目录里的命令不参与判定，GUARDRAILS-SPEC §6.3）。有命令检查 `failed` 时，内置检查和 LLM 检查全部 `skipped`，原因 “Command rules failed.”；有 `unavailable` 时原因 “A command rule could not run.”。
 - 一个临时 session 一次判定全部：建在卡片 workspace 里，父 session 为交付的 session，标签同摘要器（`flowly=summarizer`、`flowly-task`、`flowly-review=1`），结束后硬删除，删除失败时归档并记日志。超时 15 分钟。Paseo 0.16 宿主上用后台 agent（`background: true`），结束后通过 SDK 归档，默认列表、标签页、通知和用户归档均不可见（`docs/PASEO-0.16-SPEC.md` §3.1）。
 - 模型：Settings → Models 的 **Review model**（`task-summary` 设置的 `reviewModel`）；未设置时用摘要模型列表；不继承项目或最近 session 的模型、reasoning 或权限。
 - Reasoning：Settings → Models → Review model 在显式模型支持 `thinkingOptions` 时显示 Reasoning，含 Model default 及 provider 原样返回的选项。`task-summary.reviewThinking`（可选 string，最多 100 字符）保存选项 id；缺失或空为模型默认。更换模型或返回默认模型时清空。无显式 reviewModel 时不覆盖摘要 fallback 的 reasoning；创建评审前核对当前模型仍支持该 id，仅支持时传 `config.thinkingOptionId`，过期 id 不发送；reasoning 元数据查询失败时记录错误并使用模型默认 reasoning，仍创建评审，不让可选设置令整轮不可用。设置读取不迁移旧数据。

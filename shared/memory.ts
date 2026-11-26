@@ -313,7 +313,7 @@ function quotedPairs(output: string): Map<string, string> {
  *   `detail.output` as `"question"="answer"` pairs (the sentence around them differs by Claude Code version).
  * - Codex `request_user_input` (sync): a completed tool call with `metadata.questions` and `metadata.answers` by question id.
  * - Codex `request_user_input_async`: the turn only asks; the answers come back as a user message starting
- *   with "Answers to your questions:" and one "title\nanswer" block per question. Its own tool call is skipped:
+ *   with "Answers to your questions:" and one "title\nanswer" block per question (a one-line title, then the answer, which may span lines). Its own tool call is skipped:
  *   answered and still-open calls render alike.
  * Dismissed or failed questions give nothing.
  */
@@ -350,9 +350,10 @@ export function questionAnswers(items: readonly TurnItem[]): QuestionAnswer[] {
         .map((block) => block.trim())
         .filter(Boolean)
         .forEach((block, i) => {
-          const lines = block.split("\n");
-          const answer = lines.pop()!.trim();
-          const question = lines.join("\n").trim();
+          // The title is one line; everything after it is the answer, which may span lines (a typed answer).
+          const at = block.indexOf("\n");
+          const question = at < 0 ? "" : block.slice(0, at).trim();
+          const answer = at < 0 ? "" : block.slice(at + 1).trim();
           if (question && answer) out.push({ id: `${callId}:${i}`, ask: question, text: answer });
         });
     }

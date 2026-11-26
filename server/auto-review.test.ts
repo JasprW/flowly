@@ -14,6 +14,7 @@ import {
   linkedReviewDiff,
   linkedShape,
   numstatShape,
+  readConversation,
   repoPath,
   reviewDiff,
   reviewShape,
@@ -26,6 +27,7 @@ import { GuardrailsService } from "./guardrails";
 import { reviewPrompt } from "./review-session";
 import type { AgentService } from "./agent-service";
 import type { ChangeShape, Lane } from "../shared/model";
+import type { ConversationEntry } from "../shared/auto-review";
 import { emptyCounts, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import { projectLanes } from "../shared/lanes";
 import { attentionItems } from "../shared/attention";
@@ -90,7 +92,7 @@ async function setup(
     lanes?: Lane[];
     exits?: Record<string, number | "spawn" | "timeout">;
     llm?: LlmReview;
-    conversation?: () => Promise<string[] | null>;
+    conversation?: () => Promise<ConversationEntry[] | null>;
     entries?: GuardrailEntry[];
     items?: CardItem[];
     shape?: ChangeShape;
@@ -104,6 +106,8 @@ async function setup(
     real?: boolean;
     git?: Git;
     run?: RunCheck;
+    /** The card's workspace is a shared directory (not a worktree): commands then do not decide (§6.3 step 1). Default: the card's own worktree. */
+    shared?: boolean;
   } = {},
 ) {
   const x = await agentFixture();
@@ -134,6 +138,7 @@ async function setup(
     return { exitCode: exit, timedOut: false, ms: 5, output: exit ? `\u001b[31mFAIL\u001b[0m expected 1 to be 2\n` : "ok\n" };
   };
   const repo = { head: "aaaaaaaaaaaa" };
+  const place = { shared: !!options.shared };
   const git: Git =
     options.git ??
     (options.real ? defaultGit : undefined) ??
@@ -147,7 +152,7 @@ async function setup(
   const bases: (string | undefined)[] = [];
   const sent: { agentId: string; text: string }[] = [];
   const reviews = new AutoReviewService(x.store, {
-    workspace: async () => ({ directory: options.directory ?? x.a, worktree: false }),
+    workspace: async () => ({ directory: options.directory ?? x.a, worktree: !place.shared }),
     sessionBusy: async (agentId) => x.actors[agentId]?.status === "running",
     sessionLive: async (agentId) => !!x.actors[agentId] && !x.actors[agentId]!.archivedAt,
     send: async (message) => {
@@ -195,7 +200,7 @@ async function setup(
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" });
     });
   const entry = async (id: string) => (await guardrails.store.read()).entries.find((e) => e.id === id)!;
-  return { ...x, reviews, guardrails, sent, runs, exits, repo, diffs, bases, deliver, turnStarted, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
+  return { ...x, reviews, guardrails, sent, runs, exits, repo, place, diffs, bases, deliver, turnStarted, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
 }
 
 const card = async (x: { store: { read(): Promise<import("../shared/model").Board> } }) => (await x.store.read()).tasks[0]!;
@@ -227,7 +232,7 @@ test("a passing review leaves the card in In review; a person's move into In rev
   const board = await x.deliver("development");
   const task = board.tasks[0]!;
   expect(task.status).toBe("in_review");
-  expect(task.review).toMatchObject({ state: "passed", round: 1, maxRounds: 2, shared: true, trigger: { agentId: "actor", from: "development" }, shape: { files: 1, lines: 10, size: "s" }, model: "claude/haiku" });
+  expect(task.review).toMatchObject({ state: "passed", round: 1, maxRounds: 2, shared: false, trigger: { agentId: "actor", from: "development" }, shape: { files: 1, lines: 10, size: "s" }, model: "claude/haiku" });
   expect(task.review!.items).toEqual([
     { id: "tests", kind: "command", name: "Tests", gating: true, state: "passed", argv: ["npm", "test"], exitCode: 0, ms: 5 },
     expect.objectContaining({ id: "goal", kind: "goal", name: "Does what you asked", gating: true, state: "passed" }),
@@ -782,7 +787,8 @@ test("a fast review computes immediately but sends rework only after the deliver
   const review = x.reviews.turnEnded("actor", x.paseo, recorded);
   try {
     await reworked;
-    expect(x.runs).toEqual(["npm test"]);
+    // The failed command ran once more at the same commit (§6.3 step 1) and failed again.
+    expect(x.runs).toEqual(["npm test", "npm test"]);
     expect(x.sent).toEqual([]);
     await x.store.mutate((b) => {
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_ended", agentId: "actor", model: "codex/test", pick: 0, byUser: true });
@@ -1007,13 +1013,13 @@ test("round 2 reads only the changes since the previous delivery and keeps what 
   expect(x.diffs.at(-1)).toBeUndefined();
 });
 
-test("disputes: only failed findings of the latest review, kept on the card, judged as disputed next time (§6.1, B7)", async () => {
+test("disputes: only failed findings of the latest review, kept on the card; the disputed check is judged again with the dispute (§6.1, E1)", async () => {
   let seen: LlmReviewInput | undefined;
   let round = 0;
   const llm: LlmReview = async (input) => {
     seen = input;
     round++;
-    return { model: "m", verdicts: input.checks.map((c) => ({ id: c.id, verdict: round === 1 && c.id === "g1" ? ("fail" as const) : ("pass" as const), detail: "d", file: "src/a.ts" })) };
+    return { model: "m", verdicts: input.checks.map((c) => ({ id: c.id, verdict: round === 1 && c.id === "g1" ? ("fail" as const) : ("pass" as const), detail: round === 1 ? "No zh-TW entry." : "d", file: "src/a.ts", line: 3 })) };
   };
   const x = await setup({ entries: [command("tests", ["npm", "test"]), guideline("g1", "Rule one")], llm });
   await x.deliver("development");
@@ -1030,27 +1036,303 @@ test("disputes: only failed findings of the latest review, kept on the card, jud
   const before = (await card(x)).revision;
   const board = await x.deliver(undefined, { disputes: [{ id: "g1", reason: "This card does not touch UI text." }] });
   const task = board.tasks[0]!;
-  expect(task.disputes).toEqual([{ id: "g1", kind: "guideline", name: "Rule one", reason: "This card does not touch UI text.", round: 1, at: expect.any(String) }]);
-  // Not judged again: recorded as disputed with the agent's reason; the review passes.
-  expect(seen!.checks.map((c) => c.id)).toEqual(["goal"]);
-  expect(task.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "disputed", disputeReason: "This card does not touch UI text.", gating: true });
+  // The dispute keeps the finding and the commit it failed on.
+  expect(task.disputes).toEqual([
+    { id: "g1", kind: "guideline", name: "Rule one", reason: "This card does not touch UI text.", round: 1, at: expect.any(String), sha: "aaaaaaaaaaaa", finding: "No zh-TW entry. (src/a.ts:3)" },
+  ]);
+  // Judged again, with the finding and the agent's reason; the reviewer accepts it here.
+  expect(seen!.checks.find((c) => c.id === "g1")).toMatchObject({ dispute: { finding: "No zh-TW entry. (src/a.ts:3)", reason: "This card does not touch UI text.", round: 1 } });
+  expect(task.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "passed", disputeReason: "This card does not touch UI text.", gating: true });
   expect(task.review).toMatchObject({ state: "passed", round: 2 });
   // The delivery's own revision bump only; the dispute itself adds none.
   expect(task.revision).toBe(before + 1);
   // A disputed finding is not "caught" when it later passes.
   expect((await x.entry("g1")).counts.caught).toBe(0);
-  // Sending the same dispute again is idempotent (the reason is updated).
+  // Sending the same dispute again is idempotent (the reason is updated; it did not fail again, so the finding stays).
   await x.store.mutate((b) => {
     b.tasks[0]!.status = "development";
   });
   ctx = await x.service.get(x.identity);
   await x.service.write(x.identity, "status", { ...input(ctx, "Again"), status: "in_review", disputes: [{ id: "g1", reason: "Still not UI." }] });
   await x.reviews.idle();
-  expect((await card(x)).disputes).toEqual([expect.objectContaining({ id: "g1", reason: "Still not UI.", round: 1 })]);
+  expect((await card(x)).disputes).toEqual([expect.objectContaining({ id: "g1", reason: "Still not UI.", round: 1, finding: "No zh-TW entry. (src/a.ts:3)" })]);
   // Done: the dispute still stands, so it counts as a misfire and is cleared (§6.6).
   await x.guardrails.finishTask("t");
   expect((await x.entry("g1")).counts.misfire).toBe(1);
   expect((await card(x)).disputes).toBeUndefined();
+});
+
+test("a disputed goal is still judged on every later delivery; failing again with new evidence ends the dispute (§6.3, E1)", async () => {
+  const inputs: LlmReviewInput[] = [];
+  const goalVerdicts: ("pass" | "fail")[] = ["fail", "fail", "pass"];
+  const llm: LlmReview = async (input) => {
+    inputs.push(input);
+    const verdict = goalVerdicts[inputs.length - 1]!;
+    return { model: "m", verdicts: input.checks.map((c) => ({ id: c.id, verdict, detail: `Round ${inputs.length}: no Rerun button.`, quote: "Add a Rerun button" })) };
+  };
+  const x = await setup({ llm, maxRounds: 3, conversation: async () => ["Add a Rerun button."] });
+  await x.deliver("development");
+  expect((await card(x)).review).toMatchObject({ state: "rework" });
+  await x.turnStarted();
+  x.repo.head = "bbbbbbbbbbbb";
+  let board = await x.deliver(undefined, { disputes: [{ id: "goal", reason: "The user dropped the Rerun button." }] });
+  // The goal was judged again, not skipped as disputed; the reviewer saw the finding and the reason.
+  expect(inputs).toHaveLength(2);
+  expect(inputs[1]!.checks.map((c) => c.id)).toEqual(["goal"]);
+  expect(inputs[1]!.checks[0]).toMatchObject({ dispute: { reason: "The user dropped the Rerun button.", round: 1, finding: "Round 1: no Rerun button." } });
+  expect(reviewPrompt(inputs[1]!)).toContain('disputed: the round 1 finding was "Round 1: no Rerun button."');
+  expect(reviewPrompt(inputs[1]!)).toContain("agent's reason: The user dropped the Rerun button.");
+  expect(reviewPrompt(inputs[1]!)).toContain("unless you have new evidence");
+  // It failed again: the review sends the card back and the dispute ends.
+  expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", disputeReason: "The user dropped the Rerun button." });
+  expect(board.tasks[0]!.disputes).toBeUndefined();
+  // The next delivery judges the goal again, with no dispute to show.
+  await x.turnStarted();
+  board = await x.deliver();
+  expect(inputs).toHaveLength(3);
+  expect(inputs[2]!.checks.map((c) => c.id)).toEqual(["goal"]);
+  expect(inputs[2]!.checks[0]!.dispute).toBeUndefined();
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", round: 3 });
+});
+
+test("a check still disputed needs a new verdict in every rework round; it does not inherit its earlier pass (§6.3 step 2, E1)", async () => {
+  const inputs: LlmReviewInput[] = [];
+  const llm: LlmReview = async (input) => {
+    inputs.push(input);
+    const n = inputs.length;
+    // Round 1: goal fails. Round 2: goal passes, g1 fails. Round 3: the reviewer leaves the goal out.
+    const verdicts = input.checks
+      .filter((c) => !(n === 3 && c.id === "goal"))
+      .map((c) => ({ id: c.id, verdict: (n === 1 && c.id === "goal") || (n === 2 && c.id === "g1") ? ("fail" as const) : ("pass" as const), detail: `Round ${n}.`, file: "src/a.ts" }));
+    return { model: "m", verdicts };
+  };
+  const x = await setup({ entries: [guideline("g1", "Rule one")], llm, maxRounds: 3 });
+  await x.deliver("development");
+  await x.turnStarted();
+  x.repo.head = "bbbbbbbbbbbb";
+  let board = await x.deliver(undefined, { disputes: [{ id: "goal", reason: "The user changed the request." }] });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "passed" });
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "goal" })]);
+  await x.turnStarted();
+  x.repo.head = "cccccccccccc";
+  board = await x.deliver();
+  // Round 3 is incremental and still shows the dispute; the prompt asks for a verdict on it.
+  expect(inputs[2]).toMatchObject({ incremental: true });
+  expect(inputs[2]!.checks.find((c) => c.id === "goal")).toMatchObject({ previous: { state: "passed" }, dispute: { reason: "The user changed the request." } });
+  expect(reviewPrompt(inputs[2]!)).toContain("every disputed check needs a verdict");
+  // Left out, it does not keep its round 2 pass.
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "unavailable", reason: "The review session gave no verdict for this check." });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "passed" });
+});
+
+test("a disputed command is skipped only at the commit it failed on; new code runs and decides it again (§6.3 step 1, E1)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 3 });
+  await x.deliver("development");
+  expect((await card(x)).review).toMatchObject({ state: "rework" });
+  await x.turnStarted();
+  // Same commit: not run, recorded as disputed; the review session still judges the goal.
+  const runs = x.runs.length;
+  let board = await x.deliver(undefined, { disputes: [{ id: "tests", reason: "Fails on the machine's load, not this change." }] });
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "tests", sha: "aaaaaaaaaaaa", finding: "exited 1" })]);
+  expect(x.runs).toHaveLength(runs);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "disputed", disputeReason: "Fails on the machine's load, not this change." });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "passed" });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed" });
+  // New commit: it runs (and is retried once), fails, sends the card back and ends the dispute.
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  x.repo.head = "cccccccccccc";
+  board = await x.deliver();
+  expect(x.runs).toHaveLength(runs + 2);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1 });
+  expect(board.tasks[0]!.review!.state).toBe("rework");
+  expect(board.tasks[0]!.disputes).toBeUndefined();
+});
+
+test("a command disputed from a worktree still runs when the same commit is delivered from a shared directory (§6.3 step 1)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 3 });
+  await x.deliver("development");
+  await x.turnStarted();
+  let board = await x.deliver(undefined, { disputes: [{ id: "tests", reason: "Load." }] });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "disputed" });
+  // Same sha, now in a shared directory: the command does not decide, so the dispute does not skip it and its result shows.
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  x.place.shared = true;
+  const runs = x.runs.length;
+  board = await x.deliver();
+  expect(x.runs).toHaveLength(runs + 1);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", gating: false, exitCode: 1 });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", shared: true });
+  // A failure that decided nothing does not end the dispute: back in the worktree at the same sha it is skipped again.
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "tests" })]);
+});
+
+test("in a shared directory commands run and show their result but never send the card back (§6.3 step 1, E3)", async () => {
+  let seen: LlmReviewInput | undefined;
+  const x = await setup({
+    shared: true,
+    exits: { "npm test": 1 },
+    llm: async (input) => {
+      seen = input;
+      return passAll(input, x.paseo);
+    },
+  });
+  const board = await x.deliver("development");
+  const review = board.tasks[0]!.review!;
+  expect(board.tasks[0]!.status).toBe("in_review");
+  expect(review).toMatchObject({ state: "passed", shared: true });
+  // Shown, not deciding, and not retried; the review session ran anyway (D9 counts only deciding commands).
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", gating: false, exitCode: 1 });
+  expect(x.runs).toEqual(["npm test"]);
+  expect(review.items.find((i) => i.id === "goal")).toMatchObject({ state: "passed" });
+  expect(x.sent).toEqual([]);
+  expect(seen!.commands).toEqual(["Tests: failed (ran in a shared directory; does not decide)"]);
+  expect(reviewPrompt(seen!)).toContain("do not decide this review");
+  // It decided nothing, so it cannot be disputed (a later delivery from a worktree at the same sha must still run it).
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  const ctx = await x.service.get(x.identity);
+  const refused = await x.service.write(x.identity, "status", { ...input(ctx, "Delivered"), status: "in_review", disputes: [{ id: "tests", reason: "Load." }] }).catch((e) => e);
+  expect(refused).toMatchObject({ code: "INVALID_INPUT" });
+  expect(String(refused.message)).toContain("(it has none)");
+  expect((await card(x)).disputes).toBeUndefined();
+  // A shared failure that passes later was never sent back, so it is not "caught" (§6.6).
+  x.exits["npm test"] = 0;
+  await x.deliver();
+  expect((await x.entry("tests")).counts).toMatchObject({ caught: 0, reviews: 2 });
+});
+
+test("a deciding command that fails runs once more at the same commit: a pass then is flaky, not a rework (§6.3 step 1, E3)", async () => {
+  let calls = 0;
+  const x = await setup({
+    run: async () => (++calls === 1 ? { exitCode: 1, timedOut: false, ms: 4, output: "Timeout in vitest worker\n" } : { exitCode: 0, timedOut: false, ms: 6, output: "ok\n" }),
+  });
+  const board = await x.deliver("development");
+  const review = board.tasks[0]!.review!;
+  expect(calls).toBe(2);
+  expect(review).toMatchObject({ state: "passed" });
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({
+    state: "passed",
+    flaky: true,
+    ms: 10,
+    tail: "Timeout in vitest worker",
+    reason: "Failed once and passed when run again at the same commit.",
+  });
+  expect(x.sent).toEqual([]);
+  expect(board.tasks[0]!.status).toBe("in_review");
+  // get_task shows it.
+  const ctx = await x.service.get(x.identity);
+  expect(ctx.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "passed", flaky: true });
+});
+
+test("a failed command is not retried when the commit changed meanwhile (§6.3 step 1)", async () => {
+  let calls = 0;
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.setDuring(async () => {
+    if (++calls === 1) x.repo.head = "dddddddddddd";
+  });
+  const board = await x.deliver("development");
+  expect(x.runs).toEqual(["npm test"]);
+  // The code changed during the review, so its result is dropped.
+  expect(board.tasks[0]!.review!.state).toBe("cancelled");
+});
+
+test("the review reads answers given in question tools as what the user said, in time order with the messages (§4.2, E2)", async () => {
+  const timelines: Record<string, { timestamp: string; item: Record<string, unknown> }[]> = {
+    a1: [
+      { timestamp: "2026-11-26T10:00:00.000Z", item: { type: "user_message", text: "Add a Rerun button to failed checks." } },
+      {
+        timestamp: "2026-11-26T10:01:00.000Z",
+        item: {
+          type: "tool_call",
+          name: "AskUserQuestion",
+          callId: "c1",
+          status: "completed",
+          detail: {
+            input: { questions: [{ question: "Where should Rerun go?", header: "Place", options: [{ label: "Drawer" }, { label: "Card" }] }] },
+            output: 'User has answered your questions: "Where should Rerun go?"="Drawer only". You can now continue.',
+          },
+        },
+      },
+      { timestamp: "2026-11-26T10:03:00.000Z", item: { type: "user_message", text: "[Flowly auto review · rework 1/2]\nfix it" } },
+    ],
+    a2: [{ timestamp: "2026-11-26T10:02:00.000Z", item: { type: "user_message", text: "Answers to your questions:\n\nKeep the old label?\nNo" } }],
+    other: [{ timestamp: "2026-11-26T09:00:00.000Z", item: { type: "user_message", text: "Another card's message" } }],
+  };
+  const agents = [
+    { id: "a1", workspaceId: "w" },
+    { id: "a2", workspaceId: "w" },
+    { id: "other", workspaceId: "elsewhere" },
+  ];
+  const paseo = {
+    agents: {
+      list: async () => ({ entries: agents.map((agent) => ({ agent })), pageInfo: {} }),
+      ref: (id: string) => ({ timeline: { refetch: async () => ({ entries: timelines[id] ?? [] }) } }),
+    },
+  } as unknown as Parameters<typeof readConversation>[1];
+  const said = await readConversation({ workspaceId: "w" }, paseo);
+  expect(said).toEqual([
+    "Add a Rerun button to failed checks.",
+    { ask: "Where should Rerun go?", answer: "Drawer only" },
+    { ask: "Keep the old label?", answer: "No" },
+  ]);
+  // It reaches the review session's input and counts as a source for quoted evidence.
+  let seen: LlmReviewInput | undefined;
+  const x = await setup({
+    conversation: async () => said,
+    llm: async (input) => {
+      seen = input;
+      return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Rerun must stay in the drawer.", quote: "Drawer only" }] };
+    },
+  });
+  const board = await x.deliver("development");
+  expect(seen!.conversation).toContainEqual({ ask: "Where should Rerun go?", answer: "Drawer only" });
+  expect(reviewPrompt(seen!)).toContain('[2] Answered the agent\'s question: "Where should Rerun go?" → Drawer only');
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", quote: "Drawer only" });
+});
+
+test("a Codex answer that spans lines is kept whole from readConversation through the quote check (§4.2, E2)", async () => {
+  const text = 'Answers to your questions:\n\nWhat should the button say?\nKeep "Retry" on the card.\nRename the drawer one to "Rerun".\n\nKeep the old label?\nNo';
+  const paseo = {
+    agents: {
+      list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+      ref: () => ({ timeline: { refetch: async () => ({ entries: [{ timestamp: "2026-11-26T10:00:00.000Z", item: { type: "user_message", text } }] }) } }),
+    },
+  } as unknown as Parameters<typeof readConversation>[1];
+  const said = await readConversation({ workspaceId: "w" }, paseo);
+  expect(said).toEqual([
+    { ask: "What should the button say?", answer: 'Keep "Retry" on the card.\nRename the drawer one to "Rerun".' },
+    { ask: "Keep the old label?", answer: "No" },
+  ]);
+  const run = async (quote: string) => {
+    const x = await setup({ conversation: () => readConversation({ workspaceId: "w" }, paseo), llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
+    return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
+  };
+  // The first line of a multi-line answer is the user's words, not part of the question.
+  expect(await run('Keep "Retry" on the card')).toMatchObject({ state: "failed", quote: 'Keep "Retry" on the card' });
+  expect(await run('rename the drawer one to "Rerun"')).toMatchObject({ state: "failed" });
+  expect(await run("What should the button say")).toMatchObject({ state: "na", reason: "no evidence" });
+});
+
+test("only the user's answer in a question tool counts as quoted evidence, not the agent's question (§4.2, B1)", async () => {
+  let said: ConversationEntry[] = [{ ask: "Should I add a rerun button?", answer: "No" }];
+  const run = async (quote: string) => {
+    const x = await setup({ conversation: async () => said, llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
+    return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
+  };
+  expect(await run("add a rerun button")).toMatchObject({ state: "na", reason: "no evidence" });
+  expect(await run("No")).toMatchObject({ state: "failed", quote: "No" });
+  // An answer with an arrow in it is quoted whole: any part of it is evidence, the question never is.
+  said = [{ ask: "What should the button say?", answer: 'Rename "Retry" → "Rerun" in the drawer' }];
+  expect(await run('Rename "Retry"')).toMatchObject({ state: "failed", quote: 'Rename "Retry"' });
+  expect(await run('"Rerun" in the drawer')).toMatchObject({ state: "failed" });
+  expect(await run("What should the button say")).toMatchObject({ state: "na", reason: "no evidence" });
 });
 
 test("signals at review end: reviews and passes counted; two misfires in 30 days pause a guideline with an event (§6.6, §6.7)", async () => {
@@ -1295,7 +1577,8 @@ test("linked root review: a command that fails in one repository fails, with tha
     run: async (_argv, cwd) => (cwd.endsWith("SMITH") ? { exitCode: 1, timedOut: false, ms: 3, output: "FAIL smith.test.ts\n" } : { exitCode: 0, timedOut: false, ms: 2, output: "" }),
   });
   const review = (await x.deliver("development")).tasks[0]!.review!;
-  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1, ms: 5, detail: "Ran in Admin, SMITH." });
+  // Run twice (failed, then the same commit again): the time is both runs together.
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1, ms: 10, detail: "Ran in Admin, SMITH." });
   expect(review.items.find((i) => i.id === "tests")!.tail).toContain("[SMITH]");
   expect(review.items.find((i) => i.id === "goal")).toMatchObject({ state: "skipped" });
 }, 20_000);
@@ -1463,7 +1746,7 @@ test("a delivery with this repository's PR and no worktree is reviewed in the wo
 
 test("a PR whose head is in several worktrees, or of another repository, changes nothing: the workspace is reviewed (§3.4)", async () => {
   const cwds: string[] = [];
-  const x = await setup({ real: true, run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }) });
+  const x = await setup({ real: true, shared: true, run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }) });
   const { worktree, git } = await workspaceWithWorktree(x.a, x.root);
   await withPullRequest(x, worktree, git);
   // Another repository's PR: nothing found.

@@ -6,6 +6,16 @@
 
 # Implementation progress
 
+## Auto review P0 fixes after the evaluation (card "Auto review P0：争议只针对一条意见、评审读取问答、共享目录里命令不参与判定") — 2026-11-26
+
+- Source: evaluation report `docs/verification/auto-review-eval-2026-11-26/REPORT.md` §4.1–4.3, §5 P0 (untracked in the main checkout, not in this change).
+- Spec: [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §0.4 (E1–E3, E1 replaces B7's "recorded as disputed"), §6.1, §6.3, §6.4, §6.6; [AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md) §4.2, §4.3, §4.4.
+- Disputes (E1): a dispute now keeps the commit (`sha`) and the finding; a disputed judged check is judged again with the finding and the agent's reason and is told not to repeat it without new evidence; a disputed command is skipped only at the same sha; a disputed item that fails again ends its dispute (`finish`). `disputedFindings` (`server/agent-service.ts`), `findingText` (`shared/auto-review.ts`), `reviewPrompt` (`server/review-session.ts`).
+- Question-tool answers (E2): `readConversation` adds `questionAnswers` (`shared/memory.ts`) results as `{ ask, answer }` entries (`ConversationEntry`, shown to the reviewer as `Answered the agent's question: "<q>" → <a>`) in time order with the user's messages; a Codex answers message is replaced by its answers.
+- Commands (E3): in a shared directory (`review.shared`) every command is `gating: false` (shown as observing, never sends back, the review session still runs and is told not to fail for them); a deciding command that fails runs once more when HEAD is still the review's sha, and a pass then is `passed` + `flaky` (first output kept as `tail`; drawer label "flaky"). `caught` counts only failures that were gating.
+- Auto review rework 2/4 on this card: a dispute now skips a command only when that command decides (in a shared directory it always runs and shows its result), and only a deciding failure ends a dispute; for a question-tool answer only the user's answer counts as a quote source, the agent's question stays as context. Rework 3/4: the answer is checked from its own field (`userWords`), not cut out of the rendered line, so an answer that contains "→" is quoted whole. Rework 4/4: a Codex async answers message (`questionAnswers`, `shared/memory.ts`) is read as a one-line title followed by the whole answer, which may span lines (before, only the last line was the answer and the user's earlier lines were taken as the question); this also fixes the memory `answer` clue ([PROJECT-MEMORY-SPEC](PROJECT-MEMORY-SPEC.md) §4.0).
+- Tool and skill text for `disputes` updated (the review still judges the check). No tour copy, tip or telemetry field: no new switch or entry point; one new UI string ("flaky") in every catalog.
+
 ## Auto review retry and Attention after a failure (card "auto review优化") — 2026-11-24
 
 - Spec: [AUTO-REVIEW-SPEC](AUTO-REVIEW-SPEC.md) §3.5, D18, D19, §13.3; §3.2, §8.2, §8.5, §9.2 and §9.4 updated.

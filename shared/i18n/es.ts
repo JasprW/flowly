@@ -1429,6 +1429,7 @@ const catalog: Catalog = {
   "Sent back": "Devuelta",
   "Disputed": "Impugnado",
   "observing": "en observación",
+  "flaky": "inestable",
   "Round {round}": "Ronda {round}",
   "Now a project guideline": "Ahora es una pauta del proyecto",
   "Sent back {n} times": {"one":"Devuelta {n} vez","other":"Devuelta {n} veces"},

@@ -1429,6 +1429,7 @@ const catalog: Catalog = {
   "Sent back": "差し戻し",
   "Disputed": "異議あり",
   "observing": "観察中",
+  "flaky": "不安定",
   "Round {round}": "{round} 回目",
   "Now a project guideline": "プロジェクトのガイドラインになりました",
   "Sent back {n} times": "{n} 回差し戻し",
