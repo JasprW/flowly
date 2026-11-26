@@ -14,8 +14,11 @@ const PERMISSION_PREFIX = "permission-";
 
 type Request = { id?: unknown; name?: unknown; kind?: unknown; input?: unknown };
 type Resolution = { behavior?: unknown; updatedInput?: unknown };
-/** One answered question call: what the user answered to each title, and the message Paseo sent for it. */
-export type AnsweredQuestions = { callId: string; message: string; pairs: { ask: string; text: string }[] };
+/**
+ * One answered question call: what the user answered to each title, the message Paseo sent for it, and when the hook saw
+ * the answer (ms since epoch; Paseo sends the message at the same moment, §4.2 ⑤).
+ */
+export type AnsweredQuestions = { callId: string; message: string; pairs: { ask: string; text: string }[]; answeredAt: number };
 /**
  * What the hooks know of one session's question calls: the answered ones, newest first, and whether a call's outcome is
  * known at all (asked since the plugin started and still held: open, answered, or closed without an answer). A call it
@@ -37,6 +40,8 @@ export class AsyncQuestionTitles {
   private readonly answered = new Map<string, Map<string, AnsweredQuestions>>();
   /** Closed without an answer (dismissed, interrupted, removed by a rewind while open): session → call id. */
   private readonly closed = new Map<string, Map<string, true>>();
+
+  constructor(private readonly now: () => number = Date.now) {}
 
   /** Keeps the titles of a Codex async question request; anything else is ignored. */
   remember(agentId: string, request: Request): void {
@@ -68,7 +73,7 @@ export class AsyncQuestionTitles {
       if (!text) return void put(this.closed, agentId, callId, true);
       pairs.push({ ask, text });
     }
-    put(this.answered, agentId, callId, { callId, message: codexAnswersMessage(pairs), pairs });
+    put(this.answered, agentId, callId, { callId, message: codexAnswersMessage(pairs), pairs, answeredAt: this.now() });
   }
 
   /** The session's calls as the auto review pairs them (§4.2). */

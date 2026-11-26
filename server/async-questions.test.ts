@@ -9,8 +9,9 @@ const ask = (id: string, ...titles: string[]) => ({
 });
 const allow = (...answers: string[]) => ({ behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } });
 
-test("pairs the answers of the request actually answered with its titles, as the message Paseo sends", () => {
-  const q = new AsyncQuestionTitles();
+test("pairs the answers of the request actually answered with its titles, as the message Paseo sends, and when it was answered", () => {
+  let now = 1_000;
+  const q = new AsyncQuestionTitles(() => now);
   q.remember("a1", ask("c1", "Which label?", "Where?"));
   q.remember("a1", ask("c2", "Which label?"));
   q.resolved("a1", "permission-c1", allow(" Rerun\n\nwith a hint ", "Drawer only"));
@@ -22,11 +23,16 @@ test("pairs the answers of the request actually answered with its titles, as the
         { ask: "Which label?", text: "Rerun\n\nwith a hint" },
         { ask: "Where?", text: "Drawer only" },
       ],
+      answeredAt: 1_000,
     },
   ]);
   // The other request is still open and has no answers yet.
+  now = 5_000;
   q.resolved("a1", "permission-c2", allow("Retry"));
-  expect(q.answers("a1").map((a) => a.callId)).toEqual(["c2", "c1"]);
+  expect(q.answers("a1").map((a) => [a.callId, a.answeredAt])).toEqual([
+    ["c2", 5_000],
+    ["c1", 1_000],
+  ]);
   expect(codexAnswersMessage([{ ask: "Which label?", text: "Retry" }])).toBe("Answers to your questions:\n\nWhich label?\nRetry");
 });
 

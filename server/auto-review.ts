@@ -386,22 +386,33 @@ export async function readConversation(
 
 /** How far back the review reads a session to find all its question calls before pairing (§4.2, E2). */
 export const pairingHistoryLimit = 2000;
+/**
+ * How far apart a Codex answers message and its call's answer may be (§4.2 ⑤): Paseo sends the message when the user
+ * submits the answer, seconds from the hook; the same text typed by hand after a rewind comes much later.
+ */
+export const answerMessageWindowMs = 60_000;
 
 type TimelineEntry = { timestamp?: string; item?: TurnItem };
 type TimelinePage = { entries: unknown[]; hasOlder: boolean; startCursor: { epoch: string; seq: number } | null; epoch: string; reset?: boolean; staleCursor?: boolean; error?: string | null };
 
-/** A Codex answers message that some answered call of the session built, as trimmed; null otherwise. */
+/** A Codex answers message that some answered call of the session built, character for character; null otherwise. */
 function answersText(item: TurnItem, answered: readonly AnsweredQuestions[]): string | null {
   if (item.type !== "user_message" || typeof item.text !== "string") return null;
-  const text = item.text.trim();
+  const text = item.text;
   return text.startsWith(CODEX_ANSWERS_PREFIX) && answered.some((a) => a.message === text) ? text : null;
+}
+
+/** Whether a message's timeline time is within the window of its call's answer (§4.2 ⑤); an unreadable time is not. */
+function nearAnswer(timestamp: string | undefined, answeredAt: number): boolean {
+  const at = timestamp ? Date.parse(timestamp) : NaN;
+  return Number.isFinite(at) && Math.abs(at - answeredAt) <= answerMessageWindowMs;
 }
 
 /** The session's entries before `first`, back to its start; null when the start is out of reach or the timeline changed. */
 async function olderEntries(handle: { timeline: { refetch: (options: never) => Promise<unknown> } }, first: TimelinePage): Promise<TimelineEntry[] | null> {
   let out: TimelineEntry[] = [];
   let last = first;
-  while (last.hasOlder) {
+  while (last.hasOlder !== false) {
     if (!last.startCursor || out.length >= pairingHistoryLimit) return null;
     const options = { direction: "before", cursor: last.startCursor, limit: conversationLimits.perSession, projection: "projected" };
     const next = (await handle.timeline.refetch(options as never).catch(() => null)) as TimelinePage | null;
@@ -424,9 +435,11 @@ async function olderEntries(handle: { timeline: { refetch: (options: never) => P
  *   may have sent the same text;
  * - two calls can build the same text, so the messages of one text are paired with the calls of that text only when
  *   there are as many of each, in order (the timeline shows the answers messages in the order the user answered, and
- *   the calls are kept in that order too), each call asked before its message.
- * Anything else (a rewind that removed an answer but kept its question, a timeline whose start is out of reach) leaves
- * every message of that text whole.
+ *   the calls are kept in that order too), each call asked before its message;
+ * - each message is in the timeline within a minute of its call's answer: Paseo sends it when the user submits the
+ *   answer, while the same text typed by hand after a rewind removed the real one comes much later.
+ * Anything else (a rewind that removed an answer but kept its question, the same text typed again after a rewind, a
+ * timeline whose start is out of reach) leaves every message of that text whole.
  */
 function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQuestions, offset: number): Map<number, AnsweredQuestions> {
   const out = new Map<number, AnsweredQuestions>();
@@ -444,6 +457,7 @@ function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQues
     const last = at[at.length - 1]!;
     if ([...askedAt].some(([callId, i]) => i < last && !questions.known(callId))) continue;
     if (kept.some((a, n) => askedAt.get(a.callId)! > at[n]!)) continue;
+    if (kept.some((a, n) => !nearAnswer(entries[at[n]!]!.timestamp, a.answeredAt))) continue;
     at.forEach((index, n) => {
       if (index >= offset) out.set(index - offset, kept[n]!);
     });

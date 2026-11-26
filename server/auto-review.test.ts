@@ -1298,20 +1298,28 @@ test("the review reads answers given in question tools as what the user said, in
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", quote: "Drawer only" });
 });
 
-/** A session timeline: a string is a user message, `{ asked }` the request_user_input_async tool call of that call id. */
-const codexTimeline = (lines: readonly (string | { asked: string })[]) =>
+/**
+ * A session timeline, one second per entry from 10:00:00: a string is a user message, `{ said, at }` one at that time,
+ * `{ asked }` the request_user_input_async tool call of that call id.
+ */
+type CodexLine = string | { asked: string } | { said: string; at: string };
+const codexTimeline = (lines: readonly CodexLine[]) =>
   lines.map((line, i) => ({
-    timestamp: `2026-11-26T10:${String(i).padStart(2, "0")}:00.000Z`,
+    timestamp: typeof line === "object" && "said" in line ? line.at : `2026-11-26T10:00:${String(i).padStart(2, "0")}.000Z`,
     item:
       typeof line === "string"
         ? { type: "user_message", text: line }
-        : { type: "tool_call", name: "request_user_input_async", callId: line.asked, status: "completed", detail: { type: "plain_text", text: "Question" } },
+        : "said" in line
+          ? { type: "user_message", text: line.said }
+          : { type: "tool_call", name: "request_user_input_async", callId: line.asked, status: "completed", detail: { type: "plain_text", text: "Question" } },
   }));
+/** The hooks saw every answer at 10:00:05, seconds from the messages Paseo sent for them (§4.2 ⑤). */
+const answeredNear = () => Date.parse("2026-11-26T10:00:05.000Z");
 
 test("a Codex answers message is read as the answers of the call it was sent for, and stays whole without it, from readConversation through the quote check (§4.2, E2)", async () => {
   // Paseo keeps request_user_input_async questions and answers in the timeline only as plain text; Flowly takes the
   // titles from the permission request and the answers from the resolution of the request actually answered.
-  const q = new AsyncQuestionTitles();
+  const q = new AsyncQuestionTitles(answeredNear);
   const request = (agentId: string, callId: string, ...titles: string[]) =>
     q.remember(agentId, { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
   const answer = (agentId: string, callId: string, ...answers: string[]) =>
@@ -1376,7 +1384,7 @@ test("a Codex answers message is read as the answers of the call it was sent for
 test("two answered Codex calls that build the same message text are paired with their messages in order only when certain, otherwise kept whole (§4.2, E2)", async () => {
   // Call A asks two questions; call B later asks one with A's first title, and its multi-line answer reads like A's
   // whole answer, so both answers messages are the same text.
-  const q = new AsyncQuestionTitles();
+  const q = new AsyncQuestionTitles(answeredNear);
   const request = (callId: string, ...titles: string[]) =>
     q.remember("a1", { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
   const answer = (callId: string, ...answers: string[]) =>
@@ -1387,15 +1395,16 @@ test("two answered Codex calls that build the same message text are paired with 
   answer("B", "Rerun\n\nWhere?\nDrawer only");
   const same = "Answers to your questions:\n\nWhich label?\nRerun\n\nWhere?\nDrawer only";
   expect(q.answers("a1").map((a) => a.message)).toEqual([same, same]);
-  // `hasOlder` false: the read holds the whole timeline; true: older entries lie before the window.
-  const paseo = (lines: (string | { asked: string })[], hasOlder: boolean) =>
+  // `hasOlder` false: the read holds the whole timeline; true: older entries lie before the window; "missing": Paseo
+  // left it out, which may also mean older entries.
+  const paseo = (lines: CodexLine[], hasOlder: boolean | "missing") =>
     ({
       agents: {
         list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
-        ref: () => ({ timeline: { refetch: async () => ({ hasOlder, entries: codexTimeline(lines) }) } }),
+        ref: () => ({ timeline: { refetch: async () => ({ ...(hasOlder === "missing" ? {} : { hasOlder }), entries: codexTimeline(lines) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
-  const read = (lines: (string | { asked: string })[], hasOlder = false) => readConversation({ workspaceId: "w" }, paseo(lines, hasOlder), (id) => q.session(id));
+  const read = (lines: CodexLine[], hasOlder: boolean | "missing" = false) => readConversation({ workspaceId: "w" }, paseo(lines, hasOlder), (id) => q.session(id));
   const a = [
     { ask: "Which label?", answer: "Rerun" },
     { ask: "Where?", answer: "Drawer only" },
@@ -1415,9 +1424,25 @@ test("two answered Codex calls that build the same message text are paired with 
   // A message whose call is in no timeline read stays the user's whole message.
   expect(await read([same])).toEqual([same]);
   expect(await read([same], true)).toEqual([same]);
+  // A page without `hasOlder` may have older entries; with no start cursor to page back from, nothing is paired.
+  expect(await read([{ asked: "A" }, same], "missing")).toEqual([same]);
+  // Only the exact text Paseo sends is paired: a trailing line break makes it the user's own message (the review input
+  // trims it like any message).
+  expect(await read([{ asked: "A" }, `${same}\n`])).toEqual([same]);
+  // A rewind removed A's answer and the user typed the same text again 20 minutes later: not A's answers message.
+  const retyped = { said: same, at: "2026-11-26T10:20:00.000Z" };
+  expect(await read([{ asked: "A" }, retyped])).toEqual([same]);
+  // A's answer kept and B's removed, then retyped: B's message is far from B's answer, so neither text is paired.
+  expect(await read([{ asked: "A" }, same, { asked: "B" }, retyped])).toEqual([same, same]);
+  // Paseo may record the message shortly before the hook sees the answer (a steered turn) or after it (a new turn):
+  // within a minute either way it is paired; 61 seconds or an unreadable time is not.
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T09:59:40.000Z" }])).toEqual(a);
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T10:01:05.000Z" }])).toEqual(a);
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T10:01:06.000Z" }])).toEqual([same]);
+  expect(await read([{ asked: "A" }, { said: same, at: "" }])).toEqual([same]);
 
   let seen: LlmReviewInput | undefined;
-  const judged = async (quote: string, lines: (string | { asked: string })[] = [{ asked: "A" }, same, { asked: "B" }, same]) => {
+  const judged = async (quote: string, lines: CodexLine[] = [{ asked: "A" }, same, { asked: "B" }, same]) => {
     const x = await setup({
       conversation: () => read(lines),
       llm: async (input) => {
@@ -1432,7 +1457,7 @@ test("two answered Codex calls that build the same message text are paired with 
   // A's titles are questions; only B's answer, which the user typed, contains "Where?" as their own words.
   expect(await judged("Which label")).toMatchObject({ state: "na", reason: "no evidence" });
   // After the rewind A's message is not read as B's answer: A's second title is a question, not the user's words.
-  const rewound: (string | { asked: string })[] = [{ asked: "A" }, same];
+  const rewound: CodexLine[] = [{ asked: "A" }, same];
   expect(await judged("Drawer only", rewound)).toMatchObject({ state: "failed", quote: "Drawer only" });
   expect(seen!.conversation).toEqual(a);
   expect(await judged("Where?", rewound)).toMatchObject({ state: "na", reason: "no evidence" });
@@ -1465,7 +1490,7 @@ test("a Codex answers message whose owner is not certain (a call from before a p
   ];
   const b = { ask: "Which label?", answer: "Rerun\n\nWhere?\nDrawer only" };
   const questions = (...calls: [string, string[], string[]][]) => {
-    const q = new AsyncQuestionTitles();
+    const q = new AsyncQuestionTitles(answeredNear);
     for (const [callId, titles] of calls)
       q.remember("a1", { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
     for (const [callId, , answers] of calls)
