@@ -2,7 +2,7 @@ import { createHidden } from "./background-agent";
 import type { PaseoApi } from "@getpaseo/client";
 import { SUMMARIZER_LABELS, readOnlyConfig, type SummarySettings } from "../shared/summary";
 import { autoReviewLimits } from "../shared/model";
-import { GOAL_ID } from "../shared/auto-review";
+import { GOAL_ID, conversationLine } from "../shared/auto-review";
 import { daemonRemoveAgent, type RemoveAgent } from "./summarizer-remove";
 import { runSummaryModels } from "./summary-models";
 import { logFailure } from "./error-report";
@@ -57,6 +57,16 @@ export function reviewPrompt(input: LlmReviewInput): string {
           'This workspace is shared with other cards (not a worktree): changes in the diff that have nothing to do with this card may belong to another card. Do not fail "goal" for them; fail it only when something the user asked for is missing or wrong.',
         ]
       : []),
+    // §6.3 step 1 (E3): in a shared directory the commands' results do not decide and may come from other cards' work.
+    ...(input.shared && input.commands.length
+      ? ["The commands ran in this shared directory and do not decide this review: a failure there may come from another card's work or the machine's load. Do not fail a check only because a command failed."]
+      : []),
+    // §6.3 step 2 (E1): a disputed finding is judged again, but not repeated without new evidence.
+    ...(input.checks.some((c) => c.dispute)
+      ? [
+          'A check marked "disputed" failed in an earlier round and the agent disputed that finding. Judge it again: do not fail it for the same finding unless you have new evidence the agent\'s reason does not answer, and then say in detail what is new. A different problem with the check is judged as usual.',
+        ]
+      : []),
     // §3.4: the delivery named a worktree; the session's own working directory is the card's workspace, not the code.
     ...(input.worktree
       ? [`The delivered code is in the git worktree ${input.worktree}, not in your working directory: read files there. The commands ran there and the diff below is its branch's change.`]
@@ -64,17 +74,17 @@ export function reviewPrompt(input: LlmReviewInput): string {
     // §6.3: from round 2 only the changes since the previous delivery are shown.
     ...(input.incremental
       ? [
-          "This is a rework round: the diff holds only what changed since the previous delivery, and each check shows its previous result. Re-check the checks that did not pass last time and look for new problems in these changes. A check that passed before and is not touched by these changes needs no verdict; leave it out.",
+          "This is a rework round: the diff holds only what changed since the previous delivery, and each check shows its previous result. Re-check the checks that did not pass last time and look for new problems in these changes. A check that passed before and is not touched by these changes needs no verdict; leave it out, unless it is marked disputed: every disputed check needs a verdict.",
         ]
       : []),
     `Reply only with JSON: {"items":[{"id","verdict","detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,
     "",
     `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}${input.task.images?.length ? `\nCard images (part of the description; view each with your image tool): ${input.task.images.join(", ")}` : ""}`,
-    // The built-in check's yardstick (§4.2): the user's own words, oldest first; a later one replaces an earlier one.
+    // The built-in check's yardstick (§4.2): the user's own words and answers to the agent's questions, oldest first; a later one replaces an earlier one.
     ...(input.conversation !== undefined
       ? [
           `## What the user said in this card's sessions (oldest first)\n${
-            input.conversation === null ? "(conversation unavailable)" : input.conversation.length ? input.conversation.map((m, i) => `[${i + 1}] ${m}`).join("\n\n") : "(no messages)"
+            input.conversation === null ? "(conversation unavailable)" : input.conversation.length ? input.conversation.map((m, i) => `[${i + 1}] ${conversationLine(m)}`).join("\n\n") : "(no messages)"
           }`,
         ]
       : []),
@@ -96,6 +106,12 @@ export function reviewPrompt(input: LlmReviewInput): string {
           `  check: ${c.text.replace(/\n/g, " ")}`,
           ...(c.quote ? [`  user's words: ${c.quote.replace(/\s+/g, " ")}`] : []),
           ...(c.previous ? [`  previous result: ${c.previous.state}${c.previous.detail ? ` — ${c.previous.detail.replace(/\s+/g, " ")}` : ""}`] : []),
+          ...(c.dispute
+            ? [
+                `  disputed: the round ${c.dispute.round} finding was ${c.dispute.finding ? `"${c.dispute.finding.replace(/\s+/g, " ")}"` : "not kept"}`,
+                `  agent's reason: ${c.dispute.reason.replace(/\s+/g, " ")}`,
+              ]
+            : []),
         ].join("\n"),
       )
       .join("\n")}`,

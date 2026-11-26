@@ -123,7 +123,7 @@ export const statusInputSchema = z.strictObject({
     )
     .max(disputeLimits.perTask)
     .optional()
-    .describe("Only with status in_review: findings of the latest auto review you think are wrong. They are not judged again; the user decides."),
+    .describe("Only with status in_review: findings of the latest auto review you think are wrong. The next review still judges that check, sees your reason and does not repeat the finding without new evidence; a disputed command is skipped only while the code is at the same commit. The user decides."),
   worktree: z
     .string()
     .trim()
@@ -515,6 +515,7 @@ export const toolContextSchema = z.object({
           quote: z.string().optional(),
           reason: z.string().optional(),
           disputeReason: z.string().optional(),
+          flaky: z.boolean().optional(),
         }),
       ),
       shape: changeShapeSchema.optional(),

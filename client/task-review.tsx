@@ -110,6 +110,11 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
             {t("observing")}
           </Label>
         )}
+        {item.flaky && (
+          <Label size={font.sm} muted selectable={false}>
+            {t("flaky")}
+          </Label>
+        )}
         {!!result && (
           <Label size={font.sm} muted selectable={false}>
             {result}

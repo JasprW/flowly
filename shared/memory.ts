@@ -313,7 +313,7 @@ function quotedPairs(output: string): Map<string, string> {
  *   `detail.output` as `"question"="answer"` pairs (the sentence around them differs by Claude Code version).
  * - Codex `request_user_input` (sync): a completed tool call with `metadata.questions` and `metadata.answers` by question id.
  * - Codex `request_user_input_async`: the turn only asks; the answers come back as a user message starting
- *   with "Answers to your questions:" and one "title\nanswer" block per question. Its own tool call is skipped:
+ *   with "Answers to your questions:" and one "title\nanswer" block per question, read only when every block is one title line and one answer line. Its own tool call is skipped:
  *   answered and still-open calls render alike.
  * Dismissed or failed questions give nothing.
  */
@@ -343,21 +343,23 @@ export function questionAnswers(items: readonly TurnItem[]): QuestionAnswer[] {
         if (question && answer) out.push({ id: `${callId}:${i}`, ask: question, text: answer });
       });
     } else if (item.type === "user_message" && str(item.text).trimStart().startsWith(CODEX_ANSWERS_PREFIX)) {
-      str(item.text)
-        .trimStart()
-        .slice(CODEX_ANSWERS_PREFIX.length)
-        .split(/\n\s*\n/)
-        .map((block) => block.trim())
-        .filter(Boolean)
-        .forEach((block, i) => {
-          const lines = block.split("\n");
-          const answer = lines.pop()!.trim();
-          const question = lines.join("\n").trim();
-          if (question && answer) out.push({ id: `${callId}:${i}`, ask: question, text: answer });
-        });
+      out.push(...codexAnswers(str(item.text), callId));
     }
   });
   return out;
+}
+
+/**
+ * A Codex async answers message, split only when its boundaries are certain: every block exactly one title line and
+ * one answer line. A title or an answer with a line break or a blank line in it makes the split ambiguous (Paseo keeps
+ * no structured questions in the timeline, its tool call renders the same text); then nothing is returned and the
+ * message stays the user's own message (user decision 2026-11-26).
+ */
+function codexAnswers(message: string, callId: string): QuestionAnswer[] {
+  const blocks = message.trimStart().slice(CODEX_ANSWERS_PREFIX.length).trim().split(/\n[ \t]*\n/);
+  const pairs = blocks.map((block) => block.split("\n").map((line) => line.trim()));
+  if (!pairs.length || pairs.some((lines) => lines.length !== 2 || !lines[0] || !lines[1])) return [];
+  return pairs.map(([ask, text], i) => ({ id: `${callId}:${i}`, ask: ask!, text: text! }));
 }
 
 /** An answer clue's text: short is fine (the question gives it context), secrets and empty ones are not. */

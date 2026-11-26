@@ -14,6 +14,8 @@ import {
   linkedReviewDiff,
   linkedShape,
   numstatShape,
+  pairingHistoryLimit,
+  readConversation,
   repoPath,
   reviewDiff,
   reviewShape,
@@ -24,8 +26,10 @@ import {
 } from "./auto-review";
 import { GuardrailsService } from "./guardrails";
 import { reviewPrompt } from "./review-session";
+import { AsyncQuestionTitles } from "./async-questions";
 import type { AgentService } from "./agent-service";
 import type { ChangeShape, Lane } from "../shared/model";
+import type { ConversationEntry } from "../shared/auto-review";
 import { emptyCounts, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import { projectLanes } from "../shared/lanes";
 import { attentionItems } from "../shared/attention";
@@ -90,7 +94,7 @@ async function setup(
     lanes?: Lane[];
     exits?: Record<string, number | "spawn" | "timeout">;
     llm?: LlmReview;
-    conversation?: () => Promise<string[] | null>;
+    conversation?: () => Promise<ConversationEntry[] | null>;
     entries?: GuardrailEntry[];
     items?: CardItem[];
     shape?: ChangeShape;
@@ -104,6 +108,8 @@ async function setup(
     real?: boolean;
     git?: Git;
     run?: RunCheck;
+    /** The card's workspace is a shared directory (not a worktree): commands then do not decide (§6.3 step 1). Default: the card's own worktree. */
+    shared?: boolean;
   } = {},
 ) {
   const x = await agentFixture();
@@ -134,6 +140,7 @@ async function setup(
     return { exitCode: exit, timedOut: false, ms: 5, output: exit ? `\u001b[31mFAIL\u001b[0m expected 1 to be 2\n` : "ok\n" };
   };
   const repo = { head: "aaaaaaaaaaaa" };
+  const place = { shared: !!options.shared };
   const git: Git =
     options.git ??
     (options.real ? defaultGit : undefined) ??
@@ -147,7 +154,7 @@ async function setup(
   const bases: (string | undefined)[] = [];
   const sent: { agentId: string; text: string }[] = [];
   const reviews = new AutoReviewService(x.store, {
-    workspace: async () => ({ directory: options.directory ?? x.a, worktree: false }),
+    workspace: async () => ({ directory: options.directory ?? x.a, worktree: !place.shared }),
     sessionBusy: async (agentId) => x.actors[agentId]?.status === "running",
     sessionLive: async (agentId) => !!x.actors[agentId] && !x.actors[agentId]!.archivedAt,
     send: async (message) => {
@@ -195,7 +202,7 @@ async function setup(
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" });
     });
   const entry = async (id: string) => (await guardrails.store.read()).entries.find((e) => e.id === id)!;
-  return { ...x, reviews, guardrails, sent, runs, exits, repo, diffs, bases, deliver, turnStarted, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
+  return { ...x, reviews, guardrails, sent, runs, exits, repo, place, diffs, bases, deliver, turnStarted, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
 }
 
 const card = async (x: { store: { read(): Promise<import("../shared/model").Board> } }) => (await x.store.read()).tasks[0]!;
@@ -227,7 +234,7 @@ test("a passing review leaves the card in In review; a person's move into In rev
   const board = await x.deliver("development");
   const task = board.tasks[0]!;
   expect(task.status).toBe("in_review");
-  expect(task.review).toMatchObject({ state: "passed", round: 1, maxRounds: 2, shared: true, trigger: { agentId: "actor", from: "development" }, shape: { files: 1, lines: 10, size: "s" }, model: "claude/haiku" });
+  expect(task.review).toMatchObject({ state: "passed", round: 1, maxRounds: 2, shared: false, trigger: { agentId: "actor", from: "development" }, shape: { files: 1, lines: 10, size: "s" }, model: "claude/haiku" });
   expect(task.review!.items).toEqual([
     { id: "tests", kind: "command", name: "Tests", gating: true, state: "passed", argv: ["npm", "test"], exitCode: 0, ms: 5 },
     expect.objectContaining({ id: "goal", kind: "goal", name: "Does what you asked", gating: true, state: "passed" }),
@@ -782,7 +789,8 @@ test("a fast review computes immediately but sends rework only after the deliver
   const review = x.reviews.turnEnded("actor", x.paseo, recorded);
   try {
     await reworked;
-    expect(x.runs).toEqual(["npm test"]);
+    // The failed command ran once more at the same commit (§6.3 step 1) and failed again.
+    expect(x.runs).toEqual(["npm test", "npm test"]);
     expect(x.sent).toEqual([]);
     await x.store.mutate((b) => {
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_ended", agentId: "actor", model: "codex/test", pick: 0, byUser: true });
@@ -1007,13 +1015,13 @@ test("round 2 reads only the changes since the previous delivery and keeps what 
   expect(x.diffs.at(-1)).toBeUndefined();
 });
 
-test("disputes: only failed findings of the latest review, kept on the card, judged as disputed next time (§6.1, B7)", async () => {
+test("disputes: only failed findings of the latest review, kept on the card; the disputed check is judged again with the dispute (§6.1, E1)", async () => {
   let seen: LlmReviewInput | undefined;
   let round = 0;
   const llm: LlmReview = async (input) => {
     seen = input;
     round++;
-    return { model: "m", verdicts: input.checks.map((c) => ({ id: c.id, verdict: round === 1 && c.id === "g1" ? ("fail" as const) : ("pass" as const), detail: "d", file: "src/a.ts" })) };
+    return { model: "m", verdicts: input.checks.map((c) => ({ id: c.id, verdict: round === 1 && c.id === "g1" ? ("fail" as const) : ("pass" as const), detail: round === 1 ? "No zh-TW entry." : "d", file: "src/a.ts", line: 3 })) };
   };
   const x = await setup({ entries: [command("tests", ["npm", "test"]), guideline("g1", "Rule one")], llm });
   await x.deliver("development");
@@ -1030,27 +1038,657 @@ test("disputes: only failed findings of the latest review, kept on the card, jud
   const before = (await card(x)).revision;
   const board = await x.deliver(undefined, { disputes: [{ id: "g1", reason: "This card does not touch UI text." }] });
   const task = board.tasks[0]!;
-  expect(task.disputes).toEqual([{ id: "g1", kind: "guideline", name: "Rule one", reason: "This card does not touch UI text.", round: 1, at: expect.any(String) }]);
-  // Not judged again: recorded as disputed with the agent's reason; the review passes.
-  expect(seen!.checks.map((c) => c.id)).toEqual(["goal"]);
-  expect(task.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "disputed", disputeReason: "This card does not touch UI text.", gating: true });
+  // The dispute keeps the finding and the commit it failed on.
+  expect(task.disputes).toEqual([
+    { id: "g1", kind: "guideline", name: "Rule one", reason: "This card does not touch UI text.", round: 1, at: expect.any(String), sha: "aaaaaaaaaaaa", finding: "No zh-TW entry. (src/a.ts:3)" },
+  ]);
+  // Judged again, with the finding and the agent's reason; the reviewer accepts it here.
+  expect(seen!.checks.find((c) => c.id === "g1")).toMatchObject({ dispute: { finding: "No zh-TW entry. (src/a.ts:3)", reason: "This card does not touch UI text.", round: 1 } });
+  expect(task.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "passed", disputeReason: "This card does not touch UI text.", gating: true });
   expect(task.review).toMatchObject({ state: "passed", round: 2 });
   // The delivery's own revision bump only; the dispute itself adds none.
   expect(task.revision).toBe(before + 1);
   // A disputed finding is not "caught" when it later passes.
   expect((await x.entry("g1")).counts.caught).toBe(0);
-  // Sending the same dispute again is idempotent (the reason is updated).
+  // Sending the same dispute again is idempotent (the reason is updated; it did not fail again, so the finding stays).
   await x.store.mutate((b) => {
     b.tasks[0]!.status = "development";
   });
   ctx = await x.service.get(x.identity);
   await x.service.write(x.identity, "status", { ...input(ctx, "Again"), status: "in_review", disputes: [{ id: "g1", reason: "Still not UI." }] });
   await x.reviews.idle();
-  expect((await card(x)).disputes).toEqual([expect.objectContaining({ id: "g1", reason: "Still not UI.", round: 1 })]);
+  expect((await card(x)).disputes).toEqual([expect.objectContaining({ id: "g1", reason: "Still not UI.", round: 1, finding: "No zh-TW entry. (src/a.ts:3)" })]);
   // Done: the dispute still stands, so it counts as a misfire and is cleared (§6.6).
   await x.guardrails.finishTask("t");
   expect((await x.entry("g1")).counts.misfire).toBe(1);
   expect((await card(x)).disputes).toBeUndefined();
+});
+
+test("a disputed goal is still judged on every later delivery; failing again ends the dispute (§6.3, E1)", async () => {
+  const inputs: LlmReviewInput[] = [];
+  const goalVerdicts: ("pass" | "fail")[] = ["fail", "fail", "pass"];
+  const llm: LlmReview = async (input) => {
+    inputs.push(input);
+    const verdict = goalVerdicts[inputs.length - 1]!;
+    return { model: "m", verdicts: input.checks.map((c) => ({ id: c.id, verdict, detail: `Round ${inputs.length}: no Rerun button.`, quote: "Add a Rerun button" })) };
+  };
+  const x = await setup({ llm, maxRounds: 3, conversation: async () => ["Add a Rerun button."] });
+  await x.deliver("development");
+  expect((await card(x)).review).toMatchObject({ state: "rework" });
+  await x.turnStarted();
+  x.repo.head = "bbbbbbbbbbbb";
+  let board = await x.deliver(undefined, { disputes: [{ id: "goal", reason: "The user dropped the Rerun button." }] });
+  // The goal was judged again, not skipped as disputed; the reviewer saw the finding and the reason.
+  expect(inputs).toHaveLength(2);
+  expect(inputs[1]!.checks.map((c) => c.id)).toEqual(["goal"]);
+  expect(inputs[1]!.checks[0]).toMatchObject({ dispute: { reason: "The user dropped the Rerun button.", round: 1, finding: "Round 1: no Rerun button." } });
+  expect(reviewPrompt(inputs[1]!)).toContain('disputed: the round 1 finding was "Round 1: no Rerun button."');
+  expect(reviewPrompt(inputs[1]!)).toContain("agent's reason: The user dropped the Rerun button.");
+  expect(reviewPrompt(inputs[1]!)).toContain("unless you have new evidence");
+  // It failed again: the review sends the card back and the dispute ends.
+  expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", disputeReason: "The user dropped the Rerun button." });
+  expect(board.tasks[0]!.disputes).toBeUndefined();
+  // The next delivery judges the goal again, with no dispute to show.
+  await x.turnStarted();
+  board = await x.deliver();
+  expect(inputs).toHaveLength(3);
+  expect(inputs[2]!.checks.map((c) => c.id)).toEqual(["goal"]);
+  expect(inputs[2]!.checks[0]!.dispute).toBeUndefined();
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", round: 3 });
+});
+
+test("a check still disputed needs a new verdict in every rework round; it does not inherit its earlier pass (§6.3 step 2, E1)", async () => {
+  const inputs: LlmReviewInput[] = [];
+  const llm: LlmReview = async (input) => {
+    inputs.push(input);
+    const n = inputs.length;
+    // Round 1: goal fails. Round 2: goal passes, g1 fails. Round 3: the reviewer leaves the goal out.
+    const verdicts = input.checks
+      .filter((c) => !(n === 3 && c.id === "goal"))
+      .map((c) => ({ id: c.id, verdict: (n === 1 && c.id === "goal") || (n === 2 && c.id === "g1") ? ("fail" as const) : ("pass" as const), detail: `Round ${n}.`, file: "src/a.ts" }));
+    return { model: "m", verdicts };
+  };
+  const x = await setup({ entries: [guideline("g1", "Rule one")], llm, maxRounds: 3 });
+  await x.deliver("development");
+  await x.turnStarted();
+  x.repo.head = "bbbbbbbbbbbb";
+  let board = await x.deliver(undefined, { disputes: [{ id: "goal", reason: "The user changed the request." }] });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "passed" });
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "goal" })]);
+  await x.turnStarted();
+  x.repo.head = "cccccccccccc";
+  board = await x.deliver();
+  // Round 3 is incremental and still shows the dispute; the prompt asks for a verdict on it.
+  expect(inputs[2]).toMatchObject({ incremental: true });
+  expect(inputs[2]!.checks.find((c) => c.id === "goal")).toMatchObject({ previous: { state: "passed" }, dispute: { reason: "The user changed the request." } });
+  expect(reviewPrompt(inputs[2]!)).toContain("every disputed check needs a verdict");
+  // Left out, it does not keep its round 2 pass.
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "unavailable", reason: "The review session gave no verdict for this check." });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "passed" });
+});
+
+test("a disputed command is skipped only at the commit it failed on; new code runs and decides it again (§6.3 step 1, E1)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 3 });
+  await x.deliver("development");
+  expect((await card(x)).review).toMatchObject({ state: "rework" });
+  await x.turnStarted();
+  // Same commit: not run, recorded as disputed; the review session still judges the goal.
+  const runs = x.runs.length;
+  let board = await x.deliver(undefined, { disputes: [{ id: "tests", reason: "Fails on the machine's load, not this change." }] });
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "tests", sha: "aaaaaaaaaaaa", finding: "exited 1" })]);
+  expect(x.runs).toHaveLength(runs);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "disputed", disputeReason: "Fails on the machine's load, not this change." });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "passed" });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed" });
+  // New commit: it runs (and is retried once), fails, sends the card back and ends the dispute.
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  x.repo.head = "cccccccccccc";
+  board = await x.deliver();
+  expect(x.runs).toHaveLength(runs + 2);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1 });
+  expect(board.tasks[0]!.review!.state).toBe("rework");
+  expect(board.tasks[0]!.disputes).toBeUndefined();
+});
+
+test("a disputed command that the user edits runs again at the same commit: the dispute was about the old command (§6.3 step 1, E1)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 3 });
+  await x.deliver("development");
+  await x.turnStarted();
+  let board = await x.deliver(undefined, { disputes: [{ id: "tests", reason: "The command itself is wrong." }] });
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "tests", sha: "aaaaaaaaaaaa", argv: ["npm", "test"] })]);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "disputed" });
+  // The user fixes the command; the code did not change.
+  await x.guardrails.store.update((state) => {
+    state.entries.find((e) => e.id === "tests")!.argv = ["npm", "run", "test"];
+    return { value: undefined, changed: true };
+  });
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  const runs = x.runs.length;
+  board = await x.deliver();
+  expect(x.runs.slice(runs)).toEqual(["npm run test"]);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "passed", argv: ["npm", "run", "test"] });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed" });
+});
+
+test("a command disputed from a worktree still runs when the same commit is delivered from a shared directory (§6.3 step 1)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 3 });
+  await x.deliver("development");
+  await x.turnStarted();
+  let board = await x.deliver(undefined, { disputes: [{ id: "tests", reason: "Load." }] });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "disputed" });
+  // Same sha, now in a shared directory: the command does not decide, so the dispute does not skip it and its result shows.
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  x.place.shared = true;
+  const runs = x.runs.length;
+  board = await x.deliver();
+  expect(x.runs).toHaveLength(runs + 1);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", gating: false, exitCode: 1 });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", shared: true });
+  // A failure that decided nothing does not end the dispute: back in the worktree at the same sha it is skipped again.
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "tests" })]);
+});
+
+test("in a shared directory commands run and show their result but never send the card back (§6.3 step 1, E3)", async () => {
+  let seen: LlmReviewInput | undefined;
+  const x = await setup({
+    shared: true,
+    exits: { "npm test": 1 },
+    llm: async (input) => {
+      seen = input;
+      return passAll(input, x.paseo);
+    },
+  });
+  const board = await x.deliver("development");
+  const review = board.tasks[0]!.review!;
+  expect(board.tasks[0]!.status).toBe("in_review");
+  expect(review).toMatchObject({ state: "passed", shared: true });
+  // Shown, not deciding, and not retried; the review session ran anyway (D9 counts only deciding commands).
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", gating: false, exitCode: 1 });
+  expect(x.runs).toEqual(["npm test"]);
+  expect(review.items.find((i) => i.id === "goal")).toMatchObject({ state: "passed" });
+  expect(x.sent).toEqual([]);
+  expect(seen!.commands).toEqual(["Tests: failed (ran in a shared directory; does not decide)"]);
+  expect(reviewPrompt(seen!)).toContain("do not decide this review");
+  // It decided nothing, so it cannot be disputed (a later delivery from a worktree at the same sha must still run it).
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  const ctx = await x.service.get(x.identity);
+  const refused = await x.service.write(x.identity, "status", { ...input(ctx, "Delivered"), status: "in_review", disputes: [{ id: "tests", reason: "Load." }] }).catch((e) => e);
+  expect(refused).toMatchObject({ code: "INVALID_INPUT" });
+  expect(String(refused.message)).toContain("(it has none)");
+  expect((await card(x)).disputes).toBeUndefined();
+  // A shared failure that passes later was never sent back, so it is not "caught" (§6.6).
+  x.exits["npm test"] = 0;
+  await x.deliver();
+  expect((await x.entry("tests")).counts).toMatchObject({ caught: 0, reviews: 2 });
+});
+
+test("a deciding command that fails runs once more at the same commit: a pass then is flaky, not a rework (§6.3 step 1, E3)", async () => {
+  let calls = 0;
+  const x = await setup({
+    run: async () => (++calls === 1 ? { exitCode: 1, timedOut: false, ms: 4, output: "Timeout in vitest worker\n" } : { exitCode: 0, timedOut: false, ms: 6, output: "ok\n" }),
+  });
+  const board = await x.deliver("development");
+  const review = board.tasks[0]!.review!;
+  expect(calls).toBe(2);
+  expect(review).toMatchObject({ state: "passed" });
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({
+    state: "passed",
+    flaky: true,
+    ms: 10,
+    tail: "Timeout in vitest worker",
+    reason: "Failed once and passed when run again at the same commit.",
+  });
+  expect(x.sent).toEqual([]);
+  expect(board.tasks[0]!.status).toBe("in_review");
+  // get_task shows it.
+  const ctx = await x.service.get(x.identity);
+  expect(ctx.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "passed", flaky: true });
+});
+
+test("a rerun that times out or cannot start keeps the first failure: the card goes back for rework (§6.3 step 1, E3)", async () => {
+  for (const second of [
+    { exitCode: null, timedOut: true, ms: 7, output: "slow\n" },
+    { exitCode: null, timedOut: false, spawnError: "spawn npm ENOENT", ms: 7, output: "" },
+  ]) {
+    let calls = 0;
+    const x = await setup({ run: async () => (++calls === 1 ? { exitCode: 1, timedOut: false, ms: 4, output: "FAIL a.test.ts\n" } : second) });
+    const board = await x.deliver("development");
+    expect(calls).toBe(2);
+    expect(board.tasks[0]!.review).toMatchObject({ state: "rework" });
+    const item = board.tasks[0]!.review!.items.find((i) => i.id === "tests")!;
+    expect(item).toMatchObject({ state: "failed", exitCode: 1, ms: 11, tail: "FAIL a.test.ts" });
+    expect(item.flaky).toBeUndefined();
+    expect(item.timedOut).toBeUndefined();
+  }
+});
+
+test("a failed command is not retried when the commit changed meanwhile (§6.3 step 1)", async () => {
+  let calls = 0;
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.setDuring(async () => {
+    if (++calls === 1) x.repo.head = "dddddddddddd";
+  });
+  const board = await x.deliver("development");
+  expect(x.runs).toEqual(["npm test"]);
+  // The code changed during the review, so its result is dropped.
+  expect(board.tasks[0]!.review!.state).toBe("cancelled");
+});
+
+test("the review reads answers given in question tools as what the user said, in time order with the messages (§4.2, E2)", async () => {
+  const timelines: Record<string, { timestamp: string; item: Record<string, unknown> }[]> = {
+    a1: [
+      { timestamp: "2026-11-26T10:00:00.000Z", item: { type: "user_message", text: "Add a Rerun button to failed checks." } },
+      {
+        timestamp: "2026-11-26T10:01:00.000Z",
+        item: {
+          type: "tool_call",
+          name: "AskUserQuestion",
+          callId: "c1",
+          status: "completed",
+          detail: {
+            input: { questions: [{ question: "Where should Rerun go?", header: "Place", options: [{ label: "Drawer" }, { label: "Card" }] }] },
+            output: 'User has answered your questions: "Where should Rerun go?"="Drawer only". You can now continue.',
+          },
+        },
+      },
+      { timestamp: "2026-11-26T10:03:00.000Z", item: { type: "user_message", text: "[Flowly auto review · rework 1/2]\nfix it" } },
+    ],
+    a2: [{ timestamp: "2026-11-26T10:02:00.000Z", item: { type: "user_message", text: "Answers to your questions:\n\nKeep the old label?\nNo" } }],
+    other: [{ timestamp: "2026-11-26T09:00:00.000Z", item: { type: "user_message", text: "Another card's message" } }],
+  };
+  const agents = [
+    { id: "a1", workspaceId: "w" },
+    { id: "a2", workspaceId: "w" },
+    { id: "other", workspaceId: "elsewhere" },
+  ];
+  const paseo = {
+    agents: {
+      list: async () => ({ entries: agents.map((agent) => ({ agent })), pageInfo: {} }),
+      ref: (id: string) => ({ timeline: { refetch: async () => ({ entries: timelines[id] ?? [] }) } }),
+    },
+  } as unknown as Parameters<typeof readConversation>[1];
+  const said = await readConversation({ workspaceId: "w" }, paseo);
+  expect(said).toEqual([
+    "Add a Rerun button to failed checks.",
+    { ask: "Where should Rerun go?", answer: "Drawer only" },
+    "Answers to your questions:\n\nKeep the old label?\nNo",
+  ]);
+  // It reaches the review session's input and counts as a source for quoted evidence.
+  let seen: LlmReviewInput | undefined;
+  const x = await setup({
+    conversation: async () => said,
+    llm: async (input) => {
+      seen = input;
+      return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Rerun must stay in the drawer.", quote: "Drawer only" }] };
+    },
+  });
+  const board = await x.deliver("development");
+  expect(seen!.conversation).toContainEqual({ ask: "Where should Rerun go?", answer: "Drawer only" });
+  expect(reviewPrompt(seen!)).toContain('[2] Answered the agent\'s question: "Where should Rerun go?" → Drawer only');
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", quote: "Drawer only" });
+});
+
+/**
+ * A session timeline, one second per entry from 10:00:00: a string is a user message, `{ said, at }` one at that time,
+ * `{ asked }` the request_user_input_async tool call of that call id.
+ */
+type CodexLine = string | { asked: string } | { said: string; at: string };
+const codexTimeline = (lines: readonly CodexLine[]) =>
+  lines.map((line, i) => ({
+    timestamp: typeof line === "object" && "said" in line ? line.at : `2026-11-26T10:00:${String(i).padStart(2, "0")}.000Z`,
+    item:
+      typeof line === "string"
+        ? { type: "user_message", text: line }
+        : "said" in line
+          ? { type: "user_message", text: line.said }
+          : { type: "tool_call", name: "request_user_input_async", callId: line.asked, status: "completed", detail: { type: "plain_text", text: "Question" } },
+  }));
+/**
+ * The async question hooks as Paseo calls them (§4.2 ⑤⑥): a question is asked at 09:59:00 and the timeline epoch read
+ * then ("e1" unless given, `null` for a read that never finished, `at` for when it finished), and every answer is seen at
+ * 10:00:05, seconds from the messages Paseo sent for them.
+ */
+function codexHooks() {
+  let now = 0;
+  const q = new AsyncQuestionTitles(() => now);
+  const request = (agentId: string, callId: string, titles: string[], read: { epoch?: string | null; at?: string } = {}) => {
+    now = Date.parse("2026-11-26T09:59:00.000Z");
+    q.remember(agentId, { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
+    if (read.at) now = Date.parse(read.at);
+    if (read.epoch !== null) q.askedIn(agentId, `permission-${callId}`, read.epoch ?? "e1");
+  };
+  const answer = (agentId: string, callId: string, answers: string[]) => {
+    now = Date.parse("2026-11-26T10:00:05.000Z");
+    return q.resolved(agentId, `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } });
+  };
+  return { q, request, answer };
+}
+
+test("a Codex answers message is read as the answers of the call it was sent for, and stays whole without it, from readConversation through the quote check (§4.2, E2)", async () => {
+  // Paseo keeps request_user_input_async questions and answers in the timeline only as plain text; Flowly takes the
+  // titles from the permission request and the answers from the resolution of the request actually answered.
+  const hooks = codexHooks();
+  const q = hooks.q;
+  const request = (agentId: string, callId: string, ...titles: string[]) => hooks.request(agentId, callId, titles);
+  const answer = (agentId: string, callId: string, ...answers: string[]) => hooks.answer(agentId, callId, answers);
+  // Two questions, then a single question with the same title as the first; the user answers the earlier call.
+  request("a1", "two", "Which label?", "Should the drawer keep the old label,\nor follow the card?");
+  request("a1", "one", "Which label?");
+  answer("a1", "two", 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".', "Follow the card");
+  const two = 'Answers to your questions:\n\nWhich label?\nKeep "Retry" on the card.\n\nRename the drawer one to "Rerun".\n\nShould the drawer keep the old label,\nor follow the card?\nFollow the card';
+  // Later the single question is answered too, with a blank line followed by exactly two lines.
+  answer("a1", "one", "Keep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun");
+  const one = "Answers to your questions:\n\nWhich label?\nKeep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun";
+  const paseo = (texts: string[], agentId = "a1") =>
+    ({
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: agentId, workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({ timeline: { refetch: async () => ({ epoch: "e1", hasOlder: false, entries: codexTimeline([{ asked: "two" }, { asked: "one" }, ...texts]) }) } }),
+      },
+    }) as unknown as Parameters<typeof readConversation>[1];
+  const read = (texts: string[], agentId?: string) => readConversation({ workspaceId: "w" }, paseo(texts, agentId), (id) => q.session(id));
+  expect(await read([two, one])).toEqual([
+    { ask: "Which label?", answer: 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".' },
+    // The question is context: its line break is folded like any other in the review input.
+    { ask: "Should the drawer keep the old label, or follow the card?", answer: "Follow the card" },
+    { ask: "Which label?", answer: "Keep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun" },
+  ]);
+  // Without the answered call (another session, or a plugin reload since) the message stays the user's whole message.
+  expect(await read([two], "a2")).toEqual([two]);
+  expect(await readConversation({ workspaceId: "w" }, paseo([two]))).toEqual([two]);
+
+  let seen: LlmReviewInput | undefined;
+  const judged = async (quote: string, texts: string[], agentId?: string) => {
+    const x = await setup({
+      conversation: () => read(texts, agentId),
+      llm: async (input) => {
+        seen = input;
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] };
+      },
+    });
+    return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
+  };
+  const none = { state: "na", reason: "no evidence" };
+  // Both answers of the earlier call reach the same review session's input, each with its own question.
+  await judged("Follow the card", [two]);
+  expect(seen!.conversation).toEqual([
+    { ask: "Which label?", answer: 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".' },
+    { ask: "Should the drawer keep the old label, or follow the card?", answer: "Follow the card" },
+  ]);
+  expect(reviewPrompt(seen!)).toContain('Answered the agent\'s question: "Should the drawer keep the old label, or follow the card?" → Follow the card');
+  // Every line of both answers is evidence; no line of the second question is.
+  expect(await judged('Rename the drawer one to "Rerun"', [two])).toMatchObject({ state: "failed", quote: 'Rename the drawer one to "Rerun"' });
+  expect(await judged('Keep "Retry" on the card', [two])).toMatchObject({ state: "failed", quote: 'Keep "Retry" on the card' });
+  expect(await judged("Follow the card", [two])).toMatchObject({ state: "failed", quote: "Follow the card" });
+  expect(await judged("Should the drawer keep the old label", [two])).toMatchObject(none);
+  expect(await judged("or follow the card?", [two])).toMatchObject(none);
+  expect(await judged("Which label", [two])).toMatchObject(none);
+  expect(await judged("In the drawer:", [one])).toMatchObject({ state: "failed", quote: "In the drawer:" });
+  // Without it nothing the user wrote is lost: the whole message is a quote source.
+  expect(await judged("Follow the card", [two], "a2")).toMatchObject({ state: "failed", quote: "Follow the card" });
+});
+
+test("two answered Codex calls that build the same message text are paired with their messages in order only when certain, otherwise kept whole (§4.2, E2)", async () => {
+  // Call A asks two questions; call B later asks one with A's first title, and its multi-line answer reads like A's
+  // whole answer, so both answers messages are the same text.
+  const hooks = codexHooks();
+  const q = hooks.q;
+  const request = (callId: string, ...titles: string[]) => hooks.request("a1", callId, titles);
+  const answer = (callId: string, ...answers: string[]) => hooks.answer("a1", callId, answers);
+  request("A", "Which label?", "Where?");
+  request("B", "Which label?");
+  answer("A", "Rerun", "Drawer only");
+  answer("B", "Rerun\n\nWhere?\nDrawer only");
+  const same = "Answers to your questions:\n\nWhich label?\nRerun\n\nWhere?\nDrawer only";
+  expect(q.answers("a1").map((a) => a.message)).toEqual([same, same]);
+  // `hasOlder` false: the read holds the whole timeline; true: older entries lie before the window; "missing": Paseo
+  // left it out, which may also mean older entries.
+  // `epoch`: the timeline's now; the hooks read "e1" when each question is asked, and a rewind since gives a new one.
+  const paseo = (lines: CodexLine[], hasOlder: boolean | "missing", epoch: string) =>
+    ({
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({ timeline: { refetch: async () => ({ epoch, ...(hasOlder === "missing" ? {} : { hasOlder }), entries: codexTimeline(lines) }) } }),
+      },
+    }) as unknown as Parameters<typeof readConversation>[1];
+  const read = (lines: CodexLine[], hasOlder: boolean | "missing" = false, epoch = "e1", held: AsyncQuestionTitles = q) =>
+    readConversation({ workspaceId: "w" }, paseo(lines, hasOlder, epoch), (id) => held.session(id));
+  const a = [
+    { ask: "Which label?", answer: "Rerun" },
+    { ask: "Where?", answer: "Drawer only" },
+  ];
+  const b = { ask: "Which label?", answer: "Rerun\n\nWhere?\nDrawer only" };
+  // The earlier message is A's two answers, the later one B's single answer.
+  expect(await read([{ asked: "A" }, same, { asked: "B" }, "Thanks", same])).toEqual([...a, "Thanks", b]);
+  // The session was rewound to before B: B's call and message are gone from the whole timeline, though the hooks
+  // recorded B's answer. The message left is A's, both answers kept.
+  expect(await read([{ asked: "A" }, same])).toEqual(a);
+  expect(await read([{ asked: "A" }, same, "Thanks"])).toEqual([...a, "Thanks"]);
+  // A rewind that removed B's answer but kept its question: two calls, one message, not certain whose; it stays whole.
+  expect(await read([{ asked: "A" }, { asked: "B" }, same])).toEqual([same]);
+  // The read window cut off A's question and kept both answers: A may sit before the window, so neither is paired.
+  expect(await read([{ asked: "B" }, same, same], true)).toEqual([same, same]);
+  expect(await read([{ asked: "B" }, "Thanks", same], true)).toEqual(["Thanks", same]);
+  // A message whose call is in no timeline read stays the user's whole message.
+  expect(await read([same])).toEqual([same]);
+  expect(await read([same], true)).toEqual([same]);
+  // A page without `hasOlder` may have older entries; with no start cursor to page back from, nothing is paired.
+  expect(await read([{ asked: "A" }, same], "missing")).toEqual([same]);
+  // Only the exact text Paseo sends is paired: a trailing line break makes it the user's own message (the review input
+  // trims it like any message).
+  expect(await read([{ asked: "A" }, `${same}\n`])).toEqual([same]);
+  // A rewind kept A's question and removed its answer, and the user sent the same text again in a new turn 30 seconds
+  // after the answer: the rewind gave the timeline a new epoch, so the source is not certain and it stays whole.
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T10:00:35.000Z" }], false, "e2")).toEqual([same]);
+  expect(await read([{ asked: "A" }, same], false, "e2")).toEqual([same]);
+  // A page without an epoch is not certain either.
+  expect(await read([{ asked: "A" }, same], false, "")).toEqual([same]);
+  // The epoch is the one read when A was asked, never one read after the answer, which a rewind may already have
+  // replaced. A read that had not finished by the answer, or finished only after the message, proves nothing.
+  const late = codexHooks();
+  late.request("a1", "A", ["Which label?", "Where?"], { epoch: null });
+  late.answer("a1", "A", ["Rerun", "Drawer only"]);
+  late.q.askedIn("a1", "permission-A", "e1");
+  expect(await read([{ asked: "A" }, same], false, "e1", late.q)).toEqual([same]);
+  const slow = codexHooks();
+  slow.request("a1", "A", ["Which label?", "Where?"], { at: "2026-11-26T10:00:03.000Z" });
+  slow.answer("a1", "A", ["Rerun", "Drawer only"]);
+  expect(await read([{ asked: "A" }, same], false, "e1", slow.q)).toEqual([same]);
+  expect(await read([{ asked: "A" }, "Thanks", "Thanks", "Thanks", same], false, "e1", slow.q)).toEqual(["Thanks", "Thanks", "Thanks", ...a]);
+  // Typed again 20 minutes later: not A's answers message.
+  const retyped = { said: same, at: "2026-11-26T10:20:00.000Z" };
+  expect(await read([{ asked: "A" }, retyped])).toEqual([same]);
+  // A's answer kept and B's removed, then retyped: B's message is far from B's answer, so neither text is paired.
+  expect(await read([{ asked: "A" }, same, { asked: "B" }, retyped])).toEqual([same, same]);
+  // Paseo may record the message shortly before the hook sees the answer (a steered turn) or after it (a new turn):
+  // within a minute either way it is paired; 61 seconds or an unreadable time is not.
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T09:59:40.000Z" }])).toEqual(a);
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T10:01:05.000Z" }])).toEqual(a);
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T10:01:06.000Z" }])).toEqual([same]);
+  expect(await read([{ asked: "A" }, { said: same, at: "" }])).toEqual([same]);
+
+  let seen: LlmReviewInput | undefined;
+  const judged = async (quote: string, lines: CodexLine[] = [{ asked: "A" }, same, { asked: "B" }, same]) => {
+    const x = await setup({
+      conversation: () => read(lines),
+      llm: async (input) => {
+        seen = input;
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] };
+      },
+    });
+    return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
+  };
+  expect(await judged("Drawer only")).toMatchObject({ state: "failed", quote: "Drawer only" });
+  expect(seen!.conversation).toEqual([...a, b]);
+  // A's titles are questions; only B's answer, which the user typed, contains "Where?" as their own words.
+  expect(await judged("Which label")).toMatchObject({ state: "na", reason: "no evidence" });
+  // After the rewind A's message is not read as B's answer: A's second title is a question, not the user's words.
+  const rewound: CodexLine[] = [{ asked: "A" }, same];
+  expect(await judged("Drawer only", rewound)).toMatchObject({ state: "failed", quote: "Drawer only" });
+  expect(seen!.conversation).toEqual(a);
+  expect(await judged("Where?", rewound)).toMatchObject({ state: "na", reason: "no evidence" });
+  expect(await judged("Which label", rewound)).toMatchObject({ state: "na", reason: "no evidence" });
+  // When the pairing is not certain the message is never read as B's single answer; it reaches the review whole.
+  for (const [lines, hasOlder] of [
+    [[{ asked: "A" }, { asked: "B" }, same], false],
+    [[{ asked: "B" }, same, same], true],
+  ] as const) {
+    seen = undefined;
+    const x = await setup({
+      conversation: () => read([...lines], hasOlder),
+      llm: async (input) => {
+        seen = input;
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote: "Drawer only" }] };
+      },
+    });
+    await x.deliver("development");
+    expect(seen!.conversation).not.toContainEqual(b);
+    expect((seen!.conversation ?? []).every((entry) => entry === same)).toBe(true);
+    expect(seen!.conversation?.length).toBeGreaterThan(0);
+  }
+});
+
+test("a Codex answers message whose owner is not certain (a call from before a plugin reload, a message older than the call, a start out of reach) stays whole; a partial read pages back to the start (§4.2, E2)", async () => {
+  const same = "Answers to your questions:\n\nWhich label?\nRerun\n\nWhere?\nDrawer only";
+  const a = [
+    { ask: "Which label?", answer: "Rerun" },
+    { ask: "Where?", answer: "Drawer only" },
+  ];
+  const b = { ask: "Which label?", answer: "Rerun\n\nWhere?\nDrawer only" };
+  const questions = (...calls: [string, string[], string[]][]) => {
+    const hooks = codexHooks();
+    for (const [callId, titles] of calls) hooks.request("a1", callId, titles);
+    for (const [callId, , answers] of calls) hooks.answer("a1", callId, answers);
+    return hooks.q;
+  };
+  const A: [string, string[], string[]] = ["A", ["Which label?", "Where?"], ["Rerun", "Drawer only"]];
+  const B: [string, string[], string[]] = ["B", ["Which label?"], ["Rerun\n\nWhere?\nDrawer only"]];
+  type Line = string | { asked: string };
+  // `pages`: the timeline from its start, one page per element; the review reads the last one first and pages back.
+  const read = async (q: AsyncQuestionTitles, pages: Line[][], options: { epochChange?: boolean } = {}) => {
+    const all = codexTimeline(pages.flat());
+    const ranges: [number, number][] = [];
+    let from = 0;
+    for (const page of pages) {
+      ranges.push([from, from + page.length]);
+      from += page.length;
+    }
+    const pageAt = (n: number) => ({
+      epoch: options.epochChange && n < pages.length - 1 ? "e2" : "e1",
+      hasOlder: n > 0,
+      startCursor: n > 0 ? { epoch: "e1", seq: n } : null,
+      entries: all.slice(ranges[n]![0], ranges[n]![1]),
+    });
+    const calls: unknown[] = [];
+    const paseo = {
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({
+          timeline: {
+            refetch: async (o: { direction: string; cursor?: { seq: number } }) => {
+              calls.push(o);
+              return o.direction === "before" ? pageAt(o.cursor!.seq - 1) : pageAt(pages.length - 1);
+            },
+          },
+        }),
+      },
+    } as unknown as Parameters<typeof readConversation>[1];
+    return { said: await readConversation({ workspaceId: "w" }, paseo, (id) => q.session(id)), reads: calls.length };
+  };
+
+  // A was answered before a plugin reload, so the hooks know only B; a rewind then removed B's answer and kept its question.
+  const onlyB = questions(B);
+  expect((await read(onlyB, [[{ asked: "A" }, same, { asked: "B" }]])).said).toEqual([same]);
+  // The message comes after B's question but A, asked before it and unknown to the hooks, may have sent it.
+  expect((await read(onlyB, [[{ asked: "A" }, { asked: "B" }, same]])).said).toEqual([same]);
+  // With both calls known, the same timeline is certain.
+  const both = questions(A, B);
+  expect((await read(both, [[{ asked: "A" }, same, { asked: "B" }, same]])).said).toEqual([...a, b]);
+  // A message older than the only call that built its text is not that call's.
+  expect((await read(both, [[same, { asked: "A" }, { asked: "B" }, same]])).said).toEqual([same, same]);
+  // A dismissed call is known: it sent nothing, so it does not block the answers after it.
+  const withDismissed = questions(A);
+  withDismissed.remember("a1", { id: "permission-D", name: "request_user_input_async", kind: "question", input: { questions: [{ id: "0", header: "Question 1", question: "Skip?" }] } });
+  withDismissed.resolved("a1", "permission-D", { behavior: "deny" });
+  expect((await read(withDismissed, [[{ asked: "D" }, { asked: "A" }, same]])).said).toEqual(a);
+
+  // A partial read pages back to the session's start to see every question call first.
+  const paged = await read(both, [[{ asked: "A" }], [same, { asked: "B" }], ["Thanks", same]]);
+  expect(paged.said).toEqual(["Thanks", b]);
+  expect(paged.reads).toBe(3);
+  // The window cut off A's question and kept both answers: read back to A, both are paired.
+  expect((await read(both, [[{ asked: "A" }, { asked: "B" }], [same, same]])).said).toEqual([...a, b]);
+  // Before the reload: paging back finds A, unknown to the hooks, so the message stays whole.
+  expect((await read(onlyB, [[{ asked: "A" }, same], [{ asked: "B" }, "Thanks", same]])).said).toEqual(["Thanks", same]);
+  // The timeline changed while paging back: nothing is paired.
+  expect((await read(both, [[{ asked: "A" }, { asked: "B" }], [same, same]], { epochChange: true })).said).toEqual([same, same]);
+  // No answers message to pair: the review does not page back.
+  expect((await read(both, [[{ asked: "A" }], ["Thanks"]])).reads).toBe(1);
+  // Paging back reads at most `pairingHistoryLimit` entries before the tail page, entries without an item included, and
+  // never asks for more than is left; reaching the start at exactly the limit still pairs.
+  const far = async (older: number) => {
+    const [askA, message] = codexTimeline([{ asked: "A" }, same]);
+    const all = [askA!, ...Array.from({ length: older - 1 }, () => ({})), message!];
+    const limits: number[] = [];
+    const page = (end: number, limit: number) => {
+      const start = Math.max(0, end - limit);
+      return { epoch: "e1", hasOlder: start > 0, startCursor: start > 0 ? { epoch: "e1", seq: start } : null, entries: all.slice(start, end) };
+    };
+    const paseo = {
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({
+          timeline: {
+            refetch: async (o: { direction: string; limit: number; cursor?: { seq: number } }) => {
+              if (o.direction !== "before") return page(all.length, 1);
+              limits.push(o.limit);
+              return page(o.cursor!.seq, o.limit);
+            },
+          },
+        }),
+      },
+    } as unknown as Parameters<typeof readConversation>[1];
+    return { said: await readConversation({ workspaceId: "w" }, paseo, (id) => both.session(id)), asked: limits.reduce((n, l) => n + l, 0) };
+  };
+  expect(await far(pairingHistoryLimit)).toEqual({ said: a, asked: pairingHistoryLimit });
+  expect(await far(pairingHistoryLimit + 1)).toEqual({ said: [same], asked: pairingHistoryLimit });
+
+  // The reviewer's input never holds B's single answer for A's message, and A's second title is not B's answer.
+  let seen: LlmReviewInput | undefined;
+  const x = await setup({
+    conversation: async () => (await read(onlyB, [[{ asked: "A" }, same, { asked: "B" }]])).said,
+    llm: async (input) => {
+      seen = input;
+      return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote: "Drawer only" }] };
+    },
+  });
+  await x.deliver("development");
+  expect(seen!.conversation).toEqual([same]);
+});
+
+test("only the user's answer in a question tool counts as quoted evidence, not the agent's question (§4.2, B1)", async () => {
+  let said: ConversationEntry[] = [{ ask: "Should I add a rerun button?", answer: "No" }];
+  const run = async (quote: string) => {
+    const x = await setup({ conversation: async () => said, llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
+    return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
+  };
+  expect(await run("add a rerun button")).toMatchObject({ state: "na", reason: "no evidence" });
+  expect(await run("No")).toMatchObject({ state: "failed", quote: "No" });
+  // An answer with an arrow in it is quoted whole: any part of it is evidence, the question never is.
+  said = [{ ask: "What should the button say?", answer: 'Rename "Retry" → "Rerun" in the drawer' }];
+  expect(await run('Rename "Retry"')).toMatchObject({ state: "failed", quote: 'Rename "Retry"' });
+  expect(await run('"Rerun" in the drawer')).toMatchObject({ state: "failed" });
+  expect(await run("What should the button say")).toMatchObject({ state: "na", reason: "no evidence" });
 });
 
 test("signals at review end: reviews and passes counted; two misfires in 30 days pause a guideline with an event (§6.6, §6.7)", async () => {
@@ -1295,7 +1933,8 @@ test("linked root review: a command that fails in one repository fails, with tha
     run: async (_argv, cwd) => (cwd.endsWith("SMITH") ? { exitCode: 1, timedOut: false, ms: 3, output: "FAIL smith.test.ts\n" } : { exitCode: 0, timedOut: false, ms: 2, output: "" }),
   });
   const review = (await x.deliver("development")).tasks[0]!.review!;
-  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1, ms: 5, detail: "Ran in Admin, SMITH." });
+  // Run twice (failed, then the same commit again): the time is both runs together.
+  expect(review.items.find((i) => i.id === "tests")).toMatchObject({ state: "failed", exitCode: 1, ms: 10, detail: "Ran in Admin, SMITH." });
   expect(review.items.find((i) => i.id === "tests")!.tail).toContain("[SMITH]");
   expect(review.items.find((i) => i.id === "goal")).toMatchObject({ state: "skipped" });
 }, 20_000);
@@ -1463,7 +2102,7 @@ test("a delivery with this repository's PR and no worktree is reviewed in the wo
 
 test("a PR whose head is in several worktrees, or of another repository, changes nothing: the workspace is reviewed (§3.4)", async () => {
   const cwds: string[] = [];
-  const x = await setup({ real: true, run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }) });
+  const x = await setup({ real: true, shared: true, run: async (argv, cwd) => (cwds.push(cwd), { exitCode: 0, timedOut: false, ms: 2, output: "" }) });
   const { worktree, git } = await workspaceWithWorktree(x.a, x.root);
   await withPullRequest(x, worktree, git);
   // Another repository's PR: nothing found.

@@ -33,7 +33,17 @@
 | B4 | 项目级 Project.memory 开关去留；host 的 Guardrails 关闭后准则还参不参与评审 | 项目开关保留，改名 Guardrails；host 或项目任一关闭时：不学、不注入、不复盘，准则与专属项不参与评审，命令和内置检查照跑（§6.3、§8） |
 | B5 | 迁移放 P1 还是 P2；各期之间会不会发版 | 三期合在 1.8.0 一起发，迁移只有一次；P1 不再声称可独立发布（§3.6、§13） |
 | B6 | 返工回合只认 A1，关了自动状态的项目就不学 | 改为与记忆线索 `feedback` 同一事实：回合由用户自己的消息开始，且开始时卡片在 In review；不依赖 A1/A1r，归纳本身负责把“提交并推送”判为 `none`（§4.1） |
-| B7 | 争议怎么跨轮保存 | 存在 `task.disputes`，随卡保留到 Done/Cancelled；之后各轮该项直接记 `disputed`，不再引用、不再判 fail（§6.1、§6.6） |
+| B7 | 争议怎么跨轮保存 | 存在 `task.disputes`，随卡保留到 Done/Cancelled；~~之后各轮该项直接记 `disputed`，不再引用、不再判 fail~~（2026-11-26 被 E1 取代，见 §0.4）（§6.1、§6.6） |
+
+### 0.4 评估后的修正（2026-11-26，卡片 `b8821c26`）
+
+来源：auto review 实际效果评估（`docs/verification/auto-review-eval-2026-11-26/REPORT.md` §4.1–4.3、§5 P0），用户据此建卡。
+
+| # | 问题 | 决定 |
+| --- | --- | --- |
+| E1 | 争议让整项检查在这张卡上永久失效（goal 的 id 固定，一次争议后此后的交付都不再判 goal；已有 2 张卡因此免检通过） | 争议只针对那一条意见，不针对整项检查。判断类检查照样判定，评审拿到上一轮的意见和 agent 的理由，没有新证据不得以同一条意见再判 fail；命令的争议只在同一个 sha 上有效，代码换了就照常跑、照常判定。被争议的项再次 `failed` 且参与判定时争议结束（§6.1、§6.3）。取代 B7 的“直接记 `disputed`” |
+| E2 | 评审看不到问题工具里的回答，用户在 AskUserQuestion 里做的决定会被判成没做到 | 问题工具的问答以“问题 → 回答”并进评审的对话，与用户消息按时间排序（AUTO-REVIEW-SPEC §4.2） |
+| E3 | 共享目录里的命令检查 252 次运行没抓到一次真问题，11 次失败全是环境问题，却带来 20 次争议 | 交付没带 worktree、卡片工作区也不是 worktree（评审记录 `shared`）时，命令只跑出结果给人看，不参与判定；参与判定的命令失败后在同一个 sha 上自动重跑一次，重跑通过记为 flaky、不退回（§6.3） |
 
 ### 0.2 实现中记下的偏差（阶段 A，2026-10-28，已接受）
 
@@ -307,7 +317,7 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
 触发、排队、状态机（Reviewing / Passed / Rework / Failed / Unavailable / Cancelled）、退回目标阶段、返工计数、投递、指纹、硬删除，全部沿用 AUTO-REVIEW-SPEC §3 和 §5。改动：
 
 - **去掉 L1**：`flowly_update_status(in_review)` 不再返回 `WORKPAD_OPEN` 或 `WORKPAD_FAILING`，`acknowledgeOpen` 只对 `SETUP_INCOMPLETE` 有效（CARD-SETUP-SPEC §3.4；“workpad 缺失”改为“验收清单缺失”）。
-- 交付调用新增可选 `disputes?: [{ id, reason ≤300 }]`：id 必须是本卡最近一次评审里 `failed` 的项，或已在 `task.disputes` 里的项（重复提交幂等），否则 `INVALID_INPUT`。接受的争议写进 `task.disputes: [{ id, kind, name, reason, round, at }]`（≤10 条，随卡保留，不改 task revision 之外的语义；B7）。卡进入 Done / Cancelled 时按 §6.6 记账后清空；人把卡拖回工作阶段不清空（争议还在，等下一次评审）。
+- 交付调用新增可选 `disputes?: [{ id, reason ≤300 }]`：id 必须是本卡最近一次评审里 `failed` 且参与判定（`gating`）的项（2026-11-26 加：observing 和共享目录里的命令失败不退回，不能争议），或已在 `task.disputes` 里的项（重复提交幂等），否则 `INVALID_INPUT`。接受的争议写进 `task.disputes: [{ id, kind, name, reason, round, at, sha?, argv?, finding? }]`（≤10 条，随卡保留，不改 task revision 之外的语义；B7）：`sha` 是该项失败的那次评审的 `fingerprint.sha`，`argv` 是命令当时跑的参数（只有命令有），`finding` 是那条意见（≤600 字：判断类检查的 `detail` 加 `file:line`，命令为 “exited N” 或 “timed out”）。再次提交同一 id 时更新理由；该项在最近一次评审里又 `failed` 时，同时换成这次的 `round`、`sha`、`argv` 和 `finding`。争议只针对那一条意见，不让整项检查免检（E1，§6.3）。被争议的项在之后的评审里再次 `failed` 且参与判定时（共享目录里只给人看的命令失败不算），这条争议随评审结果一起移除（评审拿到了理由仍判 fail，或代码换了命令仍失败）；agent 可以对新的意见再提争议。卡进入 Done / Cancelled 时按 §6.6 记账后清空；人把卡拖回工作阶段不清空（争议还在，等下一次评审）。
 - 交付调用新增可选 `worktree`：改动在卡片仓库的另一个 git worktree 里时，填它的路径或分支，评审在那里跑命令、读 diff（AUTO-REVIEW-SPEC §3.4）。
 - 项目开启、卡片未归档即触发；没有任何命令和准则时也跑内置检查。
 
@@ -329,18 +339,23 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
 
 ### 6.3 顺序与判定
 
-1. **命令**：active 与 observing 的命令全部跑完（执行方式同 AUTO-REVIEW-SPEC §4.3）。只有 active 的参与总判定。多仓根目录（§6.2）里每条命令只在本次交付改动过的仓库里跑（有未提交或未跟踪的改动，或者有卡片创建之后的提交；git 读不了的仓库算改动过；一个都没改动时退回全部仓库），在这些仓库里依次挑适用的跑，任一仓库失败即该项失败（失败输出前标 `[<仓库名>]`，耗时为各次之和），后面的仓库不再跑；该项的 `detail` 记下实际跑过的仓库（`Ran in agent-smith, search-admin.`，失败的仓库在最后），评审记录里展开命令即可看到，通过时也有（目录本身是 Git 仓库时不写）：`npm` / `pnpm` / `yarn` / `bun`（及 `npx` 等）的脚本要求该仓库 `package.json` 有这个脚本（`run <x>`、`test` 等别名；其余子命令只要求有 `package.json`）；`make <target>` 要求有 makefile 且写了该 target；`go` / `cargo` 要求有 `go.mod` / `Cargo.toml`；其他命令在每个仓库都跑。没有一个仓库适用时该项记 `skipped`（`No repository in this workspace has this command.`；只看改动过的仓库时为 `No repository this delivery changed has this command.`），不让评审变成 Unavailable。
+1. **命令**：active 与 observing 的命令全部跑完（执行方式同 AUTO-REVIEW-SPEC §4.3）。只有 active 的参与总判定，以下两种情况除外（E3）：
+   - **共享目录**：评审记录 `shared` 为真（交付没带 `worktree`，卡片工作区也不是 worktree）时，所有命令照跑、结果照写，但 `gating: false`，抽屉里和 observing 命令一样标 observing，不参与总判定，也不挡评审 session（D9 只看参与判定的命令）。评审 session 的输入把它们标为 “ran in a shared directory; does not decide”，并告诉评审：共享目录里的命令结果可能来自别的卡的改动，不能单凭它判 fail。带了 `worktree`、或卡片工作区本身是 worktree 时照常判定。
+   - **自动重跑**：参与判定的命令 `failed`（退出码非 0；超时和起不来是 `unavailable`，不重跑）后，再读一次 HEAD；与本次评审的 `fingerprint.sha` 相同时立即在同一目录重跑一次（多仓根目录同样只在原来那些仓库里）。重跑通过：该项 `passed`、`flaky: true`，`tail` 保留第一次失败的输出，`ms` 为两次之和，不退回；重跑仍失败：`failed`，`tail` 为重跑的输出；重跑超时或起不来：仍按第一次记 `failed`（退出码和 `tail` 都是第一次的），`ms` 为两次之和，照常退回。HEAD 变了或读不到时不重跑（评审结束时指纹不符，本来就会 Cancelled）。不参与判定的命令不重跑。
+   - **被争议的命令**：本次参与判定、`task.disputes` 里有它、争议的 `sha` 等于本次评审的 `fingerprint.sha`、且争议的 `argv` 与命令现在的参数逐项相同时，不跑，直接记 `disputed`（带理由）；用户改过命令（参数不同，或争议没记 `argv`）时照常跑、照常判定，争议说的是旧命令（2026-11-27，PR #128 评审）；不参与判定的（observing、共享目录）总是照跑，结果照常显示；sha 不同（代码换了）或争议没有 sha 时照常跑、照常判定（E1）。只认 sha：同一提交上未提交的改动不算换了代码。
+
+   多仓根目录（§6.2）里每条命令只在本次交付改动过的仓库里跑（有未提交或未跟踪的改动，或者有卡片创建之后的提交；git 读不了的仓库算改动过；一个都没改动时退回全部仓库），在这些仓库里依次挑适用的跑，任一仓库失败即该项失败（失败输出前标 `[<仓库名>]`，耗时为各次之和），后面的仓库不再跑；该项的 `detail` 记下实际跑过的仓库（`Ran in agent-smith, search-admin.`，失败的仓库在最后），评审记录里展开命令即可看到，通过时也有（目录本身是 Git 仓库时不写）：`npm` / `pnpm` / `yarn` / `bun`（及 `npx` 等）的脚本要求该仓库 `package.json` 有这个脚本（`run <x>`、`test` 等别名；其余子命令只要求有 `package.json`）；`make <target>` 要求有 makefile 且写了该 target；`go` / `cargo` 要求有 `go.mod` / `Cargo.toml`；其他命令在每个仓库都跑。没有一个仓库适用时该项记 `skipped`（`No repository in this workspace has this command.`；只看改动过的仓库时为 `No repository this delivery changed has this command.`），不让评审变成 Unavailable。
 2. **评审 session**：所有参与判定的命令都通过时才跑（D9）。一次判定全部：内置检查 `goal`（“Does what you asked”，尺子同 AUTO-REVIEW-SPEC §4.2：卡片、用户原话、验收清单只作上下文）、范围内的每条准则、本卡每条 `open` 项。输出：
 
    ```
    { items: [{ id, verdict: "pass" | "fail" | "na", detail ≤600, file?, line? }] }
    ```
 
-   - `fail` 必须带证据，三种任一（B1）：`file` 出现在 diff 里（改错了）；`file` 在仓库里存在但缺东西（漏改了，例如 `shared/i18n/zh-TW.ts` 没有新词条，daemon 只核对文件存在）；`quote` 引用卡片描述或用户原话里没做到的要求（内置检查和专属项常见）；daemon 核对出处（2026-11-07 按 PR #75 评审意见补）：quote 与来源都压缩空白、去首尾、转小写后，quote 必须是卡片标题、卡片描述、评审拿到的过滤后对话里任一条消息、或该检查自己的用户原话的子串，否则不算证据（从 diff 或代码里引的文字要用 `file` 给证据）。三样都没有的 `fail` 由 daemon 改为 `na`，`reason: "no evidence"`。这是确定性的降噪，目的是丢掉凭空的意见，不是只许挑改过的代码的毛病。
+   - `fail` 必须带证据，三种任一（B1）：`file` 出现在 diff 里（改错了）；`file` 在仓库里存在但缺东西（漏改了，例如 `shared/i18n/zh-TW.ts` 没有新词条，daemon 只核对文件存在）；`quote` 引用卡片描述或用户原话里没做到的要求（内置检查和专属项常见）；daemon 核对出处（2026-11-07 按 PR #75 评审意见补）：quote 与来源都压缩空白、去首尾、转小写后，quote 必须是卡片标题、卡片描述、评审拿到的过滤后对话里任一条消息（问题工具的问答只算用户的回答，不算 agent 的问题，AUTO-REVIEW-SPEC §4.2）、或该检查自己的用户原话的子串，否则不算证据（从 diff 或代码里引的文字要用 `file` 给证据）。三样都没有的 `fail` 由 daemon 改为 `na`，`reason: "no evidence"`。这是确定性的降噪，目的是丢掉凭空的意见，不是只许挑改过的代码的毛病。
    - 输出的每项于是为 `{ id, verdict, detail, file?, line?, quote? }`，`quote` ≤300 字。
    - `na` 按通过处理，不计抓到也不计误判。
    - 返工第 2 轮起：评审输入只给上一轮交付以来的增量 diff（`git diff <上一轮 sha>`）加上一轮的结果，指令写明只复查上一轮不通过的项和增量里的新问题，不重复已经通过的。
-   - 争议：`task.disputes` 里的项（§6.1）不交给评审 session，直接记为 `disputed`，带 agent 的理由。
+   - 争议（E1，2026-11-26 改；之前是“不交给评审 session，直接记为 `disputed`”）：`task.disputes` 里的判断类检查照样交给评审 session 判定。这一项的输入附上被争议的那条意见（`finding`、所在轮次）和 agent 的理由，指令写明：这条意见被 agent 争议过，没有争议没回答的新证据时，不要以同一条意见再判 fail；有新证据时在 `detail` 里说明新在哪里；别的问题照常判。结果照常记（`passed` / `failed` / `na`），条目带 `disputeReason` 供人查看。返工第 2 轮起，仍在 `task.disputes` 里的项必须由评审重新给结论，不沿用上一轮的通过（提示词写明；评审没给时记 `unavailable`）。命令的争议见步骤 1。
 3. **总判定**：有任何参与判定的项 `failed` → 不通过（R1，或到上限 R2）；否则有 `unavailable` → Unavailable；否则 Passed。`disputed` 不算不通过。
 
 参与判定的集合（B4）：命令与内置检查总是参与；准则和专属项只在 Guardrails 开着时参与（host `features.memory` 为开且 `Project.memory !== false`）。关闭时它们也不注入、不学、不显示在 `get_task.guardrails` 里。
@@ -358,7 +373,8 @@ Review {
   items: [{ id, kind: "command" | "goal" | "guideline" | "item", name,
             gating: boolean,                                  // observing 命令为 false
             state: "queued" | "running" | "passed" | "failed" | "na" | "disputed" | "skipped" | "unavailable",
-            ms?, argv?, exitCode?, timedOut?, tail?, detail?, file?, line?, reason?, disputeReason? }],
+            ms?, argv?, exitCode?, timedOut?, tail?, detail?, file?, line?, reason?, disputeReason?,
+            flaky? }],                                        // 命令第一次失败、同一 sha 上重跑通过（§6.3）
   model?, tokens?: { in, out, costUsd? },
   startedAt, finishedAt? }
 ```
@@ -383,7 +399,7 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 
 | 信号 | 事实 | 计数 |
 | --- | --- | --- |
-| 抓到 | 一项在第 n 轮 `failed`，同一张卡之后的评审里它 `passed`（没有争议） | `caught + 1`，`lastCaughtAt` |
+| 抓到 | 一项在第 n 轮 `failed` 且参与判定（`gating`，2026-11-26 加：共享目录里和 observing 的命令失败不退回，不算抓到），同一张卡之后的评审里它 `passed`（没有争议） | `caught + 1`，`lastCaughtAt` |
 | 漏掉 | 范围内的 active 准则在最近一次评审 `passed` 或 `na`，之后的返工回合归纳匹配到它（§4.3） | `missed + 1` |
 | 误判 | 一项在 `task.disputes` 里，这张卡进入 Done 或 Cancelled 时争议仍在（用户没有为这件事再退卡） | `misfire + 1`；争议随即清空 |
 | 评审 | 每次参与评审 | `reviews + 1`；`passed`/`na` 时 `passes + 1` |
@@ -538,7 +554,7 @@ Memory / Guardrails 页本身也沿用 `board.changes`：健康在线停用原5/
 skill（`server/skill-source.ts` 与 `skills/flowly/SKILL.md`）：
 
 - 删除验证项、sha、dirty、新鲜度、`WORKPAD_OPEN`、`WORKPAD_FAILING`、`acknowledgeOpen`（保留在 `SETUP_INCOMPLETE` 一句里）、`flowly_propose_review_rules`、“reviewRules lists the checks”。
-- 新增一段（英文）：“`flowly_get_task.guardrails` lists what this delivery will be checked against: the project's commands, the guidelines learned from what the user sent earlier cards back for, and this card's own items. Read them before you start and before you deliver; the reviewer judges against them and against what the user asked in the card and this conversation. A rework message starting with `[Flowly auto review` lists what failed: fix it, update the acceptance list and deliver again. If a finding is wrong, deliver with `disputes=[{id, reason}]` instead of arguing in the note; the user decides.”
+- 新增一段（英文）：“`flowly_get_task.guardrails` lists what this delivery will be checked against: the project's commands, the guidelines learned from what the user sent earlier cards back for, and this card's own items. Read them before you start and before you deliver; the reviewer judges against them and against what the user asked in the card and this conversation. A rework message starting with `[Flowly auto review` lists what failed: fix it, update the acceptance list and deliver again. If a finding is wrong, deliver with `disputes=[{id, reason}]` instead of arguing in the note; the next review sees your reason and drops that finding unless it has new evidence, and the user decides.”
 - Workpad 一段改为：“Before you start implementing, write 3–5 acceptance criteria with `flowly_update_workpad` and tick them as you meet them; the reviewer reads them as your own claim, not as proof.”
 - 记忆一段：去掉 “check memory.candidates first”，加 “What you remember takes effect at once.”
 

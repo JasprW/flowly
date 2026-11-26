@@ -176,10 +176,12 @@ export const reviewItemSchema = z.object({
   quote: z.string().max(300).optional(),
   reason: z.string().max(autoReviewLimits.reason).optional(),
   disputeReason: z.string().max(300).optional(),
+  /** A command that failed and passed when run again at the same commit (GUARDRAILS-SPEC §6.3 step 1). */
+  flaky: z.boolean().optional(),
 });
 export type ReviewItem = z.infer<typeof reviewItemSchema>;
 /** A failed finding the agent disputed on delivery; kept until the card is Done or Cancelled (GUARDRAILS-SPEC §6.1, B7). */
-export const disputeLimits = { perTask: 10, reason: 300 } as const;
+export const disputeLimits = { perTask: 10, reason: 300, finding: 600 } as const;
 export const disputeSchema = z.object({
   id: z.string().max(40),
   kind: z.enum(reviewItemKinds),
@@ -187,6 +189,12 @@ export const disputeSchema = z.object({
   reason: z.string().max(disputeLimits.reason),
   round: z.number().int().min(1),
   at: timestamp,
+  /** The commit the finding failed on: a disputed command is skipped only at this sha (§6.3 step 1, E1). */
+  sha: z.string().max(80).optional(),
+  /** The disputed command as it ran: editing the command ends its dispute (§6.3 step 1, E1). */
+  argv: z.array(z.string()).max(autoReviewLimits.args).optional(),
+  /** The disputed finding itself, shown to the reviewer next time (§6.3 step 2, E1). */
+  finding: z.string().max(disputeLimits.finding).optional(),
 });
 export type Dispute = z.infer<typeof disputeSchema>;
 /** A review written before guardrails has `rules` only: read them as items (command, the built-in goal, else a guideline). */

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { autoReviewOf, autoReviewRuns, continuesRound, conversationForReview, hasEvidence, joinCommand, reviewContext, reviewProgress, reviewVerdict, reworkMessage, splitCommand, visibleReview, markReviewHandled, rerunnablePlace, reviewSignal } from "./auto-review";
+import { conversationLine, userWords, autoReviewOf, autoReviewRuns, continuesRound, conversationForReview, hasEvidence, joinCommand, reviewContext, reviewProgress, reviewVerdict, reworkMessage, splitCommand, visibleReview, markReviewHandled, rerunnablePlace, reviewSignal } from "./auto-review";
 import { projectSchema, reviewSchema, type BoardEvent, type Review, type ReviewItem } from "./model";
 
 const review = (state: Review["state"], extra: Partial<Review> = {}): Review => ({
@@ -203,8 +203,22 @@ test("P3: the conversation the built-in check reads drops rework messages and in
   expect(kept).toHaveLength(30);
   expect(kept[0]).toBe("m10");
   const long = conversationForReview([{ at: "a", text: "x".repeat(2000) }]);
-  expect(long[0]!.length).toBe(1501);
+  expect((long[0] as string).length).toBe(1501);
   const big = conversationForReview(Array.from({ length: 12 }, (_, i) => ({ at: `t${String(i).padStart(2, "0")}`, text: String(i % 10).repeat(1500) })));
   expect(big.join("").length).toBeLessThanOrEqual(12_000);
   expect(big.at(-1)).toBe("1".repeat(1500));
+});
+
+test("E2: a question-tool answer keeps the question apart; only the whole answer is the user's words, even with an arrow in it", () => {
+  const said = conversationForReview([
+    { at: "b", text: ' Rename "Retry" → "Rerun" in the drawer ', ask: "What should\n the button say?" },
+    { at: "a", text: "[Flowly auto review · rework 1/2]" , ask: "Odd answer?" },
+  ]);
+  expect(said).toEqual([
+    { ask: "Odd answer?", answer: "[Flowly auto review · rework 1/2]" },
+    { ask: "What should the button say?", answer: 'Rename "Retry" → "Rerun" in the drawer' },
+  ]);
+  expect(userWords(said[1]!)).toBe('Rename "Retry" → "Rerun" in the drawer');
+  expect(userWords("Plain message")).toBe("Plain message");
+  expect(conversationLine(said[1]!)).toBe('Answered the agent\'s question: "What should the button say?" → Rename "Retry" → "Rerun" in the drawer');
 });

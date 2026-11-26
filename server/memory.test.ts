@@ -287,11 +287,15 @@ test("native question answers become answer clues once; the Codex answers messag
   // The same turn seen twice (a replayed hook) adds nothing new.
   await x.memory.recordTurn(x.identity, [ask], await x.store.read());
   await x.memory.recordTurn(x.identity, [{ type: "user_message", text: "Answers to your questions:\n\nHow long?\n7 characters" }], await x.store.read());
+  // An answers message that cannot be split for certain stays the user's own message instead of being dropped.
+  const unclear = "Answers to your questions:\n\nHow long?\n7 characters, never 6\nbecause people type them by hand";
+  await x.memory.recordTurn(x.identity, [{ type: "user_message", text: unclear }], await x.store.read());
   const clues = (await x.memory.store.read()).clues;
   expect(clues.map((c) => [c.kind, c.ask, c.text])).toEqual([
     ["answer", "Which alphabet?", "base62"],
     ["message", undefined, "Pick the short-code format for the API"],
     ["answer", "How long?", "7 characters"],
+    ["message", undefined, unclear],
   ]);
 });
 
