@@ -8,7 +8,9 @@ import {
   AutoReviewService,
   changedRepos,
   commandApplies,
+  changedFrom,
   contentDigest,
+  contentSnapshot,
   runCheck,
   defaultGit,
   linkedHead,
@@ -1143,15 +1145,19 @@ test("a check still disputed needs a new verdict in every rework round; it does 
   };
   // Each round's diff touches src/a.ts, so g1's round 2 fail is a regression of that round (§3.6), not demoted.
   const x = await setup({ entries: [guideline("g1", "Rule one")], llm, maxRounds: 3, diffText: () => "diff --git a/src/a.ts b/src/a.ts\n+x" });
+  await mkdir(join(x.a, "src"), { recursive: true });
+  await writeFile(join(x.a, "src/a.ts"), "round 1");
   await x.deliver("development");
   await x.turnStarted();
   x.repo.head = "bbbbbbbbbbbb";
+  await writeFile(join(x.a, "src/a.ts"), "round 2");
   let board = await x.deliver(undefined, { disputes: [{ id: "goal", reason: "The user changed the request." }] });
   expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "passed" });
   expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "goal" })]);
   await x.turnStarted();
   x.repo.head = "cccccccccccc";
+  await writeFile(join(x.a, "src/a.ts"), "round 3");
   board = await x.deliver();
   // Round 3 is incremental and still shows the dispute; the prompt asks for a verdict on it.
   expect(inputs[2]).toMatchObject({ incremental: true });
@@ -2253,16 +2259,21 @@ test("rework round: a fail of what passed before must cite a file this round cha
     return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }, { id: "g1", verdict: "fail", detail: "Broke it here.", file: "src/b.ts" }] };
   };
   const x = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, paths: ["src/a.ts", "src/b.ts"], diffText: (since) => (since ? "diff --git a/src/b.ts b/src/b.ts\n+x" : "diff --git a/src/a.ts b/src/a.ts\n+x") });
+  await mkdir(join(x.a, "src"), { recursive: true });
+  await writeFile(join(x.a, "src/a.ts"), "one");
   await x.deliver("development");
   await x.turnStarted();
+  await writeFile(join(x.a, "src/b.ts"), "this round");
   let board = await x.deliver();
   expect(board.tasks[0]!.review).toMatchObject({ state: "passed", round: 2 });
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
   // Same again, but the fail cites a file this round changed: a real regression decides.
   const y = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, paths: ["src/a.ts", "src/b.ts"], diffText: (since) => (since ? "diff --git a/src/b.ts b/src/b.ts\n+x" : "diff --git a/src/a.ts b/src/a.ts\n+x") });
   round = 0;
+  await mkdir(join(y.a, "src"), { recursive: true });
   await y.deliver("development");
   await y.turnStarted();
+  await writeFile(join(y.a, "src/b.ts"), "this round");
   round = 2;
   board = await y.deliver();
   expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
@@ -2270,6 +2281,33 @@ test("rework round: a fail of what passed before must cite a file this round cha
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")!.severity).toBeUndefined();
   // The reviewer sees each unresolved failure's severity, so it can keep it (§3.6).
   expect(seen[1]!.checks.find((c) => c.id === "goal")!.previous).toMatchObject({ state: "failed", severity: "blocker" });
+
+  // A file already uncommitted at the previous delivery and untouched since is not this round's change, even though
+  // git still lists it against the previous commit: a new fail citing it is minor.
+  const z = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, paths: ["src/a.ts", "src/b.ts"], diffText: () => "diff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/src/b.ts b/src/b.ts\n+y" });
+  round = 0;
+  await mkdir(join(z.a, "src"), { recursive: true });
+  await writeFile(join(z.a, "src/a.ts"), "uncommitted since round 1");
+  z.repo.changed = ["src/a.ts"];
+  await z.deliver("development");
+  await z.turnStarted();
+  await writeFile(join(z.a, "src/b.ts"), "this round");
+  z.repo.changed = ["src/a.ts", "src/b.ts"];
+  board = await z.deliver();
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", round: 2 });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+});
+
+test("changedFrom: a path counts when its content differs from the snapshot; one the snapshot lacks counts", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-changed-"));
+  await writeFile(join(dir, "a"), "1");
+  await writeFile(join(dir, "b"), "2");
+  const { files } = await contentSnapshot(dir, ["a", "b"]);
+  expect([...(await changedFrom(dir, files, ["a", "b"]))]).toEqual([]);
+  await writeFile(join(dir, "b"), "3");
+  await writeFile(join(dir, "c"), "new");
+  expect([...(await changedFrom(dir, files, ["c"]))].sort()).toEqual(["b", "c"]);
+  await rm(dir, { recursive: true, force: true });
 });
 
 test("the card's cap: its 10th judged review that fails goes to Blocked without rework; Done clears the count (§3.3)", async () => {
@@ -2287,6 +2325,36 @@ test("the card's cap: its 10th judged review that fails goes to Blocked without 
   // Cancelled and unavailable reviews do not count.
   const y = await setup({ exits: { "npm test": "spawn" } });
   expect((await y.deliver("development")).tasks[0]!.reviewCount).toBeUndefined();
+});
+
+test("the card's cap: past 10 reviews an agent's delivery runs no commands and no review session; a person's Rerun still reviews (§3.3)", async () => {
+  let sessions = 0;
+  const x = await setup({
+    llm: async (input) => {
+      sessions++;
+      return passAll(input, undefined as never);
+    },
+  });
+  await x.store.mutate((b) => {
+    b.tasks[0]!.reviewCount = 10;
+  });
+  let ctx = await x.service.get(x.identity);
+  await x.service.write(x.identity, "status", { ...input(ctx), status: "development" });
+  ctx = await x.service.get(x.identity);
+  const result = (await x.service.write(x.identity, "status", { ...input(ctx, "Delivered"), status: "in_review", nextMoves: [] })) as { notice?: string };
+  await x.reviews.idle();
+  const task = await card(x);
+  expect(task).toMatchObject({ status: "in_review", reviewCount: 10 });
+  expect(task.reviewWaiting).toBeUndefined();
+  expect(task.review).toBeUndefined();
+  expect(x.runs).toEqual([]);
+  expect(sessions).toBe(0);
+  expect(result.notice).toContain("This card reached 10 reviews, so no automatic review runs");
+  // The person's Rerun is reviewed.
+  await x.reviews.rerun("t", x.paseo);
+  await x.reviews.idle();
+  expect((await card(x)).review).toMatchObject({ state: "passed" });
+  expect(sessions).toBe(1);
 });
 
 test("card item demotion: the third decisive fail in a row with a different finding stops deciding; it stays observing (§3.6)", async () => {
