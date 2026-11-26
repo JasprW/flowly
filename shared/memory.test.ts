@@ -272,6 +272,16 @@ describe("native question answers (timelines checked 2026-10-22)", () => {
       ["请恢复公司网络后告知。", "已恢复内网连接"],
       ["Which alphabet?", "base58, because people type them by hand"],
     ]);
+    // Split only when every block is one title line and one answer line; otherwise the boundaries are not certain
+    // (a multi-line answer, a blank line in an answer, a multi-line title) and nothing is read as answers.
+    const unclear = (body: string) => questionAnswers([{ type: "user_message", text: `Answers to your questions:\n\n${body}` }]);
+    expect(unclear("Which alphabet?\nbase58\nbecause people type them by hand")).toEqual([]);
+    expect(unclear("Which alphabet?\nbase58\n\nbecause people type them by hand")).toEqual([]);
+    expect(unclear("Which alphabet should the codes use,\ngiven people type them by hand?\nbase58")).toEqual([]);
+    expect(unclear("Which alphabet?\nbase58\n\nHow long?\n7").map((a) => [a.ask, a.text])).toEqual([
+      ["Which alphabet?", "base58"],
+      ["How long?", "7"],
+    ]);
   });
   it("keeps short answers but never secrets", () => {
     expect(answerText(" 6 ")).toBe("6");

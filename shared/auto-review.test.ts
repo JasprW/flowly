@@ -7,7 +7,7 @@ import {
   countsTowardCap,
   diffPaths,
   unquoteGitPath,
-  findingText,
+  demotionFinding,
   hasEvidence,
   joinCommand,
   needsUserReason,
@@ -25,6 +25,8 @@ import {
   markReviewHandled,
   rerunnablePlace,
   reviewSignal,
+  conversationLine,
+  userWords,
 } from "./auto-review";
 import { projectSchema, reviewSchema, type BoardEvent, type Review, type ReviewItem } from "./model";
 
@@ -245,7 +247,7 @@ test("P3: the conversation the built-in check reads drops rework messages and in
   expect(kept).toHaveLength(30);
   expect(kept[0]).toBe("m10");
   const long = conversationForReview([{ at: "a", text: "x".repeat(2000) }]);
-  expect(long[0]!.length).toBe(1501);
+  expect((long[0] as string).length).toBe(1501);
   const big = conversationForReview(Array.from({ length: 12 }, (_, i) => ({ at: `t${String(i).padStart(2, "0")}`, text: String(i % 10).repeat(1500) })));
   expect(big.join("").length).toBeLessThanOrEqual(12_000);
   expect(big.at(-1)).toBe("1".repeat(1500));
@@ -329,8 +331,8 @@ test("a person moving the card away or archiving it cancels the running review i
 });
 
 test("card item demotion: three decisive fails in a row whose findings all differ (§3.6)", () => {
-  expect(findingText({ detail: "Missing  key", file: "a.ts", line: 3 })).toBe("a.ts:3 — Missing key");
-  expect(findingText({ detail: "x".repeat(300) })).toHaveLength(200);
+  expect(demotionFinding({ detail: "Missing  key", file: "a.ts", line: 3 })).toBe("a.ts:3 — Missing key");
+  expect(demotionFinding({ detail: "x".repeat(300) })).toHaveLength(200);
   // Same place, or word sets with Jaccard ≥ 0.5 (English by word, CJK by character).
   expect(sameFinding("a.ts:3 — one thing", "a.ts:3 — another thing entirely")).toBe(true);
   expect(sameFinding("The zh-TW catalog has no entry for Rerun", "zh-TW catalog has no entry for the Rerun label")).toBe(true);
@@ -364,4 +366,18 @@ test("the files a diff touches, from its headers (§3.6 regression backstop)", (
   expect(unquoteGitPath("plain.ts")).toBe("plain.ts");
   // Raw UTF-8 (core.quotePath=false) outside the BMP, next to an escape.
   expect(unquoteGitPath('"🚀\\tx.ts"')).toBe("🚀\tx.ts");
+});
+
+test("E2: a question-tool answer keeps the question apart; only the whole answer is the user's words, even with an arrow in it", () => {
+  const said = conversationForReview([
+    { at: "b", text: ' Rename "Retry" → "Rerun" in the drawer ', ask: "What should\n the button say?" },
+    { at: "a", text: "[Flowly auto review · rework 1/2]" , ask: "Odd answer?" },
+  ]);
+  expect(said).toEqual([
+    { ask: "Odd answer?", answer: "[Flowly auto review · rework 1/2]" },
+    { ask: "What should the button say?", answer: 'Rename "Retry" → "Rerun" in the drawer' },
+  ]);
+  expect(userWords(said[1]!)).toBe('Rename "Retry" → "Rerun" in the drawer');
+  expect(userWords("Plain message")).toBe("Plain message");
+  expect(conversationLine(said[1]!)).toBe('Answered the agent\'s question: "What should the button say?" → Rename "Retry" → "Rerun" in the drawer');
 });

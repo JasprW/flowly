@@ -238,7 +238,7 @@ export const notThisRoundReason = "Not caused by this round's changes.";
 export const demoteAfter = 3;
 
 /** A review finding as the card item's history keeps it (GUARDRAILS-SPEC §3.3): `file:line — detail`, at most 200 characters. */
-export function findingText(i: Pick<ReviewItem, "detail" | "file" | "line" | "reason">): string {
+export function demotionFinding(i: Pick<ReviewItem, "detail" | "file" | "line" | "reason">): string {
   const where = i.file ? `${i.file}${i.line ? `:${i.line}` : ""} — ` : "";
   const text = `${where}${(i.detail || i.reason || "").replace(/\s+/g, " ").trim()}`;
   return text.length > 200 ? text.slice(0, 200) : text;
@@ -277,7 +277,7 @@ export function shouldDemote(earlier: readonly string[], finding: string): boole
  * passed, na and a minor fail clear it; needs_user, disputed, skipped and unavailable leave it as it is (undefined).
  */
 export function nextFails(earlier: readonly string[] | undefined, item: ReviewItem): string[] | undefined {
-  if (item.state === "failed" && !isMinor(item)) return [...(earlier || []), findingText(item)].slice(-demoteAfter);
+  if (item.state === "failed" && !isMinor(item)) return [...(earlier || []), demotionFinding(item)].slice(-demoteAfter);
   if (item.state === "passed" || item.state === "na" || item.state === "failed") return [];
   return undefined;
 }
@@ -381,6 +381,22 @@ export function failureLine(item: ReviewItem, words: ReadonlyMap<string, string>
   return `✗ [${item.severity ?? "major"}] ${itemLabel(item, words)} — ${item.detail || item.reason || "not met"}${where}${id}`;
 }
 
+/**
+ * The finding a dispute is about, as the reviewer reads it next time (GUARDRAILS-SPEC §6.1, E1): a judged check's
+ * detail with its file, or how a command ended. At most 600 characters.
+ */
+export function findingText(item: ReviewItem): string {
+  const text =
+    item.kind === "command"
+      ? item.timedOut
+        ? "timed out"
+        : item.exitCode === null || item.exitCode === undefined
+          ? "did not finish"
+          : `exited ${item.exitCode}`
+      : `${item.detail || item.reason || "not met"}${item.file ? ` (${item.file}${item.line ? `:${item.line}` : ""})` : ""}`;
+  return text.length > 600 ? `${text.slice(0, 599)}…` : text;
+}
+
 /** The decisive failed items as one short note. */
 export const failureSummary = (review: Pick<Review, "items">) =>
   review.items.filter((i) => i.state === "failed" && decisive(i)).map((i) => (i.kind === "goal" ? GOAL_NAME : i.name)).join(", ");
@@ -437,6 +453,7 @@ export function reviewContext(review: Review | undefined) {
       ...(i.quote ? { quote: i.quote } : {}),
       ...(i.reason ? { reason: i.reason } : {}),
       ...(i.disputeReason ? { disputeReason: i.disputeReason } : {}),
+      ...(i.flaky ? { flaky: true } : {}),
     })),
     ...(review.shape ? { shape: review.shape } : {}),
     startedAt: review.startedAt,
@@ -478,21 +495,32 @@ export const conversationLimits = { perSession: 200, messages: 30, total: 12_000
 const reworkMark = "[Flowly auto review";
 // Provider injections, and messages one agent sends another (their full report, not the user's request).
 const injectedMessage = /^(<task-notification|<system-reminder|<command-|<local-command|<paseo-system)/;
-/** The card's user messages across its sessions, oldest first, without rework messages and injections. */
-export function conversationForReview(messages: readonly { at: string; text: string }[]): string[] {
+/** One thing the user said: a message, or an answer given in a question tool with the agent's question kept apart (§4.2, E2). */
+export type ConversationEntry = string | { ask: string; answer: string };
+const clipText = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+/** The user's own words in an entry, the only part a quote may come from: for a question-tool answer the whole answer, never the question (B1, E2). */
+export const userWords = (entry: ConversationEntry) => (typeof entry === "string" ? entry : entry.answer);
+/** An entry as the review session reads it. */
+export const conversationLine = (entry: ConversationEntry) => (typeof entry === "string" ? entry : `Answered the agent's question: "${entry.ask}" → ${entry.answer}`);
+/** The card's user messages and question-tool answers across its sessions, oldest first, without rework messages and injections. */
+export function conversationForReview(messages: readonly { at: string; text: string; ask?: string }[]): ConversationEntry[] {
   const kept = messages
-    .map((m) => ({ at: m.at, text: m.text.trim() }))
-    .filter((m) => m.text && !m.text.startsWith(reworkMark) && !injectedMessage.test(m.text))
+    .map((m) => ({ at: m.at, text: m.text.trim(), ask: m.ask?.replace(/\s+/g, " ").trim() }))
+    .filter((m) => m.text && (m.ask !== undefined || (!m.text.startsWith(reworkMark) && !injectedMessage.test(m.text))))
     .sort((a, b) => a.at.localeCompare(b.at))
     .slice(-conversationLimits.messages)
-    .map((m) => (m.text.length > conversationLimits.each ? `${m.text.slice(0, conversationLimits.each)}…` : m.text));
+    .map((m): ConversationEntry => {
+      const text = clipText(m.text, conversationLimits.each);
+      return m.ask === undefined ? text : { ask: clipText(m.ask, 500), answer: text };
+    });
   // Keep the newest within the total; the earliest go first.
   let total = 0;
-  const out: string[] = [];
+  const out: ConversationEntry[] = [];
   for (let i = kept.length - 1; i >= 0; i--) {
-    if (total + kept[i].length > conversationLimits.total) break;
-    total += kept[i].length;
-    out.unshift(kept[i]);
+    const size = conversationLine(kept[i]!).length;
+    if (total + size > conversationLimits.total) break;
+    total += size;
+    out.unshift(kept[i]!);
   }
   return out;
 }

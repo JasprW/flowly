@@ -27,16 +27,19 @@ import {
   continuesRound,
   countsTowardCap,
   conversationForReview,
+  userWords,
+  type ConversationEntry,
   conversationLimits,
   defaultCheckTimeoutSec,
   demotedReason,
   diffPaths,
   unquoteGitPath,
   failureSummary,
-  findingText,
+  demotionFinding,
   goalPrompt,
   hasEvidence,
   isMinor,
+  decisive,
   itemPassed,
   needsUserReason,
   notThisRoundReason,
@@ -56,6 +59,8 @@ import {
 import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
+import { CODEX_ANSWERS_PREFIX, questionAnswers, type TurnItem } from "../shared/memory";
+import type { AnsweredQuestions, SessionQuestions } from "./async-questions";
 import { logFailure } from "./error-report";
 import { resolveWorktree, worktreeBase } from "./review-worktree";
 
@@ -83,14 +88,16 @@ export type JudgedCheck = {
   quote?: string;
   /** Round ≥ 2: its result in the previous round. */
   previous?: { state: string; severity?: string; detail?: string };
+  /** The agent disputed an earlier finding of this check (§6.3 step 2, E1): judge it, but not on that finding again without new evidence. */
+  dispute?: { finding?: string; reason: string; round: number };
 };
 /** What the review session reads (GUARDRAILS-SPEC §6.3). */
 export type LlmReviewInput = {
   task: { id: string; title: string; description: string; type?: TaskType; workspaceId: string; /** Absolute paths of the card's images (CARD-IMAGES-SPEC §5). */ images?: string[] };
   checks: JudgedCheck[];
-  /** The user's messages in the card's sessions, oldest first (§4.2); null when they could not be read. */
-  conversation?: string[] | null;
-  /** The workspace is not a worktree: the diff may hold other cards' uncommitted changes (§2 limit 3). */
+  /** What the user said in the card's sessions, oldest first: messages and answers to question tools (§4.2); null when they could not be read. */
+  conversation?: ConversationEntry[] | null;
+  /** The workspace is not a worktree: the diff may hold other cards' uncommitted changes (§2 limit 3), and commands do not decide (§6.3 step 1). */
   shared?: boolean;
   /** The card's acceptance list: the agent's own claim, context only. */
   acceptance: AcceptanceItem[];
@@ -381,10 +388,15 @@ export function repoPath(directory: string, file: string): string | null {
 }
 
 /**
- * The user's messages in the card's sessions (§4.2): the projected tail of each session in its workspace, Flowly's own
- * temporary sessions left out. null when Paseo could not list them; one unreadable session is skipped.
+ * What the user said in the card's sessions (§4.2): their messages and their answers in a question tool (as
+ * "question → answer", E2), from the projected tail of each session in its workspace, Flowly's own temporary sessions
+ * left out. null when Paseo could not list them; one unreadable session is skipped.
  */
-export async function readConversation(task: Pick<Task, "workspaceId">, paseo: PaseoApi): Promise<string[] | null> {
+export async function readConversation(
+  task: Pick<Task, "workspaceId">,
+  paseo: PaseoApi,
+  questions: (agentId: string) => SessionQuestions = () => ({ answered: [], known: () => false }),
+): Promise<ConversationEntry[] | null> {
   const ids: string[] = [];
   let cursor: string | undefined;
   try {
@@ -397,16 +409,122 @@ export async function readConversation(task: Pick<Task, "workspaceId">, paseo: P
     logFailure("Flowly auto review could not list the card's sessions:", e);
     return null;
   }
-  const messages: { at: string; text: string }[] = [];
+  const messages: { at: string; text: string; ask?: string }[] = [];
   for (const id of ids) {
-    const res = await paseo.agents
-      .ref(id)
-      .timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" })
-      .catch(() => null);
-    for (const entry of (res?.entries || []) as { timestamp?: string; item?: { type?: unknown; text?: unknown } }[])
-      if (entry.item?.type === "user_message" && typeof entry.item.text === "string") messages.push({ at: entry.timestamp || "", text: entry.item.text });
+    const handle = paseo.agents.ref(id);
+    const res = await handle.timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" }).catch(() => null);
+    const entries = ((res?.entries || []) as { timestamp?: string; item?: TurnItem }[]).filter((e) => e.item);
+    const asked = questions(id);
+    // Pairing a Codex answers message needs every question call of the session; read back to its start only then.
+    const before = res && res.hasOlder !== false && entries.some((e) => answersText(e.item!, asked.answered) !== null) ? await olderEntries(handle, res) : res ? [] : null;
+    const calls = before ? answeredCalls([...before, ...entries], asked, before.length, (res as TimelinePage | null)?.epoch) : new Map<number, AnsweredQuestions>();
+    for (const [index, entry] of entries.entries()) {
+      const at = entry.timestamp || "";
+      const item = entry.item!;
+      if (item.type === "user_message" && typeof item.text === "string") {
+        const call = calls.get(index);
+        if (call) for (const qa of call.pairs) messages.push({ at, text: qa.text, ask: qa.ask });
+        else messages.push({ at, text: item.text });
+        continue;
+      }
+      // Answers given in AskUserQuestion or Codex request_user_input (tool calls with structured questions).
+      for (const qa of questionAnswers([item])) messages.push({ at, text: qa.text, ask: qa.ask });
+    }
   }
   return conversationForReview(messages);
+}
+
+
+/** How far back the review reads a session to find all its question calls before pairing (§4.2, E2). */
+export const pairingHistoryLimit = 2000;
+/**
+ * How far apart a Codex answers message and its call's answer may be (§4.2 ⑤): Paseo sends the message when the user
+ * submits the answer, seconds from the hook; the same text typed by hand after a rewind comes much later.
+ */
+export const answerMessageWindowMs = 60_000;
+
+type TimelineEntry = { timestamp?: string; item?: TurnItem };
+type TimelinePage = { entries: unknown[]; hasOlder: boolean; startCursor: { epoch: string; seq: number } | null; epoch: string; reset?: boolean; staleCursor?: boolean; error?: string | null };
+
+/** A Codex answers message that some answered call of the session built, character for character; null otherwise. */
+function answersText(item: TurnItem, answered: readonly AnsweredQuestions[]): string | null {
+  if (item.type !== "user_message" || typeof item.text !== "string") return null;
+  const text = item.text;
+  return text.startsWith(CODEX_ANSWERS_PREFIX) && answered.some((a) => a.message === text) ? text : null;
+}
+
+/**
+ * Whether a message at this timeline time, read in this timeline epoch, is certainly the one Paseo sent for this answered
+ * call: within the window of the answer (§4.2 ⑤), and the epoch read when the call was asked, before the message, is
+ * still the timeline's, so no rewind came since (§4.2 ⑥). An unreadable time is not.
+ */
+function sentFor(call: AnsweredQuestions, timestamp: string | undefined, epoch: string | undefined): boolean {
+  const at = timestamp ? Date.parse(timestamp) : NaN;
+  return Number.isFinite(at) && Math.abs(at - call.answeredAt) <= answerMessageWindowMs && !!epoch && call.asked?.epoch === epoch && call.asked.at < at;
+}
+
+/** The session's entries before `first`, back to its start; null when the start is out of reach or the timeline changed. */
+async function olderEntries(handle: { timeline: { refetch: (options: never) => Promise<unknown> } }, first: TimelinePage): Promise<TimelineEntry[] | null> {
+  let out: TimelineEntry[] = [];
+  let last = first;
+  // Every entry read counts toward the limit, with or without an item; reaching the start at exactly the limit is fine.
+  let read = 0;
+  while (last.hasOlder !== false) {
+    const room = pairingHistoryLimit - read;
+    if (!last.startCursor || room <= 0) return null;
+    const options = { direction: "before", cursor: last.startCursor, limit: Math.min(conversationLimits.perSession, room), projection: "projected" };
+    const next = (await handle.timeline.refetch(options as never).catch(() => null)) as TimelinePage | null;
+    if (!next || next.error || next.reset || next.staleCursor || next.epoch !== first.epoch || !next.entries.length || next.entries.length > room) return null;
+    read += next.entries.length;
+    out = [...(next.entries as TimelineEntry[]).filter((e) => e.item), ...out];
+    last = next;
+  }
+  return out;
+}
+
+/**
+ * Which Codex async answers message of a session was sent for which answered call (§4.2, E2), from the session's whole
+ * timeline (`entries`; the review's own window starts at `offset`, and the map is keyed by window index). A message is
+ * read as a call's answers only when its owner is certain:
+ * - it is the message Paseo built from that call's titles and answers, character for character;
+ * - the call's own `request_user_input_async` tool call (its first one: Paseo may add the answered one later) is in
+ *   the timeline and comes before the message. A call the hooks answered that is not in the timeline was removed by a
+ *   rewind (Paseo keeps the calls it finds there, `reconcileAsyncQuestionsAfterRewind`) and is left out;
+ * - no call whose outcome the hooks do not know (asked before a plugin reload, for one) comes before the message: it
+ *   may have sent the same text;
+ * - two calls can build the same text, so the messages of one text are paired with the calls of that text only when
+ *   there are as many of each, in order (the timeline shows the answers messages in the order the user answered, and
+ *   the calls are kept in that order too), each call asked before its message;
+ * - each message is in the timeline within a minute of its call's answer: Paseo sends it when the user submits the
+ *   answer;
+ * - the timeline has not been rewound since the call was answered: the epoch the hook read when the call was asked is
+ *   the one this read has (an epoch never comes back), and that read finished before the message. A rewind may have
+ *   removed the real message, and the same text typed by hand afterwards, however soon, cannot be told from it.
+ * Anything else (a rewind that removed an answer but kept its question, the same text typed again after a rewind, a
+ * timeline whose start is out of reach) leaves every message of that text whole.
+ */
+function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQuestions, offset: number, epoch: string | undefined): Map<number, AnsweredQuestions> {
+  const out = new Map<number, AnsweredQuestions>();
+  const askedAt = new Map<string, number>();
+  const byText = new Map<string, number[]>();
+  for (const [i, { item }] of entries.entries()) {
+    if (item?.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string" && !askedAt.has(item.callId)) askedAt.set(item.callId, i);
+    const text = item ? answersText(item, questions.answered) : null;
+    if (text) byText.set(text, [...(byText.get(text) ?? []), i]);
+  }
+  const inAnswerOrder = [...questions.answered].reverse();
+  for (const [text, at] of byText) {
+    const kept = inAnswerOrder.filter((a) => a.message === text && askedAt.has(a.callId));
+    if (kept.length !== at.length) continue;
+    const last = at[at.length - 1]!;
+    if ([...askedAt].some(([callId, i]) => i < last && !questions.known(callId))) continue;
+    if (kept.some((a, n) => askedAt.get(a.callId)! > at[n]!)) continue;
+    if (kept.some((a, n) => !sentFor(a, entries[at[n]!]!.timestamp, epoch))) continue;
+    at.forEach((index, n) => {
+      if (index >= offset) out.set(index - offset, kept[n]!);
+    });
+  }
+  return out;
 }
 
 export type CheckRun = { exitCode: number | null; timedOut: boolean; spawnError?: string; ms: number; output: string };
@@ -566,7 +684,7 @@ export type AutoReviewDeps = {
   /** The project's guardrails; absent: only the built-in check runs. */
   guardrails?: ReviewGuardrails;
   /** The user's messages in the card's sessions (§4.2), for the built-in check; null when unreadable. */
-  conversation?: (task: Task, paseo: PaseoApi) => Promise<string[] | null>;
+  conversation?: (task: Task, paseo: PaseoApi) => Promise<ConversationEntry[] | null>;
   /** The diff the review session reads; `reviewDiff` by default. */
   diff?: (directory: string, since?: string, baseRef?: string) => Promise<string>;
   /** The delivery's shape; `reviewShape` by default. */
@@ -880,24 +998,33 @@ export class AutoReviewService {
       if (t.reviewWaiting?.eventId === (manual ? waitId : delivery.eventId)) delete t.reviewWaiting;
       const previous = t.review;
       const round = !manual && continuesRound(b.events, t.id, previous) ? previous!.round + 1 : 1;
-      const disputes = new Map((t.disputes || []).map((d) => [d.id, d.reason]));
-      // A disputed finding is not checked again: it is recorded as disputed with the agent's reason (§6.3, B7).
-      const queued = (id: string) =>
-        disputes.has(id) ? { state: "disputed" as const, disputeReason: clip(disputes.get(id)!, 300) } : { state: "queued" as const };
+      const disputes = new Map((t.disputes || []).map((d) => [d.id, d]));
+      // A dispute is about one finding, not the whole check (E1): a judged check is judged again with the dispute in its
+      // input; a deciding command is skipped as disputed only at the commit it failed on, and only while it is the command
+      // that failed (an edited command runs). A command that does not decide (observing, or in a shared directory) always
+      // runs, so its result stays visible.
+      const queued = (id: string, gating: boolean, argv: readonly string[]) => {
+        const d = disputes.get(id);
+        const same = !!d?.argv && d.argv.length === argv.length && d.argv.every((a, n) => a === argv[n]);
+        return gating && same && d?.sha && d.sha === head?.sha ? { state: "disputed" as const, disputeReason: clip(d.reason, 300) } : { state: "queued" as const };
+      };
+      const judgedState = (id: string) => ({ state: "queued" as const, ...(disputes.has(id) ? { disputeReason: clip(disputes.get(id)!.reason, 300) } : {}) });
+      // In a shared directory commands run and show their result but do not decide (§6.3 step 1, E3).
+      const shared = !where?.worktree;
       const items: ReviewItem[] = [
         ...(guard?.commands || []).map((c) => ({
           id: c.id,
           kind: "command" as const,
           name: clip(c.text, 200),
           // An observing command runs and shows its result but never decides the review (§4.5).
-          gating: c.state === "active",
+          gating: c.state === "active" && !shared,
           argv: [...(c.argv || [])],
-          ...queued(c.id),
+          ...queued(c.id, c.state === "active" && !shared, c.argv || []),
         })),
-        { id: GOAL_ID, kind: "goal" as const, name: GOAL_NAME, gating: true, ...queued(GOAL_ID) },
-        ...(guard?.guidelines || []).map((g) => ({ id: g.id, kind: "guideline" as const, name: clip(g.text, 200), gating: true, ...queued(g.id) })),
+        { id: GOAL_ID, kind: "goal" as const, name: GOAL_NAME, gating: true, ...judgedState(GOAL_ID) },
+        ...(guard?.guidelines || []).map((g) => ({ id: g.id, kind: "guideline" as const, name: clip(g.text, 200), gating: true, ...judgedState(g.id) })),
         // A demoted card item is judged and shown but never decides (§3.6).
-        ...(guard?.items || []).map((i) => ({ id: i.id, kind: "item" as const, name: clip(i.text, 200), gating: !i.observing, ...(i.observing ? { reason: demotedReason } : {}), ...queued(i.id) })),
+        ...(guard?.items || []).map((i) => ({ id: i.id, kind: "item" as const, name: clip(i.text, 200), gating: !i.observing, ...(i.observing ? { reason: demotedReason } : {}), ...judgedState(i.id) })),
       ].slice(0, 40);
       t.review = {
         trigger: { eventId: manual ? "" : delivery.eventId, agentId: delivery.agentId, from: delivery.from },
@@ -912,7 +1039,7 @@ export class AutoReviewService {
           dirty: !!head?.dirty,
           ...(content ? { content } : {}),
         },
-        shared: !where?.worktree,
+        shared,
         ...(delivery.worktree ? { worktree: delivery.worktree } : {}),
         ...(measured ? { shape: measured.shape } : {}),
         items,
@@ -927,7 +1054,7 @@ export class AutoReviewService {
     const abort = new AbortController();
     this.active.set(delivery.taskId, { startedAt, abort });
     try {
-      await this.conduct(delivery, manual, paseo, lifecycleRecorded, { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal: abort.signal });
+      await this.conduct(delivery, manual, paseo, lifecycleRecorded, { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal: abort.signal, head });
     } finally {
       if (this.active.get(delivery.taskId)?.abort === abort) this.active.delete(delivery.taskId);
     }
@@ -952,9 +1079,11 @@ export class AutoReviewService {
       started: { previous?: Task["review"]; round: number };
       measure: () => Promise<Measured>;
       signal: AbortSignal;
+      /** HEAD when the review started: a failed command is rerun only at this commit (flaky, §6.3 step 1). */
+      head: { sha?: string } | null;
     },
   ) {
-    const { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal } = ctx;
+    const { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal, head } = ctx;
     const items = (await this.current(delivery.taskId, startedAt))?.items ?? [];
     const set = (id: string, patch: Partial<ReviewItem>) => this.updateItems(delivery.taskId, startedAt, [id], patch);
     if (!where) {
@@ -968,15 +1097,25 @@ export class AutoReviewService {
         const entry = guard?.commands.find((c) => c.id === item.id);
         await set(item.id, { state: "running" });
         const timeout = (entry?.timeoutSec ?? defaultCheckTimeoutSec) * 1000;
-        const run: (CheckRun & { ran?: string[] }) | null = linked.length
-          ? await runInRepos(this.run, item.argv || [], runIn, timeout, signal)
-          : await this.run(item.argv || [], where.directory, timeout, signal);
+        const once = () => (linked.length ? runInRepos(this.run, item.argv || [], runIn, timeout, signal) : this.run(item.argv || [], where.directory, timeout, signal));
+        let run: (CheckRun & { ran?: string[] }) | null = await once();
         if (signal.aborted) return;
         if (!run) {
           await set(item.id, { state: "skipped", reason: runIn.length < linked.length ? "No repository this delivery changed has this command." : "No repository in this workspace has this command." });
           continue;
         }
-        const tail = outputTail(run.output, autoReviewLimits.tail);
+        let flaky: { ms: number; output: string } | undefined;
+        // A gating command that failed runs once more at the same commit; passing then is flaky, not a failure (§6.3 step 1, E3).
+        if (item.gating && run.exitCode !== 0 && !run.timedOut && !run.spawnError && head?.sha) {
+          const now = linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now());
+          const again = now?.sha === head.sha ? await once() : null;
+          // A rerun that cannot start or times out says nothing about the code: the first failure stands.
+          if (again && !again.timedOut && !again.spawnError) {
+            if (again.exitCode === 0) flaky = { ms: run.ms, output: run.output };
+            run = { ...again, ms: run.ms + again.ms };
+          } else if (again) run = { ...run, ms: run.ms + again.ms };
+        }
+        const tail = outputTail(flaky ? flaky.output : run.output, autoReviewLimits.tail);
         const passed = run.exitCode === 0 && !run.timedOut && !run.spawnError;
         // A command that cannot start or times out is the review's problem, not the agent's (§3.2 Unavailable).
         const state = passed ? "passed" : run.spawnError || run.timedOut ? "unavailable" : "failed";
@@ -985,7 +1124,8 @@ export class AutoReviewService {
           exitCode: run.exitCode,
           ...(run.timedOut ? { timedOut: true } : {}),
           ms: Math.max(0, Math.round(run.ms)),
-          ...(!passed && tail ? { tail } : {}),
+          ...((!passed || flaky) && tail ? { tail } : {}),
+          ...(flaky ? { flaky: true, reason: "Failed once and passed when run again at the same commit." } : {}),
           ...(run.ran ? { detail: `Ran in ${run.ran.join(", ")}.`.slice(0, autoReviewLimits.detail) } : {}),
           ...(run.spawnError ? { reason: `Could not start: ${run.spawnError}`.slice(0, autoReviewLimits.reason) } : {}),
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
@@ -1012,7 +1152,15 @@ export class AutoReviewService {
     const counted = (list: readonly ReviewItem[]) => list.map((i) => (i.state === "failed" && isMinor(i) ? { ...i, state: "na" as const } : i));
     if (this.deps.guardrails)
       await this.deps.guardrails
-        .reviewed({ projectId: outcome.task.projectId, taskId, items: counted(outcome.review.items), previous: previous && counted(previous), disputed: (outcome.task.disputes || []).map((d) => d.id) })
+        .reviewed({
+          projectId: outcome.task.projectId,
+          taskId,
+          // A minor failure sent nothing back, so it counts as na (§3.6).
+          items: counted(outcome.review.items),
+          // Only a decisive failure was sent back, so only it can be caught (§6.6).
+          previous: previous && counted(previous.filter((i) => i.gating)),
+          disputed: (outcome.task.disputes || []).map((d) => d.id),
+        })
         .catch((e) => logFailure("Flowly guardrail counts not updated:", e, taskId));
     if (!outcome.rework) return;
     // Compute the review immediately, but never start a rework turn before its predecessor is recorded.
@@ -1092,12 +1240,14 @@ export class AutoReviewService {
       checks: judged.map((i) => {
         const quote = guard?.words.get(i.id);
         const prior = incremental ? before.get(i.id) : undefined;
+        const dispute = task.disputes?.find((d) => d.id === i.id);
         return {
           id: i.id,
           kind: i.kind as JudgedCheck["kind"],
           text: text(i),
           ...(quote ? { quote } : {}),
           ...(prior ? { previous: { state: prior.state, ...(prior.severity ? { severity: prior.severity } : {}), ...(prior.detail ? { detail: prior.detail } : {}) } } : {}),
+          ...(dispute ? { dispute: { reason: dispute.reason, round: dispute.round, ...(dispute.finding ? { finding: dispute.finding } : {}) } } : {}),
         };
       }),
       ...(ids.includes(GOAL_ID) ? { conversation: this.deps.conversation ? await this.deps.conversation(task, paseo).catch(() => null) : null } : {}),
@@ -1105,7 +1255,9 @@ export class AutoReviewService {
       acceptance: board.workpads.find((w) => w.taskId === task.id)?.acceptance ?? [],
       deliveryNote: deliveryEvent?.note ?? "",
       outputs: board.artifacts.filter((a) => a.taskId === task.id && a.role === "output").map((a) => a.target),
-      commands: now.items.filter((r) => r.kind === "command").map((r) => `${r.name}: ${r.state}${r.gating ? "" : " (observing)"}`),
+      commands: now.items
+        .filter((r) => r.kind === "command")
+        .map((r) => `${r.name}: ${r.state}${r.flaky ? " (failed once, passed when run again)" : ""}${r.gating ? "" : now.shared ? " (ran in a shared directory; does not decide)" : " (observing)"}`),
       diff: linked.length
         ? await linkedReviewDiff(linked, { since: incremental ? previous!.fingerprint.repos : undefined, baseRef: task.baseRef }, this.git)
         : await (this.deps.diff ?? ((d: string, since?: string, baseRef?: string) => reviewDiff(d, { since, baseRef }, this.git)))(
@@ -1159,12 +1311,14 @@ export class AutoReviewService {
           if (!ids.includes(r.id)) return r;
           const v = verdicts.get(r.id);
           if (!v) {
-            // Round ≥ 2 re-checks only what failed; a check that passed before and was not judged again keeps its pass.
+            // Round ≥ 2 re-checks only what failed; a check that passed before and was not judged again keeps its pass,
+            // unless it is still disputed: a disputed check always needs a verdict of its own (§6.3 step 2, E1).
             const prior = incremental ? before.get(r.id) : undefined;
-            if (prior && itemPassed(prior)) return { ...r, state: prior.state, ms, ...(prior.detail ? { detail: prior.detail } : {}), reason: "Passed in the previous round; not judged again." };
+            if (prior && itemPassed(prior) && !r.disputeReason) return { ...r, state: prior.state, ms, ...(prior.detail ? { detail: prior.detail } : {}), reason: "Passed in the previous round; not judged again." };
             return { ...r, state: "unavailable" as const, ms, reason: "The review session gave no verdict for this check." };
           }
-          const quoteSources = [task.title, task.description, ...(input.conversation ?? []), guard?.words.get(r.id)];
+          // An answer in a question tool counts by the user's answer only; the agent's question is context (§4.2, E2).
+          const quoteSources = [task.title, task.description, ...(input.conversation ?? []).map(userWords), guard?.words.get(r.id)];
           const evidence = v.verdict !== "fail" || hasEvidence(v, diffFiles, existing, quoteSources);
           // needs_user needs no evidence, but must say what the person has to do (§3.6).
           const asks = v.verdict === "needs_user" && !!v.detail.trim();
@@ -1182,7 +1336,7 @@ export class AutoReviewService {
           }
           // A card item failing a third time in a row, each time for something else, stops deciding the review (§3.6).
           const card = r.kind === "item" ? cardItems.get(r.id) : undefined;
-          if (card && gating && state === "failed" && severity !== "minor" && shouldDemote(card.fails || [], findingText({ detail: v.detail, file: v.file, line: v.line }))) {
+          if (card && gating && state === "failed" && severity !== "minor" && shouldDemote(card.fails || [], demotionFinding({ detail: v.detail, file: v.file, line: v.line }))) {
             gating = false;
             why = demotedReason;
           }
@@ -1255,6 +1409,14 @@ export class AutoReviewService {
 
   /** Applies the verdict of a review whose result stands (§3.2, §3.3, §4.5), in the caller's write. */
   private conclude(b: Board, t: Task, project: Project, r: NonNullable<Task["review"]>, finishedAt: string): { value: Outcome; changed: true } {
+    // A disputed finding that failed again decisively (judged with the dispute, or a command on new code) ends that dispute (§6.1, E1).
+    if (t.disputes?.length) {
+      const kept = t.disputes.filter((d) => !r.items.some((i) => i.id === d.id && i.state === "failed" && decisive(i)));
+      if (kept.length !== t.disputes.length) {
+        if (kept.length) t.disputes = kept;
+        else delete t.disputes;
+      }
+    }
     // Each item's result and kind go with the event, for Insights (§6.4, §7.5).
     const event = (note: string) =>
       this.store.event(b, {

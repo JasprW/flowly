@@ -1433,6 +1433,7 @@ const catalog: Catalog = {
   "Sent back": "되돌려 보냄",
   "Disputed": "이의 제기됨",
   "observing": "관찰 중",
+  "flaky": "불안정",
   "Round {round}": "{round}회차",
   "Now a project guideline": "이제 프로젝트 지침입니다",
   "Sent back {n} times": "{n}번 되돌려 보냄",
