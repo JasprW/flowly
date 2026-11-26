@@ -362,33 +362,6 @@ function codexAnswers(message: string, callId: string): QuestionAnswer[] {
   return pairs.map(([ask, text], i) => ({ id: `${callId}:${i}`, ask: ask!, text: text! }));
 }
 
-/**
- * A Codex async answers message split by the questions as they were asked (`titles`, from the permission request the
- * question raised, GUARDRAILS-SPEC E2): Paseo writes it as the prefix, a blank line, then `title\nanswer` per question
- * joined by blank lines. Each answer runs up to the next title, so blank lines and line breaks inside an answer and
- * multi-line titles are kept exactly. null when the message does not carry exactly these titles in this order.
- */
-export function splitCodexAnswers(message: string, titles: readonly string[]): { ask: string; text: string }[] | null {
-  const head = `${CODEX_ANSWERS_PREFIX}\n\n`;
-  const trimmed = message.trim();
-  if (!titles.length || !trimmed.startsWith(head)) return null;
-  let rest = trimmed.slice(head.length);
-  const out: { ask: string; text: string }[] = [];
-  for (let i = 0; i < titles.length; i++) {
-    const title = titles[i]!;
-    if (!title || !rest.startsWith(`${title}\n`)) return null;
-    rest = rest.slice(title.length + 1);
-    const next = titles[i + 1];
-    const end = next === undefined ? rest.length : rest.indexOf(`\n\n${next}\n`);
-    if (end < 0) return null;
-    const text = rest.slice(0, end).trim();
-    if (!text) return null;
-    out.push({ ask: title, text });
-    rest = rest.slice(end + 2);
-  }
-  return out;
-}
-
 /** An answer clue's text: short is fine (the question gives it context), secrets and empty ones are not. */
 export function answerText(value: string): string | null {
   const trimmed = value.trim();

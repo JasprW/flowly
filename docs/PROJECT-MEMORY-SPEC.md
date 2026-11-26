@@ -263,7 +263,7 @@ agent 提候选前、复盘提炼时、人审阅时，都用同一组规则，�
 - `answer`：本轮 timeline 里有用户通过原生提问工具给出的回答 → 每个问题记一条，`ask` 是问题，`text` 是回答。回答很短也记（有问题作上下文），只过滤空回答和密钥。格式于 2026-10-22 用本机真实 timeline 和 Paseo 源码核对（`shared/memory.ts` 的 `questionAnswers`）：
   - **Claude `AskUserQuestion`**：同一轮里一条已完成的 `tool_call`。问题在 `detail.input.questions[].question`，回答在 `detail.output.output` 里，形如 `"问题"="回答"`。外层句子随 Claude Code 版本不同（实测有 `Your questions have been answered: …` 和 `The user answered: …` 两种），所以只解析引号对。
   - **Codex `request_user_input`（同步）**：同一轮里一条已完成的 `tool_call`，`metadata.questions[]`（`id`、`question`）加 `metadata.answers`（按问题 id 的回答数组，多选用 “, ” 连接）。
-  - **Codex `request_user_input_async`（异步）**：本轮只发出问题，回答之后作为一条用户消息送回给 Codex，开头是 `Answers to your questions:`，每个问题一段“问题标题\n回答”，段与段之间空一行。只有每一段都正好是一行标题加一行回答时才按问题解析（2026-11-26 用户决定）：标题或回答里有换行、回答里有空行时，问答边界无法确定（Paseo 的 timeline 不保留结构化的问题，那次异步调用投影出来也只是同样格式的纯文本），这时不解析成回答，整条消息照常记成用户自己的 `message`，不丢内容。这条规则仍有一个认不出的情况：回答里有空行、空行后又恰好是两行，会被当成另一组问答；记忆线索只是给复核的素材，这里接受这个误差，自动评审则按提问时记下的原问题切分，找不到原问题时整条保留（AUTO-REVIEW-SPEC §4.2）。解析成回答的消息如果是一轮的第一条消息，不再另记成 `message`。异步工具调用本身不读：已答和未答时渲染出的文本结构相同，被关闭时末尾是 `Dismissed`。
+  - **Codex `request_user_input_async`（异步）**：本轮只发出问题，回答之后作为一条用户消息送回给 Codex，开头是 `Answers to your questions:`，每个问题一段“问题标题\n回答”，段与段之间空一行。只有每一段都正好是一行标题加一行回答时才按问题解析（2026-11-26 用户决定）：标题或回答里有换行、回答里有空行时，问答边界无法确定（Paseo 的 timeline 不保留结构化的问题，那次异步调用投影出来也只是同样格式的纯文本），这时不解析成回答，整条消息照常记成用户自己的 `message`，不丢内容。这条规则仍有一个认不出的情况：回答里有空行、空行后又恰好是两行，会被当成另一组问答；记忆线索只是给复核的素材，这里接受这个误差，自动评审则按权限钩子记下的、实际被回答的那次调用读取，找不到时整条保留（AUTO-REVIEW-SPEC §4.2）。解析成回答的消息如果是一轮的第一条消息，不再另记成 `message`。异步工具调用本身不读：已答和未答时渲染出的文本结构相同，被关闭时末尾是 `Dismissed`。
   - 被关闭、失败或中断的提问不记。同一个问题的线索 id 由 session 和调用 id 组成，同一轮被重复送进 hook 也只记一次。
   - Pi 的提问工具本机没有可核对的记录，暂不处理。
 - `feedback`：本轮开始时卡片在 In review，也就是交付后的回复；

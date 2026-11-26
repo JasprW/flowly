@@ -571,7 +571,7 @@ export default function contribute(host: PluginServerContext) {
       return !!agent && !agent.archivedAt && agent.workspaceId === task.workspaceId;
     },
     send: (message, api) => composer.push(message, api),
-    conversation: (task, api) => readConversation(task, api, (agentId) => asyncQuestions.asked(agentId)),
+    conversation: (task, api) => readConversation(task, api, (agentId) => asyncQuestions.answers(agentId)),
     guardrails,
     // A temporary session judges the built-in check, guidelines and card items, hard-deleted after like the summarizer.
     llm: llmReviewer({
@@ -800,11 +800,15 @@ export default function contribute(host: PluginServerContext) {
       .turnEnded(event.agent, paseo)
       .catch((e) => logFailure("Workflow insights commands not recorded:", e));
   });
+  // The answers of a Codex async question, by the request actually answered (only requests kept above are matched).
+  server.addHook("agent.permission.after", async (event) => {
+    asyncQuestions.resolved(event.agent.id, event.requestId, event.resolution);
+  });
   server.addHook("agent.permission.before", async (event, { paseo }) => {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
     if (!identity) return;
-    // A Codex async question's titles, in memory only, so the auto review can split its answers (AUTO-REVIEW-SPEC §4.2).
+    // A Codex async question's titles, in memory only, so the auto review can read its answers (AUTO-REVIEW-SPEC §4.2).
     asyncQuestions.remember(event.agent.id, event.request);
     await store.mutate((board) =>
       // INSIGHTS-REDESIGN-SPEC §7.2: only the tool's name, never its input.

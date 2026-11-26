@@ -47,7 +47,8 @@ import {
 import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
-import { CODEX_ANSWERS_PREFIX, questionAnswers, splitCodexAnswers, type TurnItem } from "../shared/memory";
+import { CODEX_ANSWERS_PREFIX, questionAnswers, type TurnItem } from "../shared/memory";
+import type { AnsweredQuestions } from "./async-questions";
 import { logFailure } from "./error-report";
 import { resolveWorktree, worktreeBase } from "./review-worktree";
 
@@ -343,7 +344,7 @@ export function repoPath(directory: string, file: string): string | null {
 export async function readConversation(
   task: Pick<Task, "workspaceId">,
   paseo: PaseoApi,
-  asked: (agentId: string) => [string, readonly string[]][] = () => [],
+  answered: (agentId: string) => readonly AnsweredQuestions[] = () => [],
 ): Promise<ConversationEntry[] | null> {
   const ids: string[] = [];
   let cursor: string | undefined;
@@ -363,19 +364,18 @@ export async function readConversation(
       .ref(id)
       .timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" })
       .catch(() => null);
-    // Codex async questions of this session as asked (call id → titles), and the calls seen so far in its timeline.
-    const known = asked(id);
-    const seen: string[] = [];
+    // Codex async question calls this session's user answered (permission hooks, by call id).
+    const known = answered(id);
     for (const entry of (res?.entries || []) as { timestamp?: string; item?: TurnItem }[]) {
       if (!entry.item) continue;
       const at = entry.timestamp || "";
       const item = entry.item;
-      if (item.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string") seen.push(item.callId);
       if (item.type === "user_message" && typeof item.text === "string") {
-        // A Codex async answers message is split only by the titles of a question this session asked, the calls
-        // seen before it first; without them it stays the user's whole message.
-        const pairs = item.text.trimStart().startsWith(CODEX_ANSWERS_PREFIX) ? asyncAnswers(item.text, known, seen) : null;
-        if (pairs) for (const qa of pairs) messages.push({ at, text: qa.text, ask: qa.ask });
+        // A Codex async answers message is split only as the answer of the call it was sent for: the message Paseo
+        // built from that call's titles and answers, character for character. Otherwise it stays the user's whole message.
+        const text = item.text.trim();
+        const call = text.startsWith(CODEX_ANSWERS_PREFIX) ? known.find((a) => a.message === text) : undefined;
+        if (call) for (const qa of call.pairs) messages.push({ at, text: qa.text, ask: qa.ask });
         else messages.push({ at, text: item.text });
         continue;
       }
@@ -386,16 +386,6 @@ export async function readConversation(
   return conversationForReview(messages);
 }
 
-
-/** The answers message split by the first question of the session whose titles it carries exactly (§4.2, E2). */
-function asyncAnswers(text: string, known: [string, readonly string[]][], seen: readonly string[]) {
-  const order = [...known].sort(([a], [b]) => Number(seen.includes(b)) - Number(seen.includes(a)));
-  for (const [, titles] of order) {
-    const pairs = splitCodexAnswers(text, titles);
-    if (pairs) return pairs;
-  }
-  return null;
-}
 
 export type CheckRun = { exitCode: number | null; timedOut: boolean; spawnError?: string; ms: number; output: string };
 /** Runs one check as an argument array in `cwd`, never through a shell. */

@@ -1298,74 +1298,55 @@ test("the review reads answers given in question tools as what the user said, in
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", quote: "Drawer only" });
 });
 
-test("a Codex answers message is split by the questions as asked in the same session, and stays whole without them, from readConversation through the quote check (§4.2, E2)", async () => {
-  // Paseo keeps request_user_input_async questions in the timeline only as plain text; their titles come from the
-  // permission request each question raised (agent.permission.before), matched by session and call id.
-  const blankLine = 'Answers to your questions:\n\nWhat should the button say?\nKeep "Retry" on the card.\n\nRename the drawer one to "Rerun".';
-  const longTitle = "Answers to your questions:\n\nShould the drawer keep the old label,\nor follow the card?\nFollow the card";
-  const twoLines = "Answers to your questions:\n\nWhat should change?\nKeep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun";
-  const twoQuestions = "Answers to your questions:\n\nWhich label?\nRerun\n\nwith a short hint\n\nWhere?\nDrawer only";
-  const asked = new AsyncQuestionTitles();
-  const request = (callId: string, ...titles: string[]) =>
-    asked.remember("a1", {
-      id: `permission-${callId}`,
-      name: "request_user_input_async",
-      kind: "question",
-      input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question, options: [], isOther: true })) },
-    });
-  request("q-blank", "What should the button say?");
-  request("q-long", "Should the drawer keep the old label,\nor follow the card?");
-  request("q-two-lines", "What should change?");
-  request("q-two", "Which label?", "Where?");
-  const paseo = (text: string, callId?: string, agentId = "a1") =>
+test("a Codex answers message is read as the answers of the call it was sent for, and stays whole without it, from readConversation through the quote check (§4.2, E2)", async () => {
+  // Paseo keeps request_user_input_async questions and answers in the timeline only as plain text; Flowly takes the
+  // titles from the permission request and the answers from the resolution of the request actually answered.
+  const q = new AsyncQuestionTitles();
+  const request = (agentId: string, callId: string, ...titles: string[]) =>
+    q.remember(agentId, { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
+  const answer = (agentId: string, callId: string, ...answers: string[]) =>
+    q.resolved(agentId, `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } });
+  // Two questions, then a single question with the same title as the first; the user answers the earlier call.
+  request("a1", "two", "Which label?", "Should the drawer keep the old label,\nor follow the card?");
+  request("a1", "one", "Which label?");
+  answer("a1", "two", 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".', "Follow the card");
+  const two = 'Answers to your questions:\n\nWhich label?\nKeep "Retry" on the card.\n\nRename the drawer one to "Rerun".\n\nShould the drawer keep the old label,\nor follow the card?\nFollow the card';
+  // Later the single question is answered too, with a blank line followed by exactly two lines.
+  answer("a1", "one", "Keep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun");
+  const one = "Answers to your questions:\n\nWhich label?\nKeep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun";
+  const paseo = (texts: string[], agentId = "a1") =>
     ({
       agents: {
         list: async () => ({ entries: [{ agent: { id: agentId, workspaceId: "w" } }], pageInfo: {} }),
-        ref: () => ({
-          timeline: {
-            refetch: async () => ({
-              entries: [
-                ...(callId ? [{ timestamp: "2026-11-26T09:59:00.000Z", item: { type: "tool_call", name: "request_user_input_async", callId, status: "completed", detail: { type: "plain_text", text: "…" } } }] : []),
-                { timestamp: "2026-11-26T10:00:00.000Z", item: { type: "user_message", text } },
-              ],
-            }),
-          },
-        }),
+        ref: () => ({ timeline: { refetch: async () => ({ entries: texts.map((text, i) => ({ timestamp: `2026-11-26T10:0${i}:00.000Z`, item: { type: "user_message", text } })) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
-  const read = (text: string, callId?: string, agentId?: string) => readConversation({ workspaceId: "w" }, paseo(text, callId, agentId), (id) => asked.asked(id));
-  expect(await read(blankLine, "q-blank")).toEqual([{ ask: "What should the button say?", answer: 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".' }]);
-  // The question is context: its line break is folded like any other in the review input.
-  expect(await read(longTitle, "q-long")).toEqual([{ ask: "Should the drawer keep the old label, or follow the card?", answer: "Follow the card" }]);
-  expect(await read(twoLines, "q-two-lines")).toEqual([{ ask: "What should change?", answer: "Keep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun" }]);
-  expect(await read(twoQuestions, "q-two")).toEqual([
-    { ask: "Which label?", answer: "Rerun\n\nwith a short hint" },
-    { ask: "Where?", answer: "Drawer only" },
+  const read = (texts: string[], agentId?: string) => readConversation({ workspaceId: "w" }, paseo(texts, agentId), (id) => q.answers(id));
+  expect(await read([two, one])).toEqual([
+    { ask: "Which label?", answer: 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".' },
+    // The question is context: its line break is folded like any other in the review input.
+    { ask: "Should the drawer keep the old label, or follow the card?", answer: "Follow the card" },
+    { ask: "Which label?", answer: "Keep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun" },
   ]);
-  // The question's call fell out of the read window: the session's other questions are still tried.
-  expect(await read(twoLines)).toEqual([{ ask: "What should change?", answer: "Keep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun" }]);
-  // Without the questions as asked (another session, or a plugin reload since) the message stays the user's whole message.
-  expect(await read(blankLine, "q-blank", "a2")).toEqual([blankLine]);
-  expect(await readConversation({ workspaceId: "w" }, paseo(longTitle, "q-long"))).toEqual([longTitle]);
+  // Without the answered call (another session, or a plugin reload since) the message stays the user's whole message.
+  expect(await read([two], "a2")).toEqual([two]);
+  expect(await readConversation({ workspaceId: "w" }, paseo([two]))).toEqual([two]);
 
-  const judged = async (quote: string, text: string, callId?: string, agentId?: string) => {
-    const x = await setup({ conversation: () => read(text, callId, agentId), llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
+  const judged = async (quote: string, texts: string[], agentId?: string) => {
+    const x = await setup({ conversation: () => read(texts, agentId), llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
     return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
   };
-  const evidence = { state: "failed" };
   const none = { state: "na", reason: "no evidence" };
-  // With the questions as asked, every line of the answer is evidence and no line of the question is.
-  expect(await judged('Rename the drawer one to "Rerun"', blankLine, "q-blank")).toMatchObject({ ...evidence, quote: 'Rename the drawer one to "Rerun"' });
-  expect(await judged('Keep "Retry" on the card', blankLine, "q-blank")).toMatchObject({ ...evidence, quote: 'Keep "Retry" on the card' });
-  expect(await judged("What should the button say", blankLine, "q-blank")).toMatchObject(none);
-  expect(await judged("Follow the card", longTitle, "q-long")).toMatchObject({ ...evidence, quote: "Follow the card" });
-  expect(await judged("Should the drawer keep the old label", longTitle, "q-long")).toMatchObject(none);
-  expect(await judged("or follow the card?", longTitle, "q-long")).toMatchObject(none);
-  expect(await judged("In the drawer:", twoLines, "q-two-lines")).toMatchObject({ ...evidence, quote: "In the drawer:" });
-  expect(await judged("with a short hint", twoQuestions, "q-two")).toMatchObject({ ...evidence, quote: "with a short hint" });
-  expect(await judged("Where?", twoQuestions, "q-two")).toMatchObject(none);
-  // Without them nothing the user wrote is lost: the whole message is a quote source.
-  expect(await judged("In the drawer:", twoLines, "q-two-lines", "a2")).toMatchObject({ ...evidence, quote: "In the drawer:" });
+  // Every line of both answers is evidence; no line of the second question is.
+  expect(await judged('Rename the drawer one to "Rerun"', [two])).toMatchObject({ state: "failed", quote: 'Rename the drawer one to "Rerun"' });
+  expect(await judged('Keep "Retry" on the card', [two])).toMatchObject({ state: "failed", quote: 'Keep "Retry" on the card' });
+  expect(await judged("Follow the card", [two])).toMatchObject({ state: "failed", quote: "Follow the card" });
+  expect(await judged("Should the drawer keep the old label", [two])).toMatchObject(none);
+  expect(await judged("or follow the card?", [two])).toMatchObject(none);
+  expect(await judged("Which label", [two])).toMatchObject(none);
+  expect(await judged("In the drawer:", [one])).toMatchObject({ state: "failed", quote: "In the drawer:" });
+  // Without it nothing the user wrote is lost: the whole message is a quote source.
+  expect(await judged("Follow the card", [two], "a2")).toMatchObject({ state: "failed", quote: "Follow the card" });
 });
 
 test("only the user's answer in a question tool counts as quoted evidence, not the agent's question (§4.2, B1)", async () => {
