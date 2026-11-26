@@ -1,0 +1,32 @@
+{
+  "step": "2-after-a1r-desktop",
+  "cardLabel": "Open task QA review needs you (temporary). In review. Acceptance 0/1. Review needs you. Normal priority, Chore. 0 running, 1 finished turns, 1 unread sessions, 1 need attention. Latest agent output just now: OK.",
+  "cardText": "Chore\nQA review needs you (temporary)\nOK\njust now\n1 unread\nReview needs you",
+  "attention": [
+    "QA review needs you (temporary)",
+    "等待仓库所有者轮换生产 API 密钥",
+    "just now",
+    "1 unread",
+    "QA review needs you (temporary)",
+    "Tinylink · In review · Review needs you: Does what you asked: The repository owner must sign in to the hosting provider’s dashboard, rotate the Tinylink production API key, and confirm here once the rotation is complete. · 1 unread",
+    "just now",
+    "Dismissed · 1"
+  ],
+  "review": [
+    "Review",
+    "Review needs you · Round 1 · codex/gpt-6.2-sol",
+    "Does what you asked: The repository owner must sign in to the hosting provider’s dashboard, rotate the Tinylink production API key, and confirm here once the rotation is complete.",
+    "Ran in a shared workspace, with other cards' uncommitted changes.",
+    "Does what you asked",
+    "Needs you",
+    "The repository owner must sign in to the hosting provider’s dashboard, rotate the Tinylink production API key, and confirm here once the rotation is complete.",
+    "Tests",
+    "observing",
+    "1 s",
+    "Artifacts",
+    "0",
+    "Links",
+    "0"
+  ],
+  "errors": []
+}

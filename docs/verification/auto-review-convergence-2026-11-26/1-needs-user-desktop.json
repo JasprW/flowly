@@ -1,0 +1,32 @@
+{
+  "step": "1-needs-user-desktop",
+  "cardLabel": "Open task QA review needs you (temporary). In review. Acceptance 0/1. Review needs you. Normal priority, Chore. 0 running, 0 finished turns, 0 unread sessions, 0 need attention.",
+  "cardText": "Chore\nQA review needs you (temporary)\n1\nReview needs you",
+  "attention": [
+    "QA review needs you (temporary)",
+    "1",
+    "Review needs you",
+    "High",
+    "QA review needs you (temporary)",
+    "Tinylink · In review · Review needs you: Does what you asked: The repository owner must sign in to the hosting provider’s dashboard, rotate the Tinylink production API key, and confirm completion on this card.",
+    "just now",
+    "Dismissed · 1"
+  ],
+  "review": [
+    "Review",
+    "Review needs you · Round 1 · codex/gpt-6.2-sol",
+    "Does what you asked: The repository owner must sign in to the hosting provider’s dashboard, rotate the Tinylink production API key, and confirm completion on this card.",
+    "Ran in a shared workspace, with other cards' uncommitted changes.",
+    "Does what you asked",
+    "Needs you",
+    "The repository owner must sign in to the hosting provider’s dashboard, rotate the Tinylink production API key, and confirm completion on this card.",
+    "Tests",
+    "observing",
+    "1 s",
+    "Artifacts",
+    "0",
+    "Links",
+    "0"
+  ],
+  "errors": []
+}

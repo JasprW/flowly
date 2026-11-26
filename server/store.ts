@@ -9,7 +9,7 @@ import { ideaTitleKey } from "../shared/ideas";
 import { otherEnd, relationLabels, relationOf, touches } from "../shared/links";
 import { changeTags, mergeTagEdit, normalizeTags, tagChangeNote } from "../shared/tags";
 import { attentionDismissLimits, dismissalSignals, type AttentionDismissInput, type AttentionRestoreInput } from "../shared/attention-dismiss";
-import { markReviewHandled } from "../shared/auto-review";
+import { markReviewHandled, stopReviewForPerson } from "../shared/auto-review";
 import type { FlowLog } from "./flow-log";
 import type { ProjectSnapshot } from "./project-folder";
 import {
@@ -60,6 +60,8 @@ export class BoardStore {
   private tail: Promise<unknown> = Promise.resolve();
   /** Events created by the running transaction; appended to the flow log once it commits. */
   private pending: BoardEvent[] = [];
+  /** Cards whose running review the running transaction stopped; their work stops once it commits. */
+  private stopped: string[] = [];
   /** Untrimmed event log for insights (PROJECT-INSIGHTS-SPEC §2). */
   flow: FlowLog | null = null;
   /** Runs after each committed write (project folder snapshots, PROJECT-FOLDER-SPEC). */
@@ -104,16 +106,20 @@ export class BoardStore {
   ): Promise<T> {
     return this.queue(async () => {
       this.pending = [];
+      this.stopped = [];
       const persistence = await this.persistence();
       const board = await persistence.load();
       const result = await operation(board);
       const events = this.pending;
+      const stopped = this.stopped;
       this.pending = [];
+      this.stopped = [];
       if (!result.changed) return result.value;
       board.revision++;
       assertBoardInvariants(board);
       await persistence.save(storageSchema.parse(board));
       this.onCommit?.();
+      for (const id of stopped) this.onReviewStop?.(id);
       if (this.flow && events.length)
         void this.flow.append(events, board).catch((e) =>
           logFailure("Kanban flow log append failed:", e),
@@ -563,6 +569,8 @@ export class BoardStore {
       return { value: ordered.map((p) => p.id), changed: true };
     });
   }
+  /** Called after a person's move stopped a running review (AUTO-REVIEW-SPEC §3.2): stops its commands and session. */
+  onReviewStop?: (taskId: string) => void;
   event(board: Board, input: Omit<BoardEvent, "id" | "at">) {
     const event = {
       ...input,
@@ -575,6 +583,16 @@ export class BoardStore {
     if (input.taskId && (input.action === "agent.turn_started" || (input.actor === "human" && input.action === "status_changed"))) {
       const task = board.tasks.find((t) => t.id === input.taskId);
       if (task) markReviewHandled(task, input, event.at);
+    }
+    if (input.taskId && (input.action === "status_changed" || input.action === "archive_changed")) {
+      const task = board.tasks.find((t) => t.id === input.taskId);
+      // A person moving the card away or archiving it stops its review now (AUTO-REVIEW-SPEC §3.2), in this same write.
+      if (task && stopReviewForPerson(task, input, event.at)) {
+        this.event(board, { taskId: task.id, actor: "system", action: "review_finished", agentId: task.review!.trigger.agentId, note: "Auto review cancelled: a person moved the card" });
+        this.stopped.push(task.id);
+      }
+      // The card's review count starts over once it is finished (§3.3).
+      if (task && (input.to === "done" || input.to === "cancelled")) delete task.reviewCount;
     }
     const relevant = board.events.filter((e) => e.taskId === input.taskId);
     if (relevant.length > 100) {

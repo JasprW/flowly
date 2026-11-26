@@ -118,7 +118,7 @@ export const autoReviewSchema = z.looseObject({
 });
 export type AutoReview = z.infer<typeof autoReviewSchema>;
 export type AutoReviewInput = z.infer<typeof autoReviewInput>;
-export const reviewStates = ["running", "passed", "rework", "failed", "unavailable", "cancelled"] as const;
+export const reviewStates = ["running", "passed", "rework", "failed", "needs_user", "unavailable", "cancelled"] as const;
 export type ReviewState = (typeof reviewStates)[number];
 export const ruleStates = ["queued", "running", "passed", "failed", "na", "skipped", "unavailable"] as const;
 export type RuleState = (typeof ruleStates)[number];
@@ -153,7 +153,10 @@ export const changeShapeSchema = z.object({
 });
 export type ChangeShape = z.infer<typeof changeShapeSchema>;
 export const reviewItemKinds = ["command", "goal", "guideline", "item"] as const;
-export const reviewItemStates = ["queued", "running", "passed", "failed", "na", "disputed", "skipped", "unavailable"] as const;
+export const reviewItemStates = ["queued", "running", "passed", "failed", "na", "needs_user", "disputed", "skipped", "unavailable"] as const;
+/** How much a failed or needs_user finding matters (AUTO-REVIEW-SPEC §3.6): only blocker and major decide the review. */
+export const reviewSeverities = ["blocker", "major", "minor"] as const;
+export type ReviewSeverity = (typeof reviewSeverities)[number];
 export type ReviewItemState = (typeof reviewItemStates)[number];
 /** One checked item of a review (GUARDRAILS-SPEC §6.4); replaces `rules`. */
 export const reviewItemSchema = z.object({
@@ -164,6 +167,8 @@ export const reviewItemSchema = z.object({
   /** false for an observing command: run and shown, not part of the verdict. */
   gating: z.boolean(),
   state: z.enum(reviewItemStates),
+  /** A failed or needs_user finding's weight (AUTO-REVIEW-SPEC §3.6); absent means major. */
+  severity: z.enum(reviewSeverities).optional(),
   ms: z.number().int().nonnegative().optional(),
   argv: z.array(z.string()).max(autoReviewLimits.args).optional(),
   exitCode: z.number().int().nullable().optional(),
@@ -216,7 +221,11 @@ export const reviewSchema = z.preprocess(legacyReview, z.object({
     /** A linked root: each repository's commit by name; `sha` is then a digest of them (GUARDRAILS-SPEC §6.2). */
     repos: z.record(z.string().max(300), z.string().max(40)).optional(),
     dirty: z.boolean(),
+    /** A digest of the content of the files this delivery changed (AUTO-REVIEW-SPEC §3.6); absent when git could not tell. */
+    content: z.string().max(40).optional(),
   }),
+  /** Finished while A1 had the card out of In review: applied when A1r brings it back unchanged (AUTO-REVIEW-SPEC §3.2). */
+  held: z.literal(true).optional(),
   /** The workspace is not a worktree: other cards' uncommitted changes are in it too. */
   shared: z.boolean(),
   /** The git worktree the delivery named, where the commands ran and the diff was read (AUTO-REVIEW-SPEC §3.4). */
@@ -324,6 +333,8 @@ export const taskSchema = z.object({
   reviewWaiting: z.object({ eventId: z.string(), agentId: z.string(), from: historyStatusSchema, since: timestamp, worktree: z.string().max(1000).optional() }).optional(),
   /** Review findings the agent disputed (GUARDRAILS-SPEC §6.1); written without a task revision, cleared at Done/Cancelled. */
   disputes: z.array(disputeSchema).max(disputeLimits.perTask).optional(),
+  /** Reviews of this card that judged something (AUTO-REVIEW-SPEC §3.3 cap); written without a task revision, cleared at Done/Cancelled. */
+  reviewCount: z.number().int().nonnegative().optional(),
 });
 /** A follow-up an agent proposed on its card; the user may turn it into a card (IDEAS-SPEC). */
 export const ideaStatuses = ["open", "accepted", "dismissed"] as const;
@@ -556,7 +567,7 @@ export const eventSchema = z.object({
   /** status_changed into In review by an agent that acknowledged missing card setup (CARD-SETUP-SPEC §3.4). */
   setup: z.object({ missing: z.array(z.enum(["type", "tags", "workpad"])) }).optional(),
   /** review_finished: each item's result and kind, for the Insights counts (GUARDRAILS-SPEC §6.4); `gating: false` marks an observing command. */
-  results: z.array(z.object({ id: z.string().max(40), state: z.string().max(20), kind: z.enum(reviewItemKinds).optional(), gating: z.literal(false).optional() })).max(40).optional(),
+  results: z.array(z.object({ id: z.string().max(40), state: z.string().max(20), kind: z.enum(reviewItemKinds).optional(), gating: z.literal(false).optional(), severity: z.literal("minor").optional() })).max(40).optional(),
   /** guardrail_learned / guardrail_retired: what changed (GUARDRAILS-SPEC §7.6). */
   guardrail: guardrailChangeSchema.optional(),
   at: timestamp,

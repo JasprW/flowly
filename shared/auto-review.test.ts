@@ -1,5 +1,30 @@
 import { expect, test } from "vitest";
-import { autoReviewOf, autoReviewRuns, continuesRound, conversationForReview, hasEvidence, joinCommand, reviewContext, reviewProgress, reviewVerdict, reworkMessage, splitCommand, visibleReview, markReviewHandled, rerunnablePlace, reviewSignal } from "./auto-review";
+import {
+  autoReviewOf,
+  autoReviewRuns,
+  continuesRound,
+  conversationForReview,
+  countsTowardCap,
+  diffPaths,
+  findingText,
+  hasEvidence,
+  joinCommand,
+  needsUserReason,
+  nextFails,
+  reviewContext,
+  reviewProgress,
+  reviewVerdict,
+  reworkMessage,
+  roundAwaitsTurnEnd,
+  sameFinding,
+  shouldDemote,
+  splitCommand,
+  stopReviewForPerson,
+  visibleReview,
+  markReviewHandled,
+  rerunnablePlace,
+  reviewSignal,
+} from "./auto-review";
 import { projectSchema, reviewSchema, type BoardEvent, type Review, type ReviewItem } from "./model";
 
 const review = (state: Review["state"], extra: Partial<Review> = {}): Review => ({
@@ -24,12 +49,28 @@ test("settings commands split on spaces, quotes keep spaces, nothing else is she
   expect(splitCommand(joinCommand(["npx", "vitest", "a b.ts"]))).toEqual(["npx", "vitest", "a b.ts"]);
 });
 
-test("a delivery continues the round only after a rework with at most the rework turn in between", () => {
+test("a delivery continues the round unless a person moved the card or a turn a person started ended (§3.3)", () => {
   const prev = review("rework");
+  const started = (at: string, agentId = "a") => event("agent.turn_started", at, { agentId });
+  const ended = (at: string, byUser: boolean | undefined, agentId = "a") => event("agent.turn_ended", at, { agentId, ...(byUser === undefined ? {} : { byUser }) });
   expect(continuesRound([], "t", prev)).toBe(true);
-  expect(continuesRound([event("agent.turn_started", "2026-10-28T00:02:00.000Z")], "t", prev)).toBe(true);
-  const twoTurns = [event("agent.turn_started", "2026-10-28T00:02:00.000Z"), event("agent.turn_started", "2026-10-28T00:03:00.000Z")];
-  expect(continuesRound(twoTurns, "t", prev)).toBe(false);
+  // The rework turn (the delivering session's first turn after the review) never counts, even though its message reads as the user's.
+  expect(continuesRound([started("2026-10-28T00:02:00.000Z"), ended("2026-10-28T00:02:30.000Z", true)], "t", prev)).toBe(true);
+  // A background wake-up after it does not reset; a person's message does, and so does a turn whose starter is unknown.
+  const rework = [started("2026-10-28T00:02:00.000Z"), ended("2026-10-28T00:02:30.000Z", true)];
+  expect(continuesRound([...rework, started("2026-10-28T00:03:00.000Z"), ended("2026-10-28T00:03:30.000Z", false)], "t", prev)).toBe(true);
+  expect(continuesRound([...rework, started("2026-10-28T00:03:00.000Z"), ended("2026-10-28T00:03:30.000Z", true)], "t", prev)).toBe(false);
+  expect(continuesRound([...rework, started("2026-10-28T00:03:00.000Z"), ended("2026-10-28T00:03:30.000Z", undefined)], "t", prev)).toBe(false);
+  // A person's turn in another session of the card resets too, even before the rework turn.
+  expect(continuesRound([started("2026-10-28T00:02:00.000Z", "b"), ended("2026-10-28T00:02:30.000Z", true, "b")], "t", prev)).toBe(false);
+  // A turn that ended without starting after the review (the delivering turn of the previous review) does not count.
+  expect(continuesRound([ended("2026-10-28T00:02:30.000Z", true)], "t", prev)).toBe(true);
+  // A second turn still open: the round waits for its end to be recorded; the rework turn alone does not.
+  const open = [...rework, started("2026-10-28T00:03:00.000Z")];
+  expect(continuesRound(open, "t", prev)).toBe(true);
+  expect(roundAwaitsTurnEnd(open, "t", prev)).toBe(true);
+  expect(roundAwaitsTurnEnd([started("2026-10-28T00:02:00.000Z")], "t", prev)).toBe(false);
+  expect(roundAwaitsTurnEnd(open, "t", review("passed"))).toBe(false);
   expect(continuesRound([event("status_changed", "2026-10-28T00:02:00.000Z", { actor: "human" })], "t", prev)).toBe(false);
   // Events before the review finished do not count.
   expect(continuesRound([event("status_changed", "2026-10-27T00:00:00.000Z", { actor: "human" })], "t", prev)).toBe(true);
@@ -169,8 +210,8 @@ test("the rework message lists what failed in the user's words, with ids to disp
   expect(text.split("\n")).toEqual([
     "[Flowly auto review · rework 1/2]",
     "Commands: 2/2 passed",
-    '✗ "新文案也要进所有语言" — zh-TW.ts has no entry for "Review passed" (shared/i18n/zh-TW.ts:412) [id: g1]',
-    "✗ Does what you asked — the card asked for a Rerun button; none was added [id: goal]",
+    '✗ [major] "新文案也要进所有语言" — zh-TW.ts has no entry for "Review passed" (shared/i18n/zh-TW.ts:412) [id: g1]',
+    "✗ [major] Does what you asked — the card asked for a Rerun button; none was added [id: goal]",
     "Fix these, rerun the checks, update the acceptance list and deliver to In review again. If a finding is wrong, deliver with disputes=[{id, reason}].",
   ]);
   const skipped = reworkMessage(review("rework", { items: [item("c", "command", "failed", { argv: ["npm", "test"], exitCode: 1, tail: "1 failing" }), item("goal", "goal", "skipped")] }));
@@ -207,4 +248,98 @@ test("P3: the conversation the built-in check reads drops rework messages and in
   const big = conversationForReview(Array.from({ length: 12 }, (_, i) => ({ at: `t${String(i).padStart(2, "0")}`, text: String(i % 10).repeat(1500) })));
   expect(big.join("").length).toBeLessThanOrEqual(12_000);
   expect(big.at(-1)).toBe("1".repeat(1500));
+});
+
+test("severity: only blocker and major fails decide; a minor one is shown, counted as passed on the strip and left out of rework (§3.6)", () => {
+  const minor = item("g1", "guideline", "failed", { severity: "minor", detail: "wording" });
+  expect(reviewVerdict([item("goal", "goal", "passed"), minor])).toBe("passed");
+  expect(reviewVerdict([item("goal", "goal", "failed", { severity: "blocker" }), minor])).toBe("failed");
+  // A missing severity is major, as before.
+  expect(reviewVerdict([item("goal", "goal", "failed")])).toBe("failed");
+  expect(reviewProgress(review("passed", { items: [item("goal", "goal", "passed"), minor] }))).toMatchObject({ passed: 2, failed: 0, total: 2 });
+  const r = review("rework", { items: [item("goal", "goal", "failed", { severity: "blocker", detail: "core missing" }), minor] });
+  const text = reworkMessage(r);
+  expect(text).toContain("✗ [blocker] Does what you asked — core missing [id: goal]");
+  expect(text).not.toContain("wording");
+  expect(reviewContext(review("passed", { items: [minor] }))!.items[0]).toMatchObject({ severity: "minor", state: "failed" });
+});
+
+test("needs_user: decides only without a decisive fail and after unavailable; the rework message lists it apart (§3.6, §4.5)", () => {
+  const ask = item("goal", "goal", "needs_user", { detail: "Install the build on the phone and confirm it." });
+  expect(reviewVerdict([ask, item("g", "guideline", "passed")])).toBe("needs_user");
+  expect(reviewVerdict([ask, item("g", "guideline", "failed", { severity: "major" })])).toBe("failed");
+  expect(reviewVerdict([ask, item("g", "guideline", "unavailable")])).toBe("unavailable");
+  expect(reviewVerdict([{ ...ask, severity: "minor" }, item("g", "guideline", "passed")])).toBe("passed");
+  expect(reviewVerdict([{ ...ask, gating: false }])).toBe("passed");
+  expect(needsUserReason([ask, item("i", "item", "needs_user", { name: "Ask the API team", detail: "Get a key" })])).toBe(
+    "Does what you asked: Install the build on the phone and confirm it.; Ask the API team: Get a key",
+  );
+  expect(needsUserReason([item("i", "item", "needs_user", { detail: "x".repeat(600) })]).length).toBe(500);
+  const text = reworkMessage(review("rework", { items: [item("g", "guideline", "failed", { detail: "bug" }), ask] }));
+  expect(text.split("\n").slice(-3)).toEqual([
+    "Needs the user (do not work around these; mention them in your delivery note):",
+    "? Does what you asked — Install the build on the phone and confirm it. [id: goal]",
+    "Fix these, rerun the checks, update the acceptance list and deliver to In review again. If a finding is wrong, deliver with disputes=[{id, reason}].",
+  ]);
+});
+
+test("Review needs you shows in In review, calls Attention until a person acts, and counts toward the cap (§3.2, §3.5)", () => {
+  const r = review("needs_user", { reason: "Does what you asked: test on the phone" });
+  expect(visibleReview({ status: "in_review", review: r, archivedAt: null })?.state).toBe("needs_user");
+  expect(visibleReview({ status: "development", review: r, archivedAt: null })).toBeNull();
+  expect(reviewSignal({ status: "in_review", review: r, archivedAt: null })).toEqual({ state: "needs_user", key: `review:needs_user:${r.startedAt}` });
+  const task = { review: { ...r } };
+  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_started" }, "2026-10-28T00:05:00.000Z")).toBe(true);
+  expect(reviewSignal({ status: "in_review", review: task.review, archivedAt: null })).toBeNull();
+  expect(["passed", "rework", "failed", "needs_user"].every((s) => countsTowardCap(s as Review["state"]))).toBe(true);
+  expect(["cancelled", "unavailable", "running"].some((s) => countsTowardCap(s as Review["state"]))).toBe(false);
+});
+
+test("a person moving the card away or archiving it cancels the running review in that write; A1 does not; a person's move drops a held result (§3.2)", () => {
+  const at = "2026-10-28T00:05:00.000Z";
+  const running = () => ({ status: "development" as const, archivedAt: null as string | null, review: review("running", { finishedAt: undefined }) });
+  const moved = running();
+  expect(stopReviewForPerson(moved, { actor: "human", action: "status_changed", to: "development" }, at)).toBe(true);
+  expect(moved.review).toMatchObject({ state: "cancelled", reason: "A person moved the card during the review.", finishedAt: at });
+  const a1 = running();
+  expect(stopReviewForPerson(a1, { actor: "system", action: "status_changed", to: "development" }, at)).toBe(false);
+  expect(a1.review.state).toBe("running");
+  const back = running();
+  expect(stopReviewForPerson(back, { actor: "human", action: "status_changed", to: "in_review" }, at)).toBe(false);
+  const archived = { ...running(), status: "in_review" as const, archivedAt: at };
+  expect(stopReviewForPerson(archived, { actor: "human", action: "archive_changed" }, at)).toBe(true);
+  const held = { status: "development" as const, archivedAt: null, review: review("cancelled", { held: true }) };
+  expect(stopReviewForPerson(held, { actor: "human", action: "status_changed", to: "test" }, at)).toBe(false);
+  expect(held.review.held).toBeUndefined();
+});
+
+test("card item demotion: three decisive fails in a row whose findings all differ (§3.6)", () => {
+  expect(findingText({ detail: "Missing  key", file: "a.ts", line: 3 })).toBe("a.ts:3 — Missing key");
+  expect(findingText({ detail: "x".repeat(300) })).toHaveLength(200);
+  // Same place, or word sets with Jaccard ≥ 0.5 (English by word, CJK by character).
+  expect(sameFinding("a.ts:3 — one thing", "a.ts:3 — another thing entirely")).toBe(true);
+  expect(sameFinding("The zh-TW catalog has no entry for Rerun", "zh-TW catalog has no entry for the Rerun label")).toBe(true);
+  expect(sameFinding("The zh-TW catalog has no entry", "The phone layout overflows on small screens")).toBe(false);
+  expect(sameFinding("缺少繁体中文翻译", "繁体中文翻译缺少")).toBe(true);
+  expect(sameFinding("缺少繁体中文翻译", "按钮在手机上溢出")).toBe(false);
+  const a = "Catalog misses the Rerun label";
+  const b = "Phone layout overflows the card";
+  const c = "Spec section 3 was not updated";
+  expect(shouldDemote([a, b], c)).toBe(true);
+  expect(shouldDemote([a], c)).toBe(false);
+  expect(shouldDemote([a, b], `${a} again`)).toBe(false);
+  // Only the last two earlier fails count.
+  expect(shouldDemote([a, a, b], c)).toBe(true);
+  // Fail history: a decisive fail adds; pass, na and a minor fail clear; the rest leave it.
+  const fail = item("i", "item", "failed", { detail: "d", file: "f.ts", line: 1 });
+  expect(nextFails([a, b, c], fail)).toEqual([b, c, "f.ts:1 — d"]);
+  expect(nextFails([a], item("i", "item", "passed"))).toEqual([]);
+  expect(nextFails([a], item("i", "item", "na"))).toEqual([]);
+  expect(nextFails([a], { ...fail, severity: "minor" })).toEqual([]);
+  for (const state of ["needs_user", "disputed", "skipped", "unavailable"] as const) expect(nextFails([a], item("i", "item", state))).toBeUndefined();
+});
+
+test("the files a diff touches, from its headers (§3.6 regression backstop)", () => {
+  const diff = "# Changes\ndiff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/old.ts b/new.ts\n# New files\ndiff --git a/repo/x.md b/repo/x.md\n";
+  expect([...diffPaths(diff)]).toEqual(["src/a.ts", "new.ts", "repo/x.md"]);
 });

@@ -161,3 +161,27 @@ test.each(["error response", "exception"])("review still runs with default reaso
   expect(configs).toEqual([{ provider: "claude/claude-opus-5-5", modeId: "plan" }]);
   expect(logFailure).toHaveBeenCalledOnce();
 });
+
+test("needs_user and severity (AUTO-REVIEW-SPEC §3.6): parsed for fail and needs_user only; a bad severity is dropped", () => {
+  const text = JSON.stringify({
+    items: [
+      { id: "a", verdict: "fail", severity: "minor", detail: "Wording", file: "x.ts" },
+      { id: "b", verdict: "needs_user", severity: "major", detail: "Test on the phone" },
+      { id: "c", verdict: "pass", severity: "blocker", detail: "ok" },
+      { id: "d", verdict: "fail", severity: "huge", detail: "Bug", file: "y.ts" },
+    ],
+  });
+  expect(parseReviewOutput(text, ["a", "b", "c", "d"])).toEqual([
+    { id: "a", verdict: "fail", severity: "minor", detail: "Wording", file: "x.ts" },
+    { id: "b", verdict: "needs_user", severity: "major", detail: "Test on the phone" },
+    { id: "c", verdict: "pass", detail: "ok" },
+    { id: "d", verdict: "fail", detail: "Bug", file: "y.ts" },
+  ]);
+  const prompt = reviewPrompt(base);
+  expect(prompt).toContain("needs_user (the agent cannot meet it by changing code or files");
+  expect(prompt).toContain("Give every fail and needs_user a severity: blocker");
+  expect(prompt).toContain("Every fail needs evidence (needs_user does not)");
+  const rework = reviewPrompt({ ...base, incremental: true });
+  expect(rework).toContain("Re-check only the checks that did not pass last time, and look only for regressions these changes introduced. A problem these changes did not cause may be at most minor.");
+  expect(rework).not.toContain("look for new problems");
+});

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { guardrailLearnedAction, guardrailRetiredAction, type ChangeSize, type GuardrailChange, type Project, type ReviewItem, type Task } from "../shared/model";
 import { memoryStateSchema, titleKey } from "../shared/memory";
+import { demotedReason, nextFails } from "../shared/auto-review";
 import {
   archivedOverflow,
   catchUpLimits,
@@ -394,6 +395,23 @@ export class GuardrailsService {
           countReview(entry.counts, item.state);
         } else continue;
         changed = true;
+      }
+      // A card item's fails in a row and its demotion (AUTO-REVIEW-SPEC §3.6).
+      for (const item of input.items) {
+        if (item.kind !== "item") continue;
+        const card = state.items.find((i) => i.id === item.id && i.taskId === input.taskId);
+        if (!card) continue;
+        const fails = nextFails(card.fails, item);
+        if (fails !== undefined && JSON.stringify(fails) !== JSON.stringify(card.fails || [])) {
+          if (fails.length) card.fails = fails;
+          else delete card.fails;
+          changed = true;
+        }
+        if (!item.gating && item.reason === demotedReason && !card.observing) {
+          card.observing = true;
+          card.updatedAt = at;
+          changed = true;
+        }
       }
       for (const id of caughtIds(input.previous, input.items, input.disputed)) {
         const entry = byId.get(id);

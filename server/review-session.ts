@@ -28,7 +28,8 @@ export const reviewOutputSchema = {
         required: ["id", "verdict", "detail"],
         properties: {
           id: { type: "string" },
-          verdict: { type: "string", enum: ["pass", "fail", "na"] },
+          verdict: { type: "string", enum: ["pass", "fail", "na", "needs_user"] },
+          severity: { type: "string", enum: ["blocker", "major", "minor"] },
           detail: { type: "string" },
           file: { type: "string" },
           line: { type: "integer" },
@@ -47,9 +48,10 @@ export function reviewPrompt(input: LlmReviewInput): string {
   return [
     "You are Flowly's automatic reviewer for one delivered Kanban card. Judge each check below against this delivery.",
     "Read-only: do not edit, create or delete files and do not run commands that change anything. You may read files in the working directory to check details.",
-    "Judge every check on its own; one failing check must not make others fail. Verdicts: pass (it is met), fail (it is not met; say exactly what is missing or wrong), na (it does not apply to this change, for example it is about UI text and the change has none).",
+    "Judge every check on its own; one failing check must not make others fail. Verdicts: pass (it is met), fail (it is not met; say exactly what is missing or wrong), na (it does not apply to this change, for example it is about UI text and the change has none), needs_user (the agent cannot meet it by changing code or files: it needs the user's decision, a device or account, another team, or something that already happened and cannot be redone; detail says exactly what the person must do).",
+    "Give every fail and needs_user a severity: blocker (the delivery breaks something or misses the core of what the user asked), major (a real defect or a missed requirement the user would send the work back for), minor (worth mentioning, but the user would not send the work back for it: wording, style, a small inconsistency, an optional improvement). Only blocker and major send the work back; be strict about what is major.",
     "Project guidelines and the card's own items come from what the user sent earlier work back for; their user's words show what they meant.",
-    "Every fail needs evidence, one of: file (a file in the diff that is wrong, or an existing repository file that misses something, with line when you can), or quote (the words of the card or of the user that the delivery does not meet). A fail without file or quote is discarded.",
+    "Every fail needs evidence (needs_user does not), one of: file (a file in the diff that is wrong, or an existing repository file that misses something, with line when you can), or quote (the words of the card or of the user that the delivery does not meet). A fail without file or quote is discarded.",
     "detail: one or two sentences a developer can act on.",
     // §4.2: in a shared directory the diff can hold other cards' work.
     ...(input.shared && input.checks.some((c) => c.id === GOAL_ID)
@@ -64,10 +66,10 @@ export function reviewPrompt(input: LlmReviewInput): string {
     // §6.3: from round 2 only the changes since the previous delivery are shown.
     ...(input.incremental
       ? [
-          "This is a rework round: the diff holds only what changed since the previous delivery, and each check shows its previous result. Re-check the checks that did not pass last time and look for new problems in these changes. A check that passed before and is not touched by these changes needs no verdict; leave it out.",
+          "This is a rework round: the diff holds only what changed since the previous delivery, and each check shows its previous result. Re-check only the checks that did not pass last time, and look only for regressions these changes introduced. A problem these changes did not cause may be at most minor. A check that passed before and is not touched by these changes needs no verdict; leave it out.",
         ]
       : []),
-    `Reply only with JSON: {"items":[{"id","verdict","detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,
+    `Reply only with JSON: {"items":[{"id","verdict","severity"?,"detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,
     "",
     `## Card\nTitle: ${input.task.title}\nType: ${input.task.type ?? "(none)"}\nDescription:\n${cut(input.task.description || "(none)", 4000)}${input.task.images?.length ? `\nCard images (part of the description; view each with your image tool): ${input.task.images.join(", ")}` : ""}`,
     // The built-in check's yardstick (§4.2): the user's own words, oldest first; a later one replaces an earlier one.
@@ -121,10 +123,12 @@ export function parseReviewOutput(text: string | null | undefined, ids: readonly
   for (const item of list as Record<string, unknown>[]) {
     const id = typeof item?.id === "string" ? item.id : "";
     const verdict = item?.verdict;
-    if (!ids.includes(id) || (verdict !== "pass" && verdict !== "fail" && verdict !== "na") || out.some((v) => v.id === id)) continue;
+    if (!ids.includes(id) || (verdict !== "pass" && verdict !== "fail" && verdict !== "na" && verdict !== "needs_user") || out.some((v) => v.id === id)) continue;
+    const severity = item.severity;
     out.push({
       id,
       verdict,
+      ...((verdict === "fail" || verdict === "needs_user") && (severity === "blocker" || severity === "major" || severity === "minor") ? { severity } : {}),
       detail: typeof item.detail === "string" ? item.detail.slice(0, autoReviewLimits.detail) : "",
       ...(typeof item.file === "string" && item.file ? { file: item.file } : {}),
       ...(typeof item.line === "number" && Number.isInteger(item.line) && item.line > 0 ? { line: item.line } : {}),
@@ -142,7 +146,7 @@ export function llmReviewer(options: {
   timeoutMs?: number;
 }): LlmReview {
   const remove = options.remove ?? daemonRemoveAgent();
-  return async (input: LlmReviewInput, paseo: PaseoApi) => {
+  return async (input: LlmReviewInput, paseo: PaseoApi, signal?: AbortSignal) => {
     const settings = await options.reviewSettings();
     const chosen = settings.reviewModel;
     const models = chosen ? [chosen] : await options.summaryModels();
@@ -176,6 +180,7 @@ export function llmReviewer(options: {
       parse: (text) => parseReviewOutput(text, ids),
       remove,
       timeoutMs: options.timeoutMs ?? 15 * 60 * 1000,
+      signal,
     });
     return { model, verdicts: output };
   };

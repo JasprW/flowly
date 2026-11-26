@@ -502,9 +502,11 @@ export const toolContextSchema = z.object({
           id: z.string(),
           kind: z.enum(reviewItemKinds),
           name: z.string(),
-          /** false: an observing command, shown but not part of the verdict. */
+          /** false: an observing command or a demoted card item, shown but not part of the verdict. */
           gating: z.boolean(),
           state: z.enum(reviewItemStates),
+          /** For failed and needs_user: blocker, major or minor; a minor finding never sends the card back (AUTO-REVIEW-SPEC §3.6). */
+          severity: z.enum(["blocker", "major", "minor"]).optional(),
           command: z.string().optional(),
           exitCode: z.number().nullable().optional(),
           timedOut: z.boolean().optional(),

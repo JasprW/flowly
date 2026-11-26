@@ -356,7 +356,7 @@ describe("weekly run pieces (§7.3)", () => {
 describe("the Insights ledger (§7.2, §7.5)", () => {
   const at = (hoursAgo: number) => new Date(NOW - hoursAgo * 3_600_000).toISOString();
   const delivered = (taskId: string, h: number) => ({ taskId, at: at(h), action: "status_changed", actor: "agent", to: "in_review" });
-  const finished = (taskId: string, h: number, results: { id: string; state: string; kind?: string; gating?: false }[]) => ({ taskId, at: at(h), action: "review_finished", actor: "system", results });
+  const finished = (taskId: string, h: number, results: { id: string; state: string; kind?: string; gating?: false; severity?: "minor" }[]) => ({ taskId, at: at(h), action: "review_finished", actor: "system", results });
   const event = (action: string, h: number, change: string) => ({ taskId: "a", at: at(h), action, actor: "system", guardrail: { change, kind: "guideline", id: "x" } });
 
   test("deliveries in 14 days, reviewed, first-review passes (an observing failure passes), judged failures in 30 days, this week's changes", () => {
@@ -393,5 +393,15 @@ describe("the Insights ledger (§7.2, §7.5)", () => {
       misfires: 1,
       changes: { learned: 1, widened: 1, revived: 1, retired: 1, observing: 1 },
     });
+  });
+
+  test("a minor finding is neither a failure nor judged; needs_user is reviewed but not a first-review pass (AUTO-REVIEW-SPEC §3.6)", () => {
+    const flow = [
+      delivered("a", 10),
+      finished("a", 9, [{ id: "goal", state: "passed", kind: "goal" }, { id: "g", state: "failed", kind: "guideline", severity: "minor" as const }]),
+      delivered("b", 8),
+      finished("b", 7, [{ id: "goal", state: "needs_user", kind: "goal" }]),
+    ];
+    expect(guardrailsLedger({ flow, entries: [], projectId: "p", now: NOW, tz: "UTC" })).toMatchObject({ deliveries: 2, reviewed: 2, firstPass: 1, judged: 0 });
   });
 });

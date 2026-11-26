@@ -1477,3 +1477,25 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 修复（[UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts)）：iOS/Android 上未获得焦点、可编辑的多行 `Field` 上盖一层透明 `Pressable`：拖动落在它上面时由弹层滚动，轻点则让输入框获得焦点；获得焦点后遮罩移除，点按放光标、选择文字照常。Web 不变。
 - 取舍：轻点获得焦点时光标不在点按位置，需再点一次定位；编辑中在输入框上拖动不滚动弹层（点框外结束编辑后恢复）。
 - 无新 UI/设置/核心动作，不需要 tour、tip、遥测字段。
+
+## 2026-11-26 Auto review 收敛（卡片 a333fd46）
+
+- 依据评估报告 `docs/verification/auto-review-eval-2026-11-26/REPORT.md` §4.4–4.7、§5 P1。规格先改：AUTO-REVIEW-SPEC §3.1–3.3、新 §3.6、§4.4–4.5、§8.2、§9、D20–D24、§13.4；GUARDRAILS-SPEC §3.3、§6.3–6.6；ONBOARDING-SPEC 提示表。
+- 实现：
+  - 严重程度（blocker、major、minor）：只有决定性的不通过才退回。
+  - 返工轮做回归兜底：上一轮通过的项判不通过时，引用的文件不在本轮 diff 里就降为 minor。
+  - 新增 `needs_user`：评审状态 Needs you，进 Attention 并排在前面，加了一次性提示 `review-needs-you`。
+  - 轮次只在人发消息开始回合（`byUser`）或人改状态时重置，后台唤醒的回合不算；轮次取决于还没记下结束的回合时，最多等 15 秒。
+  - 每卡上限 10 次（`task.reviewCount`，卡进 Done 或 Cancelled 时清零），到上限后不通过直接按 R2 处理。
+  - 卡片项降级：连续 3 次不通过且每次意见都不同时，记 `CardItem.fails` 和 `observing`，不再参与判定。
+  - 指纹按内容算：`fingerprint.content` 是本次改动路径的内容摘要，task revision 不再参与。
+  - 人把卡移出 In review 或归档时，同一次写入里把评审记为 Cancelled，提交后结束命令进程组和评审 session 的等待（`BoardStore.onReviewStop`）。
+  - A1 让卡离开 In review 时结果挂起（`held`）；A1r 还原且内容没变时按挂起的结果走（`AutoReviewService.restored`）。
+- 遥测：不加字段。needs_user 是评审的一种结果，不是新开关，也不是值得单独计数的核心动作。导览：不改导览页，只加一条一次性提示。
+- 检查：`npm run typecheck` 退出码 0；`npm test` 172 个文件通过、1 个跳过，测试 1612 通过、6 跳过。
+- Tinylink 实机验证（`docs/verification/auto-review-convergence-2026-11-26/REPORT.md`）：
+  - needs_user：卡片留在 In review，Attention 写明要人做什么。
+  - A1 期间评审跑完，结果挂起；A1r 后结果原样生效。
+  - 人挪卡后 346 ms 内评审停止。
+  - 测试资源已清理。
+  - 未做：紧凑布局、手机、独立验证。

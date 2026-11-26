@@ -611,7 +611,7 @@ function CardSignals({
       <Signal
         key="review"
         icon={reviewIcon(review)}
-        color={review.state === "failed" || review.state === "rework" ? colors.statusDanger : review.state === "passed" ? colors.statusSuccess : review.state === "unavailable" || review.state === "cancelled" ? colors.statusWarning : undefined}
+        color={review.state === "failed" || review.state === "rework" ? colors.statusDanger : review.state === "passed" ? colors.statusSuccess : review.state === "unavailable" || review.state === "cancelled" || review.state === "needs_user" ? colors.statusWarning : undefined}
         text={reviewLabel(review)}
       />,
     );
