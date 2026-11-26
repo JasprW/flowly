@@ -24,7 +24,7 @@ test("pairs the answers of the request actually answered with its titles, as the
         { ask: "Where?", text: "Drawer only" },
       ],
       answeredAt: 1_000,
-      epoch: null,
+      asked: null,
     },
   ]);
   // The other request is still open and has no answers yet.
@@ -34,13 +34,20 @@ test("pairs the answers of the request actually answered with its titles, as the
     ["c2", 5_000],
     ["c1", 1_000],
   ]);
-  // The timeline epoch read after the answer is kept once; a later read (after a rewind) does not replace it.
-  q.answeredIn("a1", "permission-c1", "e1");
-  q.answeredIn("a1", "permission-c1", "e2");
-  q.answeredIn("a1", "permission-unknown", "e1");
-  expect(q.answers("a1").map((a) => [a.callId, a.epoch])).toEqual([
+  // The timeline epoch is the one read while the question was open, the first read only, with when it finished; a read
+  // that finishes after the answer is not kept.
+  now = 7_000;
+  q.remember("a1", ask("c3", "Which label?"));
+  q.askedIn("a1", "permission-c3", "e1");
+  now = 8_000;
+  q.askedIn("a1", "permission-c3", "e2");
+  q.resolved("a1", "permission-c3", allow("Rerun"));
+  q.askedIn("a1", "permission-c2", "e1");
+  q.askedIn("a1", "permission-unknown", "e1");
+  expect(q.answers("a1").map((a) => [a.callId, a.asked])).toEqual([
+    ["c3", { epoch: "e1", at: 7_000 }],
     ["c2", null],
-    ["c1", "e1"],
+    ["c1", null],
   ]);
   expect(codexAnswersMessage([{ ask: "Which label?", text: "Retry" }])).toBe("Answers to your questions:\n\nWhich label?\nRetry");
 });

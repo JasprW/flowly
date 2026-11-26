@@ -402,10 +402,14 @@ function answersText(item: TurnItem, answered: readonly AnsweredQuestions[]): st
   return text.startsWith(CODEX_ANSWERS_PREFIX) && answered.some((a) => a.message === text) ? text : null;
 }
 
-/** Whether a message's timeline time is within the window of its call's answer (§4.2 ⑤); an unreadable time is not. */
-function nearAnswer(timestamp: string | undefined, answeredAt: number): boolean {
+/**
+ * Whether a message at this timeline time, read in this timeline epoch, is certainly the one Paseo sent for this answered
+ * call: within the window of the answer (§4.2 ⑤), and the epoch read when the call was asked, before the message, is
+ * still the timeline's, so no rewind came since (§4.2 ⑥). An unreadable time is not.
+ */
+function sentFor(call: AnsweredQuestions, timestamp: string | undefined, epoch: string | undefined): boolean {
   const at = timestamp ? Date.parse(timestamp) : NaN;
-  return Number.isFinite(at) && Math.abs(at - answeredAt) <= answerMessageWindowMs;
+  return Number.isFinite(at) && Math.abs(at - call.answeredAt) <= answerMessageWindowMs && !!epoch && call.asked?.epoch === epoch && call.asked.at < at;
 }
 
 /** The session's entries before `first`, back to its start; null when the start is out of reach or the timeline changed. */
@@ -438,9 +442,9 @@ async function olderEntries(handle: { timeline: { refetch: (options: never) => P
  *   the calls are kept in that order too), each call asked before its message;
  * - each message is in the timeline within a minute of its call's answer: Paseo sends it when the user submits the
  *   answer;
- * - the timeline has not been rewound since the call was answered (`epoch`, the one the hook read right after the
- *   answer, is the read's): a rewind may have removed the real message, and the same text typed by hand afterwards,
- *   however soon, cannot be told from it.
+ * - the timeline has not been rewound since the call was answered: the epoch the hook read when the call was asked is
+ *   the one this read has (an epoch never comes back), and that read finished before the message. A rewind may have
+ *   removed the real message, and the same text typed by hand afterwards, however soon, cannot be told from it.
  * Anything else (a rewind that removed an answer but kept its question, the same text typed again after a rewind, a
  * timeline whose start is out of reach) leaves every message of that text whole.
  */
@@ -457,11 +461,10 @@ function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQues
   for (const [text, at] of byText) {
     const kept = inAnswerOrder.filter((a) => a.message === text && askedAt.has(a.callId));
     if (kept.length !== at.length) continue;
-    if (!epoch || kept.some((a) => a.epoch !== epoch)) continue;
     const last = at[at.length - 1]!;
     if ([...askedAt].some(([callId, i]) => i < last && !questions.known(callId))) continue;
     if (kept.some((a, n) => askedAt.get(a.callId)! > at[n]!)) continue;
-    if (kept.some((a, n) => !nearAnswer(entries[at[n]!]!.timestamp, a.answeredAt))) continue;
+    if (kept.some((a, n) => !sentFor(a, entries[at[n]!]!.timestamp, epoch))) continue;
     at.forEach((index, n) => {
       if (index >= offset) out.set(index - offset, kept[n]!);
     });

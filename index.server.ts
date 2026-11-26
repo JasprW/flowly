@@ -801,22 +801,23 @@ export default function contribute(host: PluginServerContext) {
       .catch((e) => logFailure("Workflow insights commands not recorded:", e));
   });
   // The answers of a Codex async question, by the request actually answered (only requests kept above are matched).
-  server.addHook("agent.permission.after", async (event, { paseo }) => {
-    if (!asyncQuestions.resolved(event.agent.id, event.requestId, event.resolution)) return;
-    // The timeline's epoch now: a rewind after this answer gives it a new one, and the review then keeps the
-    // session's answers messages whole (AUTO-REVIEW-SPEC §4.2 ⑥). Never blocks the hook.
-    void paseo.agents
-      .ref(event.agent.id)
-      .timeline.refetch({ direction: "tail", limit: 1, projection: "projected" })
-      .then((page) => asyncQuestions.answeredIn(event.agent.id, event.requestId, page.epoch))
-      .catch((e) => logFailure("Flowly could not read a session's timeline epoch after a Codex answer:", e, event.agent.id));
+  server.addHook("agent.permission.after", async (event) => {
+    asyncQuestions.resolved(event.agent.id, event.requestId, event.resolution);
   });
   server.addHook("agent.permission.before", async (event, { paseo }) => {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
     if (!identity) return;
     // A Codex async question's titles, in memory only, so the auto review can read its answers (AUTO-REVIEW-SPEC §4.2).
-    asyncQuestions.remember(event.agent.id, event.request);
+    if (asyncQuestions.remember(event.agent.id, event.request)) {
+      // The timeline's epoch as the question is asked: a rewind after it gives the timeline a new one, and the review
+      // then keeps the session's answers messages whole (AUTO-REVIEW-SPEC §4.2 ⑥). Never blocks the hook.
+      void paseo.agents
+        .ref(event.agent.id)
+        .timeline.refetch({ direction: "tail", limit: 1, projection: "projected" })
+        .then((page) => asyncQuestions.askedIn(event.agent.id, event.request.id, page.epoch))
+        .catch((e) => logFailure("Flowly could not read a session's timeline epoch for a Codex question:", e, event.agent.id));
+    }
     await store.mutate((board) =>
       // INSIGHTS-REDESIGN-SPEC §7.2: only the tool's name, never its input.
       recordLifecycle(store, board, identity, "agent.permission_requested", undefined, { tool: event.request.name || event.request.kind }),
