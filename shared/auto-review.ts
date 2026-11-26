@@ -153,13 +153,16 @@ const calls = (state: Review["state"]) => state === "failed" || state === "unava
  * no rework message, so such a turn comes from a person) or a person changed its status. Marks the finished failed or
  * unavailable review handled, once; true when it changed. Opening the card or Mark as read is not an action.
  */
-export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardEvent, "actor" | "action" | "byUser">, at: string): boolean {
+export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardEvent, "actor" | "action" | "byUser">, at: string, turnStartedAt?: string): boolean {
   const review = task.review;
   if (!review || review.handledAt || !review.finishedAt || !calls(review.state)) return false;
   const person = event.actor === "human" && event.action === "status_changed";
   // needs_user asks a person to act: only a person's status change or a turn a person's message started (known when it
-  // ends) handles it, never a background wake. Failed and unavailable end at any turn start.
-  const turn = review.state === "needs_user" ? event.action === "agent.turn_ended" && event.byUser === true : event.action === "agent.turn_started";
+  // ends) handles it, never a background wake, and only a turn that started after the result: the delivering turn's own
+  // end, recorded after the review finished, is not an answer to it. Failed and unavailable end at any turn start.
+  const turn = review.state === "needs_user"
+    ? event.action === "agent.turn_ended" && event.byUser === true && !!turnStartedAt && turnStartedAt >= review.finishedAt
+    : event.action === "agent.turn_started";
   if (!person && !turn) return false;
   review.handledAt = at;
   return true;
@@ -295,7 +298,7 @@ const gitEscapes: Record<string, string> = { a: "\x07", b: "\b", t: "\t", n: "\n
 export function unquoteGitPath(path: string): string {
   if (path.length < 2 || !path.startsWith('"') || !path.endsWith('"')) return path;
   // The quoted body is ASCII: each escape becomes its byte as %XX, so one decode rebuilds the UTF-8 name.
-  const encoded = path.slice(1, -1).replace(/\\([0-7]{3}|.)|[^\\]/g, (all: string, escape?: string) => {
+  const encoded = path.slice(1, -1).replace(/\\([0-7]{3}|.)|[^\\]/gu, (all: string, escape?: string) => {
     if (escape === undefined) return encodeURIComponent(all);
     if (/^[0-7]{3}$/.test(escape)) return `%${parseInt(escape, 8).toString(16).padStart(2, "0")}`;
     return encodeURIComponent(gitEscapes[escape] ?? escape);

@@ -410,7 +410,8 @@ test("Rerun from Blocked after a failed review: moves to In review and waits in 
   expect(task).toMatchObject({ status: "in_review", revision: revision + 1, reviewWaiting: { agentId: "actor", from: "development" } });
   expect(task.reviewWaiting!.eventId).toMatch(/^rerun:/);
   expect(reviewSignal(task)).toBeNull();
-  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(/waiting to start/);
+  // Refused while the first is queued or already running (whichever check the timing reaches first).
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(/waiting to start|already running/);
   const board = await x.store.read();
   expect(board.events.filter((e) => e.action === "status_changed").at(-1)).toMatchObject({ actor: "human", from: "blocked", to: "in_review", note: "Rerun auto review" });
   await x.reviews.idle();
@@ -1569,6 +1570,9 @@ test("needs_user: no rework, the card stays in In review, Attention says what to
   expect(x.sent).toEqual([]);
   expect(board.events.filter((e) => e.rule === "R1" || e.rule === "R2")).toEqual([]);
   expect(attentionItems(board, [] as never, [], false)[0]).toMatchObject({ review: "needs_user" });
+  // The delivering turn's end, recorded after the review finished, keeps it.
+  await x.turnEnded(true);
+  expect(attentionItems(await x.store.read(), [] as never, [], false)).toHaveLength(1);
   // A background wake (a turn no person started) keeps it; the turn a person's message started ends it.
   await x.turnStarted();
   await x.turnEnded(false);

@@ -148,7 +148,7 @@ stateDiagram-v2
 - 评审记录加 `handledAt`（§8.2）：这次评审结束后，人第一次对这张卡有动作的时间。`reviewSignal` 在 `handledAt` 存在时不出信号；卡面、抽屉和 `get_task.review` 照常显示 Review failed / Review unavailable（那是卡片状态，不是提醒）。
 - 记为已处理的动作（只对 `failed` / `unavailable` 且已结束、还没有 `handledAt` 的记录，写入不改 task revision）：
   1. 这张卡 workspace 里任一受管 session 开始一个回合（`agent.turn.before`，与 `agent.turn_started` 记录同一次写入，在 A1 之前）。Failed 和 Unavailable 都不发返工消息，所以评审结束之后开始的回合都来自人（含人新建的 session；Paseo 的定时任务也会算，可以接受）。之后 A1r 把卡还原到 Blocked 时信号不再回来。
-     Needs you（2026-11-26）不按回合开始算：只有人发消息开始的回合结束时（`agent.turn_ended` 的 `byUser` 为 true，与它同一次写入）才算处理；后台任务唤醒的回合（`byUser: false`）不算，因为 Needs you 要的是人去做一件事。
+     Needs you（2026-11-26）不按回合开始算：只有人发消息开始、而且在评审结束之后才开始的回合结束时（`agent.turn_ended` 的 `byUser` 为 true，与它同一次写入；开始时间取该 session 最近一次 `agent.turn_started`）才算处理；后台任务唤醒的回合（`byUser: false`）不算，因为 Needs you 要的是人去做一件事；交付所在回合的结束晚于评审结束才记下时也不算，它不是对结果的回应。
   2. 人改这张卡的状态（拖动、菜单、手机 Actions，任意 `actor: "human"` 的 `status_changed`），与改状态同一次写入。从 Blocked 拖到 In review 后卡面仍是 Review failed，可按 Rerun，但不再提醒。
   3. Rerun：新评审替换整条记录（从 Blocked 重试时，移动那次写入先按第 2 条处理）。
 - 只打开卡片、看抽屉、Mark as read 不算处理（D18）。想放着不管仍用 Dismiss（ATTENTION-DISMISS-SPEC，规则不变）。

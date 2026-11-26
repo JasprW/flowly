@@ -294,7 +294,10 @@ test("Review needs you shows in In review, calls Attention until a person acts, 
   expect(markReviewHandled(task, { actor: "system", action: "agent.turn_started" }, "2026-10-28T00:05:00.000Z")).toBe(false);
   expect(markReviewHandled(task, { actor: "system", action: "agent.turn_ended", byUser: false }, "2026-10-28T00:05:00.000Z")).toBe(false);
   expect(reviewSignal({ status: "in_review", review: task.review, archivedAt: null })?.state).toBe("needs_user");
-  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_ended", byUser: true }, "2026-10-28T00:05:00.000Z")).toBe(true);
+  // The delivering turn (started before the review finished) ending later is not an answer to it.
+  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_ended", byUser: true }, "2026-10-28T00:05:00.000Z", "2026-10-28T00:00:30.000Z")).toBe(false);
+  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_ended", byUser: true }, "2026-10-28T00:05:00.000Z")).toBe(false);
+  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_ended", byUser: true }, "2026-10-28T00:05:00.000Z", "2026-10-28T00:04:00.000Z")).toBe(true);
   expect(reviewSignal({ status: "in_review", review: task.review, archivedAt: null })).toBeNull();
   const moved = { review: { ...r } };
   expect(markReviewHandled(moved, { actor: "human", action: "status_changed" }, "2026-10-28T00:05:00.000Z")).toBe(true);
@@ -357,4 +360,6 @@ test("the files a diff touches, from its headers (§3.6 regression backstop)", (
   expect([...diffPaths(quoted)]).toEqual(["说明.ts", "a\tb.ts", "plain.ts"]);
   expect(unquoteGitPath('"q\\"x\\\\y"')).toBe('q"x\\y');
   expect(unquoteGitPath("plain.ts")).toBe("plain.ts");
+  // Raw UTF-8 (core.quotePath=false) outside the BMP, next to an escape.
+  expect(unquoteGitPath('"🚀\\tx.ts"')).toBe("🚀\tx.ts");
 });

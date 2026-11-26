@@ -583,7 +583,12 @@ export class BoardStore {
     // turn a person started, known when it ends.
     if (input.taskId && (input.action === "agent.turn_started" || input.action === "agent.turn_ended" || (input.actor === "human" && input.action === "status_changed"))) {
       const task = board.tasks.find((t) => t.id === input.taskId);
-      if (task) markReviewHandled(task, input, event.at);
+      // For a turn's end, when that turn started (its latest start in this session), so a turn that began before the
+      // review finished is not taken as an answer to it.
+      const startedAt = input.action === "agent.turn_ended"
+        ? board.events.findLast((e) => e !== event && e.taskId === input.taskId && e.agentId === input.agentId && e.action === "agent.turn_started")?.at
+        : undefined;
+      if (task) markReviewHandled(task, input, event.at, startedAt);
     }
     if (input.taskId && (input.action === "status_changed" || input.action === "archive_changed")) {
       const task = board.tasks.find((t) => t.id === input.taskId);
