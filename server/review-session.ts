@@ -66,7 +66,7 @@ export function reviewPrompt(input: LlmReviewInput): string {
     // §6.3: from round 2 only the changes since the previous delivery are shown.
     ...(input.incremental
       ? [
-          "This is a rework round: the diff holds only what changed since the previous delivery, and each check shows its previous result. Re-check only the checks that did not pass last time, and look only for regressions these changes introduced. A problem these changes did not cause may be at most minor. A check that passed before and is not touched by these changes needs no verdict; leave it out.",
+          "This is a rework round: the diff holds only what changed since the previous delivery, and each check shows its previous result. Re-check only the checks that did not pass last time, and look only for regressions these changes introduced. A check that still fails as it did last time keeps its severity; only a new problem that these changes did not cause may be at most minor. A check that passed before and is not touched by these changes needs no verdict; leave it out.",
         ]
       : []),
     `Reply only with JSON: {"items":[{"id","verdict","severity"?,"detail","file"?,"line"?,"quote"?}]}, one entry per check id${input.incremental ? " you judge" : ""}.`,

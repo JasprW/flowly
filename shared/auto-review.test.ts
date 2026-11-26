@@ -6,6 +6,7 @@ import {
   conversationForReview,
   countsTowardCap,
   diffPaths,
+  unquoteGitPath,
   findingText,
   hasEvidence,
   joinCommand,
@@ -289,8 +290,14 @@ test("Review needs you shows in In review, calls Attention until a person acts, 
   expect(visibleReview({ status: "development", review: r, archivedAt: null })).toBeNull();
   expect(reviewSignal({ status: "in_review", review: r, archivedAt: null })).toEqual({ state: "needs_user", key: `review:needs_user:${r.startedAt}` });
   const task = { review: { ...r } };
-  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_started" }, "2026-10-28T00:05:00.000Z")).toBe(true);
+  // A turn starting is not a person acting: a background wake must not clear it (§3.2).
+  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_started" }, "2026-10-28T00:05:00.000Z")).toBe(false);
+  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_ended", byUser: false }, "2026-10-28T00:05:00.000Z")).toBe(false);
+  expect(reviewSignal({ status: "in_review", review: task.review, archivedAt: null })?.state).toBe("needs_user");
+  expect(markReviewHandled(task, { actor: "system", action: "agent.turn_ended", byUser: true }, "2026-10-28T00:05:00.000Z")).toBe(true);
   expect(reviewSignal({ status: "in_review", review: task.review, archivedAt: null })).toBeNull();
+  const moved = { review: { ...r } };
+  expect(markReviewHandled(moved, { actor: "human", action: "status_changed" }, "2026-10-28T00:05:00.000Z")).toBe(true);
   expect(["passed", "rework", "failed", "needs_user"].every((s) => countsTowardCap(s as Review["state"]))).toBe(true);
   expect(["cancelled", "unavailable", "running"].some((s) => countsTowardCap(s as Review["state"]))).toBe(false);
 });
@@ -311,6 +318,9 @@ test("a person moving the card away or archiving it cancels the running review i
   const held = { status: "development" as const, archivedAt: null, review: review("cancelled", { held: true }) };
   expect(stopReviewForPerson(held, { actor: "human", action: "status_changed", to: "test" }, at)).toBe(false);
   expect(held.review.held).toBeUndefined();
+  const heldArchived = { status: "development" as const, archivedAt: at as string | null, review: review("cancelled", { held: true }) };
+  expect(stopReviewForPerson(heldArchived, { actor: "human", action: "archive_changed" }, at)).toBe(false);
+  expect(heldArchived.review.held).toBeUndefined();
 });
 
 test("card item demotion: three decisive fails in a row whose findings all differ (§3.6)", () => {
@@ -342,4 +352,9 @@ test("card item demotion: three decisive fails in a row whose findings all diffe
 test("the files a diff touches, from its headers (§3.6 regression backstop)", () => {
   const diff = "# Changes\ndiff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/old.ts b/new.ts\n# New files\ndiff --git a/repo/x.md b/repo/x.md\n";
   expect([...diffPaths(diff)]).toEqual(["src/a.ts", "new.ts", "repo/x.md"]);
+  // Git quotes a name with non-ASCII bytes, a tab or a quote, on either side.
+  const quoted = 'diff --git "a/\\350\\257\\264\\346\\230\\216.ts" "b/\\350\\257\\264\\346\\230\\216.ts"\ndiff --git a/old.ts "b/a\\tb.ts"\ndiff --git "a/q\\"x.ts" b/plain.ts\n';
+  expect([...diffPaths(quoted)]).toEqual(["说明.ts", "a\tb.ts", "plain.ts"]);
+  expect(unquoteGitPath('"q\\"x\\\\y"')).toBe('q"x\\y');
+  expect(unquoteGitPath("plain.ts")).toBe("plain.ts");
 });

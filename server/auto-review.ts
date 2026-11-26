@@ -31,6 +31,7 @@ import {
   defaultCheckTimeoutSec,
   demotedReason,
   diffPaths,
+  unquoteGitPath,
   failureSummary,
   findingText,
   goalPrompt,
@@ -231,6 +232,17 @@ async function repoDiff(directory: string, options: { since?: string; baseRef?: 
   return text;
 }
 
+/**
+ * Every path changed since the previous delivery's commit (§3.6, the rework round's regression backstop), with
+ * `prefix` before each: the whole list, NUL-separated so Git does not quote it, where the review's diff is cut at
+ * 64 KiB. Untracked new files count too. Empty when git fails.
+ */
+export async function pathsChangedSince(directory: string, since: string, git: Git = defaultGit, prefix = ""): Promise<Set<string>> {
+  if (!shaPattern.test(since)) return new Set();
+  const [tracked, added] = await Promise.all([git(directory, ["diff", since, "--name-only", "-z"]).catch(() => ""), untrackedFiles(directory, git).catch(() => [])]);
+  return new Set([...tracked.split("\0"), ...added].filter(Boolean).map((p) => `${prefix}${p}`));
+}
+
 /** A Git repository inside a workspace directory that is not one itself (a linked root, GUARDRAILS-SPEC §6.2). */
 export type LinkedRepo = { name: string; directory: string };
 const linkedRepoLimit = 20;
@@ -294,7 +306,7 @@ export function numstatShape(...outputs: string[]): { shape: ChangeShape; paths:
       const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line.trim());
       if (!m) continue;
       lines += (m[1] === "-" ? 0 : Number(m[1])) + (m[2] === "-" ? 0 : Number(m[2]));
-      paths.add(renamedTo(m[3]));
+      paths.add(unquoteGitPath(renamedTo(unquoteGitPath(m[3]!))));
     }
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
@@ -408,6 +420,11 @@ export const runCheck: RunCheck = (argv, cwd, timeoutMs, signal) =>
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString("utf8")).slice(-autoReviewLimits.tail * 2);
     };
+    // A person moved the card before the command started (§3.2): it does not start.
+    if (signal?.aborted) {
+      resolve({ exitCode: null, timedOut: false, spawnError: "Stopped.", ms: 0, output: "" });
+      return;
+    }
     // Its own process group, so a timeout also stops the test runner's workers.
     const group = process.platform !== "win32";
     const child = spawn(argv[0], argv.slice(1), {
@@ -1112,7 +1129,14 @@ export class AutoReviewService {
     }
     const ms = Math.max(0, Math.round(this.clock() - started));
     // Rework round (§3.6): what this round changed, for the regression backstop.
-    const changedNow = incremental ? diffPaths(input.diff) : new Set<string>();
+    const changedNow = new Set<string>();
+    if (incremental) {
+      const parts = linked.length
+        ? await Promise.all(linked.map((r) => (previous!.fingerprint.repos?.[r.name] ? pathsChangedSince(r.directory, previous!.fingerprint.repos[r.name]!, this.git, `${r.name}/`) : new Set<string>())))
+        : [await pathsChangedSince(where.directory, previous!.fingerprint.sha!, this.git)];
+      // The shown diff too, in case git could not list them.
+      for (const p of [...parts.flatMap((x) => [...x]), ...diffPaths(input.diff)]) changedNow.add(p);
+    }
     const cardItems = new Map((guard?.items || []).map((i) => [i.id, i]));
     // B1: a cited file outside the diff counts when it exists in the repository (a missing entry, say).
     const exists = this.deps.exists ?? fileExists;
@@ -1237,7 +1261,7 @@ export class AutoReviewService {
         action: reviewFinishedAction,
         agentId: r.trigger.agentId,
         note,
-        results: r.items.map((x) => ({ id: x.id, state: x.state, kind: x.kind, ...(x.gating ? {} : { gating: false as const }), ...(x.state === "failed" && isMinor(x) ? { severity: "minor" as const } : {}) })),
+        results: r.items.map((x) => ({ id: x.id, state: x.state, kind: x.kind, ...(x.gating ? {} : { gating: false as const }), ...((x.state === "failed" || x.state === "needs_user") && isMinor(x) ? { severity: "minor" as const } : {}) })),
       });
     const verdict = reviewVerdict(r.items);
     const reviews = t.reviewCount ?? 0;
@@ -1298,6 +1322,8 @@ export class AutoReviewService {
     return this.store.transaction((b) => {
       const t = b.tasks.find((x) => x.id === taskId);
       if (!t?.review || t.review.startedAt !== startedAt) return { value: null, changed: false };
+      // The rework could not be sent, so this review no longer counts toward the card's cap (§3.3).
+      if (countsTowardCap(t.review.state) && t.reviewCount) t.reviewCount -= 1;
       t.review = { ...t.review, state: "unavailable", reason, finishedAt: t.review.finishedAt ?? this.now() };
       this.store.event(b, { taskId, actor: "system", action: reviewFinishedAction, agentId: t.review.trigger.agentId, note: `Auto review unavailable: ${reason}` });
       return { value: null, changed: true };

@@ -156,7 +156,7 @@ try {
     state.cleanup = { at: new Date().toISOString(), ...remains }; await save();
     console.log(JSON.stringify(remains, null, 1));
     const restored = JSON.stringify(remains.autoReview) === JSON.stringify(state.project.original);
-    if (remains.card || remains.dismissal || !restored || remains.nativeAgents.length || remains.activeWorkspace.length) throw new Error('Fixture resources remain');
+    if (remains.card || remains.dismissal || !restored || remains.nativeAgents.length || remains.activeWorkspace.length || remains.newStatesOnBoard.length) throw new Error('Fixture resources remain');
     await rm(scratch, { recursive: true, force: true });
     state.cleanup.verified = true; await save();
     console.log('cleanup verified');

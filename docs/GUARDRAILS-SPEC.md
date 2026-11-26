@@ -344,7 +344,7 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
    - `fail` 必须带证据，三种任一（B1）：`file` 出现在 diff 里（改错了）；`file` 在仓库里存在但缺东西（漏改了，例如 `shared/i18n/zh-TW.ts` 没有新词条，daemon 只核对文件存在）；`quote` 引用卡片描述或用户原话里没做到的要求（内置检查和专属项常见）；daemon 核对出处（2026-11-07 按 PR #75 评审意见补）：quote 与来源都压缩空白、去首尾、转小写后，quote 必须是卡片标题、卡片描述、评审拿到的过滤后对话里任一条消息、或该检查自己的用户原话的子串，否则不算证据（从 diff 或代码里引的文字要用 `file` 给证据）。三样都没有的 `fail` 由 daemon 改为 `na`，`reason: "no evidence"`。这是确定性的降噪，目的是丢掉凭空的意见，不是只许挑改过的代码的毛病。
    - 输出的每项于是为 `{ id, verdict, detail, file?, line?, quote? }`，`quote` ≤300 字。
    - `na` 按通过处理，不计抓到也不计误判。
-   - 返工第 2 轮起：评审输入只给上一轮交付以来的增量 diff（`git diff <上一轮 sha>`）加上一轮的结果，指令写明（2026-11-26）：复查上一轮没通过的项；其余只找本轮改动引入的回归，与本轮改动无关的新问题只能记 `minor`；不重复已经通过的。daemon 兜底：上一轮通过的项这一轮判 `fail` 时，`file` 不在本轮增量 diff 里就降为 `minor`（`reason` “Not caused by this round's changes.”）。
+   - 返工第 2 轮起：评审输入只给上一轮交付以来的增量 diff（`git diff <上一轮 sha>`）加上一轮的结果，指令写明（2026-11-26）：复查上一轮没通过的项，仍以同样原因不通过的保持原来的 severity；其余只找本轮改动引入的回归，与本轮改动无关的新问题只能记 `minor`；不重复已经通过的。daemon 兜底：上一轮通过的项这一轮判 `fail` 时，`file` 不在本轮改动过的路径里（git 从上一轮 sha 列出的全部路径加未跟踪文件，不受 diff 截断影响，AUTO-REVIEW-SPEC §3.6）就降为 `minor`（`reason` “Not caused by this round's changes.”）。
    - 卡片专属项连续 3 次决定性地不通过、意见两两不同时，第 3 次起 `gating: false`（AUTO-REVIEW-SPEC §3.6）。
    - 争议：`task.disputes` 里的项（§6.1）不交给评审 session，直接记为 `disputed`，带 agent 的理由。
 3. **总判定**：有决定性的 `failed` → 不通过（R1，或到上限、到每卡 10 次评审时 R2）；否则有参与判定的 `unavailable` → Unavailable；否则有决定性的 `needs_user` → Needs you（卡片留在 In review，进 Attention，不返工，AUTO-REVIEW-SPEC §3.2）；否则 Passed。`disputed` 与 `minor` 不算不通过。
@@ -394,7 +394,7 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 
 | 信号 | 事实 | 计数 |
 | --- | --- | --- |
-| 抓到 | 一项在第 n 轮 `failed`，同一张卡之后的评审里它 `passed`（没有争议） | `caught + 1`，`lastCaughtAt` |
+| 抓到 | 一项在第 n 轮决定性地 `failed`（`minor` 不算，2026-11-26），同一张卡之后的评审里它 `passed`（没有争议） | `caught + 1`，`lastCaughtAt` |
 | 漏掉 | 范围内的 active 准则在最近一次评审 `passed` 或 `na`，之后的返工回合归纳匹配到它（§4.3） | `missed + 1` |
 | 误判 | 一项在 `task.disputes` 里，这张卡进入 Done 或 Cancelled 时争议仍在（用户没有为这件事再退卡） | `misfire + 1`；争议随即清空 |
 | 评审 | 每次参与评审 | `reviews + 1`；`passed`/`na` 时 `passes + 1` |

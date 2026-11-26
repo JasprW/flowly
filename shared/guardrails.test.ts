@@ -146,6 +146,9 @@ describe("counters (§6.6)", () => {
     expect(caughtIds(previous, current, ["d"])).toEqual(["a"]);
     expect(caughtIds(undefined, current)).toEqual([]);
   });
+  test("caught leaves out a minor failure: it sent nothing back (§6.3)", () => {
+    expect(caughtIds([{ id: "a", state: "failed", severity: "minor" }, { id: "b", state: "failed" }], [{ id: "a", state: "passed" }, { id: "b", state: "passed" }])).toEqual(["b"]);
+  });
   test("misfire times keep the latest ten", () => {
     const counts = emptyCounts();
     for (let i = 0; i < 12; i++) countMisfire(counts, ago(12 - i));

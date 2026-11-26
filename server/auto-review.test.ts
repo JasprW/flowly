@@ -16,6 +16,7 @@ import {
   linkedReviewDiff,
   linkedShape,
   numstatShape,
+  pathsChangedSince,
   repoPath,
   reviewDiff,
   reviewShape,
@@ -826,6 +827,8 @@ test("a lifecycle write failure does not start a rework turn", async () => {
   await x.reviews.turnEnded("actor", x.paseo, Promise.resolve(false));
   expect(x.sent).toEqual([]);
   expect((await card(x)).review).toMatchObject({ state: "unavailable", reason: "The delivering turn could not be recorded, so the rework message was not sent." });
+  // The rework never went out, so that review does not count toward the card's cap (§3.3).
+  expect((await card(x)).reviewCount ?? 0).toBe(0);
 });
 
 test("a second card keeps waiting while the project's first review runs; reviews remain serial", async () => {
@@ -873,6 +876,13 @@ test("runCheck runs an argument array without a shell: exit code, output tail, t
   expect(slow.timedOut).toBe(true);
   const missing = await runCheck(["flowly-no-such-command-xyz"], process.cwd(), 5_000);
   expect(missing.spawnError).toMatch(/ENOENT/);
+  // Stopped before it started: nothing is spawned.
+  const controller = new AbortController();
+  controller.abort();
+  const marker = join(tmpdir(), `flowly-runcheck-${process.pid}-${Date.now()}`);
+  const stopped = await runCheck([process.execPath, "-e", `require("fs").writeFileSync(${JSON.stringify(marker)}, "x")`], process.cwd(), 5_000, controller.signal);
+  expect(stopped).toMatchObject({ exitCode: null, spawnError: "Stopped." });
+  expect(existsSync(marker)).toBe(false);
 });
 
 test("recover: a review left running by a restart becomes unavailable", async () => {
@@ -1110,6 +1120,7 @@ test("the delivery's shape from git --numstat: files, changed lines (binary 0), 
   expect(shape).toEqual({ files: 3, lines: 56, size: "m" });
   expect([...paths].sort()).toEqual(["logo.png", "src/a.ts", "src/new/b.ts"]);
   expect(numstatShape("").shape).toEqual({ files: 0, lines: 0, size: "s" });
+  expect([...numstatShape('1\t0\t"\\350\\257\\264\\346\\230\\216.ts"\n').paths]).toEqual(["说明.ts"]);
   expect(numstatShape("500\t1\tbig.ts").shape.size).toBe("l");
   expect(repoPath("/w", "./src/a.ts")).toBe("src/a.ts");
   expect(repoPath("/w", "/w/src/a.ts")).toBe("src/a.ts");
@@ -1346,6 +1357,30 @@ test("linked root diff: a large change in one repository cannot push the others 
   expect(diff).toContain("diff --git a/SMITH/src/app.ts b/SMITH/src/app.ts");
 }, 20_000);
 
+test("a rework round lists every path changed since the previous commit, past the cut diff: NUL-separated, untracked too (§3.6)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-changed-since-"));
+  try {
+    const git = (...args: string[]) => defaultGit(dir, ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
+    await git("init", "-q", "-b", "main");
+    await writeFile(join(dir, "a.ts"), "1\n");
+    await writeFile(join(dir, "说明.md"), "1\n");
+    await git("add", ".");
+    await git("commit", "-q", "-m", "init");
+    const since = (await git("rev-parse", "HEAD")).trim();
+    await writeFile(join(dir, "big.ts"), "x".repeat(200_000));
+    await git("add", "big.ts");
+    await git("commit", "-q", "-m", "big");
+    await writeFile(join(dir, "说明.md"), "2\n");
+    await writeFile(join(dir, "new file.ts"), "n\n");
+    expect([...(await pathsChangedSince(dir, since))].sort()).toEqual(["big.ts", "new file.ts", "说明.md"]);
+    expect([...(await pathsChangedSince(dir, since, defaultGit, "repo/"))].sort()).toEqual(["repo/big.ts", "repo/new file.ts", "repo/说明.md"]);
+    // Not a commit id: nothing is listed (and nothing is run).
+    expect((await pathsChangedSince(dir, "--output=x")).size).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 20_000);
+
 /** The fixture workspace as a git repository with a worktree on `feat/wt` that changed a file, committed and not. */
 async function workspaceWithWorktree(dir: string, root: string) {
   const git = (cwd: string, ...args: string[]) => defaultGit(cwd, ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
@@ -1511,6 +1546,9 @@ test("severity: a minor fail passes the review, shows on the item and counts as 
   expect(board.tasks[0]).toMatchObject({ status: "in_review", review: { state: "passed" } });
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor" });
   expect(board.events.filter((e) => e.action === "review_finished").at(-1)!.results!.find((r) => r.id === "g1")).toMatchObject({ state: "failed", severity: "minor" });
+  const z = await setup({ llm: verdicts([{ id: "goal", verdict: "needs_user", severity: "minor", detail: "Someone could try it on a phone later." }]) });
+  const minorAsk = await z.deliver("development");
+  expect(minorAsk.events.filter((e) => e.action === "review_finished").at(-1)!.results!.find((r) => r.id === "goal")).toMatchObject({ state: "needs_user", severity: "minor" });
   expect(x.sent).toEqual([]);
   expect((await x.entry("g1")).counts).toMatchObject({ reviews: 1, passes: 1 });
 
@@ -1529,8 +1567,12 @@ test("needs_user: no rework, the card stays in In review, Attention says what to
   expect(x.sent).toEqual([]);
   expect(board.events.filter((e) => e.rule === "R1" || e.rule === "R2")).toEqual([]);
   expect(attentionItems(board, [] as never, [], false)[0]).toMatchObject({ review: "needs_user" });
-  // A person replies in the session: the signal ends.
+  // A background wake (a turn no person started) keeps it; the turn a person's message started ends it.
   await x.turnStarted();
+  await x.turnEnded(false);
+  expect(attentionItems(await x.store.read(), [] as never, [], false)).toHaveLength(1);
+  await x.turnStarted();
+  await x.turnEnded(true);
   expect(attentionItems(await x.store.read(), [] as never, [], false)).toEqual([]);
 
   const y = await setup({ llm: verdicts([{ id: "goal", verdict: "needs_user", detail: "  " }]) });

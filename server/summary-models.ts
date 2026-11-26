@@ -66,7 +66,10 @@ export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: nu
 /** Resolves as `work` does, or rejects as soon as `signal` aborts (the work itself is left to end on its own). */
 function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
   if (!signal) return work;
-  if (signal.aborted) return Promise.reject(new Error("Stopped."));
+  if (signal.aborted) {
+    work.catch(() => {}); // Left to end on its own; its failure is not ours to report.
+    return Promise.reject(new Error("Stopped."));
+  }
   return new Promise<T>((resolve, reject) => {
     const stop = () => reject(new Error("Stopped."));
     signal.addEventListener("abort", stop, { once: true });

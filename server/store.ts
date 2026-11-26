@@ -579,8 +579,9 @@ export class BoardStore {
     };
     board.events.push(event);
     this.pending.push(event);
-    // A person acting on the card ends its failed or unavailable review's Attention signal (AUTO-REVIEW-SPEC §3.5).
-    if (input.taskId && (input.action === "agent.turn_started" || (input.actor === "human" && input.action === "status_changed"))) {
+    // A person acting on the card ends its review's Attention signal (AUTO-REVIEW-SPEC §3.5); needs_user waits for a
+    // turn a person started, known when it ends.
+    if (input.taskId && (input.action === "agent.turn_started" || input.action === "agent.turn_ended" || (input.actor === "human" && input.action === "status_changed"))) {
       const task = board.tasks.find((t) => t.id === input.taskId);
       if (task) markReviewHandled(task, input, event.at);
     }

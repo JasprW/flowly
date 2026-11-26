@@ -153,10 +153,14 @@ const calls = (state: Review["state"]) => state === "failed" || state === "unava
  * no rework message, so such a turn comes from a person) or a person changed its status. Marks the finished failed or
  * unavailable review handled, once; true when it changed. Opening the card or Mark as read is not an action.
  */
-export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardEvent, "actor" | "action">, at: string): boolean {
+export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardEvent, "actor" | "action" | "byUser">, at: string): boolean {
   const review = task.review;
   if (!review || review.handledAt || !review.finishedAt || !calls(review.state)) return false;
-  if (event.action !== "agent.turn_started" && !(event.actor === "human" && event.action === "status_changed")) return false;
+  const person = event.actor === "human" && event.action === "status_changed";
+  // needs_user asks a person to act: only a person's status change or a turn a person's message started (known when it
+  // ends) handles it, never a background wake. Failed and unavailable end at any turn start.
+  const turn = review.state === "needs_user" ? event.action === "agent.turn_ended" && event.byUser === true : event.action === "agent.turn_started";
+  if (!person && !turn) return false;
   review.handledAt = at;
   return true;
 }
@@ -168,7 +172,7 @@ export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardE
 export function stopReviewForPerson(task: Pick<Task, "review" | "status" | "archivedAt">, event: Pick<BoardEvent, "actor" | "action" | "to">, at: string): boolean {
   const review = task.review;
   if (!review || event.actor !== "human") return false;
-  if (event.action === "status_changed" && review.held) delete review.held;
+  if ((event.action === "status_changed" || event.action === "archive_changed") && review.held) delete review.held;
   const away = (event.action === "status_changed" && event.to !== "in_review") || (event.action === "archive_changed" && !!task.archivedAt);
   if (!away || review.state !== "running") return false;
   task.review = { ...review, state: "cancelled", reason: "A person moved the card during the review.", finishedAt: at };
@@ -277,8 +281,30 @@ export function nextFails(earlier: readonly string[] | undefined, item: ReviewIt
 /** Files a `git diff` text touches: the new path of each `diff --git a/… b/…` header. */
 export function diffPaths(diff: string): Set<string> {
   const out = new Set<string>();
-  for (const m of diff.matchAll(/^diff --git a\/.+? b\/(.+)$/gm)) out.add(m[1]!.trim());
+  // Either side may be C-quoted by Git (a non-ASCII byte, a tab, a quote…); the new path is the b side.
+  for (const m of diff.matchAll(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+?) (?:"b\/((?:[^"\\]|\\.)*)"|b\/(.+))$/gm))
+    out.add(m[1] !== undefined ? unquoteGitPath(`"${m[1]}"`) : m[2]!.trim());
   return out;
+}
+
+const gitEscapes: Record<string, string> = { a: "\x07", b: "\b", t: "\t", n: "\n", v: "\v", f: "\f", r: "\r", '"': '"', "\\": "\\" };
+/**
+ * A path as Git prints it without `-z`: one with a non-ASCII byte, a tab, a quote, a backslash or another control
+ * character is C-quoted ("\346\226\207.ts"); octal escapes are UTF-8 bytes. Any other text is returned as it is.
+ */
+export function unquoteGitPath(path: string): string {
+  if (path.length < 2 || !path.startsWith('"') || !path.endsWith('"')) return path;
+  // The quoted body is ASCII: each escape becomes its byte as %XX, so one decode rebuilds the UTF-8 name.
+  const encoded = path.slice(1, -1).replace(/\\([0-7]{3}|.)|[^\\]/g, (all: string, escape?: string) => {
+    if (escape === undefined) return encodeURIComponent(all);
+    if (/^[0-7]{3}$/.test(escape)) return `%${parseInt(escape, 8).toString(16).padStart(2, "0")}`;
+    return encodeURIComponent(gitEscapes[escape] ?? escape);
+  });
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return path;
+  }
 }
 
 const normalizedQuote = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();

@@ -266,13 +266,13 @@ export function countMisfire(counts: GuardrailCounts, at: string) {
   counts.misfireAt = [...(counts.misfireAt || []), at].slice(-guardrailLimits.misfiresKept);
 }
 
-type ItemResult = { id: string; state: string };
+type ItemResult = { id: string; state: string; severity?: string };
 /**
  * Caught (§6.6): items that failed in the previous review of a card and passed in this one, leaving out
- * disputed ones. Pure; the caller counts them.
+ * disputed ones and minor failures (they sent nothing back, §6.3). Pure; the caller counts them.
  */
 export function caughtIds(previous: readonly ItemResult[] | undefined, current: readonly ItemResult[], disputed: readonly string[] = []): string[] {
-  const failed = new Set((previous || []).filter((r) => r.state === "failed").map((r) => r.id));
+  const failed = new Set((previous || []).filter((r) => r.state === "failed" && r.severity !== "minor").map((r) => r.id));
   const skip = new Set(disputed);
   return current.filter((r) => r.state === "passed" && failed.has(r.id) && !skip.has(r.id)).map((r) => r.id);
 }
