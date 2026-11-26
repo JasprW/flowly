@@ -4,6 +4,7 @@ import {
   clueText,
   containsSecret,
   questionAnswers,
+  splitCodexAnswers,
   fitCandidate,
   isStale,
   isWidelyUsed,
@@ -147,6 +148,25 @@ describe("lifecycle hints", () => {
       fresh = entry({ usedAt: "2026-12-01T00:00:00.000Z" }),
       pinned = entry({ pinned: true, usedAt: "2025-01-01T00:00:00.000Z" });
     expect(leastUsed([fresh, pinned, old], "p", 2).map((e) => e.id)).toEqual([old.id, fresh.id]);
+  });
+});
+
+describe("splitCodexAnswers", () => {
+  const P = "Answers to your questions:\n\n";
+  it("splits by the titles as asked, keeping blank lines and line breaks in answers and multi-line titles", () => {
+    expect(splitCodexAnswers(`${P}Which label?\nRerun\n\nwith a hint\n\nWhere?\nIn the drawer:\nonly there`, ["Which label?", "Where?"])).toEqual([
+      { ask: "Which label?", text: "Rerun\n\nwith a hint" },
+      { ask: "Where?", text: "In the drawer:\nonly there" },
+    ]);
+    expect(splitCodexAnswers(`${P}Keep the label,\nor not?\nKeep it`, ["Keep the label,\nor not?"])).toEqual([{ ask: "Keep the label,\nor not?", text: "Keep it" }]);
+  });
+  it("returns null when the message does not carry exactly these titles in order", () => {
+    expect(splitCodexAnswers(`${P}Which label?\nRerun`, ["Where?"])).toBeNull();
+    expect(splitCodexAnswers(`${P}Which label?\nRerun`, ["Which label?", "Where?"])).toBeNull();
+    expect(splitCodexAnswers(`${P}Where?\nDrawer\n\nWhich label?\nRerun`, ["Which label?", "Where?"])).toBeNull();
+    expect(splitCodexAnswers(`${P}Which label?\n`, ["Which label?"])).toBeNull();
+    expect(splitCodexAnswers("Which label?\nRerun", ["Which label?"])).toBeNull();
+    expect(splitCodexAnswers(`${P}Which label?\nRerun`, [])).toBeNull();
   });
 });
 

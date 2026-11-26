@@ -47,7 +47,7 @@ import {
 import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
-import { questionAnswers, type TurnItem } from "../shared/memory";
+import { CODEX_ANSWERS_PREFIX, questionAnswers, splitCodexAnswers, type TurnItem } from "../shared/memory";
 import { logFailure } from "./error-report";
 import { resolveWorktree, worktreeBase } from "./review-worktree";
 
@@ -340,7 +340,11 @@ export function repoPath(directory: string, file: string): string | null {
  * "question → answer", E2), from the projected tail of each session in its workspace, Flowly's own temporary sessions
  * left out. null when Paseo could not list them; one unreadable session is skipped.
  */
-export async function readConversation(task: Pick<Task, "workspaceId">, paseo: PaseoApi): Promise<ConversationEntry[] | null> {
+export async function readConversation(
+  task: Pick<Task, "workspaceId">,
+  paseo: PaseoApi,
+  asked: (agentId: string) => [string, readonly string[]][] = () => [],
+): Promise<ConversationEntry[] | null> {
   const ids: string[] = [];
   let cursor: string | undefined;
   try {
@@ -359,20 +363,39 @@ export async function readConversation(task: Pick<Task, "workspaceId">, paseo: P
       .ref(id)
       .timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" })
       .catch(() => null);
+    // Codex async questions of this session as asked (call id → titles), and the calls seen so far in its timeline.
+    const known = asked(id);
+    const seen: string[] = [];
     for (const entry of (res?.entries || []) as { timestamp?: string; item?: TurnItem }[]) {
       if (!entry.item) continue;
       const at = entry.timestamp || "";
-      // Answers given in AskUserQuestion or Codex request_user_input (tool calls with structured questions). A Codex
-      // async answers message is never split: the timeline keeps no structured questions, so its question/answer
-      // boundaries are a guess, and it stays the user's whole message.
-      const answers = entry.item.type === "user_message" ? [] : questionAnswers([entry.item]);
-      if (answers.length) for (const qa of answers) messages.push({ at, text: qa.text, ask: qa.ask });
-      else if (entry.item.type === "user_message" && typeof entry.item.text === "string") messages.push({ at, text: entry.item.text });
+      const item = entry.item;
+      if (item.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string") seen.push(item.callId);
+      if (item.type === "user_message" && typeof item.text === "string") {
+        // A Codex async answers message is split only by the titles of a question this session asked, the calls
+        // seen before it first; without them it stays the user's whole message.
+        const pairs = item.text.trimStart().startsWith(CODEX_ANSWERS_PREFIX) ? asyncAnswers(item.text, known, seen) : null;
+        if (pairs) for (const qa of pairs) messages.push({ at, text: qa.text, ask: qa.ask });
+        else messages.push({ at, text: item.text });
+        continue;
+      }
+      // Answers given in AskUserQuestion or Codex request_user_input (tool calls with structured questions).
+      for (const qa of questionAnswers([item])) messages.push({ at, text: qa.text, ask: qa.ask });
     }
   }
   return conversationForReview(messages);
 }
 
+
+/** The answers message split by the first question of the session whose titles it carries exactly (§4.2, E2). */
+function asyncAnswers(text: string, known: [string, readonly string[]][], seen: readonly string[]) {
+  const order = [...known].sort(([a], [b]) => Number(seen.includes(b)) - Number(seen.includes(a)));
+  for (const [, titles] of order) {
+    const pairs = splitCodexAnswers(text, titles);
+    if (pairs) return pairs;
+  }
+  return null;
+}
 
 export type CheckRun = { exitCode: number | null; timedOut: boolean; spawnError?: string; ms: number; output: string };
 /** Runs one check as an argument array in `cwd`, never through a shell. */

@@ -41,6 +41,7 @@ import { join } from "node:path";
 import { SessionSettingsService } from "./server/session-settings";
 import { applyTurnEnded, applyTurnStarted, recordLifecycle } from "./server/progress-rules";
 import { AutoReviewService, readConversation } from "./server/auto-review";
+import { AsyncQuestionTitles } from "./server/async-questions";
 import { llmReviewer } from "./server/review-session";
 import { NextMoveRows } from "./server/next-move-rows";
 import { SessionInsightService, SessionInsightStore } from "./server/session-insights";
@@ -555,6 +556,7 @@ export default function contribute(host: PluginServerContext) {
   void cardImages.cleanup().catch((e) => logFailure("Card images not cleaned:", e));
   const workpads = new WorkpadService(store);
   // Automatic review of agent deliveries (AUTO-REVIEW-SPEC); rework goes out through the composer queue.
+  const asyncQuestions = new AsyncQuestionTitles();
   const reviews = new AutoReviewService(store, {
     workspace: async (task, api) => {
       const workspace = await api.workspaces.ref(task.workspaceId).refresh();
@@ -569,7 +571,7 @@ export default function contribute(host: PluginServerContext) {
       return !!agent && !agent.archivedAt && agent.workspaceId === task.workspaceId;
     },
     send: (message, api) => composer.push(message, api),
-    conversation: readConversation,
+    conversation: (task, api) => readConversation(task, api, (agentId) => asyncQuestions.asked(agentId)),
     guardrails,
     // A temporary session judges the built-in check, guidelines and card items, hard-deleted after like the summarizer.
     llm: llmReviewer({
@@ -802,6 +804,8 @@ export default function contribute(host: PluginServerContext) {
     tools.attach(paseo);
     const identity = await managedTask(event.agent);
     if (!identity) return;
+    // A Codex async question's titles, in memory only, so the auto review can split its answers (AUTO-REVIEW-SPEC §4.2).
+    asyncQuestions.remember(event.agent.id, event.request);
     await store.mutate((board) =>
       // INSIGHTS-REDESIGN-SPEC §7.2: only the tool's name, never its input.
       recordLifecycle(store, board, identity, "agent.permission_requested", undefined, { tool: event.request.name || event.request.kind }),
