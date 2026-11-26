@@ -389,11 +389,15 @@ export async function readConversation(
  * Two calls can build the same text (a later answer that spans what looks like the earlier call's next question), so
  * they are paired in order: the timeline shows the answers messages in the order the user answered, and the calls
  * are kept in that order too. Pairing runs from the newest message back, each call used once and never one answered
- * after the newer message's call, so messages that fell out of the read window do not shift the rest.
+ * after the newer message's call, so messages that fell out of the read window do not shift the rest. Only calls whose
+ * own `request_user_input_async` tool call is in the timeline read take part: a rewind removes a call from the timeline
+ * (Paseo keeps the calls it finds there, `reconcileAsyncQuestionsAfterRewind`) but not from what the hooks recorded.
  */
 function answeredCalls(entries: readonly { item?: TurnItem }[], answeredNewestFirst: readonly AnsweredQuestions[]): Map<number, AnsweredQuestions> {
   const out = new Map<number, AnsweredQuestions>();
-  let pool = answeredNewestFirst;
+  const asked = new Set<string>();
+  for (const { item } of entries) if (item?.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string") asked.add(item.callId);
+  let pool = answeredNewestFirst.filter((a) => asked.has(a.callId));
   for (let i = entries.length - 1; i >= 0 && pool.length; i--) {
     const item = entries[i]!.item!;
     if (item.type !== "user_message" || typeof item.text !== "string") continue;
