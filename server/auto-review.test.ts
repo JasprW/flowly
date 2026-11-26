@@ -144,7 +144,8 @@ async function setup(
     if (exit === "timeout") return { exitCode: null, timedOut: true, ms: 1, output: "slow" };
     return { exitCode: exit, timedOut: false, ms: 5, output: exit ? `\u001b[31mFAIL\u001b[0m expected 1 to be 2\n` : "ok\n" };
   };
-  const repo = { head: "aaaaaaaaaaaa" };
+  // `changed`: what `git diff <sha> --name-only -z` lists (paths that differ from the review start's commit).
+  const repo = { head: "aaaaaaaaaaaa", changed: [] as string[] };
   const place = { shared: !!options.shared };
   const git: Git =
     options.git ??
@@ -153,6 +154,7 @@ async function setup(
       const key = args.join(" ");
       if (key === "rev-parse --short=12 HEAD") return repo.head;
       if (key === "rev-parse --abbrev-ref HEAD") return "main";
+      if (args[0] === "diff" && args.includes("--name-only")) return repo.changed.join("\0");
       return "";
     });
   const diffs: (string | undefined)[] = [];
@@ -2334,6 +2336,46 @@ test("content fingerprint: a commit during the review keeps the result; editing 
   board = await y.deliver("development");
   expect(board.tasks[0]).toMatchObject({ status: "in_review", review: { state: "cancelled", reason: "The card, its workpad or its code changed during the review." } });
   expect(y.sent).toEqual([]);
+
+  // A file outside the delivery's changed set, edited after the start, cancels it too.
+  const z = await setup({ exits: { "npm test": 1 } });
+  await mkdir(join(z.a, "src"), { recursive: true });
+  await writeFile(join(z.a, "src/a.ts"), "one");
+  z.setDuring(async () => {
+    await writeFile(join(z.a, "src/b.ts"), "new");
+    z.repo.changed = ["src/b.ts"];
+    z.repo.head = "bbbbbbbbbbbb";
+  });
+  board = await z.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "in_review", review: { state: "cancelled" } });
+  expect(z.sent).toEqual([]);
+
+  // In a shared directory another session's file outside the set does not (D6).
+  const w = await setup({ shared: true, llm: verdicts([{ id: "goal", verdict: "fail", detail: "core missing", file: "src/a.ts", line: 1 }]) });
+  await mkdir(join(w.a, "src"), { recursive: true });
+  await writeFile(join(w.a, "src/a.ts"), "one");
+  w.setDuring(async () => {
+    await writeFile(join(w.a, "src/other.ts"), "someone else's");
+    w.repo.changed = ["src/other.ts"];
+  });
+  board = await w.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "rework" } });
+});
+
+test("contentDigest: a symbolic link counts by its target path, not the target's bytes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-digest-link-"));
+  await writeFile(join(dir, "a.json"), "{}");
+  await writeFile(join(dir, "b.json"), "{}");
+  await symlink("a.json", join(dir, "link.json"));
+  const before = await contentDigest(dir, ["link.json"]);
+  await rm(join(dir, "link.json"));
+  await symlink("b.json", join(dir, "link.json"));
+  expect(await contentDigest(dir, ["link.json"])).not.toBe(before);
+  // Outside the workspace: only the path is read.
+  await rm(join(dir, "link.json"));
+  await symlink("/nonexistent/flowly-target", join(dir, "link.json"));
+  expect(await contentDigest(dir, ["link.json"])).not.toBe(await contentDigest(dir, ["missing.json"]));
+  await rm(dir, { recursive: true, force: true });
 });
 
 test("contentDigest: the paths' content, order-free; a deleted file differs from an empty one", async () => {
@@ -2377,19 +2419,25 @@ test("a person moving the card away stops the review at once: commands and the r
 
   // The review session's wait ends too.
   let released = false;
+  let listening!: () => void;
+  const ready = new Promise<void>((resolve) => (listening = resolve));
   const llm: LlmReview = (_input, _paseo, signal) =>
     new Promise((_resolve, reject) => {
-      signal?.addEventListener("abort", () => {
+      const stop = () => {
         released = true;
         reject(new Error("Stopped."));
-      });
+      };
+      if (signal?.aborted) return stop();
+      signal?.addEventListener("abort", stop);
+      listening();
     });
   const y = await setup({ llm });
   const c1 = await y.service.get(y.identity);
   await y.service.write(y.identity, "status", { ...input(c1), status: "development" });
   const c2 = await y.service.get(y.identity);
   void y.service.write(y.identity, "status", { ...input(c2, "Delivered"), status: "in_review", nextMoves: [] });
-  for (let i = 0; i < 100 && (await card(y)).review?.items.find((r) => r.id === "goal")?.state !== "running"; i++) await new Promise((r) => setTimeout(r, 10));
+  // The reviewer is waiting with its abort listener in place.
+  await ready;
   const t2 = await card(y);
   await y.store.placeTask({ id: "t", revision: t2.revision, status: "development", beforeId: null, afterId: null });
   await y.reviews.idle();
@@ -2466,10 +2514,17 @@ test("A1 during the review holds the result; A1r back unchanged applies it, chan
 
 test("runCheck: an abort ends the command and its children at once", async () => {
   const controller = new AbortController();
-  const started = Date.now();
-  const pending = runCheck(["sh", "-c", "sleep 30 & sleep 30"], tmpdir(), 60_000, controller.signal);
-  setTimeout(() => controller.abort(), 100);
+  const dir = await mkdtemp(join(tmpdir(), "flowly-abort-"));
+  const marker = join(dir, "started");
+  // The marker appears once the background child runs; it holds the output pipes open until it is killed.
+  const pending = runCheck(["sh", "-c", 'sleep 30 & touch "$0"; wait', marker], tmpdir(), 60_000, controller.signal);
+  for (let i = 0; i < 500 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 10));
+  expect(existsSync(marker)).toBe(true);
+  const aborted = Date.now();
+  controller.abort();
   const result = await pending;
-  expect(Date.now() - started).toBeLessThan(5000);
+  expect(Date.now() - aborted).toBeLessThan(5000);
+  expect(result.spawnError).toBeUndefined();
   expect(result.timedOut).toBe(false);
+  await rm(dir, { recursive: true, force: true });
 });

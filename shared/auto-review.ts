@@ -200,8 +200,8 @@ export function outputTail(text: string, max: number) {
 
 /** An item's result counts as passing: passed, or not applicable to this change. */
 export const itemPassed = (i: Pick<ReviewItem, "state">) => i.state === "passed" || i.state === "na";
-/** For the strip and the counts: passing, or a minor fail, which never decides the review (§3.6). */
-const countsAsPassed = (i: Pick<ReviewItem, "state" | "severity">) => itemPassed(i) || (i.state === "failed" && isMinor(i));
+/** For the strip and the counts: passing, or a minor fail or needs_user, which never decides the review (§3.6). */
+const countsAsPassed = (i: Pick<ReviewItem, "state" | "severity">) => itemPassed(i) || ((i.state === "failed" || i.state === "needs_user") && isMinor(i));
 
 /** A minor finding is shown but never decides the review (AUTO-REVIEW-SPEC §3.6); a missing severity is major. */
 export const isMinor = (i: Pick<ReviewItem, "severity">) => i.severity === "minor";
@@ -243,7 +243,8 @@ export function demotionFinding(i: Pick<ReviewItem, "detail" | "file" | "line" |
   const text = `${where}${(i.detail || i.reason || "").replace(/\s+/g, " ").trim()}`;
   return text.length > 200 ? text.slice(0, 200) : text;
 }
-const placeOf = (finding: string) => /^(\S+:\d+) — /.exec(finding)?.[1] ?? null;
+// The path may hold spaces: everything before the first ":<line> — ".
+const placeOf = (finding: string) => /^(.+?:\d+) — /.exec(finding)?.[1] ?? null;
 /** Words of a finding for comparison: English by word, Chinese, Japanese and Korean by character, lowercase. */
 function wordsOf(text: string): Set<string> {
   const out = new Set<string>();

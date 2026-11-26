@@ -260,6 +260,10 @@ test("severity: only blocker and major fails decide; a minor one is shown, count
   // A missing severity is major, as before.
   expect(reviewVerdict([item("goal", "goal", "failed")])).toBe("failed");
   expect(reviewProgress(review("passed", { items: [item("goal", "goal", "passed"), minor] }))).toMatchObject({ passed: 2, failed: 0, total: 2 });
+  // A minor needs_user does not decide either, so the strip counts it as passed, like the verdict.
+  const ask = item("g2", "guideline", "needs_user", { severity: "minor", detail: "confirm on the phone" });
+  expect(reviewVerdict([item("goal", "goal", "passed"), ask])).toBe("passed");
+  expect(reviewProgress(review("passed", { items: [item("goal", "goal", "passed"), ask] }))).toMatchObject({ passed: 2, failed: 0, total: 2 });
   const r = review("rework", { items: [item("goal", "goal", "failed", { severity: "blocker", detail: "core missing" }), minor] });
   const text = reworkMessage(r);
   expect(text).toContain("✗ [blocker] Does what you asked — core missing [id: goal]");
@@ -335,6 +339,7 @@ test("card item demotion: three decisive fails in a row whose findings all diffe
   expect(demotionFinding({ detail: "x".repeat(300) })).toHaveLength(200);
   // Same place, or word sets with Jaccard ≥ 0.5 (English by word, CJK by character).
   expect(sameFinding("a.ts:3 — one thing", "a.ts:3 — another thing entirely")).toBe(true);
+  expect(sameFinding("src/ui panel.ts:12 — one thing", "src/ui panel.ts:12 — another thing entirely")).toBe(true);
   expect(sameFinding("The zh-TW catalog has no entry for Rerun", "zh-TW catalog has no entry for the Rerun label")).toBe(true);
   expect(sameFinding("The zh-TW catalog has no entry", "The phone layout overflows on small screens")).toBe(false);
   expect(sameFinding("缺少繁体中文翻译", "繁体中文翻译缺少")).toBe(true);

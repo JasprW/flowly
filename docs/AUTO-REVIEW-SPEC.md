@@ -177,7 +177,7 @@ stateDiagram-v2
 
 **卡片项降级**：卡片专属项（GUARDRAILS-SPEC §3.3）连续 3 次决定性地不通过、而且 3 次的意见两两不同时，从第 3 次起降为不参与判定（`gating: false`，抽屉标 “observing”，`reason` “Failed 3 times in a row with a different finding each time, so it no longer decides the review.”），之后在这张卡上照常判定、显示，但不再退回。两次意见“相同”：引用同一文件同一行，或者词集合（英文按词、中日韩按字，小写）的 Jaccard ≥ 0.5。通过、`na`、`minor` 让连续计数归零；`needs_user`、`disputed`、`skipped`、`unavailable` 不改变计数。
 
-**内容指纹**：`fingerprint.content` 是本次改动内容的摘要：按 GUARDRAILS-SPEC §6.2 取本次改动涉及的路径（worktree 卡为分支以来的改动加未跟踪文件，目录卡为未提交改动、最近 5 个提交和未跟踪文件；linked root 带仓库前缀），对每个路径（评审开始时取的路径集合，评审中新加的文件不计）的工作区内容（不存在记为删除）算 SHA-1，再对排序后的“路径 + 内容哈希”算一次，取 16 位。提交本身不改内容，所以 agent 提交、推送不会让结果作废；共享目录里别的会话改了本卡改动之外的文件也不会。共享目录里，开始时就在 diff 里的别人的文件被改，仍会让评审作废（无法区分归属，D6）。读不到时（git 失败）回退到比较 HEAD sha 与 dirty。
+**内容指纹**：`fingerprint.content` 是本次改动内容的摘要：按 GUARDRAILS-SPEC §6.2 取本次改动涉及的路径（worktree 卡为分支以来的改动加未跟踪文件，目录卡为未提交改动、最近 5 个提交和未跟踪文件；linked root 带仓库前缀），卡片自己的 worktree 里再并上与评审开始时 HEAD 不同的路径（`git diff <开始时 sha> --name-only` 加未跟踪文件），所以评审中改了或新加了集合外的文件，路径集合就变了，摘要随之不同；共享目录不并（别的会话的改动会让每次评审都作废，D6），评审中新加的文件不计。对每个路径的工作区内容（不存在记为删除；符号链接只记其指向的路径，不跟随；文件逐个流式读取）算 SHA-1，再对排序后的“路径 + 内容哈希”算一次，取 16 位。提交本身不改内容，所以 agent 提交、推送不会让结果作废；共享目录里别的会话改了本卡改动之外的文件也不会。共享目录里，开始时就在 diff 里的别人的文件被改，仍会让评审作废（无法区分归属，D6）。读不到时（git 失败）回退到比较 HEAD sha 与 dirty。
 
 ## 4. 检查
 

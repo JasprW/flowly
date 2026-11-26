@@ -1,7 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { deliveringBackgroundWork } from "./background-work";
 import { createHash, randomUUID } from "node:crypto";
-import { access, readdir, readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { access, lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cardImagePath } from "./card-images";
 import { promisify } from "node:util";
@@ -361,10 +362,24 @@ export async function linkedShape(repos: readonly LinkedRepo[], baseRef?: string
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
 
-/** One file's content as a digest; "-" when it is gone (deleted) or cannot be read. */
+/**
+ * One path's content as a digest: a file's bytes, read as a stream; a symbolic link's target path, never followed;
+ * "-" when it is gone (deleted) or cannot be read.
+ */
 async function fileDigest(path: string): Promise<string> {
-  const data = await readFile(path).catch(() => null);
-  return data ? createHash("sha1").update(data).digest("hex") : "-";
+  const info = await lstat(path).catch(() => null);
+  if (!info) return "-";
+  if (info.isSymbolicLink()) {
+    const target = await readlink(path).catch(() => null);
+    return target === null ? "-" : createHash("sha1").update(`link ${target}`).digest("hex");
+  }
+  const hash = createHash("sha1");
+  try {
+    for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+  } catch {
+    return "-";
+  }
+  return hash.digest("hex");
 }
 /**
  * The review fingerprint's content digest (AUTO-REVIEW-SPEC §3.6): the working-tree content of each path this
@@ -373,7 +388,9 @@ async function fileDigest(path: string): Promise<string> {
  */
 export async function contentDigest(directory: string, paths: Iterable<string>): Promise<string> {
   const sorted = [...new Set(paths)].sort();
-  const lines = await Promise.all(sorted.map(async (p) => `${p} ${await fileDigest(join(directory, p))}`));
+  // One file at a time, so memory stays at one read chunk however large the delivery's files are.
+  const lines: string[] = [];
+  for (const p of sorted) lines.push(`${p} ${await fileDigest(join(directory, p))}`);
   return createHash("sha1").update(lines.join("\n")).digest("hex").slice(0, 16);
 }
 
@@ -982,12 +999,25 @@ export class AutoReviewService {
       const t = fresh.tasks.find((x) => x.id === delivery.taskId);
       if (t && roundAwaitsTurnEnd(fresh.events, t.id, t.review)) await Promise.race([lifecycleRecorded, new Promise((resolve) => setTimeout(resolve, lifecycleWaitMs).unref())]);
     }
-    // The content digest (§3.6): the paths this delivery changed, under the directory they are relative to.
+    // The content digest (§3.6): the paths this delivery changed, under the directory they are relative to, and, in the
+    // card's own worktree, every path that differs from the start's commit (so an edit or new file outside that set
+    // after the start changes it; a commit of the same content leaves it as it was). A shared directory leaves those
+    // out: other sessions' edits there would cancel every review (D6).
     const contentPaths = measured ? [...measured.paths] : null;
-    const content = where && contentPaths ? await contentDigest(where.directory, contentPaths).catch(() => undefined) : undefined;
+    const startSha = head?.sha;
+    const startRepos = repoShas;
+    const changedAfter = async (): Promise<string[]> => {
+      if (!where?.worktree) return [];
+      const sets = linked.length
+        ? await Promise.all(linked.map((r) => (startRepos?.[r.name] ? pathsChangedSince(r.directory, startRepos[r.name]!, this.git, `${r.name}/`) : new Set<string>())))
+        : [startSha ? await pathsChangedSince(where.directory, startSha, this.git) : new Set<string>()];
+      return sets.flatMap((set) => [...set]);
+    };
+    const digestNow = async () => (where && contentPaths ? await contentDigest(where.directory, [...contentPaths, ...(await changedAfter())]).catch(() => undefined) : undefined);
+    const content = await digestNow();
     const measure = async (): Promise<Measured> => {
       if (!where) return {};
-      if (content !== undefined && contentPaths) return { content: await contentDigest(where.directory, contentPaths).catch(() => undefined) };
+      if (content !== undefined) return { content: await digestNow() };
       return { head: linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now()) };
     };
     const startedAt = this.now();
