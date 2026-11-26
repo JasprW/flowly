@@ -365,7 +365,7 @@ export async function readConversation(
       .timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" })
       .catch(() => null);
     const entries = ((res?.entries || []) as { timestamp?: string; item?: TurnItem }[]).filter((e) => e.item);
-    const calls = answeredCalls(entries, answered(id));
+    const calls = answeredCalls(entries, answered(id), res?.hasOlder === false);
     for (const [index, entry] of entries.entries()) {
       const at = entry.timestamp || "";
       const item = entry.item!;
@@ -385,28 +385,37 @@ export async function readConversation(
 
 /**
  * Which Codex async answers message of a session was sent for which answered call (§4.2, E2): a message is read as a
- * call's answers only when it is the message Paseo built from that call's titles and answers, character for character.
- * Two calls can build the same text (a later answer that spans what looks like the earlier call's next question), so
- * they are paired in order: the timeline shows the answers messages in the order the user answered, and the calls
- * are kept in that order too. Pairing runs from the newest message back, each call used once and never one answered
- * after the newer message's call, so messages that fell out of the read window do not shift the rest. Only calls whose
- * own `request_user_input_async` tool call is in the timeline read take part: a rewind removes a call from the timeline
- * (Paseo keeps the calls it finds there, `reconcileAsyncQuestionsAfterRewind`) but not from what the hooks recorded.
+ * call's answers only when it is the message Paseo built from that call's titles and answers, character for character,
+ * and the pairing is certain. Two calls can build the same text (a later answer that spans what looks like the earlier
+ * call's next question), so the messages of one text are paired with the calls of that text only when there are as
+ * many of each, in order (the timeline shows the answers messages in the order the user answered, and the calls are
+ * kept in that order too). A call counts when its own `request_user_input_async` tool call is in the timeline read.
+ * When the read holds the whole timeline (`whole`), a call missing from it was removed by a rewind (Paseo keeps the
+ * calls it finds there, `reconcileAsyncQuestionsAfterRewind`) and is left out; when it does not, a missing call may sit
+ * before the window, so nothing of that text is paired. Any other mismatch (a rewind that removed an answer but kept
+ * its question, a call no longer held in memory) leaves every message of that text whole.
  */
-function answeredCalls(entries: readonly { item?: TurnItem }[], answeredNewestFirst: readonly AnsweredQuestions[]): Map<number, AnsweredQuestions> {
+function answeredCalls(
+  entries: readonly { item?: TurnItem }[],
+  answeredNewestFirst: readonly AnsweredQuestions[],
+  whole: boolean,
+): Map<number, AnsweredQuestions> {
   const out = new Map<number, AnsweredQuestions>();
   const asked = new Set<string>();
-  for (const { item } of entries) if (item?.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string") asked.add(item.callId);
-  let pool = answeredNewestFirst.filter((a) => asked.has(a.callId));
-  for (let i = entries.length - 1; i >= 0 && pool.length; i--) {
-    const item = entries[i]!.item!;
-    if (item.type !== "user_message" || typeof item.text !== "string") continue;
+  const byText = new Map<string, number[]>();
+  for (const [i, { item }] of entries.entries()) {
+    if (item?.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string") asked.add(item.callId);
+    if (item?.type !== "user_message" || typeof item.text !== "string") continue;
     const text = item.text.trim();
-    if (!text.startsWith(CODEX_ANSWERS_PREFIX)) continue;
-    const at = pool.findIndex((a) => a.message === text);
-    if (at < 0) continue;
-    out.set(i, pool[at]!);
-    pool = pool.slice(at + 1);
+    if (text.startsWith(CODEX_ANSWERS_PREFIX)) byText.set(text, [...(byText.get(text) ?? []), i]);
+  }
+  const inAnswerOrder = [...answeredNewestFirst].reverse();
+  for (const [text, at] of byText) {
+    const calls = inAnswerOrder.filter((a) => a.message === text);
+    if (!whole && calls.some((a) => !asked.has(a.callId))) continue;
+    const kept = calls.filter((a) => asked.has(a.callId));
+    if (kept.length !== at.length) continue;
+    at.forEach((index, n) => out.set(index, kept[n]!));
   }
   return out;
 }

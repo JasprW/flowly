@@ -1328,7 +1328,7 @@ test("a Codex answers message is read as the answers of the call it was sent for
     ({
       agents: {
         list: async () => ({ entries: [{ agent: { id: agentId, workspaceId: "w" } }], pageInfo: {} }),
-        ref: () => ({ timeline: { refetch: async () => ({ entries: codexTimeline([{ asked: "two" }, { asked: "one" }, ...texts]) }) } }),
+        ref: () => ({ timeline: { refetch: async () => ({ hasOlder: false, entries: codexTimeline([{ asked: "two" }, { asked: "one" }, ...texts]) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
   const read = (texts: string[], agentId?: string) => readConversation({ workspaceId: "w" }, paseo(texts, agentId), (id) => q.answers(id));
@@ -1373,7 +1373,7 @@ test("a Codex answers message is read as the answers of the call it was sent for
   expect(await judged("Follow the card", [two], "a2")).toMatchObject({ state: "failed", quote: "Follow the card" });
 });
 
-test("two answered Codex calls that build the same message text are paired with their messages in timeline order, only with calls still in the timeline (§4.2, E2)", async () => {
+test("two answered Codex calls that build the same message text are paired with their messages in order only when certain, otherwise kept whole (§4.2, E2)", async () => {
   // Call A asks two questions; call B later asks one with A's first title, and its multi-line answer reads like A's
   // whole answer, so both answers messages are the same text.
   const q = new AsyncQuestionTitles();
@@ -1387,14 +1387,15 @@ test("two answered Codex calls that build the same message text are paired with 
   answer("B", "Rerun\n\nWhere?\nDrawer only");
   const same = "Answers to your questions:\n\nWhich label?\nRerun\n\nWhere?\nDrawer only";
   expect(q.answers("a1").map((a) => a.message)).toEqual([same, same]);
-  const paseo = (lines: (string | { asked: string })[]) =>
+  // `hasOlder` false: the read holds the whole timeline; true: older entries lie before the window.
+  const paseo = (lines: (string | { asked: string })[], hasOlder: boolean) =>
     ({
       agents: {
         list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
-        ref: () => ({ timeline: { refetch: async () => ({ entries: codexTimeline(lines) }) } }),
+        ref: () => ({ timeline: { refetch: async () => ({ hasOlder, entries: codexTimeline(lines) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
-  const read = (lines: (string | { asked: string })[]) => readConversation({ workspaceId: "w" }, paseo(lines), (id) => q.answers(id));
+  const read = (lines: (string | { asked: string })[], hasOlder = false) => readConversation({ workspaceId: "w" }, paseo(lines, hasOlder), (id) => q.answers(id));
   const a = [
     { ask: "Which label?", answer: "Rerun" },
     { ask: "Where?", answer: "Drawer only" },
@@ -1402,14 +1403,18 @@ test("two answered Codex calls that build the same message text are paired with 
   const b = { ask: "Which label?", answer: "Rerun\n\nWhere?\nDrawer only" };
   // The earlier message is A's two answers, the later one B's single answer.
   expect(await read([{ asked: "A" }, same, { asked: "B" }, "Thanks", same])).toEqual([...a, "Thanks", b]);
-  // A's call and message fell out of the read window: the one left is still B's, the newest.
-  expect(await read([{ asked: "B" }, "Thanks", same])).toEqual(["Thanks", b]);
-  // The session was rewound to before B: B's call and message are gone from the timeline, though the hooks recorded
-  // B's answer. The message left is A's, both answers kept.
+  // The session was rewound to before B: B's call and message are gone from the whole timeline, though the hooks
+  // recorded B's answer. The message left is A's, both answers kept.
   expect(await read([{ asked: "A" }, same])).toEqual(a);
   expect(await read([{ asked: "A" }, same, "Thanks"])).toEqual([...a, "Thanks"]);
+  // A rewind that removed B's answer but kept its question: two calls, one message, not certain whose; it stays whole.
+  expect(await read([{ asked: "A" }, { asked: "B" }, same])).toEqual([same]);
+  // The read window cut off A's question and kept both answers: A may sit before the window, so neither is paired.
+  expect(await read([{ asked: "B" }, same, same], true)).toEqual([same, same]);
+  expect(await read([{ asked: "B" }, "Thanks", same], true)).toEqual(["Thanks", same]);
   // A message whose call is in no timeline read stays the user's whole message.
   expect(await read([same])).toEqual([same]);
+  expect(await read([same], true)).toEqual([same]);
 
   let seen: LlmReviewInput | undefined;
   const judged = async (quote: string, lines: (string | { asked: string })[] = [{ asked: "A" }, same, { asked: "B" }, same]) => {
@@ -1432,6 +1437,24 @@ test("two answered Codex calls that build the same message text are paired with 
   expect(seen!.conversation).toEqual(a);
   expect(await judged("Where?", rewound)).toMatchObject({ state: "na", reason: "no evidence" });
   expect(await judged("Which label", rewound)).toMatchObject({ state: "na", reason: "no evidence" });
+  // When the pairing is not certain the message is never read as B's single answer; it reaches the review whole.
+  for (const [lines, hasOlder] of [
+    [[{ asked: "A" }, { asked: "B" }, same], false],
+    [[{ asked: "B" }, same, same], true],
+  ] as const) {
+    seen = undefined;
+    const x = await setup({
+      conversation: () => read([...lines], hasOlder),
+      llm: async (input) => {
+        seen = input;
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote: "Drawer only" }] };
+      },
+    });
+    await x.deliver("development");
+    expect(seen!.conversation).not.toContainEqual(b);
+    expect((seen!.conversation ?? []).every((entry) => entry === same)).toBe(true);
+    expect(seen!.conversation?.length).toBeGreaterThan(0);
+  }
 });
 
 test("only the user's answer in a question tool counts as quoted evidence, not the agent's question (§4.2, B1)", async () => {
