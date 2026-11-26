@@ -1505,5 +1505,6 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
   - Git 加引号的路径（中文、制表符）在 diff 头和 numstat 里正确还原。
   - 已经停止的评审不再起命令；摘要等待被停止时不留未处理的 rejection。
   - 返工消息没能发出时退回总上限计数；`minor` 的不通过不计抓到；未解决的上一轮问题保持原 severity；归档清除挂起。
+  - 第二轮：返工轮把上一轮的 severity 一并交给评审；numstat 路径只解码一次（文件名本身带引号时不再被剥掉）。
   - 未改（理由回复在 PR 线程里）：Rerun 前删除挂起与事务之间的竞争。窗口只有一次 git 调用的时间，后果是人再按一次 Rerun。
   - 检查：`npm run typecheck` 退出码 0；`npm test` 172 个文件通过、1 个跳过，测试 1615 通过、6 跳过。

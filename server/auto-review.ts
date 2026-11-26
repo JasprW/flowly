@@ -82,7 +82,7 @@ export type JudgedCheck = {
   /** The user's own words it came from. */
   quote?: string;
   /** Round ≥ 2: its result in the previous round. */
-  previous?: { state: string; detail?: string };
+  previous?: { state: string; severity?: string; detail?: string };
 };
 /** What the review session reads (GUARDRAILS-SPEC §6.3). */
 export type LlmReviewInput = {
@@ -306,7 +306,9 @@ export function numstatShape(...outputs: string[]): { shape: ChangeShape; paths:
       const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line.trim());
       if (!m) continue;
       lines += (m[1] === "-" ? 0 : Number(m[1])) + (m[2] === "-" ? 0 : Number(m[2]));
-      paths.add(unquoteGitPath(renamedTo(unquoteGitPath(m[3]!))));
+      // Decode Git's quoting exactly once: the whole record when Git quoted all of it, else the renamed-to part.
+      const raw = m[3]!;
+      paths.add(/^"(?:[^"\\]|\\.)*"$/.test(raw) ? renamedTo(unquoteGitPath(raw)) : unquoteGitPath(renamedTo(raw)));
     }
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
@@ -1095,7 +1097,7 @@ export class AutoReviewService {
           kind: i.kind as JudgedCheck["kind"],
           text: text(i),
           ...(quote ? { quote } : {}),
-          ...(prior ? { previous: { state: prior.state, ...(prior.detail ? { detail: prior.detail } : {}) } } : {}),
+          ...(prior ? { previous: { state: prior.state, ...(prior.severity ? { severity: prior.severity } : {}), ...(prior.detail ? { detail: prior.detail } : {}) } } : {}),
         };
       }),
       ...(ids.includes(GOAL_ID) ? { conversation: this.deps.conversation ? await this.deps.conversation(task, paseo).catch(() => null) : null } : {}),

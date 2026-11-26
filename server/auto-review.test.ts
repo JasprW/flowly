@@ -1121,6 +1121,8 @@ test("the delivery's shape from git --numstat: files, changed lines (binary 0), 
   expect([...paths].sort()).toEqual(["logo.png", "src/a.ts", "src/new/b.ts"]);
   expect(numstatShape("").shape).toEqual({ files: 0, lines: 0, size: "s" });
   expect([...numstatShape('1\t0\t"\\350\\257\\264\\346\\230\\216.ts"\n').paths]).toEqual(["说明.ts"]);
+  // A name that itself starts and ends with quotes is decoded once, keeping them.
+  expect([...numstatShape('1\t0\t"\\"\\350\\257\\264\\346\\230\\216.ts\\""\n').paths]).toEqual(['"说明.ts"']);
   expect(numstatShape("500\t1\tbig.ts").shape.size).toBe("l");
   expect(repoPath("/w", "./src/a.ts")).toBe("src/a.ts");
   expect(repoPath("/w", "/w/src/a.ts")).toBe("src/a.ts");
@@ -1596,9 +1598,11 @@ test("a decisive fail with needs_user: rework lists both apart", async () => {
 
 test("rework round: a fail of what passed before must cite a file this round changed, else it is minor (§3.6)", async () => {
   let round = 0;
-  const llm: LlmReview = async () => {
+  const seen: LlmReviewInput[] = [];
+  const llm: LlmReview = async (input) => {
     round++;
-    if (round === 1) return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Missing.", file: "src/a.ts" }, { id: "g1", verdict: "pass", detail: "ok" }] };
+    seen.push(input);
+    if (round === 1) return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "blocker", detail: "Missing.", file: "src/a.ts" }, { id: "g1", verdict: "pass", detail: "ok" }] };
     if (round === 2) return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }, { id: "g1", verdict: "fail", detail: "New nit elsewhere.", file: "src/a.ts" }] };
     return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }, { id: "g1", verdict: "fail", detail: "Broke it here.", file: "src/b.ts" }] };
   };
@@ -1618,6 +1622,8 @@ test("rework round: a fail of what passed before must cite a file this round cha
   expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed" });
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")!.severity).toBeUndefined();
+  // The reviewer sees each unresolved failure's severity, so it can keep it (§3.6).
+  expect(seen[1]!.checks.find((c) => c.id === "goal")!.previous).toMatchObject({ state: "failed", severity: "blocker" });
 });
 
 test("the card's cap: its 10th judged review that fails goes to Blocked without rework; Done clears the count (§3.3)", async () => {

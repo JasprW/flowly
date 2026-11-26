@@ -97,7 +97,7 @@ export function reviewPrompt(input: LlmReviewInput): string {
           `  kind: ${kindLabel[c.kind]}`,
           `  check: ${c.text.replace(/\n/g, " ")}`,
           ...(c.quote ? [`  user's words: ${c.quote.replace(/\s+/g, " ")}`] : []),
-          ...(c.previous ? [`  previous result: ${c.previous.state}${c.previous.detail ? ` — ${c.previous.detail.replace(/\s+/g, " ")}` : ""}`] : []),
+          ...(c.previous ? [`  previous result: ${c.previous.state}${c.previous.severity ? ` (${c.previous.severity})` : ""}${c.previous.detail ? ` — ${c.previous.detail.replace(/\s+/g, " ")}` : ""}`] : []),
         ].join("\n"),
       )
       .join("\n")}`,

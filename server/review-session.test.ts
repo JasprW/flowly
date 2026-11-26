@@ -56,6 +56,8 @@ test("round 2 reviews only the changes since the previous delivery and shows eac
   const prompt = reviewPrompt({ ...base, incremental: true, checks: [{ ...base.checks[1]!, previous: { state: "failed", detail: "zh-TW missing" } }] });
   expect(prompt).toContain("This is a rework round: the diff holds only what changed since the previous delivery");
   expect(prompt).toContain("previous result: failed — zh-TW missing");
+  const graded = reviewPrompt({ ...base, incremental: true, checks: [{ ...base.checks[1]!, previous: { state: "failed", severity: "major", detail: "zh-TW missing" } }] });
+  expect(graded).toContain("previous result: failed (major) — zh-TW missing");
 });
 
 test("the built-in check's input: the user's words in order, or a note when they could not be read; nothing without it", () => {
