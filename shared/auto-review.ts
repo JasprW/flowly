@@ -176,7 +176,8 @@ export function stopReviewForPerson(task: Pick<Task, "review" | "status" | "arch
   const review = task.review;
   if (!review || event.actor !== "human") return false;
   if ((event.action === "status_changed" || event.action === "archive_changed") && review.held) delete review.held;
-  const away = (event.action === "status_changed" && event.to !== "in_review") || (event.action === "archive_changed" && !!task.archivedAt);
+  // An edit can move the card back to In review and archive it in one write: archived counts as away either way.
+  const away = !!task.archivedAt || (event.action === "status_changed" && event.to !== "in_review");
   if (!away || review.state !== "running") return false;
   task.review = { ...review, state: "cancelled", reason: "A person moved the card during the review.", finishedAt: at };
   return true;

@@ -321,6 +321,8 @@ test("a person moving the card away or archiving it cancels the running review i
   const held = { status: "development" as const, archivedAt: null, review: review("cancelled", { held: true }) };
   expect(stopReviewForPerson(held, { actor: "human", action: "status_changed", to: "test" }, at)).toBe(false);
   expect(held.review.held).toBeUndefined();
+  const archivedBack = { ...running(), status: "in_review" as const, archivedAt: at as string | null };
+  expect(stopReviewForPerson(archivedBack, { actor: "human", action: "status_changed", to: "in_review" }, at)).toBe(true);
   const heldArchived = { status: "development" as const, archivedAt: at as string | null, review: review("cancelled", { held: true }) };
   expect(stopReviewForPerson(heldArchived, { actor: "human", action: "archive_changed" }, at)).toBe(false);
   expect(heldArchived.review.held).toBeUndefined();
