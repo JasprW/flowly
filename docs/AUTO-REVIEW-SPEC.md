@@ -55,7 +55,7 @@
 
 **agent** 调用 `flowly_update_status(in_review)`，通过 L1 并成功提交，项目开启了 Auto review，卡片未归档、不是设置卡片（§6.3），且有对这张卡生效的检查（§4.2）。人拖进 In review 不触发。
 
-评审在**交付的那个 session 这一轮结束后**才开始（`agent.turn_ended`）；交付时该 session 已空闲则立即开始。交付之后同一轮里 agent 还可能提交、改 workpad，这些会改变指纹让评审作废。回合结束的 hook 先把评审入队，再做设置、模型、timeline 等读取（2026-11-13）。检查计算不等待这些读取；只有返工消息等待本轮 `agent.turn_ended` 记录提交后才发送，防止返工的新回合开始后被旧回合的结束记录覆盖。记录失败则不发送返工，并把评审记为 Unavailable。
+评审在**交付的那个 session 这一轮结束后**才开始（`agent.turn_ended`）；交付时该 session 已空闲则立即开始。交付之后同一轮里 agent 还可能改 workpad 或改动内容，这些会改变指纹让评审作废；只提交、推送不会（§3.6）。回合结束的 hook 先把评审入队，再做设置、模型、timeline 等读取（2026-11-13）。检查计算不等待这些读取（只有轮次取决于一个还没记下结束的回合时，才等本轮 `agent.turn_ended` 记下 `byUser`，最多 15 秒，§3.3）；只有返工消息等待本轮 `agent.turn_ended` 记录提交后才发送，防止返工的新回合开始后被旧回合的结束记录覆盖。记录失败则不发送返工，并把评审记为 Unavailable。
 
 **等待评审**（2026-11-13）：交付的同一次写入里记下 `task.reviewWaiting`。从交付到评审开始（等回合结束、项目内排队），卡片在 In review 时显示 “Waiting for review”，上一次评审的结果不显示、不进 Attention、不能 Rerun；这期间卡片的未读同 Reviewing 一样暂不计入。评审开始的那次写入清除它；这次交付没被评审（卡片已离开 In review、项目关了 Auto review 等）时也清除。等待中的交付只记在内存里：等待期间插件重启，启动时清除标记，卡片仍在 In review 时评审记为 Unavailable（“Flowly restarted before the review started.”），人可以按 Rerun。
 
@@ -69,12 +69,17 @@ stateDiagram-v2
     Reviewing --> Passed: 所有检查通过或不适用
     Reviewing --> Rework: 有检查不通过，且已返工次数 < maxRounds
     Reviewing --> Failed: 有检查不通过，且已返工次数 = maxRounds
+    Reviewing --> NeedsUser: 没有决定性的不通过，有决定性的 needs_user
     Reviewing --> Unavailable: 评审本身出错
-    Reviewing --> Cancelled: 指纹变化（人移动卡片 / 新一轮开始 / 新提交）
+    Reviewing --> Cancelled: 内容或 workpad 变化 / 人移动卡片（立即停止）
+    Reviewing --> Held: A1 让卡片离开 In review
+    Held --> Passed: A1r 还原且内容未变（同样可到 Rework、Failed、NeedsUser、Unavailable）
+    Held --> Cancelled: A1r 还原但内容变了
     Rework --> L1: agent 修改后再次交付
     Passed --> [*]: 留在 In review，放开被压住的未读
     Failed --> [*]: 移到 Blocked，进入 Attention
     Unavailable --> [*]: 留在 In review，进入 Attention
+    NeedsUser --> [*]: 留在 In review，进入 Attention（写明要人做什么）
 ```
 
 同一项目同一时间只跑一个评审（排队），因为它们的卡可能共用目录。
@@ -88,14 +93,18 @@ stateDiagram-v2
   3. 项目关闭 autoStatus 时 R1 照常运行。
 - **Failed（R2）**：返工次数已达 `maxRounds` 仍不通过，不再发消息；卡片移到 Blocked（actor=system，`rule: "R2"`，note “Auto review failed after N rework rounds”），进入 Attention。Blocked 泳道关闭时留在 In review。之后用户在该卡 session 里回复，A1 照常把卡拉回最近的工作阶段；人也可以按 Rerun 重新评审（§3.5）。
 - **Unavailable**：评审机制本身出错：工作目录不可用、命令起不来或超时、评审 session 失败或输出无法解析、返工 session 已不在、评审进行中 Flowly 重启。卡片不动（R1 之后投递失败时保持退回状态），进入 Attention 并显示原因。不计返工次数。
-- Failed 与 Unavailable 的 Attention 在人对这张卡有动作后消除（§3.5）。
-- **Cancelled**：开始时记录指纹（task revision、workpad revision、HEAD sha、dirty）。写结果前指纹变了就丢弃结果：不改状态、不发消息、不进 Attention。卡片仍在 In review 时显示 “Review cancelled”，可 Rerun。共享工作区里别的卡提交也会让 HEAD 变化而取消。
+- **Needs you（needs_user，2026-11-26）**：没有决定性的不通过（§3.6），但有决定性的 `needs_user` 项：问题要人或外部条件才能解决（要用户决定、要设备或账号、要别的团队、事情已经发生无法重做）。不发返工，卡片留在 In review，不计返工次数；进入 Attention，原因是 “Review needs you”，后面跟要人做的事（各 `needs_user` 项的 detail，见 §9.4）。人改状态、按 Rerun，或人发消息开始的回合结束后消除（§3.5；后台唤醒的回合不算）。人可以 Rerun。
+- Failed、Unavailable 与 Needs you 的 Attention 在人对这张卡有动作后消除（§3.5）。
+- **Cancelled**：开始时记录指纹（workpad revision、本次改动的内容摘要 `content`，以及 HEAD sha、dirty，见 §3.6）。写结果前内容摘要或 workpad revision 变了就丢弃结果：不改状态、不发消息、不进 Attention。task revision 不再参与（2026-11-26）。卡片仍在 In review 时显示 “Review cancelled”，可 Rerun。
+  - 人把卡移出 In review（拖动、菜单、手机 Actions，任意 `actor: "human"` 的 `status_changed`）或归档：**立即**停掉这次评审：正在跑的命令连同其子进程被结束，评审 session 被删除（0.16 上归档），结果记为 Cancelled，原因 “A person moved the card during the review.”。
+  - 卡片因 A1（人在卡片 session 里发消息）离开 In review：评审照常跑完。结束时卡片仍不在 In review 就把结果**挂起**（`held`，状态记 Cancelled，原因 “The card left In review during the review.”），不改状态、不发消息。之后 A1r 把卡还原到 In review 时重新算内容摘要：与开始时相同（workpad revision 也相同）就按挂起的结果走（通过、R1/R2、Needs you、Unavailable，与当场结束完全一样）；不同就丢弃，仍是 Cancelled。挂起期间 agent 再交付则新评审替换它；人改状态或归档时清除挂起。
 - 通过后从不自动移到 Done。
 
 ### 3.3 返工计数
 
 - `round` 从 1 开始，每次 Rework 后再交付 +1；已返工次数 = `round - 1`。`maxRounds = 2` 表示最多自动返工 2 次、最多评审 3 次；`maxRounds = 0` 表示第一次不通过就进 Blocked。
-- 重置为 1：上一次评审结束后人移动了卡片；该卡开始了不止一个回合（返工消息本身开始一个回合，多出来的是人发的消息）；上一次评审是 Passed/Failed/Unavailable/Cancelled；人按 Rerun。
+- 重置为 1（2026-11-26 起只认人）：上一次评审不是 Rework；上一次评审结束后人改过卡片状态；人按 Rerun；上一次评审结束后，这张卡的 session 里有**人发消息开始的回合**（返工消息开始的那一回合除外）。回合是不是人发起的，看它 `agent.turn_ended` 事件的 `byUser`：Paseo 后台任务唤醒的回合（以 `<task-notification`、`<system-reminder` 等注入文本开始）为 false，不算；读不到 timeline 的回合（`byUser` 缺失）按人算。轮次取决于一个还没记下结束的回合（返工回合以外、上一次评审之后开始的回合，通常就是交付所在的回合）时，评审在开始前等它的 `agent.turn_ended` 写入，最多 15 秒；等不到时按已记下的事件判断（没结束的回合不算）。交付就在返工回合里时不等。
+- **每卡总上限**：一张卡评审过的次数（通过、Rework、Failed、Needs you；不含 Cancelled 与 Unavailable，返工消息没能发出而记为 Unavailable 的那次也退回不计；Rerun 也算）记在 `task.reviewCount`，卡进 Done 或 Cancelled 时清零。达到 10 次后，不通过的评审不再返工，按 R2 处理：移到 Blocked（Blocked 泳道关闭时留在 In review），note “Auto review stopped after 10 reviews of this card”，评审 `reason` “This card reached 10 reviews, so no more automatic rework.”。之后的交付和 Rerun 照常评审，通过照常通过；只是不再自动返工，由人决定下一步。
 
 ### 3.4 交付指定的 worktree（2026-11-13）
 
@@ -139,6 +148,7 @@ stateDiagram-v2
 - 评审记录加 `handledAt`（§8.2）：这次评审结束后，人第一次对这张卡有动作的时间。`reviewSignal` 在 `handledAt` 存在时不出信号；卡面、抽屉和 `get_task.review` 照常显示 Review failed / Review unavailable（那是卡片状态，不是提醒）。
 - 记为已处理的动作（只对 `failed` / `unavailable` 且已结束、还没有 `handledAt` 的记录，写入不改 task revision）：
   1. 这张卡 workspace 里任一受管 session 开始一个回合（`agent.turn.before`，与 `agent.turn_started` 记录同一次写入，在 A1 之前）。Failed 和 Unavailable 都不发返工消息，所以评审结束之后开始的回合都来自人（含人新建的 session；Paseo 的定时任务也会算，可以接受）。之后 A1r 把卡还原到 Blocked 时信号不再回来。
+     Needs you（2026-11-26）不按回合开始算：只有人发消息开始、而且在评审结束之后才开始的回合结束时（`agent.turn_ended` 的 `byUser` 为 true，与它同一次写入；开始时间取该 session 最近一次 `agent.turn_started`）才算处理；后台任务唤醒的回合（`byUser: false`）不算，因为 Needs you 要的是人去做一件事；交付所在回合的结束晚于评审结束才记下时也不算，它不是对结果的回应。
   2. 人改这张卡的状态（拖动、菜单、手机 Actions，任意 `actor: "human"` 的 `status_changed`），与改状态同一次写入。从 Blocked 拖到 In review 后卡面仍是 Review failed，可按 Rerun，但不再提醒。
   3. Rerun：新评审替换整条记录（从 Blocked 重试时，移动那次写入先按第 2 条处理）。
 - 只打开卡片、看抽屉、Mark as read 不算处理（D18）。想放着不管仍用 Dismiss（ATTENTION-DISMISS-SPEC，规则不变）。
@@ -146,6 +156,28 @@ stateDiagram-v2
 - 不影响卡片的其他 Attention 信号（提问、权限、错误、未读）：它们照旧计数。
 
 **不变**：人拖进 In review 不触发评审；通过不进 Done；返工消息的格式、投递与指纹取消规则不变。遥测不加字段（Rerun 不是新开关，也不是值得单独计数的核心动作）。引导：不改导览，不加提示，Rerun 是已有按钮换了出现的位置；没有新的界面文字，i18n 目录不变。
+
+### 3.6 收敛（2026-11-26）
+
+状态：已实现。卡片 `a333fd46`。依据：`docs/verification/auto-review-eval-2026-11-26/REPORT.md` §4.4–4.7、§5 P1（每轮都挑出新问题、不分轻重地退回；agent 改不了的事也发返工；14% 的评审跑完后才被取消）。决定见 D20–D24。
+
+**严重程度**：评审给每条 `fail` 和 `needs_user` 标 `severity`：
+
+| severity | 含义 | 决定结果 |
+| --- | --- | --- |
+| `blocker` | 交付坏了东西，或没做到用户要的核心 | 是 |
+| `major` | 用户会因此退回的真缺陷或漏掉的要求 | 是 |
+| `minor` | 值得一提，但用户不会因此退回（措辞、风格、小的不一致、可选的改进） | 否 |
+
+- 缺 `severity` 的 `fail` 按 `major`（与以前一样会退回）。
+- **决定性**的项 = 参与判定（`gating`）且 `severity` 不是 `minor`。只有决定性的 `failed` 让评审不通过、发返工；`minor` 的 `failed` 照样记在评审记录里（抽屉显示 “Minor”，`get_task.review` 带 `severity`），不进返工消息，不计 Guardrails 的抓到、误判（§6.6 按 `na` 计）。
+- 返工轮（round ≥ 2，读增量 diff 时）：评审只复查上一轮没通过的项，并只找本轮改动引入的**回归**；上一轮没通过、这一轮仍以同样原因不通过的项保持原来的 severity；与本轮改动无关的新问题只能记 `minor`。daemon 确定性地兜底：上一轮通过（`passed` / `na`）的项这一轮判 `fail` 时，引用的 `file` 必须在本轮改动过的路径里，否则降为 `minor`（`reason` “Not caused by this round's changes.”）。本轮改动过的路径 = 从上一次评审记下的 HEAD sha 到现在 git 列出的全部路径（`git diff <sha> --name-only -z`）加未跟踪文件，linked root 按仓库各算一次并带仓库前缀；它不受评审 diff 64 KiB 截断的影响。git 失败时只看评审 diff 里出现的路径。
+
+**needs_user**：评审新增结论 `needs_user`（GUARDRAILS-SPEC §6.3），表示这一项 agent 做不到：要用户决定、要设备或账号、要别的团队、事情已经发生无法重做。`detail` 写人要做什么；没有 `detail` 的 `needs_user` 记为 `na`（`reason: "no detail"`）。不需要 `file` / `quote` 证据。总判定见 §4.5；不通过时返工消息另列这些项，告诉 agent 不要绕过、在交付说明里提一句（GUARDRAILS-SPEC §6.5）。
+
+**卡片项降级**：卡片专属项（GUARDRAILS-SPEC §3.3）连续 3 次决定性地不通过、而且 3 次的意见两两不同时，从第 3 次起降为不参与判定（`gating: false`，抽屉标 “observing”，`reason` “Failed 3 times in a row with a different finding each time, so it no longer decides the review.”），之后在这张卡上照常判定、显示，但不再退回。两次意见“相同”：引用同一文件同一行，或者词集合（英文按词、中日韩按字，小写）的 Jaccard ≥ 0.5。通过、`na`、`minor` 让连续计数归零；`needs_user`、`disputed`、`skipped`、`unavailable` 不改变计数。
+
+**内容指纹**：`fingerprint.content` 是本次改动内容的摘要：按 GUARDRAILS-SPEC §6.2 取本次改动涉及的路径（worktree 卡为分支以来的改动加未跟踪文件，目录卡为未提交改动、最近 5 个提交和未跟踪文件；linked root 带仓库前缀），卡片自己的 worktree 里再并上与评审开始时 HEAD 不同的路径（`git diff <开始时 sha> --name-only` 加未跟踪文件），所以评审中改了或新加了集合外的文件，路径集合就变了，摘要随之不同；共享目录不并（别的会话的改动会让每次评审都作废，D6），评审中新加的文件不计。对每个路径的工作区内容（不存在记为删除；符号链接只记其指向的路径，不跟随；文件逐个流式读取）算 SHA-1，再对排序后的“路径 + 内容哈希”算一次，取 16 位。提交本身不改内容，所以 agent 提交、推送不会让结果作废；共享目录里别的会话改了本卡改动之外的文件也不会。共享目录里，开始时就在 diff 里的别人的文件被改，仍会让评审作废（无法区分归属，D6）。读不到时（git 失败）回退到比较 HEAD sha 与 dirty。
 
 ## 4. 检查
 
@@ -205,14 +237,15 @@ stateDiagram-v2
 - 输出（`outputSchema`，解析宽松：取第一个 JSON 对象，未知 id 和坏条目丢弃）：
 
   ```
-  { rules: [{ id, verdict: "pass" | "fail" | "na", detail: string ≤ 600, file?: string, line?: int }] }
+  { items: [{ id, verdict: "pass" | "fail" | "na" | "needs_user", severity?: "blocker" | "major" | "minor",
+              detail: string ≤ 600, file?: string, line?: int, quote?: string }] }
   ```
 
-  `na` 按通过处理，显示 “Not applicable”。缺某条的 id → 那条 `unavailable`；session 超时、失败或输出无法解析 → 全部 `unavailable`。
+  `na` 按通过处理，显示 “Not applicable”。`severity` 与 `needs_user` 见 §3.6。缺某条的 id → 那条 `unavailable`；session 超时、失败或输出无法解析 → 全部 `unavailable`。
 
 ### 4.5 总判定
 
-有任何一条 `failed` → 不通过（R1 或 R2）；否则有 `unavailable` → Unavailable；否则 Passed。
+只看参与判定的项（2026-11-26）：有决定性的 `failed`（§3.6，不是 `minor`）→ 不通过（R1 或 R2，或到每卡上限按 R2，§3.3）；否则有 `unavailable` → Unavailable；否则有决定性的 `needs_user` → Needs you；否则 Passed。`minor` 的 `failed` 与 `needs_user` 只显示，不影响结果。
 
 ## 5. 返工投递与 get_task
 
@@ -396,15 +429,17 @@ project.reviewDraft?: {
 
 - `task.reviewSetup?: true`：设置卡片。
 - `task.review`：最近一次评审，新的覆盖旧的；写入不改 task revision。
+- `task.reviewCount?: int`：这张卡评审过的次数（§3.3 每卡上限），写入不改 task revision；卡进 Done / Cancelled 时删除。
 - `task.reviewWaiting?: { eventId, agentId, from, since, worktree? }`：已交付、评审还没开始（§3.1）；写入不改 task revision。只清除 `eventId` 与自己相同的标记；交付指定的 worktree 一并保存，重启恢复时复制到 review，避免交付事件被裁剪后 Rerun 回退到共享工作区。Rerun 也写它（§3.5）：`eventId` 为 `rerun:<uuid>`（不是交付事件），`agentId`、`from`、`worktree` 取自 Rerun 用的那次交付；等待中重启时恢复出的评审 `trigger.eventId` 为空。
 
 ```
 Review {
   trigger: { eventId, agentId, from },     // 人按 Rerun 时 eventId 为空
   round: int ≥ 1, maxRounds: int 0–5,
-  state: "running" | "passed" | "rework" | "failed" | "unavailable" | "cancelled",
-  reason?: string,                         // ≤ 500
-  fingerprint: { taskRevision, workpadRevision, sha?, dirty },
+  state: "running" | "passed" | "rework" | "failed" | "needs_user" | "unavailable" | "cancelled",
+  reason?: string,                         // ≤ 500；needs_user 时为要人做的事
+  fingerprint: { taskRevision, workpadRevision, sha?, dirty, content? },  // content：§3.6；taskRevision 只记录，不再用于取消
+  held?: true,                             // 卡片因 A1 离开 In review 时挂起的结果（§3.2 Cancelled）
   shared: boolean,                         // 非 worktree
   worktree?: string,                       // 交付指定的 worktree，评审实际用的目录（§3.4）
   rules: [{ id, kind: "command" | "llm", name,
@@ -413,11 +448,12 @@ Review {
             detail?, file?, line?,                     // 判定理由，passed 时也保留
             reason? }],                                // skipped/unavailable 的原因
   model?: string,
-  handledAt?: string,                      // 结束后人第一次对这张卡有动作的时间，只用于 failed/unavailable（§3.5）
+  handledAt?: string,                      // 结束后人第一次对这张卡有动作的时间，只用于 failed/unavailable/needs_user（§3.5）
   startedAt, finishedAt?
 }
 ```
 
+- 条目（GUARDRAILS-SPEC §6.4 的 `items`）的 `state` 增加 `needs_user`，并可带 `severity`（§3.6）。
 - 开始时所有检查为 `queued`，命令逐条变 `running` 再变结果；判断类检查在评审 session 运行期间一起为 `running`，结果一起写回。内置检查的条目 `id: "goal"`、`kind: "llm"`、`name: "Does what you asked"`。
 - 插件启动时仍为 `running` 的评审改为 `unavailable`（“Flowly restarted during the review.”）。
 
@@ -452,13 +488,13 @@ Review {
 
 - `Waiting for review`（In review，已交付、评审未开始，§3.1）：同一位置的指示条，时钟图标、无扫光；评审开始后原地变成 `Reviewing`。
 - `Reviewing n/N`（In review，进行中）：卡片底部展开指示条（图标 + 文字 + 运行中卡片同款点阵扫光，跟随 Reduce Motion 和扫光开关），开始时展开、结束时收起；n 为已结束的检查数。
-- `Review passed`（In review）、`Reworking 1/2`（退回后的工作阶段）、`Review failed`（Blocked，或 Blocked 泳道关闭时的 In review）、`Review unavailable`（In review，或 R1 之后投递失败时的工作阶段）、`Review cancelled`（In review）。
+- `Review passed`（In review）、`Reworking 1/2`（退回后的工作阶段）、`Review failed`（Blocked，或 Blocked 泳道关闭时的 In review）、`Review unavailable`（In review，或 R1 之后投递失败时的工作阶段）、`Review needs you`（In review）、`Review cancelled`（In review）。
 - 卡片的无障碍标签带上评审状态。
 
 ### 9.2 抽屉（D17）
 
 - （2026-10-28 删除：原“项目开启 Auto review 时 Auto review 区块放在 Workpad 之前、Workpad 默认收起”。评审现在是 Workpad 里的 **Review** 组，Workpad 按用户的抽屉默认展开，见 GUARDRAILS-SPEC §7.1。）
-- Auto review 区块：分 **Commands** 和 **LLM review** 两组（内置检查在 LLM review 组第一行），每组标题右侧 “通过数/条数”；每行状态图标、名称、耗时。`failed` 行展开显示命令输出末尾或判定理由与文件位置；`passed` 的判断类检查点开可看理由；`skipped`、`unavailable` 行显示原因；共享工作区时注明。评审中逐条更新（沿用卡片详情的 etag 读取，不新增轮询）。
+- Auto review 区块：分 **Commands** 和 **LLM review** 两组（内置检查在 LLM review 组第一行），每组标题右侧 “通过数/条数”；每行状态图标、名称、耗时。`failed` 行展开显示命令输出末尾或判定理由与文件位置；`passed` 的判断类检查点开可看理由；`skipped`、`unavailable` 行显示原因；`needs_user` 行默认展开，结果列 “Needs you”，显示要人做的事；`minor` 的不通过结果列 “Minor”、默认收起；不参与判定的项（观察中的命令、降级的卡片项）标 “observing”；共享工作区时注明。评审中逐条更新（沿用卡片详情的 etag 读取，不新增轮询）。
 - 等待评审时 Review 组只显示 “Waiting for review”，不显示上一次的结果。
 - 卡片在 In review（或在 Blocked 且评审为 failed，§3.5）、项目开启且有生效的检查、没有评审在跑或在等待时有 **Rerun**（round 重置为 1，返工发给最近一次交付的 session；从 Blocked 按时先把卡移到 In review）。
 - 设置卡片的抽屉显示项目草案（§6.4）。
@@ -486,7 +522,8 @@ Auto review                                   [开]
 
 ### 9.4 Attention
 
-- 新原因：review failed、review unavailable（只在卡片还停在该评审留下的位置、且人还没对这张卡有动作时，§3.5）。信号 key `review:<state>:<startedAt>`，供 Dismiss 判断“有新信号”（ATTENTION-DISMISS-SPEC §2.2）。Review failed 与提问、权限一样排在前面。
+- 新原因：review failed、review unavailable、review needs you（只在卡片还停在该评审留下的位置、且人还没对这张卡有动作时，§3.5）。信号 key `review:<state>:<startedAt>`，供 Dismiss 判断“有新信号”（ATTENTION-DISMISS-SPEC §2.2）。Review failed、Review needs you 与提问、权限一样排在前面。
+- Review needs you 的行说明写成 “Review needs you: <要人做的事>”（评审的 `reason`，即各 `needs_user` 项的 “名称: detail”，以 “; ” 连接，≤ 500 字），点开卡片在 Review 组看到逐项内容。圆点为警告色。
 - 通过不是单独的原因：评审期间压住的未读在通过后放开，Mark as read 照常清掉。
 
 ### 9.5 Insights 页
@@ -497,6 +534,7 @@ Auto review                                   [开]
 
 - **新用户**（D14）：导览 More features 一行被动介绍，不带按钮：“Auto review: deliveries are checked before they reach you, and go back to the agent when they fall short.” 一次性提示：`auto-review`（项目里有卡片显示评审状态且没打开卡片时，排在 next-move 之后、first-workpad 之前）；`review-suggest`（§7.1，排在 `first-skill-draft` 之前）。`tipIds`、`tipText`、`nextTip`、onboarding-logic 测试与 ONBOARDING-SPEC 提示表一起改。
 - **老用户**（D15）：What's new 1.8.0 一条：“Auto review: deliveries are checked before they reach you, and go back to the agent when they fall short. Flowly can suggest the checks from your past cards.” 按钮 **Suggest checks from past cards**（新按钮动作：打开当前项目的 Edit project 并开始 §6.2）。
+- **Needs you 提示**（2026-11-26）：一次性提示 `review-needs-you`：当前项目有卡片显示 Review needs you、且没打开卡片时出现一次，“When a review finds something only you can do, the card stays in In review and Attention says what to do.”，排在 `auto-review` 之前。导览 More features 的 Auto review 一行不变。
 - **遥测**：`f_auto_review`（有未归档项目开启了 Auto review）；`f_auto_review_llm`（其中有开着的内置检查或未暂停的 LLM 检查）。TELEMETRY-SPEC §4.2 与 key-set 测试同步改定义；不加新字段。
 - **i18n**：新文案进所有目录；规则名、prompt、guidance、草案说明、分析总结是用户或模型写的内容，不翻译；内置检查名在渲染时翻译，存储为英文。
 
@@ -537,6 +575,11 @@ Auto review                                   [开]
 | D17 | 开启后用户读什么 | 抽屉以评审结果为主，Workpad 默认收起（2026-10-28） |
 | D18 | Review failed / unavailable 的 Attention 何时消除 | 人对这张卡有动作后消除：重试、给这张卡的 session 发消息、手动改状态；只打开看过不算，想放着不管用 Dismiss（用户 2026-11-24）。否决：打开卡片看到结果即消除（误点也会清掉，且每次打开多一次写入） |
 | D19 | 从 Blocked 重试时卡片在哪 | 先移到 In review 再评审，之后完全按 In review 的评审走（2026-11-24，设计选择）。否决：在 Blocked 原地评审、通过后再移动（多一套状态） |
+| D20 | 评审要不要分轻重（2026-11-26） | `severity`（blocker、major、minor），只有 blocker/major 退回，minor 只写进结果（用户卡片 a333fd46）。返工轮只复查没过的项和本轮引入的回归，daemon 用“文件在本轮 diff 里”兜底 |
+| D21 | agent 改不了的问题怎么办（2026-11-26） | 新结论 `needs_user`：不返工，卡片留在 In review，Attention 写清要人做什么（用户卡片 a333fd46） |
+| D22 | 轮次重置与总量（2026-11-26） | 只认人的消息（`byUser`）和人的操作；每卡评审 10 次后不再自动返工（数值为实现者的选择：Flowly 每卡中位 3 次、最多 8 次，项目 B 中位 12 次，可推翻）；卡片项连续 3 次不通过且意见两两不同时降级（用户卡片 a333fd46） |
+| D23 | 指纹（2026-11-26） | 按内容：本次改动路径的内容摘要 + workpad revision，不再用 task revision。用户原话是“sha、diff 哈希、workpad revision”；实现者改用“改动路径的工作区内容哈希”，因为 sha 会让“提交推送”这类没有改内容的回合也作废结果，而 diff 哈希在目录卡上随提交变化 |
+| D24 | 人挪卡后评审怎么办（2026-11-26） | 立即停掉评审会话和命令，记 Cancelled；A1（人发消息）不停，结果挂起，A1r 还原且内容未变时生效（用户卡片 a333fd46） |
 
 ## 12. 分期
 
@@ -558,7 +601,7 @@ Auto review                                   [开]
 - agent 交付 → 该 session 这一轮结束后开始评审，期间该卡不因未读进入 Attention；通过后显示 Review passed，未读照常进入 Attention。
 - 从 Test 交付、一条命令退出码非 0 → 回到 Test，Reworking 1/N，原 session 收到带标识的返工消息，`get_task.review` 有意见；A1 没有把卡改到 Development。
 - 已返工 `maxRounds` 次后再次不通过 → Blocked、Review failed、Attention，不再发消息；`maxRounds = 0` 时第一次就进 Blocked；Blocked 泳道关闭时留在 In review。
-- 评审进行中人拖动卡片、发消息或有新提交 → 结果丢弃；仍在 In review 时显示 Review cancelled，可 Rerun。
+- 评审进行中人拖动卡片或归档、workpad 改了或本次改动的内容变了 → 结果丢弃；仍在 In review 时显示 Review cancelled，可 Rerun。只有新提交、内容不变 → 结果保留；人发消息（A1）→ 按 §3.2 挂起（2026-11-26 起，见 §13.4）。
 - 命令不存在、超时、评审 session 失败、原 session 已归档 → Review unavailable，不计返工次数。
 - 三条命令中第二条失败：三条都跑完（passed、failed、passed），判断类检查全部 skipped，按 R1 退回。
 - 评审 session 输出缺一条 → 那条 unavailable；其余都通过 → Review unavailable。
@@ -594,3 +637,17 @@ Auto review                                   [开]
 - 只打开卡片抽屉、Mark as read：Review failed 信号不变。Dismiss 规则不变；之后的新未读来自人发起的回合，所以这张卡回到 Attention 时已不带 Review failed。
 - 同一张卡的其他信号（提问、权限、错误、未读）不受 `handledAt` 影响。
 - 新评审替换记录后 `handledAt` 不再存在；旧数据没有该字段时按未处理读，不迁移。
+
+### 13.4 收敛（§3.6，2026-11-26）
+
+- 评审输出一条 `fail` + `minor`、其余通过：评审 Passed，不发返工；抽屉里该项结果为 “Minor”，`get_task.review` 的该项带 `severity: "minor"`。
+- 一条 `fail` + `major`：照常 R1，返工消息里该行带 `[major]`；同一评审里的 `minor` 不进返工消息。
+- 返工轮：上一轮通过的项判 `fail` 但引用的文件不在本轮增量 diff 里 → 降为 `minor`，评审可以通过；引用的文件在本轮 diff 里 → 照常决定。
+- 评审输出一条 `needs_user`（有 detail）、没有决定性的不通过：卡片留在 In review，Review needs you，不发返工，round 与返工次数不变；Attention 出现该卡，说明是 “Review needs you: <名称>: <detail>”；人在卡片 session 里发消息、那一回合结束后，或人改状态、Rerun 后信号消失；后台任务唤醒的回合不消除。
+- 同时有决定性的 `fail` 和 `needs_user`：按 R1 返工，返工消息另列需要用户的项。
+- 返工之后，交付 session 被后台任务唤醒一回合（`byUser: false`）再交付：round 继续 +1；人在卡片 session 里发过一条消息后再交付：round 回到 1。
+- 一张卡第 10 次评审仍不通过、round 未到上限：直接进 Blocked，note “Auto review stopped after 10 reviews of this card”，不发返工；卡进 Done 后计数清零。
+- 卡片项连续 3 次决定性地不通过、3 次意见两两不同：第 3 次那条不再决定结果（observing），若没有其他决定性的不通过则评审通过；连续 3 次意见相同：照常返工。
+- 评审中 agent 只提交、不改内容：结果保留。评审中 workpad 改了，或本次改动的文件内容变了：Cancelled。
+- 评审中人把卡拖出 In review：命令进程和评审 session 立即结束（不等跑完），评审为 Cancelled，原因 “A person moved the card during the review.”。
+- 评审中人在卡片 session 发消息（A1 把卡移到 Development），评审跑完时卡仍在 Development：结果挂起；那一轮没有汇报、A1r 把卡还原后，内容未变则结果生效（例如通过则显示 Review passed，不通过则按 R1 退回并发返工）；内容变了则为 Review cancelled。

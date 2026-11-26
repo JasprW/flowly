@@ -8,6 +8,8 @@ import {
   AutoReviewService,
   changedRepos,
   commandApplies,
+  contentDigest,
+  runCheck,
   defaultGit,
   linkedHead,
   linkedRepos,
@@ -16,6 +18,7 @@ import {
   numstatShape,
   pairingHistoryLimit,
   readConversation,
+  pathsChangedSince,
   repoPath,
   reviewDiff,
   reviewShape,
@@ -108,6 +111,8 @@ async function setup(
     real?: boolean;
     git?: Git;
     run?: RunCheck;
+    /** The fake diff's text, per call (the review session's input). */
+    diffText?: (since?: string) => string;
     /** The card's workspace is a shared directory (not a worktree): commands then do not decide (§6.3 step 1). Default: the card's own worktree. */
     shared?: boolean;
   } = {},
@@ -139,7 +144,8 @@ async function setup(
     if (exit === "timeout") return { exitCode: null, timedOut: true, ms: 1, output: "slow" };
     return { exitCode: exit, timedOut: false, ms: 5, output: exit ? `\u001b[31mFAIL\u001b[0m expected 1 to be 2\n` : "ok\n" };
   };
-  const repo = { head: "aaaaaaaaaaaa" };
+  // `changed`: what `git diff <sha> --name-only -z` lists (paths that differ from the review start's commit).
+  const repo = { head: "aaaaaaaaaaaa", changed: [] as string[] };
   const place = { shared: !!options.shared };
   const git: Git =
     options.git ??
@@ -148,6 +154,7 @@ async function setup(
       const key = args.join(" ");
       if (key === "rev-parse --short=12 HEAD") return repo.head;
       if (key === "rev-parse --abbrev-ref HEAD") return "main";
+      if (args[0] === "diff" && args.includes("--name-only")) return repo.changed.join("\0");
       return "";
     });
   const diffs: (string | undefined)[] = [];
@@ -171,12 +178,13 @@ async function setup(
           diff: async (_dir: string, since?: string, baseRef?: string) => {
             diffs.push(since);
             bases.push(baseRef);
-            return "diff --git a/x b/x";
+            return options.diffText ? options.diffText(since) : "diff --git a/x b/x";
           },
           shape: async (_dir: string, baseRef?: string) => (bases.push(baseRef), { shape: options.shape ?? { files: 1, lines: 10, size: "s" as const }, paths: new Set(options.paths ?? ["src/a.ts"]) }),
         }),
     exists: options.exists ?? (async () => false),
   });
+  x.store.onReviewStop = (taskId) => reviews.stop(taskId);
   let delivering: Promise<void> = Promise.resolve();
   x.service.onDelivered = (delivery, paseo) => {
     delivering = reviews.delivered(delivery, paseo);
@@ -201,8 +209,12 @@ async function setup(
     x.store.mutate((b) => {
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_started", agentId: "actor" });
     });
+  const turnEnded = (byUser?: boolean) =>
+    x.store.mutate((b) => {
+      x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_ended", agentId: "actor", ...(byUser === undefined ? {} : { byUser }) });
+    });
   const entry = async (id: string) => (await guardrails.store.read()).entries.find((e) => e.id === id)!;
-  return { ...x, reviews, guardrails, sent, runs, exits, repo, place, diffs, bases, deliver, turnStarted, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
+  return { ...x, reviews, guardrails, sent, runs, exits, repo, place, diffs, bases, deliver, turnStarted, turnEnded, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
 }
 
 const card = async (x: { store: { read(): Promise<import("../shared/model").Board> } }) => (await x.store.read()).tasks[0]!;
@@ -324,14 +336,24 @@ test("R2: past maxRounds the card goes to Blocked without another message; maxRo
   expect(board.tasks[0]).toMatchObject({ status: "in_review", review: { state: "failed" } });
 });
 
-test("a person's message or move between deliveries starts the count again", async () => {
+test("a person's message between deliveries starts the count again; a background wake-up does not (§3.3)", async () => {
   const x = await setup({ exits: { "npm test": 1 }, maxRounds: 1 });
   await x.deliver("development");
-  // The rework turn and a second turn the user started.
+  // The rework turn, then a second turn the user started.
   await x.turnStarted();
+  await x.turnEnded(true);
   await x.turnStarted();
-  const board = await x.deliver();
+  await x.turnEnded(true);
+  let board = await x.deliver();
   expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "rework", round: 1 } });
+  expect(x.sent).toHaveLength(2);
+  // The rework turn, then a turn a background task woke (byUser false): the round goes on and reaches the limit.
+  await x.turnStarted();
+  await x.turnEnded(true);
+  await x.turnStarted();
+  await x.turnEnded(false);
+  board = await x.deliver();
+  expect(board.tasks[0]).toMatchObject({ status: "blocked", review: { state: "failed", round: 2 } });
   expect(x.sent).toHaveLength(2);
 });
 
@@ -397,7 +419,8 @@ test("Rerun from Blocked after a failed review: moves to In review and waits in 
   expect(task).toMatchObject({ status: "in_review", revision: revision + 1, reviewWaiting: { agentId: "actor", from: "development" } });
   expect(task.reviewWaiting!.eventId).toMatch(/^rerun:/);
   expect(reviewSignal(task)).toBeNull();
-  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(/waiting to start/);
+  // Refused while the first is queued or already running (whichever check the timing reaches first).
+  await expect(x.reviews.rerun("t", x.paseo)).rejects.toThrow(/waiting to start|already running/);
   const board = await x.store.read();
   expect(board.events.filter((e) => e.action === "status_changed").at(-1)).toMatchObject({ actor: "human", from: "blocked", to: "in_review", note: "Rerun auto review" });
   await x.reviews.idle();
@@ -815,6 +838,8 @@ test("a lifecycle write failure does not start a rework turn", async () => {
   await x.reviews.turnEnded("actor", x.paseo, Promise.resolve(false));
   expect(x.sent).toEqual([]);
   expect((await card(x)).review).toMatchObject({ state: "unavailable", reason: "The delivering turn could not be recorded, so the rework message was not sent." });
+  // The rework never went out, so that review does not count toward the card's cap (§3.3).
+  expect((await card(x)).reviewCount ?? 0).toBe(0);
 });
 
 test("a second card keeps waiting while the project's first review runs; reviews remain serial", async () => {
@@ -862,6 +887,13 @@ test("runCheck runs an argument array without a shell: exit code, output tail, t
   expect(slow.timedOut).toBe(true);
   const missing = await runCheck(["flowly-no-such-command-xyz"], process.cwd(), 5_000);
   expect(missing.spawnError).toMatch(/ENOENT/);
+  // Stopped before it started: nothing is spawned.
+  const controller = new AbortController();
+  controller.abort();
+  const marker = join(tmpdir(), `flowly-runcheck-${process.pid}-${Date.now()}`);
+  const stopped = await runCheck([process.execPath, "-e", `require("fs").writeFileSync(${JSON.stringify(marker)}, "x")`], process.cwd(), 5_000, controller.signal);
+  expect(stopped).toMatchObject({ exitCode: null, spawnError: "Stopped." });
+  expect(existsSync(marker)).toBe(false);
 });
 
 test("recover: a review left running by a restart becomes unavailable", async () => {
@@ -981,7 +1013,7 @@ test("B1: a fail without evidence becomes na; a file in the diff, an existing re
   expect(items[1]).toMatchObject({ file: "src/a.ts", line: 3 });
   expect(items[3]).toMatchObject({ quote: "add a Rerun button" });
   // The rework message uses the user's words for guidelines.
-  expect(x.sent[0]!.text).toContain('✗ "quote of g-diff" — Wrong here. (src/a.ts:3) [id: g-diff]');
+  expect(x.sent[0]!.text).toContain('✗ [major] "quote of g-diff" — Wrong here. (src/a.ts:3) [id: g-diff]');
 });
 
 test("round 2 reads only the changes since the previous delivery and keeps what passed before (§6.3)", async () => {
@@ -1109,7 +1141,8 @@ test("a check still disputed needs a new verdict in every rework round; it does 
       .map((c) => ({ id: c.id, verdict: (n === 1 && c.id === "goal") || (n === 2 && c.id === "g1") ? ("fail" as const) : ("pass" as const), detail: `Round ${n}.`, file: "src/a.ts" }));
     return { model: "m", verdicts };
   };
-  const x = await setup({ entries: [guideline("g1", "Rule one")], llm, maxRounds: 3 });
+  // Each round's diff touches src/a.ts, so g1's round 2 fail is a regression of that round (§3.6), not demoted.
+  const x = await setup({ entries: [guideline("g1", "Rule one")], llm, maxRounds: 3, diffText: () => "diff --git a/src/a.ts b/src/a.ts\n+x" });
   await x.deliver("development");
   await x.turnStarted();
   x.repo.head = "bbbbbbbbbbbb";
@@ -1280,8 +1313,8 @@ test("a failed command is not retried when the commit changed meanwhile (§6.3 s
   });
   const board = await x.deliver("development");
   expect(x.runs).toEqual(["npm test"]);
-  // The code changed during the review, so its result is dropped.
-  expect(board.tasks[0]!.review!.state).toBe("cancelled");
+  // Only the commit changed, not the content (AUTO-REVIEW-SPEC §3.6), so the first failure stands.
+  expect(board.tasks[0]!.review!.state).toBe("rework");
 });
 
 test("the review reads answers given in question tools as what the user said, in time order with the messages (§4.2, E2)", async () => {
@@ -1729,6 +1762,9 @@ test("the delivery's shape from git --numstat: files, changed lines (binary 0), 
   expect(shape).toEqual({ files: 3, lines: 56, size: "m" });
   expect([...paths].sort()).toEqual(["logo.png", "src/a.ts", "src/new/b.ts"]);
   expect(numstatShape("").shape).toEqual({ files: 0, lines: 0, size: "s" });
+  expect([...numstatShape('1\t0\t"\\350\\257\\264\\346\\230\\216.ts"\n').paths]).toEqual(["说明.ts"]);
+  // A name that itself starts and ends with quotes is decoded once, keeping them.
+  expect([...numstatShape('1\t0\t"\\"\\350\\257\\264\\346\\230\\216.ts\\""\n').paths]).toEqual(['"说明.ts"']);
   expect(numstatShape("500\t1\tbig.ts").shape.size).toBe("l");
   expect(repoPath("/w", "./src/a.ts")).toBe("src/a.ts");
   expect(repoPath("/w", "/w/src/a.ts")).toBe("src/a.ts");
@@ -1966,6 +2002,30 @@ test("linked root diff: a large change in one repository cannot push the others 
   expect(diff).toContain("diff --git a/SMITH/src/app.ts b/SMITH/src/app.ts");
 }, 20_000);
 
+test("a rework round lists every path changed since the previous commit, past the cut diff: NUL-separated, untracked too (§3.6)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-changed-since-"));
+  try {
+    const git = (...args: string[]) => defaultGit(dir, ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
+    await git("init", "-q", "-b", "main");
+    await writeFile(join(dir, "a.ts"), "1\n");
+    await writeFile(join(dir, "说明.md"), "1\n");
+    await git("add", ".");
+    await git("commit", "-q", "-m", "init");
+    const since = (await git("rev-parse", "HEAD")).trim();
+    await writeFile(join(dir, "big.ts"), "x".repeat(200_000));
+    await git("add", "big.ts");
+    await git("commit", "-q", "-m", "big");
+    await writeFile(join(dir, "说明.md"), "2\n");
+    await writeFile(join(dir, "new file.ts"), "n\n");
+    expect([...(await pathsChangedSince(dir, since))].sort()).toEqual(["big.ts", "new file.ts", "说明.md"]);
+    expect([...(await pathsChangedSince(dir, since, defaultGit, "repo/"))].sort()).toEqual(["repo/big.ts", "repo/new file.ts", "repo/说明.md"]);
+    // Not a commit id: nothing is listed (and nothing is run).
+    expect((await pathsChangedSince(dir, "--output=x")).size).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 20_000);
+
 /** The fixture workspace as a git repository with a worktree on `feat/wt` that changed a file, committed and not. */
 async function workspaceWithWorktree(dir: string, root: string) {
   const git = (cwd: string, ...args: string[]) => defaultGit(cwd, ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
@@ -2116,3 +2176,360 @@ test("a PR whose head is in several worktrees, or of another repository, changes
   expect(board.tasks[0]!.review!.worktree).toBeUndefined();
   expect(cwds.every((c) => c === x.a)).toBe(true);
 }, 20_000);
+
+
+// ---- Convergence (AUTO-REVIEW-SPEC §3.6, 2026-11-26) --------------------------------------------------------------
+
+const verdicts = (list: Awaited<ReturnType<LlmReview>>["verdicts"]): LlmReview => async (input) => ({
+  model: "m",
+  verdicts: input.checks.map((c) => list.find((v) => v.id === c.id) ?? { id: c.id, verdict: "pass" as const, detail: "Fine." }),
+});
+
+test("severity: a minor fail passes the review, shows on the item and counts as na for guardrails; a major one sends rework", async () => {
+  const x = await setup({ entries: [guideline("g1", "Clear wording")], llm: verdicts([{ id: "g1", verdict: "fail", severity: "minor", detail: "One label could be shorter.", file: "src/a.ts" }]) });
+  let board = await x.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "in_review", review: { state: "passed" } });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor" });
+  expect(board.events.filter((e) => e.action === "review_finished").at(-1)!.results!.find((r) => r.id === "g1")).toMatchObject({ state: "failed", severity: "minor" });
+  const z = await setup({ llm: verdicts([{ id: "goal", verdict: "needs_user", severity: "minor", detail: "Someone could try it on a phone later." }]) });
+  const minorAsk = await z.deliver("development");
+  expect(minorAsk.events.filter((e) => e.action === "review_finished").at(-1)!.results!.find((r) => r.id === "goal")).toMatchObject({ state: "needs_user", severity: "minor" });
+  expect(x.sent).toEqual([]);
+  expect((await x.entry("g1")).counts).toMatchObject({ reviews: 1, passes: 1 });
+
+  const y = await setup({ entries: [guideline("g1", "Clear wording")], llm: verdicts([{ id: "g1", verdict: "fail", severity: "major", detail: "Wrong text.", file: "src/a.ts" }]) });
+  board = await y.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "rework" } });
+  expect(y.sent[0]!.text).toContain('✗ [major] "quote of g1" — Wrong text. (src/a.ts) [id: g1]');
+});
+
+test("needs_user: no rework, the card stays in In review, Attention says what to do; without detail it is na (§3.2, §9.4)", async () => {
+  const x = await setup({ llm: verdicts([{ id: "goal", verdict: "needs_user", severity: "major", detail: "Install the build on the phone and confirm the picker opens." }]) });
+  const board = await x.deliver("development");
+  const task = board.tasks[0]!;
+  expect(task).toMatchObject({ status: "in_review", reviewCount: 1, review: { state: "needs_user", round: 1, reason: "Does what you asked: Install the build on the phone and confirm the picker opens." } });
+  expect(task.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "needs_user", severity: "major" });
+  expect(x.sent).toEqual([]);
+  expect(board.events.filter((e) => e.rule === "R1" || e.rule === "R2")).toEqual([]);
+  expect(attentionItems(board, [] as never, [], false)[0]).toMatchObject({ review: "needs_user" });
+  // The delivering turn's end, recorded after the review finished, keeps it.
+  await x.turnEnded(true);
+  expect(attentionItems(await x.store.read(), [] as never, [], false)).toHaveLength(1);
+  // A background wake (a turn no person started) keeps it; the turn a person's message started ends it.
+  await x.turnStarted();
+  await x.turnEnded(false);
+  expect(attentionItems(await x.store.read(), [] as never, [], false)).toHaveLength(1);
+  await x.turnStarted();
+  await x.turnEnded(true);
+  expect(attentionItems(await x.store.read(), [] as never, [], false)).toEqual([]);
+
+  const y = await setup({ llm: verdicts([{ id: "goal", verdict: "needs_user", detail: "  " }]) });
+  const other = (await y.deliver("development")).tasks[0]!;
+  expect(other.review).toMatchObject({ state: "passed" });
+  expect(other.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "na", reason: "no detail" });
+});
+
+test("a decisive fail with needs_user: rework lists both apart", async () => {
+  const x = await setup({
+    entries: [guideline("g1", "Tests for new rules")],
+    llm: verdicts([
+      { id: "g1", verdict: "fail", detail: "No test.", file: "src/a.ts" },
+      { id: "goal", verdict: "needs_user", detail: "Ask the API team for a key." },
+    ]),
+  });
+  const board = await x.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "rework" } });
+  expect(x.sent[0]!.text).toContain("Needs the user (do not work around these; mention them in your delivery note):\n? Does what you asked — Ask the API team for a key. [id: goal]");
+});
+
+test("rework round: a fail of what passed before must cite a file this round changed, else it is minor (§3.6)", async () => {
+  let round = 0;
+  const seen: LlmReviewInput[] = [];
+  const llm: LlmReview = async (input) => {
+    round++;
+    seen.push(input);
+    if (round === 1) return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "blocker", detail: "Missing.", file: "src/a.ts" }, { id: "g1", verdict: "pass", detail: "ok" }] };
+    if (round === 2) return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }, { id: "g1", verdict: "fail", detail: "New nit elsewhere.", file: "src/a.ts" }] };
+    return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }, { id: "g1", verdict: "fail", detail: "Broke it here.", file: "src/b.ts" }] };
+  };
+  const x = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, paths: ["src/a.ts", "src/b.ts"], diffText: (since) => (since ? "diff --git a/src/b.ts b/src/b.ts\n+x" : "diff --git a/src/a.ts b/src/a.ts\n+x") });
+  await x.deliver("development");
+  await x.turnStarted();
+  let board = await x.deliver();
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed", round: 2 });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+  // Same again, but the fail cites a file this round changed: a real regression decides.
+  const y = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, paths: ["src/a.ts", "src/b.ts"], diffText: (since) => (since ? "diff --git a/src/b.ts b/src/b.ts\n+x" : "diff --git a/src/a.ts b/src/a.ts\n+x") });
+  round = 0;
+  await y.deliver("development");
+  await y.turnStarted();
+  round = 2;
+  board = await y.deliver();
+  expect(board.tasks[0]!.review).toMatchObject({ state: "rework", round: 2 });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed" });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")!.severity).toBeUndefined();
+  // The reviewer sees each unresolved failure's severity, so it can keep it (§3.6).
+  expect(seen[1]!.checks.find((c) => c.id === "goal")!.previous).toMatchObject({ state: "failed", severity: "blocker" });
+});
+
+test("the card's cap: its 10th judged review that fails goes to Blocked without rework; Done clears the count (§3.3)", async () => {
+  const x = await setup({ exits: { "npm test": 1 } });
+  await x.store.mutate((b) => {
+    b.tasks[0]!.reviewCount = 9;
+  });
+  const board = await x.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "blocked", reviewCount: 10, review: { state: "failed", round: 1, reason: "This card reached 10 reviews, so no more automatic rework." } });
+  expect(board.events.filter((e) => e.rule === "R2").at(-1)).toMatchObject({ note: "Auto review stopped after 10 reviews of this card" });
+  expect(x.sent).toEqual([]);
+  const task = await card(x);
+  await x.store.placeTask({ id: "t", revision: task.revision, status: "done", beforeId: null, afterId: null });
+  expect((await card(x)).reviewCount).toBeUndefined();
+  // Cancelled and unavailable reviews do not count.
+  const y = await setup({ exits: { "npm test": "spawn" } });
+  expect((await y.deliver("development")).tasks[0]!.reviewCount).toBeUndefined();
+});
+
+test("card item demotion: the third decisive fail in a row with a different finding stops deciding; it stays observing (§3.6)", async () => {
+  const item = { ...cardItem("i1", "Handle the phone layout"), fails: ["Catalog misses the Rerun label", "Phone layout overflows the card"] };
+  const x = await setup({ items: [item], llm: verdicts([{ id: "i1", verdict: "fail", detail: "Spec section 3 was not updated", file: "src/a.ts" }]) });
+  let board = await x.deliver("development");
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed" });
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "i1")).toMatchObject({ state: "failed", gating: false, reason: "Failed 3 times in a row with a different finding each time, so it no longer decides the review." });
+  let stored = (await x.guardrails.store.read()).items.find((i) => i.id === "i1")!;
+  expect(stored).toMatchObject({ observing: true });
+  expect(stored.fails).toHaveLength(3);
+  // The next review judges it without letting it decide.
+  board = await x.deliver();
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "i1")).toMatchObject({ gating: false });
+  expect(board.tasks[0]!.review!.state).toBe("passed");
+
+  // The same finding again: it still decides.
+  const same = { ...cardItem("i1", "Handle the phone layout"), fails: ["Spec section 3 was not updated", "Phone layout overflows the card"] };
+  const y = await setup({ items: [same], llm: verdicts([{ id: "i1", verdict: "fail", detail: "Spec section 3 was not updated", file: "src/a.ts" }]) });
+  board = await y.deliver("development");
+  expect(board.tasks[0]!.review).toMatchObject({ state: "rework" });
+  stored = (await y.guardrails.store.read()).items.find((i) => i.id === "i1")!;
+  expect(stored.observing).toBeUndefined();
+  // A pass clears the run.
+  const z = await setup({ items: [{ ...cardItem("i1", "x"), fails: ["a b c"] }] });
+  await z.deliver("development");
+  expect((await z.guardrails.store.read()).items.find((i) => i.id === "i1")!.fails).toBeUndefined();
+});
+
+test("content fingerprint: a commit during the review keeps the result; editing a changed file cancels it (§3.6)", async () => {
+  const x = await setup({ exits: { "npm test": 1 } });
+  await mkdir(join(x.a, "src"), { recursive: true });
+  await writeFile(join(x.a, "src/a.ts"), "one");
+  x.setDuring(async () => {
+    x.repo.head = "bbbbbbbbbbbb";
+  });
+  let board = await x.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "rework" } });
+  expect(board.tasks[0]!.review!.fingerprint.content).toMatch(/^[0-9a-f]{16}$/);
+
+  const y = await setup({ exits: { "npm test": 1 } });
+  await mkdir(join(y.a, "src"), { recursive: true });
+  await writeFile(join(y.a, "src/a.ts"), "one");
+  y.setDuring(async () => {
+    await writeFile(join(y.a, "src/a.ts"), "two");
+  });
+  board = await y.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "in_review", review: { state: "cancelled", reason: "The card, its workpad or its code changed during the review." } });
+  expect(y.sent).toEqual([]);
+
+  // A file outside the delivery's changed set, edited after the start, cancels it too.
+  const z = await setup({ exits: { "npm test": 1 } });
+  await mkdir(join(z.a, "src"), { recursive: true });
+  await writeFile(join(z.a, "src/a.ts"), "one");
+  z.setDuring(async () => {
+    await writeFile(join(z.a, "src/b.ts"), "new");
+    z.repo.changed = ["src/b.ts"];
+    z.repo.head = "bbbbbbbbbbbb";
+  });
+  board = await z.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "in_review", review: { state: "cancelled" } });
+  expect(z.sent).toEqual([]);
+
+  // In a shared directory another session's file outside the set does not (D6).
+  const w = await setup({ shared: true, llm: verdicts([{ id: "goal", verdict: "fail", detail: "core missing", file: "src/a.ts", line: 1 }]) });
+  await mkdir(join(w.a, "src"), { recursive: true });
+  await writeFile(join(w.a, "src/a.ts"), "one");
+  w.setDuring(async () => {
+    await writeFile(join(w.a, "src/other.ts"), "someone else's");
+    w.repo.changed = ["src/other.ts"];
+  });
+  board = await w.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "rework" } });
+});
+
+test("contentDigest: a symbolic link counts by its target path, not the target's bytes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-digest-link-"));
+  await writeFile(join(dir, "a.json"), "{}");
+  await writeFile(join(dir, "b.json"), "{}");
+  await symlink("a.json", join(dir, "link.json"));
+  const before = await contentDigest(dir, ["link.json"]);
+  await rm(join(dir, "link.json"));
+  await symlink("b.json", join(dir, "link.json"));
+  expect(await contentDigest(dir, ["link.json"])).not.toBe(before);
+  // A regular file whose text is the target is not the same as the link.
+  const linked = await contentDigest(dir, ["link.json"]);
+  await rm(join(dir, "link.json"));
+  await writeFile(join(dir, "link.json"), "b.json");
+  expect(await contentDigest(dir, ["link.json"])).not.toBe(linked);
+  // Outside the workspace: only the path is read.
+  await rm(join(dir, "link.json"));
+  await symlink("/nonexistent/flowly-target", join(dir, "link.json"));
+  expect(await contentDigest(dir, ["link.json"])).not.toBe(await contentDigest(dir, ["missing.json"]));
+  await rm(dir, { recursive: true, force: true });
+});
+
+test("contentDigest: the paths' content, order-free; a deleted file differs from an empty one", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-digest-"));
+  roots.push(dir);
+  await writeFile(join(dir, "a"), "1");
+  await writeFile(join(dir, "b"), "2");
+  const one = await contentDigest(dir, ["a", "b"]);
+  expect(await contentDigest(dir, ["b", "a", "a"])).toBe(one);
+  await writeFile(join(dir, "b"), "3");
+  expect(await contentDigest(dir, ["a", "b"])).not.toBe(one);
+  const gone = await contentDigest(dir, ["a", "c"]);
+  await writeFile(join(dir, "c"), "");
+  expect(await contentDigest(dir, ["a", "c"])).not.toBe(gone);
+});
+
+test("a person moving the card away stops the review at once: commands and the review session end, Cancelled, no rework (§3.2)", async () => {
+  let aborted = 0;
+  const run: RunCheck = (_argv, _cwd, _timeout, signal) =>
+    new Promise((resolve) => {
+      signal?.addEventListener("abort", () => {
+        aborted++;
+        resolve({ exitCode: null, timedOut: false, ms: 1, output: "" });
+      });
+    });
+  const x = await setup({ run });
+  const ctx = await x.service.get(x.identity);
+  await x.service.write(x.identity, "status", { ...input(ctx), status: "development" });
+  const delivered = await x.service.get(x.identity);
+  void x.service.write(x.identity, "status", { ...input(delivered, "Delivered"), status: "in_review", nextMoves: [] });
+  // Wait until the command runs.
+  for (let i = 0; i < 100 && (await card(x)).review?.items[0]?.state !== "running"; i++) await new Promise((r) => setTimeout(r, 10));
+  const task = await card(x);
+  await x.store.placeTask({ id: "t", revision: task.revision, status: "design", beforeId: null, afterId: null });
+  await x.reviews.idle();
+  const board = await x.store.read();
+  expect(aborted).toBe(1);
+  expect(board.tasks[0]).toMatchObject({ status: "design", review: { state: "cancelled", reason: "A person moved the card during the review." } });
+  expect(board.events.filter((e) => e.action === "review_finished").map((e) => e.note)).toEqual(["Auto review cancelled: a person moved the card"]);
+  expect(x.sent).toEqual([]);
+
+  // The review session's wait ends too.
+  let released = false;
+  let listening!: () => void;
+  const ready = new Promise<void>((resolve) => (listening = resolve));
+  const llm: LlmReview = (_input, _paseo, signal) =>
+    new Promise((_resolve, reject) => {
+      const stop = () => {
+        released = true;
+        reject(new Error("Stopped."));
+      };
+      if (signal?.aborted) return stop();
+      signal?.addEventListener("abort", stop);
+      listening();
+    });
+  const y = await setup({ llm });
+  const c1 = await y.service.get(y.identity);
+  await y.service.write(y.identity, "status", { ...input(c1), status: "development" });
+  const c2 = await y.service.get(y.identity);
+  void y.service.write(y.identity, "status", { ...input(c2, "Delivered"), status: "in_review", nextMoves: [] });
+  // The reviewer is waiting with its abort listener in place.
+  await ready;
+  const t2 = await card(y);
+  await y.store.placeTask({ id: "t", revision: t2.revision, status: "development", beforeId: null, afterId: null });
+  await y.reviews.idle();
+  expect(released).toBe(true);
+  expect((await card(y)).review).toMatchObject({ state: "cancelled", reason: "A person moved the card during the review." });
+});
+
+/** The command-run hook runs at every run (a failed gating command runs twice, §6.3 step 1): act at the first only. */
+const firstRunOnly = (fn: () => Promise<unknown>) => {
+  let done = false;
+  return async () => {
+    if (done) return;
+    done = true;
+    await fn();
+  };
+};
+
+test("A1 during the review holds the result; A1r back unchanged applies it, changed drops it; a person's move drops it (§3.2)", async () => {
+  const a1 = async (x: Awaited<ReturnType<typeof setup>>) =>
+    x.store.mutate((b) => {
+      recordLifecycle(x.store, b, x.identity, "agent.turn_started");
+      applyTurnStarted(x.store, b, x.identity, "First actor");
+    });
+  const a1r = async (x: Awaited<ReturnType<typeof setup>>) => {
+    await x.store.mutate((b) => {
+      recordLifecycle(x.store, b, x.identity, "agent.turn_ended", { kind: "completed" } as never);
+      applyTurnEnded(x.store, b, x.identity, { kind: "completed" } as never);
+    });
+    await x.reviews.restored("t", x.paseo);
+    await x.reviews.idle();
+  };
+  // Unchanged: the failed result applies after A1r, with R1 and the rework message.
+  const x = await setup({ exits: { "npm test": 1 } });
+  x.setDuring(firstRunOnly(() => a1(x)));
+  let board = await x.deliver("development");
+  expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "cancelled", held: true, reason: "The card left In review during the review." } });
+  expect(x.sent).toEqual([]);
+  await a1r(x);
+  board = await x.store.read();
+  expect(board.tasks[0]).toMatchObject({ status: "development", review: { state: "rework" } });
+  expect(board.tasks[0]!.review!.held).toBeUndefined();
+  expect(board.events.filter((e) => e.action === "status_changed").map((e) => e.rule).slice(-3)).toEqual(["A1", "A1r", "R1"]);
+  expect(x.sent).toHaveLength(1);
+
+  // A pass applies too.
+  const p = await setup();
+  p.setDuring(firstRunOnly(() => a1(p)));
+  await p.deliver("development");
+  await a1r(p);
+  expect((await card(p))).toMatchObject({ status: "in_review", review: { state: "passed" } });
+
+  // Changed meanwhile: dropped.
+  const y = await setup({ exits: { "npm test": 1 } });
+  y.setDuring(firstRunOnly(() => a1(y)));
+  await y.deliver("development");
+  await y.store.mutate((b) => {
+    b.workpads[0]!.revision++;
+  });
+  await a1r(y);
+  expect(await card(y)).toMatchObject({ status: "in_review", review: { state: "cancelled", reason: "The card, its workpad or its code changed during the review." } });
+  expect(y.sent).toEqual([]);
+
+  // A person's move while held drops it.
+  const z = await setup({ exits: { "npm test": 1 } });
+  z.setDuring(firstRunOnly(() => a1(z)));
+  await z.deliver("development");
+  const t = await card(z);
+  await z.store.placeTask({ id: "t", revision: t.revision, status: "test", beforeId: null, afterId: null });
+  expect((await card(z)).review!.held).toBeUndefined();
+  await z.reviews.restored("t", z.paseo);
+  await z.reviews.idle();
+  expect((await card(z)).review!.state).toBe("cancelled");
+});
+
+test("runCheck: an abort ends the command and its children at once", async () => {
+  const controller = new AbortController();
+  const dir = await mkdtemp(join(tmpdir(), "flowly-abort-"));
+  const marker = join(dir, "started");
+  // The marker appears once the background child runs; it holds the output pipes open until it is killed.
+  const pending = runCheck(["sh", "-c", 'sleep 30 & touch "$0"; wait', marker], tmpdir(), 60_000, controller.signal);
+  for (let i = 0; i < 500 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 10));
+  expect(existsSync(marker)).toBe(true);
+  const aborted = Date.now();
+  controller.abort();
+  const result = await pending;
+  expect(Date.now() - aborted).toBeLessThan(5000);
+  expect(result.spawnError).toBeUndefined();
+  expect(result.timedOut).toBe(false);
+  await rm(dir, { recursive: true, force: true });
+});

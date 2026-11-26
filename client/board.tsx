@@ -182,6 +182,7 @@ const tipText: Record<TipId, (compact?: boolean) => string> = {
   "sidebar-order": () => t("Arrange an open card your way: reorder its sections and choose which start open in Settings → Cards → Card sidebar."),
   "session-history": () => t("A session's output now starts at the beginning of its current turn. Press Load earlier at the top to read further back."),
   "settings-entry": () => t("Turn features on or off and change settings here."),
+  "review-needs-you": () => t("When a review finds something only you can do, the card stays in In review and Attention says what to do."),
   "auto-review": () => t("Open the card for review results; choose the review model and reasoning in Settings → Models."),
   "first-guardrail": () => t("Flowly learned a check from a card you sent back. Open Guardrails to see what it checks now."),
   "first-workpad": () => t("This card has a workpad: the agent's acceptance list. The card shows how many items are met; open it to tick items yourself and to see the latest review."),
@@ -1269,6 +1270,7 @@ function BoardContent(
           skillDraft: features.insights && workflowTipDue && !!workflowView.data?.findings.some((f) => f.status === "open" && f.target === "skill" && !!f.skill),
           searchable: !task && projectTasks.filter((x) => !x.archivedAt).length >= 10,
           reviewShown: !task && projectTasks.some((x) => !!visibleReview(x)),
+          reviewNeedsYou: !task && projectTasks.some((x) => visibleReview(x)?.state === "needs_user"),
           learnedGuideline: !task && !!projectGuardrails?.added,
           laneSwipe: touch && !task && !page && shownStatuses.length > 1 && projectTasks.some((x) => !x.archivedAt),
           sessionComposerFill: !task && !!composersOf(chipClient()) && projectTasks.some((x) => !x.archivedAt && !!cardIndex.agentsByWorkspace.get(x.workspaceId)?.length),
@@ -1562,7 +1564,7 @@ function BoardContent(
   }, [props.params?.intent, props.params?.at, boardPending]);
   const attentionDetail = (item: AttentionItem) =>
     `${item.project.title} · ${laneName(item.project, item.task.status)} · ${[
-      item.review && item.task.review && reviewLabel(item.task.review),
+      item.review && item.task.review && (item.task.review.state === "needs_user" && item.task.review.reason ? t("Review needs you: {reason}", { reason: item.task.review.reason }) : reviewLabel(item.task.review)),
       item.questions && tn(item.questions, "{n} question", "{n} questions"),
       item.permissions && tn(item.permissions, "{n} approval", "{n} approvals"),
       item.errors && tn(item.errors, "{n} error", "{n} errors"),
@@ -1589,7 +1591,7 @@ function BoardContent(
               color={
                 item.dismissed
                   ? colors.foregroundMuted
-                  : item.permissions || item.questions || item.review === "unavailable"
+                  : item.permissions || item.questions || item.review === "unavailable" || item.review === "needs_user"
                     ? colors.statusWarning
                     : item.review === "failed"
                       ? colors.statusDanger

@@ -174,6 +174,8 @@ CardItem {
   shape: { type?: TaskType, size?: Size },
   count: int ≥1,                 // 本卡为同一件事退了几次
   state: "open" | "promoted" | "closed",
+  fails?: string[],              // 评审里连续决定性不通过的意见（最近 3 条，各 ≤200），通过/na/minor 清空（AUTO-REVIEW-SPEC §3.6）
+  observing?: true,              // 连续 3 次不通过且意见两两不同：之后只判定、不参与结果
   promotedTo?: entryId,
   createdAt, updatedAt }
 ```
@@ -348,15 +350,18 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
 2. **评审 session**：所有参与判定的命令都通过时才跑（D9）。一次判定全部：内置检查 `goal`（“Does what you asked”，尺子同 AUTO-REVIEW-SPEC §4.2：卡片、用户原话、验收清单只作上下文）、范围内的每条准则、本卡每条 `open` 项。输出：
 
    ```
-   { items: [{ id, verdict: "pass" | "fail" | "na", detail ≤600, file?, line? }] }
+   { items: [{ id, verdict: "pass" | "fail" | "na" | "needs_user", severity?: "blocker" | "major" | "minor", detail ≤600, file?, line? }] }
    ```
 
+   - `severity`（2026-11-26，AUTO-REVIEW-SPEC §3.6）：`fail` 与 `needs_user` 必带，缺失按 `major`。只有参与判定且不是 `minor` 的项（**决定性**的项）影响结果；`minor` 只记录、显示。
+   - `needs_user`：这一项 agent 做不到（要用户决定、设备或账号、别的团队、事情已经发生），`detail` 写人要做什么；没有 `detail` 记为 `na`。不需要证据。
    - `fail` 必须带证据，三种任一（B1）：`file` 出现在 diff 里（改错了）；`file` 在仓库里存在但缺东西（漏改了，例如 `shared/i18n/zh-TW.ts` 没有新词条，daemon 只核对文件存在）；`quote` 引用卡片描述或用户原话里没做到的要求（内置检查和专属项常见）；daemon 核对出处（2026-11-07 按 PR #75 评审意见补）：quote 与来源都压缩空白、去首尾、转小写后，quote 必须是卡片标题、卡片描述、评审拿到的过滤后对话里任一条消息（问题工具的问答只算用户的回答，不算 agent 的问题，AUTO-REVIEW-SPEC §4.2）、或该检查自己的用户原话的子串，否则不算证据（从 diff 或代码里引的文字要用 `file` 给证据）。三样都没有的 `fail` 由 daemon 改为 `na`，`reason: "no evidence"`。这是确定性的降噪，目的是丢掉凭空的意见，不是只许挑改过的代码的毛病。
    - 输出的每项于是为 `{ id, verdict, detail, file?, line?, quote? }`，`quote` ≤300 字。
    - `na` 按通过处理，不计抓到也不计误判。
-   - 返工第 2 轮起：评审输入只给上一轮交付以来的增量 diff（`git diff <上一轮 sha>`）加上一轮的结果，指令写明只复查上一轮不通过的项和增量里的新问题，不重复已经通过的。
+   - 返工第 2 轮起：评审输入只给上一轮交付以来的增量 diff（`git diff <上一轮 sha>`）加上一轮的结果，指令写明（2026-11-26）：复查上一轮没通过的项，仍以同样原因不通过的保持原来的 severity；其余只找本轮改动引入的回归，与本轮改动无关的新问题只能记 `minor`；不重复已经通过的。daemon 兜底：上一轮通过的项这一轮判 `fail` 时，`file` 不在本轮改动过的路径里（git 从上一轮 sha 列出的全部路径加未跟踪文件，不受 diff 截断影响，AUTO-REVIEW-SPEC §3.6）就降为 `minor`（`reason` “Not caused by this round's changes.”）。
+   - 卡片专属项连续 3 次决定性地不通过、意见两两不同时，第 3 次起 `gating: false`（AUTO-REVIEW-SPEC §3.6）。
    - 争议（E1，2026-11-26 改；之前是“不交给评审 session，直接记为 `disputed`”）：`task.disputes` 里的判断类检查照样交给评审 session 判定。这一项的输入附上被争议的那条意见（`finding`、所在轮次）和 agent 的理由，指令写明：这条意见被 agent 争议过，没有争议没回答的新证据时，不要以同一条意见再判 fail；有新证据时在 `detail` 里说明新在哪里；别的问题照常判。结果照常记（`passed` / `failed` / `na`），条目带 `disputeReason` 供人查看。返工第 2 轮起，仍在 `task.disputes` 里的项必须由评审重新给结论，不沿用上一轮的通过（提示词写明；评审没给时记 `unavailable`）。命令的争议见步骤 1。
-3. **总判定**：有任何参与判定的项 `failed` → 不通过（R1，或到上限 R2）；否则有 `unavailable` → Unavailable；否则 Passed。`disputed` 不算不通过。
+3. **总判定**：有决定性的 `failed` → 不通过（R1，或到上限、到每卡 10 次评审时 R2）；否则有参与判定的 `unavailable` → Unavailable；否则有决定性的 `needs_user` → Needs you（卡片留在 In review，进 Attention，不返工，AUTO-REVIEW-SPEC §3.2）；否则 Passed。`disputed` 与 `minor` 不算不通过。
 
 参与判定的集合（B4）：命令与内置检查总是参与；准则和专属项只在 Guardrails 开着时参与（host `features.memory` 为开且 `Project.memory !== false`）。关闭时它们也不注入、不学、不显示在 `get_task.guardrails` 里。
 
@@ -372,14 +377,15 @@ Review {
   shape: { files, lines, size },
   items: [{ id, kind: "command" | "goal" | "guideline" | "item", name,
             gating: boolean,                                  // observing 命令为 false
-            state: "queued" | "running" | "passed" | "failed" | "na" | "disputed" | "skipped" | "unavailable",
+            state: "queued" | "running" | "passed" | "failed" | "na" | "needs_user" | "disputed" | "skipped" | "unavailable",
+            severity?: "blocker" | "major" | "minor",            // failed / needs_user（2026-11-26）
             ms?, argv?, exitCode?, timedOut?, tail?, detail?, file?, line?, reason?, disputeReason?,
             flaky? }],                                        // 命令第一次失败、同一 sha 上重跑通过（§6.3）
   model?, tokens?: { in, out, costUsd? },
   startedAt, finishedAt? }
 ```
 
-`rules` 改名 `items`。`review_finished` 事件的 `results` 带每项 `{ id, kind, state }`。
+`rules` 改名 `items`。`review_finished` 事件的 `results` 带每项 `{ id, kind, state, gating?, severity? }`（`severity` 只在 `minor` 时写，Insights 按 §6.3 的总判定读）。评审状态多了 `needs_user`，指纹多了 `content`，另有 `held`（AUTO-REVIEW-SPEC §3.2、§8.2）。
 
 ### 6.5 返工消息
 
@@ -388,10 +394,14 @@ Review {
 ```
 [Flowly auto review · rework 1/2]
 Commands: 2/2 passed
-✗ "新文案也要进所有语言" — zh-TW.ts has no entry for "Review passed" (shared/i18n/zh-TW.ts:412)
-✗ Does what you asked — the card asked for a Rerun button; none was added
+✗ [major] "新文案也要进所有语言" — zh-TW.ts has no entry for "Review passed" (shared/i18n/zh-TW.ts:412) [id: …]
+✗ [blocker] Does what you asked — the card asked for a Rerun button; none was added [id: goal]
+Needs the user (do not work around these; mention them in your delivery note):
+? "真机验证" — Install the build on the phone and confirm the picker opens twice [id: …]
 Fix these, rerun the checks, update the acceptance list and deliver to In review again. If a finding is wrong, deliver with disputes=[{id, reason}].
 ```
+
+（2026-11-26）只列决定性的不通过，每行带 `[severity]`；`minor` 不进消息；有决定性的 `needs_user` 时另起一段列出。
 
 ### 6.6 三个信号与计数
 
@@ -399,10 +409,12 @@ Fix these, rerun the checks, update the acceptance list and deliver to In review
 
 | 信号 | 事实 | 计数 |
 | --- | --- | --- |
-| 抓到 | 一项在第 n 轮 `failed` 且参与判定（`gating`，2026-11-26 加：共享目录里和 observing 的命令失败不退回，不算抓到），同一张卡之后的评审里它 `passed`（没有争议） | `caught + 1`，`lastCaughtAt` |
+| 抓到 | 一项在第 n 轮决定性地 `failed`（参与判定且不是 `minor`；共享目录里和 observing 的命令失败不退回，不算抓到，2026-11-26），同一张卡之后的评审里它 `passed`（没有争议） | `caught + 1`，`lastCaughtAt` |
 | 漏掉 | 范围内的 active 准则在最近一次评审 `passed` 或 `na`，之后的返工回合归纳匹配到它（§4.3） | `missed + 1` |
 | 误判 | 一项在 `task.disputes` 里，这张卡进入 Done 或 Cancelled 时争议仍在（用户没有为这件事再退卡） | `misfire + 1`；争议随即清空 |
 | 评审 | 每次参与评审 | `reviews + 1`；`passed`/`na` 时 `passes + 1` |
+
+`minor` 的 `failed` 按 `na` 计；`needs_user` 不计（2026-11-26）。
 
 争议项被用户的返工归纳匹配到时（§4.3 `same`）：争议失败，从 `task.disputes` 移除，记 `caught + 1`，不记误判。
 

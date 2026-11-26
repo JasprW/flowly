@@ -160,6 +160,10 @@ export const cardItemSchema = z.object({
   count: z.number().int().min(1),
   state: z.enum(cardItemStates),
   promotedTo: z.string().optional(),
+  /** Its latest decisive fails in a row, newest last, as `file:line — detail` (AUTO-REVIEW-SPEC §3.6); cleared by a pass. */
+  fails: z.array(z.string().max(200)).max(3).optional(),
+  /** Demoted after failing 3 times in a row with a different finding each time: judged and shown, never decides (§3.6). */
+  observing: z.literal(true).optional(),
   createdAt: iso,
   updatedAt: iso,
 });
@@ -262,13 +266,13 @@ export function countMisfire(counts: GuardrailCounts, at: string) {
   counts.misfireAt = [...(counts.misfireAt || []), at].slice(-guardrailLimits.misfiresKept);
 }
 
-type ItemResult = { id: string; state: string };
+type ItemResult = { id: string; state: string; severity?: string };
 /**
  * Caught (§6.6): items that failed in the previous review of a card and passed in this one, leaving out
- * disputed ones. Pure; the caller counts them.
+ * disputed ones and minor failures (they sent nothing back, §6.3). Pure; the caller counts them.
  */
 export function caughtIds(previous: readonly ItemResult[] | undefined, current: readonly ItemResult[], disputed: readonly string[] = []): string[] {
-  const failed = new Set((previous || []).filter((r) => r.state === "failed").map((r) => r.id));
+  const failed = new Set((previous || []).filter((r) => r.state === "failed" && r.severity !== "minor").map((r) => r.id));
   const skip = new Set(disputed);
   return current.filter((r) => r.state === "passed" && failed.has(r.id) && !skip.has(r.id)).map((r) => r.id);
 }
@@ -696,15 +700,20 @@ type LedgerEntry = {
   action: string;
   actor: string;
   to?: string;
-  results?: readonly { id: string; state: string; kind?: string; gating?: false }[];
+  results?: readonly { id: string; state: string; kind?: string; gating?: false; severity?: "minor" }[];
   guardrail?: { change: string; kind: string; id: string };
 };
-/** A finished review's verdict from its results (gating items only); null for one that judged nothing (cancelled). */
-function resultsVerdict(results: LedgerEntry["results"]): "passed" | "failed" | "unavailable" | null {
+/**
+ * A finished review's verdict from its results (gating items only; a minor finding never decides, AUTO-REVIEW-SPEC
+ * §3.6); null for one that judged nothing (cancelled).
+ */
+function resultsVerdict(results: LedgerEntry["results"]): "passed" | "failed" | "unavailable" | "needs_user" | null {
   if (!results?.length) return null;
   const gating = results.filter((r) => r.gating !== false);
-  if (gating.some((r) => r.state === "failed")) return "failed";
+  const decisive = gating.filter((r) => r.severity !== "minor");
+  if (decisive.some((r) => r.state === "failed")) return "failed";
   if (gating.some((r) => r.state === "unavailable" || r.state === "queued" || r.state === "running")) return "unavailable";
+  if (decisive.some((r) => r.state === "needs_user")) return "needs_user";
   return "passed";
 }
 
@@ -741,7 +750,7 @@ export function guardrailsLedger(input: { flow: readonly LedgerEntry[]; entries:
       }
     }
     if (e.action === "review_finished" && at(e) >= from30)
-      judged += (e.results || []).filter((r) => r.state === "failed" && (r.kind === "goal" || r.kind === "guideline" || r.kind === "item")).length;
+      judged += (e.results || []).filter((r) => r.state === "failed" && r.severity !== "minor" && (r.kind === "goal" || r.kind === "guideline" || r.kind === "item")).length;
   });
   const own = input.entries.filter((e) => e.projectId === input.projectId);
   const misfires = own.reduce((n, e) => n + (e.counts.misfireAt || []).filter((m) => Date.parse(m) >= from30).length, 0);

@@ -1487,3 +1487,53 @@ Phase 2 spec: [PHASE-02-SPEC.md](PHASE-02-SPEC.md). Three current-card tools; au
 - 修复（[UI-UX-SPEC §5](UI-UX-SPEC.md#5-phone-and-narrow-layouts)）：iOS/Android 上未获得焦点、可编辑的多行 `Field` 上盖一层透明 `Pressable`：拖动落在它上面时由弹层滚动，轻点则让输入框获得焦点；获得焦点后遮罩移除，点按放光标、选择文字照常。Web 不变。
 - 取舍：轻点获得焦点时光标不在点按位置，需再点一次定位；编辑中在输入框上拖动不滚动弹层（点框外结束编辑后恢复）。
 - 无新 UI/设置/核心动作，不需要 tour、tip、遥测字段。
+
+## 2026-11-26 Auto review 收敛（卡片 a333fd46）
+
+- 依据评估报告 `docs/verification/auto-review-eval-2026-11-26/REPORT.md` §4.4–4.7、§5 P1。规格先改：AUTO-REVIEW-SPEC §3.1–3.3、新 §3.6、§4.4–4.5、§8.2、§9、D20–D24、§13.4；GUARDRAILS-SPEC §3.3、§6.3–6.6；ONBOARDING-SPEC 提示表。
+- 实现：
+  - 严重程度（blocker、major、minor）：只有决定性的不通过才退回。
+  - 返工轮做回归兜底：上一轮通过的项判不通过时，引用的文件不在本轮 diff 里就降为 minor。
+  - 新增 `needs_user`：评审状态 Needs you，进 Attention 并排在前面，加了一次性提示 `review-needs-you`。
+  - 轮次只在人发消息开始回合（`byUser`）或人改状态时重置，后台唤醒的回合不算；轮次取决于还没记下结束的回合时，最多等 15 秒。
+  - 每卡上限 10 次（`task.reviewCount`，卡进 Done 或 Cancelled 时清零），到上限后不通过直接按 R2 处理。
+  - 卡片项降级：连续 3 次不通过且每次意见都不同时，记 `CardItem.fails` 和 `observing`，不再参与判定。
+  - 指纹按内容算：`fingerprint.content` 是本次改动路径的内容摘要，task revision 不再参与。
+  - 人把卡移出 In review 或归档时，同一次写入里把评审记为 Cancelled，提交后结束命令进程组和评审 session 的等待（`BoardStore.onReviewStop`）。
+  - A1 让卡离开 In review 时结果挂起（`held`）；A1r 还原且内容没变时按挂起的结果走（`AutoReviewService.restored`）。
+- 遥测：不加字段。needs_user 是评审的一种结果，不是新开关，也不是值得单独计数的核心动作。导览：不改导览页，只加一条一次性提示。
+- 检查：`npm run typecheck` 退出码 0；`npm test` 172 个文件通过、1 个跳过，测试 1612 通过、6 跳过。
+- Tinylink 实机验证（`docs/verification/auto-review-convergence-2026-11-26/REPORT.md`）：
+  - needs_user：卡片留在 In review，Attention 写明要人做什么。
+  - A1 期间评审跑完，结果挂起；A1r 后结果原样生效。
+  - 人挪卡后 346 ms 内评审停止。
+  - 测试资源已清理。
+  - 未做：紧凑布局、手机、独立验证。
+- PR #127 CodeRabbit 首轮修复：
+  - Needs you 只在人发消息开始的回合结束（`byUser: true`）、人改状态或 Rerun 时消除，后台唤醒的回合不消除。
+  - 返工轮的回归兜底改用 git 列出的全部改动路径（`pathsChangedSince`，不受 diff 64 KiB 截断影响）。
+  - Git 加引号的路径（中文、制表符）在 diff 头和 numstat 里正确还原。
+  - 已经停止的评审不再起命令；摘要等待被停止时不留未处理的 rejection。
+  - 返工消息没能发出时退回总上限计数；`minor` 的不通过不计抓到；未解决的上一轮问题保持原 severity；归档清除挂起。
+  - 第二轮：返工轮把上一轮的 severity 一并交给评审；numstat 路径只解码一次（文件名本身带引号时不再被剥掉）。
+  - 第三轮：交付所在回合的结束晚于评审记下时不再消除 Needs you（只认评审结束后开始的回合）；引号路径里的 BMP 外字符（emoji）能解码；Rerun 测试接受排队中和已在跑两种拒绝（CI Node 24 偶发失败）。
+  - 第四轮：一次编辑同时把卡移回 In review 并归档时，也立即停掉评审。
+  - 合入 main 上的 P0（#128）：争议交给评审重判（E1）、命令偶发失败重跑（flaky）、共享目录命令不参与判定、问题工具的问答进评审输入。
+    - 争议结束改用“决定性地不通过”（`minor` 不结束争议），放在 `conclude` 里，挂起的结果在 A1r 后生效时同样处理。
+    - 抓到只计上一轮参与判定的项，且 `minor` 不算。
+    - 返工提示词同时带上“沿用 severity”和“被争议的项必须给结论”；上一轮结果一并带 severity 和争议意见。
+    - 两边各有一个 `findingText`：降级用的改名为 `demotionFinding`。
+    - 命令重跑也受评审停止信号控制。
+    - P0 的测试“提交变了不重跑、结果作废”改为结果保留，因为只有提交变了、内容没变（§3.6）。
+  - 合入后检查：`npm run typecheck` 退出码 0；`npm test` 173 个文件通过、1 个跳过，测试 1634 通过、6 跳过。
+  - 合入后第五轮：
+    - 卡片自己的 worktree 里，内容指纹也包含评审开始后才和开始时 commit 不同的路径。评审中改了集合外的文件，结果作废；共享目录不受影响（D6）。
+    - 符号链接按指向的路径算，不跟随，并带 `link:` 标记，与内容相同的普通文件区分开。文件逐个流式哈希。
+    - 严重程度为 minor 的 needs_user 在评审条上按通过计。
+    - 带空格的路径也能按“同一文件同一行”判为同一意见。
+    - 两个停止测试改为等就绪信号，不再靠固定等待。
+    - 未改，理由已回复在 PR 线程里：
+      - 挂起结果的生命周期记录屏障（A1r 在整整一个后续回合之后才发生）。
+      - 创建评审 session 前再查一次停止信号（窗口只有一次模型列表查询的时间，而且创建后会被删除）。
+  - 未改（理由回复在 PR 线程里）：Rerun 前删除挂起与事务之间的竞争。窗口只有一次 git 调用的时间，后果是人再按一次 Rerun。
+  - 检查：`npm run typecheck` 退出码 0；`npm test` 172 个文件通过、1 个跳过，测试 1615 通过、6 跳过。

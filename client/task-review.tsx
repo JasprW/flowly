@@ -5,7 +5,7 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { useQueryClient } from "@tanstack/react-query";
 import * as rpc from "../shared/rpc";
 import type { Project, Review, ReviewItem, ReviewItemState, Task } from "../shared/model";
-import { autoReviewRuns, outputTail, rerunnablePlace } from "../shared/auto-review";
+import { autoReviewRuns, isMinor, outputTail, rerunnablePlace } from "../shared/auto-review";
 import { invalidateCardViews } from "./card-detail-query";
 import { IconButton, Label, font, message, noFocusRing, space, useTheme } from "./ui";
 import { t } from "../shared/i18n";
@@ -23,13 +23,15 @@ export function reviewLabel(review: Review): string {
       return t("Review failed");
     case "unavailable":
       return t("Review unavailable");
+    case "needs_user":
+      return t("Review needs you");
     default:
       return t("Review cancelled");
   }
 }
 
 export function reviewIcon(review: Review): string {
-  return review.state === "running" ? "Loader" : review.state === "passed" ? "ShieldCheck" : review.state === "rework" ? "RotateCcw" : review.state === "failed" ? "ShieldAlert" : "CircleHelp";
+  return review.state === "running" ? "Loader" : review.state === "passed" ? "ShieldCheck" : review.state === "rework" ? "RotateCcw" : review.state === "failed" ? "ShieldAlert" : review.state === "needs_user" ? "User" : "CircleHelp";
 }
 
 /** phase B: `Review.tokens` (§6.4) is not on this branch's model yet. */
@@ -37,8 +39,8 @@ export function reviewIcon(review: Review): string {
 const seconds = (ms: number) => t("{n} s", { n: Math.max(1, Math.round(ms / 1000)) });
 const compactCount = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 
-/** Failed first, then disputed, then what is still going, then passed or not applicable (§7.1). */
-const itemRank: Record<ReviewItemState, number> = { failed: 0, disputed: 1, running: 2, queued: 3, unavailable: 4, passed: 5, na: 5, skipped: 6 };
+/** Failed first, then what needs the user and disputed, then what is still going, then passed or not applicable (§7.1). */
+const itemRank: Record<ReviewItemState, number> = { failed: 0, needs_user: 1, disputed: 1, running: 2, queued: 3, unavailable: 4, passed: 5, na: 5, skipped: 6 };
 export const sortedItems = (items: readonly ReviewItem[]) => items.map((item, index) => ({ item, index })).sort((a, b) => itemRank[a.item.state] - itemRank[b.item.state] || a.index - b.index).map((x) => x.item);
 
 function resultText(r: ReviewItem): string {
@@ -52,11 +54,14 @@ function resultText(r: ReviewItem): string {
       return t("Skipped");
     case "disputed":
       return t("Disputed");
+    case "needs_user":
+      return t("Needs you");
     case "unavailable":
       return r.timedOut ? t("Timed out") : t("Unavailable");
     case "failed":
       if (r.kind === "command") return r.exitCode === null || r.exitCode === undefined ? t("Stopped") : t("Exit {code}", { code: r.exitCode });
-      return "";
+      // A minor finding is shown but never sent back (AUTO-REVIEW-SPEC §3.6).
+      return isMinor(r) ? t("Minor") : "";
     default:
       return r.kind === "command" && r.ms ? seconds(r.ms) : "";
   }
@@ -73,12 +78,14 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
   const more = !!body || !!where || !!item.quote || !!ranIn || (item.kind === "command" && !!item.argv);
   // Unset until the user toggles, so a row that fails while the drawer is open still opens.
   const [toggled, setOpen] = useState<boolean | null>(null);
-  const open = toggled ?? item.state === "failed";
+  const open = toggled ?? ((item.state === "failed" && !isMinor(item)) || item.state === "needs_user");
   const icon =
     item.state === "passed"
       ? { name: "CircleCheck", color: colors.statusSuccess }
       : item.state === "failed"
-        ? { name: "CircleX", color: colors.statusDanger }
+        ? { name: "CircleX", color: isMinor(item) ? colors.foregroundMuted : colors.statusDanger }
+        : item.state === "needs_user"
+          ? { name: "User", color: colors.statusWarning }
         : item.state === "disputed"
           ? { name: "CircleAlert", color: colors.statusWarning }
           : item.state === "running"
@@ -105,7 +112,7 @@ const ItemRow = memo(function ItemRow({ item }: { item: ReviewItem }) {
             {name}
           </Label>
         </View>
-        {item.kind === "command" && !item.gating && (
+        {!item.gating && (
           <Label size={font.sm} muted selectable={false}>
             {t("observing")}
           </Label>

@@ -580,6 +580,8 @@ export default function contribute(host: PluginServerContext) {
     }),
   });
   tools.agents.onDelivered = (delivery, api) => void reviews.delivered(delivery, api);
+  // A person moving the card away stops its review's commands and session at once (AUTO-REVIEW-SPEC §3.2).
+  store.onReviewStop = (taskId) => reviews.stop(taskId);
   void reviews.recover().catch((e) => logFailure("Flowly auto review recovery failed:", e));
   server.handle(rpc.rerunReview, (input, { paseo }) => reviews.rerun(input.taskId, paseo));
   server.handle(rpc.listConnections, async () => {
@@ -772,6 +774,8 @@ export default function contribute(host: PluginServerContext) {
         rework = memory.reworkQuote(identity, timeline, board);
       });
       recorded(true);
+      // A1r may have brought the card back to In review: a review result held meanwhile applies now (AUTO-REVIEW-SPEC §3.2).
+      void reviews.restored(identity.taskId, paseo).catch((e) => logFailure("Flowly held review not applied:", e, identity.taskId));
       // The user's own words of this turn, kept for the finished-card review (PROJECT-MEMORY-SPEC §4.0); never blocks the hook.
       void store
         .read()

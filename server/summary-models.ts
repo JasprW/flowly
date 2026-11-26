@@ -63,11 +63,34 @@ export async function finishRefusingPermissions(agent: ModelAgent, timeoutMs: nu
   return result;
 }
 
+/** Resolves as `work` does, or rejects as soon as `signal` aborts (the work itself is left to end on its own). */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) {
+    work.catch(() => {}); // Left to end on its own; its failure is not ours to report.
+    return Promise.reject(new Error("Stopped."));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(new Error("Stopped."));
+    signal.addEventListener("abort", stop, { once: true });
+    work.then(
+      (v) => {
+        signal.removeEventListener("abort", stop);
+        resolve(v);
+      },
+      (e: unknown) => {
+        signal.removeEventListener("abort", stop);
+        reject(e);
+      },
+    );
+  });
+}
+
 /** Only model create/wait/parse/cleanup are retried; the caller persists after this returns. */
 export async function runSummaryModels<T>(
   paseo: PaseoApi,
   configured: SummaryModelChoice,
-  options: { create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number },
+  options: { create(model: string): Promise<ModelAgent>; parse(text: string | null | undefined): T; remove: RemoveAgent; timeoutMs: number; /** Stops the wait at once; the session is still removed (AUTO-REVIEW-SPEC §3.2). */ signal?: AbortSignal },
 ): Promise<{ model: string; output: T }> {
   const available = await availableModels(paseo, configured);
   let models: ReturnType<typeof resolveModels>;
@@ -77,12 +100,14 @@ export async function runSummaryModels<T>(
     throw new SummaryModelError(error instanceof Error ? error.message : String(error));
   }
   const failures: string[] = [];
+  const { signal } = options;
   for (const model of models) {
+    if (signal?.aborted) throw new SummaryModelError("Stopped.");
     try {
       const agent = await options.create(model);
       let output: T;
       try {
-        const result = await finishRefusingPermissions(agent, options.timeoutMs);
+        const result = await untilAborted(finishRefusingPermissions(agent, options.timeoutMs), signal);
         if (result.status !== "idle" || result.error) throw new Error(
           result.status === "timeout" ? "The summary model timed out."
             : result.status === "permission" ? "The summary model asked for a permission."
@@ -94,6 +119,7 @@ export async function runSummaryModels<T>(
       }
       return { model, output };
     } catch (error) {
+      if (signal?.aborted) throw new SummaryModelError("Stopped.");
       failures.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

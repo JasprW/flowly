@@ -1,7 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { deliveringBackgroundWork } from "./background-work";
 import { createHash, randomUUID } from "node:crypto";
-import { access, readdir, readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { access, lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cardImagePath } from "./card-images";
 import { promisify } from "node:util";
@@ -25,16 +26,26 @@ import {
   autoReviewOf,
   autoReviewRuns,
   continuesRound,
+  countsTowardCap,
   conversationForReview,
   userWords,
   type ConversationEntry,
   conversationLimits,
   defaultCheckTimeoutSec,
+  demotedReason,
+  diffPaths,
+  unquoteGitPath,
   failureSummary,
+  demotionFinding,
   goalPrompt,
   hasEvidence,
+  isMinor,
+  decisive,
   itemPassed,
+  needsUserReason,
+  notThisRoundReason,
   outputTail,
+  reviewCapPerCard,
   reviewFailedRule,
   reviewFinishedAction,
   reviewStartedAction,
@@ -43,6 +54,8 @@ import {
   reworkRule,
   reworkStage,
   rerunnablePlace,
+  roundAwaitsTurnEnd,
+  shouldDemote,
 } from "../shared/auto-review";
 import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails";
 import type { BoardStore } from "./store";
@@ -75,7 +88,7 @@ export type JudgedCheck = {
   /** The user's own words it came from. */
   quote?: string;
   /** Round ≥ 2: its result in the previous round. */
-  previous?: { state: string; detail?: string };
+  previous?: { state: string; severity?: string; detail?: string };
   /** The agent disputed an earlier finding of this check (§6.3 step 2, E1): judge it, but not on that finding again without new evidence. */
   dispute?: { finding?: string; reason: string; round: number };
 };
@@ -105,8 +118,18 @@ export type LlmReviewInput = {
    */
   backgroundWork?: string[];
 };
-export type LlmVerdict = { id: string; verdict: "pass" | "fail" | "na"; detail: string; file?: string; line?: number; quote?: string };
-export type LlmReview = (input: LlmReviewInput, paseo: PaseoApi) => Promise<{ model: string; verdicts: LlmVerdict[] }>;
+export type LlmVerdict = {
+  id: string;
+  verdict: "pass" | "fail" | "na" | "needs_user";
+  /** For fail and needs_user (AUTO-REVIEW-SPEC §3.6); absent means major. */
+  severity?: "blocker" | "major" | "minor";
+  detail: string;
+  file?: string;
+  line?: number;
+  quote?: string;
+};
+/** `signal` aborts when a person moves the card during the review (§3.2): stop waiting and remove the session. */
+export type LlmReview = (input: LlmReviewInput, paseo: PaseoApi, signal?: AbortSignal) => Promise<{ model: string; verdicts: LlmVerdict[] }>;
 
 const execute = promisify(execFile);
 export type Git = (cwd: string, args: string[]) => Promise<string>;
@@ -217,6 +240,17 @@ async function repoDiff(directory: string, options: { since?: string; baseRef?: 
   return text;
 }
 
+/**
+ * Every path changed since the previous delivery's commit (§3.6, the rework round's regression backstop), with
+ * `prefix` before each: the whole list, NUL-separated so Git does not quote it, where the review's diff is cut at
+ * 64 KiB. Untracked new files count too. Empty when git fails.
+ */
+export async function pathsChangedSince(directory: string, since: string, git: Git = defaultGit, prefix = ""): Promise<Set<string>> {
+  if (!shaPattern.test(since)) return new Set();
+  const [tracked, added] = await Promise.all([git(directory, ["diff", since, "--name-only", "-z"]).catch(() => ""), untrackedFiles(directory, git).catch(() => [])]);
+  return new Set([...tracked.split("\0"), ...added].filter(Boolean).map((p) => `${prefix}${p}`));
+}
+
 /** A Git repository inside a workspace directory that is not one itself (a linked root, GUARDRAILS-SPEC §6.2). */
 export type LinkedRepo = { name: string; directory: string };
 const linkedRepoLimit = 20;
@@ -280,7 +314,9 @@ export function numstatShape(...outputs: string[]): { shape: ChangeShape; paths:
       const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line.trim());
       if (!m) continue;
       lines += (m[1] === "-" ? 0 : Number(m[1])) + (m[2] === "-" ? 0 : Number(m[2]));
-      paths.add(renamedTo(m[3]));
+      // Decode Git's quoting exactly once: the whole record when Git quoted all of it, else the renamed-to part.
+      const raw = m[3]!;
+      paths.add(/^"(?:[^"\\]|\\.)*"$/.test(raw) ? renamedTo(unquoteGitPath(raw)) : unquoteGitPath(renamedTo(raw)));
     }
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
@@ -324,6 +360,39 @@ export async function linkedShape(repos: readonly LinkedRepo[], baseRef?: string
   const paths = new Set(parts.flatMap((p) => [...p.paths]));
   const lines = parts.reduce((sum, p) => sum + p.shape.lines, 0);
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
+}
+
+/**
+ * One path's content as a digest: a file's bytes, read as a stream; a symbolic link's target path, never followed;
+ * "-" when it is gone (deleted) or cannot be read.
+ */
+async function fileDigest(path: string): Promise<string> {
+  const info = await lstat(path).catch(() => null);
+  if (!info) return "-";
+  if (info.isSymbolicLink()) {
+    const target = await readlink(path).catch(() => null);
+    // The marker stays outside the hash, so a file whose text equals the target never matches a link.
+    return target === null ? "-" : `link:${createHash("sha1").update(target).digest("hex")}`;
+  }
+  const hash = createHash("sha1");
+  try {
+    for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+  } catch {
+    return "-";
+  }
+  return hash.digest("hex");
+}
+/**
+ * The review fingerprint's content digest (AUTO-REVIEW-SPEC §3.6): the working-tree content of each path this
+ * delivery changed, under `directory` (a linked root's paths carry the repository's name), as one 16-character digest
+ * over the sorted "path digest" lines. A commit or push leaves it as it is; editing one of these files changes it.
+ */
+export async function contentDigest(directory: string, paths: Iterable<string>): Promise<string> {
+  const sorted = [...new Set(paths)].sort();
+  // One file at a time, so memory stays at one read chunk however large the delivery's files are.
+  const lines: string[] = [];
+  for (const p of sorted) lines.push(`${p} ${await fileDigest(join(directory, p))}`);
+  return createHash("sha1").update(lines.join("\n")).digest("hex").slice(0, 16);
 }
 
 /** A file the model cited, as a repository-relative path; null when it points outside the workspace. */
@@ -477,10 +546,10 @@ function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQues
 }
 
 export type CheckRun = { exitCode: number | null; timedOut: boolean; spawnError?: string; ms: number; output: string };
-/** Runs one check as an argument array in `cwd`, never through a shell. */
-export type RunCheck = (argv: readonly string[], cwd: string, timeoutMs: number) => Promise<CheckRun>;
+/** Runs one check as an argument array in `cwd`, never through a shell; `signal` stops it and its children at once. */
+export type RunCheck = (argv: readonly string[], cwd: string, timeoutMs: number, signal?: AbortSignal) => Promise<CheckRun>;
 
-export const runCheck: RunCheck = (argv, cwd, timeoutMs) =>
+export const runCheck: RunCheck = (argv, cwd, timeoutMs, signal) =>
   new Promise((resolve) => {
     const started = Date.now();
     let output = "",
@@ -489,6 +558,11 @@ export const runCheck: RunCheck = (argv, cwd, timeoutMs) =>
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString("utf8")).slice(-autoReviewLimits.tail * 2);
     };
+    // A person moved the card before the command started (§3.2): it does not start.
+    if (signal?.aborted) {
+      resolve({ exitCode: null, timedOut: false, spawnError: "Stopped.", ms: 0, output: "" });
+      return;
+    }
     // Its own process group, so a timeout also stops the test runner's workers.
     const group = process.platform !== "win32";
     const child = spawn(argv[0], argv.slice(1), {
@@ -505,15 +579,21 @@ export const runCheck: RunCheck = (argv, cwd, timeoutMs) =>
         // Already gone.
       }
     };
-    const timer = setTimeout(() => {
-      timedOut = true;
+    const stop = () => {
       kill("SIGTERM");
       setTimeout(() => kill("SIGKILL"), 5000).unref();
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      stop();
     }, timeoutMs);
+    // A person moved the card (§3.2): the whole process group goes now, not at the timeout.
+    signal?.addEventListener("abort", stop, { once: true });
     const finish = (run: Omit<CheckRun, "ms" | "output" | "timedOut">) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", stop);
       resolve({ ...run, timedOut, ms: Date.now() - started, output });
     };
     child.stdout?.on("data", keep);
@@ -583,13 +663,14 @@ export async function changedRepos(repos: readonly LinkedRepo[], since: string |
  * null when it applies in none. The failing run's output names its repository; the time is the sum; `ran` lists the
  * repositories it ran in, the failing one last.
  */
-export async function runInRepos(run: RunCheck, argv: readonly string[], repos: readonly LinkedRepo[], timeoutMs: number): Promise<(CheckRun & { ran: string[] }) | null> {
+export async function runInRepos(run: RunCheck, argv: readonly string[], repos: readonly LinkedRepo[], timeoutMs: number, signal?: AbortSignal): Promise<(CheckRun & { ran: string[] }) | null> {
   let ms = 0;
   const ran: string[] = [];
   for (const repo of repos) {
+    if (signal?.aborted) break;
     if (!(await commandApplies(argv, repo.directory))) continue;
     ran.push(repo.name);
-    const result = await run(argv, repo.directory, timeoutMs);
+    const result = await run(argv, repo.directory, timeoutMs, signal);
     ms += result.ms;
     if (result.exitCode !== 0 || result.timedOut || result.spawnError) return { ...result, ms, ran, output: `[${repo.name}]\n${result.output}` };
   }
@@ -640,6 +721,19 @@ const fileExists = (path: string) =>
   );
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+/** How long a review waits for its delivering turn's `agent.turn_ended` (with `byUser`) before it counts the round (§3.3). */
+const lifecycleWaitMs = 15_000;
+/** What the fingerprint compares at the end (§3.6): the content digest, else HEAD and dirty when git could not tell. */
+type Measured = { content?: string; head?: GitHead | null };
+type Outcome = { task: Task; review: NonNullable<Task["review"]>; rework: boolean };
+/** A result held while A1 has the card out of In review (§3.2), applied when A1r brings it back unchanged. In memory only. */
+type HeldReview = {
+  startedAt: string;
+  measure: () => Promise<Measured>;
+  previous?: readonly ReviewItem[];
+  words: ReadonlyMap<string, string>;
+};
+
 /**
  * The automatic review of agent deliveries (AUTO-REVIEW-SPEC, GUARDRAILS-SPEC §6): runs the project's commands in the
  * card workspace, then one review session judges the built-in check, the guidelines in scope and the card's own
@@ -650,6 +744,10 @@ export class AutoReviewService {
   private chains = new Map<string, Promise<void>>();
   /** Deliveries waiting for their session's turn to end, by session. */
   private pending = new Map<string, DeliveredReview>();
+  /** The running review of each card, so a person's move can stop it at once (§3.2). */
+  private active = new Map<string, { startedAt: string; abort: AbortController }>();
+  /** Results held while the card was out of In review (§3.2), by card. */
+  private held = new Map<string, HeldReview>();
   private readonly run: RunCheck;
   private readonly git: Git;
   private readonly clock: () => number;
@@ -686,6 +784,57 @@ export class AutoReviewService {
         await this.clearWaiting(delivery.taskId, delivery.eventId);
       }
     });
+  }
+
+  /**
+   * A person moved the card out of In review or archived it while its review ran (§3.2): the store already recorded
+   * the review as cancelled in that write; this stops its commands and its review session now.
+   */
+  stop(taskId: string) {
+    this.held.delete(taskId);
+    const running = this.active.get(taskId);
+    if (!running) return;
+    this.active.delete(taskId);
+    running.abort.abort();
+  }
+
+  /**
+   * The card came back to In review (A1r, §3.2) while a result of it was held: apply that result when the delivery's
+   * content and workpad are unchanged, else drop it (Cancelled). Never throws.
+   */
+  restored(taskId: string, paseo: PaseoApi) {
+    const held = this.held.get(taskId);
+    if (!held) return Promise.resolve();
+    return this.store.read().then((board) => {
+      const task = board.tasks.find((t) => t.id === taskId);
+      if (!task || task.review?.startedAt !== held.startedAt || !task.review.held) {
+        this.held.delete(taskId);
+        return;
+      }
+      if (task.status !== "in_review" || task.reviewWaiting) return;
+      return this.enqueue(task.projectId, taskId, () => this.resume(taskId, held, paseo));
+    });
+  }
+
+  private async resume(taskId: string, held: HeldReview, paseo: PaseoApi) {
+    if (this.held.get(taskId) !== held) return;
+    this.held.delete(taskId);
+    const after = await held.measure();
+    const outcome = await this.store.transaction<Outcome | null>((b) => {
+      const t = b.tasks.find((x) => x.id === taskId);
+      const project = t && b.projects.find((p) => p.id === t.projectId);
+      const r = t?.review;
+      if (!t || !project || !r || r.startedAt !== held.startedAt || !r.held || t.archivedAt || t.status !== "in_review" || t.reviewWaiting) return { value: null, changed: false };
+      const finishedAt = this.now();
+      const { held: _held, reason: _reason, ...rest } = r;
+      if (this.changedSince(b, t, rest, after)) {
+        t.review = { ...rest, state: "cancelled", reason: "The card, its workpad or its code changed during the review.", finishedAt };
+        this.store.event(b, { taskId: t.id, actor: "system", action: reviewFinishedAction, agentId: r.trigger.agentId, note: "Auto review cancelled: the card changed during the review" });
+        return { value: null, changed: true };
+      }
+      return this.conclude(b, t, project, { ...rest, state: "running" }, finishedAt);
+    });
+    if (outcome) await this.afterFinish(outcome, held.previous, held.words, undefined, paseo);
   }
 
   /** Clears the card's waiting marker (§3.1) if it is still the one this delivery set. */
@@ -844,6 +993,34 @@ export class AutoReviewService {
         })
       : null;
     const words = guard?.words ?? new Map<string, string>();
+    // The round counts turns a person started (§3.3): when it depends on a turn whose end is not recorded yet (the
+    // delivering one), wait for that end, with its byUser, at most 15 s.
+    if (lifecycleRecorded && !manual) {
+      const fresh = await this.store.read();
+      const t = fresh.tasks.find((x) => x.id === delivery.taskId);
+      if (t && roundAwaitsTurnEnd(fresh.events, t.id, t.review)) await Promise.race([lifecycleRecorded, new Promise((resolve) => setTimeout(resolve, lifecycleWaitMs).unref())]);
+    }
+    // The content digest (§3.6): the paths this delivery changed, under the directory they are relative to, and, in the
+    // card's own worktree, every path that differs from the start's commit (so an edit or new file outside that set
+    // after the start changes it; a commit of the same content leaves it as it was). A shared directory leaves those
+    // out: other sessions' edits there would cancel every review (D6).
+    const contentPaths = measured ? [...measured.paths] : null;
+    const startSha = head?.sha;
+    const startRepos = repoShas;
+    const changedAfter = async (): Promise<string[]> => {
+      if (!where?.worktree) return [];
+      const sets = linked.length
+        ? await Promise.all(linked.map((r) => (startRepos?.[r.name] ? pathsChangedSince(r.directory, startRepos[r.name]!, this.git, `${r.name}/`) : new Set<string>())))
+        : [startSha ? await pathsChangedSince(where.directory, startSha, this.git) : new Set<string>()];
+      return sets.flatMap((set) => [...set]);
+    };
+    const digestNow = async () => (where && contentPaths ? await contentDigest(where.directory, [...contentPaths, ...(await changedAfter())]).catch(() => undefined) : undefined);
+    const content = await digestNow();
+    const measure = async (): Promise<Measured> => {
+      if (!where) return {};
+      if (content !== undefined) return { content: await digestNow() };
+      return { head: linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now()) };
+    };
     const startedAt = this.now();
     const started = await this.store.transaction<{ previous?: Task["review"]; round: number } | null>((b) => {
       const t = b.tasks.find((x) => x.id === delivery.taskId);
@@ -877,7 +1054,8 @@ export class AutoReviewService {
         })),
         { id: GOAL_ID, kind: "goal" as const, name: GOAL_NAME, gating: true, ...judgedState(GOAL_ID) },
         ...(guard?.guidelines || []).map((g) => ({ id: g.id, kind: "guideline" as const, name: clip(g.text, 200), gating: true, ...judgedState(g.id) })),
-        ...(guard?.items || []).map((i) => ({ id: i.id, kind: "item" as const, name: clip(i.text, 200), gating: true, ...judgedState(i.id) })),
+        // A demoted card item is judged and shown but never decides (§3.6).
+        ...(guard?.items || []).map((i) => ({ id: i.id, kind: "item" as const, name: clip(i.text, 200), gating: !i.observing, ...(i.observing ? { reason: demotedReason } : {}), ...judgedState(i.id) })),
       ].slice(0, 40);
       t.review = {
         trigger: { eventId: manual ? "" : delivery.eventId, agentId: delivery.agentId, from: delivery.from },
@@ -890,6 +1068,7 @@ export class AutoReviewService {
           ...(head?.sha ? { sha: head.sha } : {}),
           ...(repoShas && Object.keys(repoShas).length ? { repos: repoShas } : {}),
           dirty: !!head?.dirty,
+          ...(content ? { content } : {}),
         },
         shared,
         ...(delivery.worktree ? { worktree: delivery.worktree } : {}),
@@ -901,6 +1080,41 @@ export class AutoReviewService {
       return { value: { previous, round }, changed: true };
     });
     if (!started) return;
+    // A new review replaces a held one (§3.2).
+    this.held.delete(delivery.taskId);
+    const abort = new AbortController();
+    this.active.set(delivery.taskId, { startedAt, abort });
+    try {
+      await this.conduct(delivery, manual, paseo, lifecycleRecorded, { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal: abort.signal, head });
+    } finally {
+      if (this.active.get(delivery.taskId)?.abort === abort) this.active.delete(delivery.taskId);
+    }
+  }
+
+  /** The review after it started: commands, the review session, the result and what follows from it. */
+  private async conduct(
+    delivery: DeliveredReview,
+    manual: boolean,
+    paseo: PaseoApi,
+    lifecycleRecorded: Promise<boolean> | undefined,
+    ctx: {
+      task: Task;
+      baseRef: string | undefined;
+      where: { directory: string; worktree: boolean } | null;
+      whereUnavailable: string;
+      linked: LinkedRepo[];
+      measured: { shape: ChangeShape; paths: Set<string> } | null;
+      guard: Awaited<ReturnType<ReviewGuardrails["reviewInput"]>> | null;
+      words: Map<string, string>;
+      startedAt: string;
+      started: { previous?: Task["review"]; round: number };
+      measure: () => Promise<Measured>;
+      signal: AbortSignal;
+      /** HEAD when the review started: a failed command is rerun only at this commit (flaky, §6.3 step 1). */
+      head: { sha?: string } | null;
+    },
+  ) {
+    const { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal, head } = ctx;
     const items = (await this.current(delivery.taskId, startedAt))?.items ?? [];
     const set = (id: string, patch: Partial<ReviewItem>) => this.updateItems(delivery.taskId, startedAt, [id], patch);
     if (!where) {
@@ -909,12 +1123,14 @@ export class AutoReviewService {
       // Every active and observing command runs, in list order; each result shows as soon as it is in (§6.3 step 1).
       const runIn = linked.length ? await changedRepos(linked, task.createdAt, this.git) : [];
       for (const item of items) {
+        if (signal.aborted) return;
         if (item.kind !== "command" || item.state !== "queued") continue;
         const entry = guard?.commands.find((c) => c.id === item.id);
         await set(item.id, { state: "running" });
         const timeout = (entry?.timeoutSec ?? defaultCheckTimeoutSec) * 1000;
-        const once = () => (linked.length ? runInRepos(this.run, item.argv || [], runIn, timeout) : this.run(item.argv || [], where.directory, timeout));
+        const once = () => (linked.length ? runInRepos(this.run, item.argv || [], runIn, timeout, signal) : this.run(item.argv || [], where.directory, timeout, signal));
         let run: (CheckRun & { ran?: string[] }) | null = await once();
+        if (signal.aborted) return;
         if (!run) {
           await set(item.id, { state: "skipped", reason: runIn.length < linked.length ? "No repository this delivery changed has this command." : "No repository in this workspace has this command." });
           continue;
@@ -946,27 +1162,41 @@ export class AutoReviewService {
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
         });
       }
-      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual && started.previous?.worktree === delivery.worktree ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo);
+      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual && started.previous?.worktree === delivery.worktree ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo, signal);
+      if (signal.aborted) return;
     }
-    const after = !where ? null : linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now());
-    const outcome = await this.finish(delivery.taskId, startedAt, where ? after : undefined);
+    const after = await measure();
+    const outcome = await this.finish(delivery.taskId, startedAt, after);
+    if (outcome === "held") {
+      this.held.set(delivery.taskId, { startedAt, measure, previous: started.previous?.items, words });
+      return;
+    }
     if (!outcome) return;
-    // The three signals and retirement (§6.6, §6.7); a failure here never changes the review.
+    await this.afterFinish(outcome, started.previous?.items, words, lifecycleRecorded, paseo);
+  }
+
+  /** What follows a finished review: guardrail counts, then the rework message when it asked for rework. */
+  private async afterFinish(outcome: Outcome, previous: readonly ReviewItem[] | undefined, words: ReadonlyMap<string, string>, lifecycleRecorded: Promise<boolean> | undefined, paseo: PaseoApi) {
+    const startedAt = outcome.review.startedAt;
+    const taskId = outcome.task.id;
+    // The three signals and retirement (§6.6, §6.7); a minor finding counts as na. A failure here never changes the review.
+    const counted = (list: readonly ReviewItem[]) => list.map((i) => (i.state === "failed" && isMinor(i) ? { ...i, state: "na" as const } : i));
     if (this.deps.guardrails)
       await this.deps.guardrails
         .reviewed({
           projectId: outcome.task.projectId,
-          taskId: outcome.task.id,
-          items: outcome.review.items,
-          // Only a gating failure was sent back, so only it can be caught (§6.6).
-          previous: started.previous?.items.filter((i) => i.gating),
+          taskId,
+          // A minor failure sent nothing back, so it counts as na (§3.6).
+          items: counted(outcome.review.items),
+          // Only a decisive failure was sent back, so only it can be caught (§6.6).
+          previous: previous && counted(previous.filter((i) => i.gating)),
           disputed: (outcome.task.disputes || []).map((d) => d.id),
         })
-        .catch((e) => logFailure("Flowly guardrail counts not updated:", e, outcome.task.id));
+        .catch((e) => logFailure("Flowly guardrail counts not updated:", e, taskId));
     if (!outcome.rework) return;
     // Compute the review immediately, but never start a rework turn before its predecessor is recorded.
     if (lifecycleRecorded && !(await lifecycleRecorded)) {
-      await this.markUnavailable(delivery.taskId, startedAt, "The delivering turn could not be recorded, so the rework message was not sent.");
+      await this.markUnavailable(taskId, startedAt, "The delivering turn could not be recorded, so the rework message was not sent.");
       return;
     }
     const live = await this.deps.sessionLive(outcome.review.trigger.agentId, outcome.task, paseo).catch(() => false);
@@ -979,7 +1209,7 @@ export class AutoReviewService {
           },
         )
       : false;
-    if (!sent) await this.markUnavailable(delivery.taskId, startedAt, "The delivering session is no longer available, so the rework message was not sent.");
+    if (!sent) await this.markUnavailable(taskId, startedAt, "The delivering session is no longer available, so the rework message was not sent.");
   }
 
   private async current(taskId: string, startedAt: string) {
@@ -1002,6 +1232,7 @@ export class AutoReviewService {
     linked: readonly LinkedRepo[],
     diffFiles: ReadonlySet<string>,
     paseo: PaseoApi,
+    signal?: AbortSignal,
   ) {
     const now = await this.current(delivery.taskId, startedAt);
     if (!now) return;
@@ -1046,7 +1277,7 @@ export class AutoReviewService {
           kind: i.kind as JudgedCheck["kind"],
           text: text(i),
           ...(quote ? { quote } : {}),
-          ...(prior ? { previous: { state: prior.state, ...(prior.detail ? { detail: prior.detail } : {}) } } : {}),
+          ...(prior ? { previous: { state: prior.state, ...(prior.severity ? { severity: prior.severity } : {}), ...(prior.detail ? { detail: prior.detail } : {}) } } : {}),
           ...(dispute ? { dispute: { reason: dispute.reason, round: dispute.round, ...(dispute.finding ? { finding: dispute.finding } : {}) } } : {}),
         };
       }),
@@ -1074,13 +1305,24 @@ export class AutoReviewService {
     const started = this.clock();
     let result: Awaited<ReturnType<LlmReview>>;
     try {
-      result = await this.deps.llm(input, paseo);
+      result = await this.deps.llm(input, paseo, signal);
     } catch (e) {
+      if (signal?.aborted) return;
       const reason = `The review session failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, autoReviewLimits.reason);
       await this.updateItems(delivery.taskId, startedAt, ids, { state: "unavailable", reason });
       return;
     }
     const ms = Math.max(0, Math.round(this.clock() - started));
+    // Rework round (§3.6): what this round changed, for the regression backstop.
+    const changedNow = new Set<string>();
+    if (incremental) {
+      const parts = linked.length
+        ? await Promise.all(linked.map((r) => (previous!.fingerprint.repos?.[r.name] ? pathsChangedSince(r.directory, previous!.fingerprint.repos[r.name]!, this.git, `${r.name}/`) : new Set<string>())))
+        : [await pathsChangedSince(where.directory, previous!.fingerprint.sha!, this.git)];
+      // The shown diff too, in case git could not list them.
+      for (const p of [...parts.flatMap((x) => [...x]), ...diffPaths(input.diff)]) changedNow.add(p);
+    }
+    const cardItems = new Map((guard?.items || []).map((i) => [i.id, i]));
     // B1: a cited file outside the diff counts when it exists in the repository (a missing entry, say).
     const exists = this.deps.exists ?? fileExists;
     const verdicts = new Map<string, LlmVerdict & { file?: string }>();
@@ -1109,15 +1351,39 @@ export class AutoReviewService {
           // An answer in a question tool counts by the user's answer only; the agent's question is context (§4.2, E2).
           const quoteSources = [task.title, task.description, ...(input.conversation ?? []).map(userWords), guard?.words.get(r.id)];
           const evidence = v.verdict !== "fail" || hasEvidence(v, diffFiles, existing, quoteSources);
+          // needs_user needs no evidence, but must say what the person has to do (§3.6).
+          const asks = v.verdict === "needs_user" && !!v.detail.trim();
+          const state: ReviewItem["state"] =
+            v.verdict === "pass" ? "passed" : v.verdict === "fail" && evidence ? "failed" : asks ? "needs_user" : "na";
+          const reason = v.verdict === "fail" && !evidence ? "no evidence" : v.verdict === "needs_user" && !asks ? "no detail" : undefined;
+          let severity = state === "failed" || state === "needs_user" ? v.severity : undefined;
+          let gating = r.gating;
+          let why = reason;
+          const prior = incremental ? before.get(r.id) : undefined;
+          // A rework round re-checks what failed and looks for regressions (§3.6): a fail of what passed before must cite a file this round changed.
+          if (state === "failed" && severity !== "minor" && prior && itemPassed(prior) && !(v.file && changedNow.has(v.file))) {
+            severity = "minor";
+            why = notThisRoundReason;
+          }
+          // A card item failing a third time in a row, each time for something else, stops deciding the review (§3.6).
+          const card = r.kind === "item" ? cardItems.get(r.id) : undefined;
+          if (card && gating && state === "failed" && severity !== "minor" && shouldDemote(card.fails || [], demotionFinding({ detail: v.detail, file: v.file, line: v.line }))) {
+            gating = false;
+            why = demotedReason;
+          }
+          const { reason: _old, severity: _oldSeverity, ...base } = r;
           return {
-            ...r,
-            state: v.verdict === "pass" ? ("passed" as const) : v.verdict === "fail" && evidence ? ("failed" as const) : ("na" as const),
+            ...base,
+            ...(r.reason === demotedReason ? { reason: r.reason } : {}),
+            gating,
+            state,
+            ...(severity ? { severity } : {}),
             ms,
             detail: v.detail.slice(0, autoReviewLimits.detail),
             ...(v.file ? { file: v.file.slice(0, 300) } : {}),
             ...(v.line ? { line: v.line } : {}),
             ...(v.quote ? { quote: clip(v.quote, 300) } : {}),
-            ...(!evidence ? { reason: "no evidence" } : {}),
+            ...(why ? { reason: why } : {}),
           };
         }),
       };
@@ -1136,82 +1402,123 @@ export class AutoReviewService {
     });
   }
 
+  /** The delivery's content or the workpad changed since the review started (§3.2, §3.6). */
+  private changedSince(b: Board, t: Task, r: NonNullable<Task["review"]>, after: Measured) {
+    const pad = b.workpads.find((w) => w.taskId === t.id);
+    if ((pad?.revision ?? 0) !== r.fingerprint.workpadRevision) return true;
+    if (r.fingerprint.content !== undefined) return after.content !== r.fingerprint.content;
+    if (after.head === undefined) return false;
+    return (after.head?.sha || undefined) !== r.fingerprint.sha || !!after.head?.dirty !== r.fingerprint.dirty;
+  }
+
   /**
-   * Writes the result; a card that changed meanwhile drops it (§3.2 Cancelled). Returns the finished review (null when
-   * cancelled or gone) and whether rework goes out.
+   * Writes the result (§3.2): a changed delivery drops it (Cancelled); a card A1 took out of In review holds it
+   * ("held"); otherwise the verdict applies. Returns the finished review and whether rework goes out, else null.
    */
-  private async finish(taskId: string, startedAt: string, after: GitHead | null | undefined) {
-    return this.store.transaction<{ task: Task; review: NonNullable<Task["review"]>; rework: boolean } | null>((b) => {
+  private async finish(taskId: string, startedAt: string, after: Measured) {
+    return this.store.transaction<Outcome | "held" | null>((b) => {
       const t = b.tasks.find((x) => x.id === taskId);
       const project = t && b.projects.find((p) => p.id === t.projectId);
       const r = t?.review;
       if (!t || !project || !r || r.startedAt !== startedAt || r.state !== "running") return { value: null, changed: false };
       const finishedAt = this.now();
-      const pad = b.workpads.find((w) => w.taskId === t.id);
-      const changed =
-        t.archivedAt ||
-        t.status !== "in_review" ||
-        t.revision !== r.fingerprint.taskRevision ||
-        (pad?.revision ?? 0) !== r.fingerprint.workpadRevision ||
-        (after !== undefined && ((after?.sha || undefined) !== r.fingerprint.sha || !!after?.dirty !== r.fingerprint.dirty));
-      // Each item's result and kind go with the event, for Insights (§6.4, §7.5).
-      const event = (note: string) =>
-        this.store.event(b, { taskId: t.id, actor: "system", action: reviewFinishedAction, agentId: r.trigger.agentId, note, results: r.items.map((x) => ({ id: x.id, state: x.state, kind: x.kind, ...(x.gating ? {} : { gating: false as const }) })) });
-      if (changed) {
+      if (t.archivedAt || this.changedSince(b, t, r, after)) {
         t.review = { ...r, state: "cancelled", reason: "The card, its workpad or its code changed during the review.", finishedAt };
         // No results: a cancelled review judged nothing.
         this.store.event(b, { taskId: t.id, actor: "system", action: reviewFinishedAction, agentId: r.trigger.agentId, note: "Auto review cancelled: the card changed during the review" });
         return { value: null, changed: true };
       }
-      // A disputed finding that failed again (judged with the dispute, or a command on new code) ends that dispute (§6.1, E1).
-      if (t.disputes?.length) {
-        const kept = t.disputes.filter((d) => !r.items.some((i) => i.id === d.id && i.state === "failed" && i.gating));
-        if (kept.length !== t.disputes.length) {
-          if (kept.length) t.disputes = kept;
-          else delete t.disputes;
-        }
+      // A person's move stops the review at once (store); what is left is A1: a message in the card's session.
+      if (t.status !== "in_review") {
+        t.review = { ...r, state: "cancelled", held: true, reason: "The card left In review during the review.", finishedAt };
+        this.store.event(b, { taskId: t.id, actor: "system", action: reviewFinishedAction, agentId: r.trigger.agentId, note: "Auto review held: the card left In review during the review" });
+        return { value: "held", changed: true };
       }
-      const verdict = reviewVerdict(r.items);
-      const done = (review: NonNullable<Task["review"]>, rework = false) => ({ value: { task: { ...t, review }, review, rework }, changed: true });
-      if (verdict === "passed") {
-        t.review = { ...r, state: "passed", finishedAt };
-        const n = r.items.filter((x) => x.gating).length;
-        event(`Auto review passed (${n} check${n === 1 ? "" : "s"})`);
-        return done(t.review);
-      }
-      if (verdict === "unavailable") {
-        const unavailable = r.items.find((x) => x.gating && (x.state === "unavailable" || x.state === "queued" || x.state === "running"))!;
-        const reason = `${unavailable.kind === "goal" ? GOAL_NAME : unavailable.name}: ${unavailable.reason || "could not run"}`.slice(0, autoReviewLimits.reason);
-        t.review = { ...r, state: "unavailable", reason, finishedAt };
-        event(`Auto review unavailable: ${reason}`);
-        return done(t.review);
-      }
-      const findings = failureSummary(r);
-      const move = (to: Task["status"], rule: string, note: string) => {
-        t.status = to;
-        t.revision++;
-        t.updatedAt = finishedAt;
-        this.store.event(b, { taskId: t.id, actor: "system", action: "status_changed", agentId: r.trigger.agentId, rule, from: "in_review", to, note });
-      };
-      // Status first, then the message (§3.2): the rework turn then starts on a work stage, so A1 leaves it alone.
-      const stage = r.round - 1 < r.maxRounds ? reworkStage(b.events, t, project, r.trigger.from) : null;
-      if (stage) {
-        t.review = { ...r, state: "rework", finishedAt };
-        event(`Auto review failed: ${findings}`);
-        move(stage, reworkRule, `Auto review failed; back to rework (${r.round}/${r.maxRounds})`);
-        return done(t.review, true);
-      }
-      t.review = { ...r, state: "failed", finishedAt };
-      event(`Auto review failed: ${findings}`);
-      if (laneEnabled(project, "blocked")) move("blocked", reviewFailedRule, `Auto review failed after ${r.round - 1} rework round${r.round - 1 === 1 ? "" : "s"}`);
-      return done(t.review);
+      return this.conclude(b, t, project, r, finishedAt);
     });
+  }
+
+  /** Applies the verdict of a review whose result stands (§3.2, §3.3, §4.5), in the caller's write. */
+  private conclude(b: Board, t: Task, project: Project, r: NonNullable<Task["review"]>, finishedAt: string): { value: Outcome; changed: true } {
+    // A disputed finding that failed again decisively (judged with the dispute, or a command on new code) ends that dispute (§6.1, E1).
+    if (t.disputes?.length) {
+      const kept = t.disputes.filter((d) => !r.items.some((i) => i.id === d.id && i.state === "failed" && decisive(i)));
+      if (kept.length !== t.disputes.length) {
+        if (kept.length) t.disputes = kept;
+        else delete t.disputes;
+      }
+    }
+    // Each item's result and kind go with the event, for Insights (§6.4, §7.5).
+    const event = (note: string) =>
+      this.store.event(b, {
+        taskId: t.id,
+        actor: "system",
+        action: reviewFinishedAction,
+        agentId: r.trigger.agentId,
+        note,
+        results: r.items.map((x) => ({ id: x.id, state: x.state, kind: x.kind, ...(x.gating ? {} : { gating: false as const }), ...((x.state === "failed" || x.state === "needs_user") && isMinor(x) ? { severity: "minor" as const } : {}) })),
+      });
+    const verdict = reviewVerdict(r.items);
+    const reviews = t.reviewCount ?? 0;
+    const done = (review: NonNullable<Task["review"]>, rework = false) => {
+      // Reviews that judged something count toward the card's cap (§3.3).
+      if (countsTowardCap(review.state)) t.reviewCount = reviews + 1;
+      return { value: { task: { ...t, review }, review, rework }, changed: true as const };
+    };
+    if (verdict === "passed") {
+      t.review = { ...r, state: "passed", finishedAt };
+      const n = r.items.filter((x) => x.gating).length;
+      event(`Auto review passed (${n} check${n === 1 ? "" : "s"})`);
+      return done(t.review);
+    }
+    if (verdict === "unavailable") {
+      const unavailable = r.items.find((x) => x.gating && (x.state === "unavailable" || x.state === "queued" || x.state === "running"))!;
+      const reason = `${unavailable.kind === "goal" ? GOAL_NAME : unavailable.name}: ${unavailable.reason || "could not run"}`.slice(0, autoReviewLimits.reason);
+      t.review = { ...r, state: "unavailable", reason, finishedAt };
+      event(`Auto review unavailable: ${reason}`);
+      return done(t.review);
+    }
+    if (verdict === "needs_user") {
+      // Only a person can do it (§3.6): no rework, the card stays in In review and Attention says what to do.
+      const reason = needsUserReason(r.items);
+      t.review = { ...r, state: "needs_user", reason, finishedAt };
+      event(`Auto review needs you: ${reason}`);
+      return done(t.review);
+    }
+    const findings = failureSummary(r);
+    const move = (to: Task["status"], rule: string, note: string) => {
+      t.status = to;
+      t.revision++;
+      t.updatedAt = finishedAt;
+      this.store.event(b, { taskId: t.id, actor: "system", action: "status_changed", agentId: r.trigger.agentId, rule, from: "in_review", to, note });
+    };
+    // The card's cap (§3.3): from its 10th review on, a failure goes to Blocked instead of rework.
+    const capped = reviews + 1 >= reviewCapPerCard;
+    // Status first, then the message (§3.2): the rework turn then starts on a work stage, so A1 leaves it alone.
+    const stage = !capped && r.round - 1 < r.maxRounds ? reworkStage(b.events, t, project, r.trigger.from) : null;
+    if (stage) {
+      t.review = { ...r, state: "rework", finishedAt };
+      event(`Auto review failed: ${findings}`);
+      move(stage, reworkRule, `Auto review failed; back to rework (${r.round}/${r.maxRounds})`);
+      return done(t.review, true);
+    }
+    t.review = { ...r, state: "failed", ...(capped ? { reason: `This card reached ${reviewCapPerCard} reviews, so no more automatic rework.` } : {}), finishedAt };
+    event(`Auto review failed: ${findings}`);
+    if (laneEnabled(project, "blocked"))
+      move(
+        "blocked",
+        reviewFailedRule,
+        capped ? `Auto review stopped after ${reviewCapPerCard} reviews of this card` : `Auto review failed after ${r.round - 1} rework round${r.round - 1 === 1 ? "" : "s"}`,
+      );
+    return done(t.review);
   }
 
   private markUnavailable(taskId: string, startedAt: string, reason: string) {
     return this.store.transaction((b) => {
       const t = b.tasks.find((x) => x.id === taskId);
       if (!t?.review || t.review.startedAt !== startedAt) return { value: null, changed: false };
+      // The rework could not be sent, so this review no longer counts toward the card's cap (§3.3).
+      if (countsTowardCap(t.review.state) && t.reviewCount) t.reviewCount -= 1;
       t.review = { ...t.review, state: "unavailable", reason, finishedAt: t.review.finishedAt ?? this.now() };
       this.store.event(b, { taskId, actor: "system", action: reviewFinishedAction, agentId: t.review.trigger.agentId, note: `Auto review unavailable: ${reason}` });
       return { value: null, changed: true };

@@ -24,7 +24,7 @@ export type AttentionItem = {
   /** Unread sessions whose last turn ended without any Kanban report (M2). */
   silent: number;
   /** A finished automatic review waiting for a person (AUTO-REVIEW-SPEC §7). */
-  review: "failed" | "unavailable" | null;
+  review: "failed" | "unavailable" | "needs_user" | null;
   /** Set when exactly one session needs attention, so it can be opened directly. */
   sessionId: string | null;
   updatedAt: string;
@@ -117,8 +117,8 @@ export function attentionItemsWithFacts(
   }
   return items.sort(
     (a, b) =>
-      Number(!!(b.permissions || b.errors || b.questions || b.review === "failed")) -
-        Number(!!(a.permissions || a.errors || a.questions || a.review === "failed")) ||
+      Number(!!(b.permissions || b.errors || b.questions || b.review === "failed" || b.review === "needs_user")) -
+        Number(!!(a.permissions || a.errors || a.questions || a.review === "failed" || a.review === "needs_user")) ||
       b.updatedAt.localeCompare(a.updatedAt),
   );
 }

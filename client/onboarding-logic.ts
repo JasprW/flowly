@@ -29,7 +29,7 @@ export function welcomeDecision(input: {
   return input.blocked ? "wait" : "show";
 }
 
-export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "summary-models", "first-skill-draft", "search", "lane-swipe", "auto-review", "first-guardrail", "session-composer-fill", "settings-entry", "card-images"] as const;
+export const tipIds = ["first-card", "needs-you", "first-idea", "first-done", "first-artifact", "first-tag", "agent-question", "older-finished", "next-move", "first-ticket", "jira-connect", "project-menu", "first-workpad", "subagents", "card-display", "first-workflow-insight", "attention-dismiss", "sidebar-order", "connectors", "session-history", "ai-language", "summary-models", "first-skill-draft", "search", "lane-swipe", "auto-review", "first-guardrail", "session-composer-fill", "settings-entry", "card-images", "review-needs-you"] as const;
 export type TipId = (typeof tipIds)[number];
 
 export interface TipFacts {
@@ -82,6 +82,8 @@ export interface TipFacts {
   searchable: boolean;
   /** A card of the current project shows an automatic review state and no card is open (AUTO-REVIEW-SPEC §9.1). */
   reviewShown: boolean;
+  /** A card of the current project shows Review needs you and no card is open (AUTO-REVIEW-SPEC §9.6). */
+  reviewNeedsYou: boolean;
   /** The current project learned a guideline from cards sent back, this week, and no card is open (GUARDRAILS-SPEC §10). */
   learnedGuideline: boolean;
   /** A phone board (iOS/Android) shows two or more lanes, the project has cards, and no card or page is open (UI-UX-SPEC §5, lane swipe). */
@@ -119,6 +121,7 @@ const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
   "first-skill-draft": "skillDraft",
   search: "searchable",
   "auto-review": "reviewShown",
+  "review-needs-you": "reviewNeedsYou",
   "first-guardrail": "learnedGuideline",
   "lane-swipe": "laneSwipe",
   "card-images": "imageInput",
@@ -129,7 +132,7 @@ const tipFact: Record<Exclude<TipId, "settings-entry">, keyof TipFacts> = {
 export function nextTip(input: { tipsSeen: readonly string[]; facts: TipFacts; blocked: boolean }): TipId | null {
   if (input.blocked) return null;
   // Waiting for the user outranks introductions; the answer-in-session tip is the more specific one.
-  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "auto-review", "first-guardrail", "first-workpad", "subagents", "first-idea", "first-skill-draft", "first-workflow-insight", "ai-language", "summary-models", "first-artifact", "card-images", "first-ticket", "first-tag", "first-card", "lane-swipe", "card-display", "search", "connectors", "session-history", "session-composer-fill", "sidebar-order", "project-menu", "jira-connect"];
+  const order: Exclude<TipId, "settings-entry">[] = ["agent-question", "needs-you", "attention-dismiss", "first-done", "older-finished", "next-move", "review-needs-you", "auto-review", "first-guardrail", "first-workpad", "subagents", "first-idea", "first-skill-draft", "first-workflow-insight", "ai-language", "summary-models", "first-artifact", "card-images", "first-ticket", "first-tag", "first-card", "lane-swipe", "card-display", "search", "connectors", "session-history", "session-composer-fill", "sidebar-order", "project-menu", "jira-connect"];
   return order.find((id) => input.facts[tipFact[id]] && !input.tipsSeen.includes(id)) ?? null;
 }
 

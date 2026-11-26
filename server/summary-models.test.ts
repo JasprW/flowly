@@ -88,3 +88,46 @@ test("refusing permissions does not restart the timeout: every wait shares one d
     vi.useRealTimers();
   }
 });
+
+test("an abort stops the wait at once, removes the session and tries no other model (AUTO-REVIEW-SPEC §3.2)", async () => {
+  const actions: string[] = [];
+  const controller = new AbortController();
+  const create = async (model: string) => {
+    actions.push(`create ${model}`);
+    return { id: model, archive: async () => undefined, waitForFinish: () => new Promise<never>(() => undefined) };
+  };
+  const run = runSummaryModels(paseo, ["one/a", "one/b"], {
+    create,
+    parse: (text) => text,
+    timeoutMs: 60_000,
+    remove: async (agent) => {
+      actions.push(`remove ${agent.id}`);
+    },
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 20);
+  await expect(run).rejects.toThrow(SummaryModelError);
+  expect(actions).toEqual(["create one/a", "remove one/a"]);
+});
+
+test("a stop that lands while the session is created rejects at once, removes it, and leaves no unhandled rejection", async () => {
+  const controller = new AbortController();
+  const removed: string[] = [];
+  const unhandled: unknown[] = [];
+  const onUnhandled = (e: unknown) => unhandled.push(e);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    const create = async (model: string) => {
+      controller.abort();
+      return { id: model, archive: async () => undefined, waitForFinish: async () => { throw new Error("session gone"); } };
+    };
+    const error = await runSummaryModels(paseo, ["one/a"], { create, parse: () => null, remove: async (agent) => { removed.push(agent.id); }, timeoutMs: 100, signal: controller.signal }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SummaryModelError);
+    expect((error as Error).message).toBe("Stopped.");
+    expect(removed).toEqual(["one/a"]);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(unhandled).toEqual([]);
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+});

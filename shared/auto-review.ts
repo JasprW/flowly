@@ -57,15 +57,55 @@ export function reworkStage(events: readonly BoardEvent[], task: Pick<Task, "id"
 }
 
 /**
+ * The turns on the card since the previous rework review finished (§3.3, 2026-11-26): whether one a person started has
+ * ended (`reset`), and whether one that is not the rework turn is still open, its starter unknown (`open`). A turn
+ * counts as a person's unless its `agent.turn_ended` says `byUser: false` (a background wake-up); the rework turn (the
+ * delivering session's first turn after the review) never counts. Only turns that started after the review count.
+ */
+function turnsSinceRework(events: readonly BoardEvent[], taskId: string, previous: Review & { finishedAt: string }) {
+  const open = new Map<string, "rework" | "other">();
+  let reworkStarted = false;
+  let reset = false;
+  for (const e of events) {
+    if (e.taskId !== taskId || e.at <= previous.finishedAt || !e.agentId) continue;
+    if (e.action === "agent.turn_started") {
+      const rework = !reworkStarted && e.agentId === previous.trigger.agentId;
+      if (rework) reworkStarted = true;
+      open.set(e.agentId, rework ? "rework" : "other");
+    } else if (e.action === "agent.turn_ended") {
+      const kind = open.get(e.agentId);
+      open.delete(e.agentId);
+      if (kind === "other" && e.byUser !== false) reset = true;
+    }
+  }
+  return { reset, open: [...open.values()].includes("other") };
+}
+
+/**
  * Whether a new delivery continues the previous review's rework round (§3.3): it asked for rework, and since then no
- * person moved the card and no turn other than the rework one started on the card.
+ * person changed the card's status and no turn a person started ended on the card (`turnsSinceRework`).
  */
 export function continuesRound(events: readonly BoardEvent[], taskId: string, previous: Review | undefined): boolean {
   if (previous?.state !== "rework" || !previous.finishedAt) return false;
-  const since = events.filter((e) => e.taskId === taskId && e.at > previous.finishedAt!);
-  if (since.some((e) => e.actor === "human" && e.action === "status_changed")) return false;
-  return since.filter((e) => e.action === "agent.turn_started").length <= 1;
+  const at = previous.finishedAt;
+  if (events.some((e) => e.taskId === taskId && e.at > at && e.actor === "human" && e.action === "status_changed")) return false;
+  return !turnsSinceRework(events, taskId, { ...previous, finishedAt: at }).reset;
 }
+
+/**
+ * The round depends on a turn whose end is not recorded yet (§3.3): its `byUser` decides it, so the review waits for
+ * the delivering turn's end to be recorded before it counts.
+ */
+export function roundAwaitsTurnEnd(events: readonly BoardEvent[], taskId: string, previous: Review | undefined): boolean {
+  if (previous?.state !== "rework" || !previous.finishedAt) return false;
+  const scan = turnsSinceRework(events, taskId, { ...previous, finishedAt: previous.finishedAt });
+  return !scan.reset && scan.open;
+}
+
+/** Reviews of one card that judged something before automatic rework stops (§3.3). */
+export const reviewCapPerCard = 10;
+/** The review counts toward the card's cap (§3.3): it judged something. Cancelled and unavailable do not. */
+export const countsTowardCap = (state: Review["state"]) => state === "passed" || state === "rework" || state === "failed" || state === "needs_user";
 
 /** An agent delivered the card and its review has not started yet (§3.1): the previous review is out of date. */
 export const reviewWaiting = (task: Pick<Task, "status" | "reviewWaiting" | "archivedAt">) =>
@@ -79,6 +119,7 @@ export function visibleReview(task: Pick<Task, "status" | "review" | "reviewWait
   switch (review.state) {
     case "running":
     case "passed":
+    case "needs_user":
       return status === "in_review" ? review : null;
     case "rework":
       return isWorkStatus(status) ? review : null;
@@ -98,23 +139,47 @@ export function visibleReview(task: Pick<Task, "status" | "review" | "reviewWait
  * A finished review that needs a person (§7): its Attention signal key, else null. A pass is not one: it only releases
  * the unread sessions the running review held back, which Mark as read clears as usual.
  */
-export function reviewSignal(task: Pick<Task, "status" | "review" | "reviewWaiting" | "archivedAt">): { state: "failed" | "unavailable"; key: string } | null {
+export function reviewSignal(task: Pick<Task, "status" | "review" | "reviewWaiting" | "archivedAt">): { state: "failed" | "unavailable" | "needs_user"; key: string } | null {
   const review = visibleReview(task);
   // Once a person acted on the card after the review, the card face still shows the result but it no longer calls (§3.5).
-  if (!review || (review.state !== "failed" && review.state !== "unavailable") || review.handledAt) return null;
-  return { state: review.state, key: `review:${review.state}:${review.startedAt}` };
+  if (!review || !calls(review.state) || review.handledAt) return null;
+  return { state: review.state as "failed" | "unavailable" | "needs_user", key: `review:${review.state}:${review.startedAt}` };
 }
+/** A finished review state that calls a person through Attention (§3.2). */
+const calls = (state: Review["state"]) => state === "failed" || state === "unavailable" || state === "needs_user";
 
 /**
  * A person acted on the card (§3.5, D18): a turn started in one of its sessions (a failed or unavailable review sends
  * no rework message, so such a turn comes from a person) or a person changed its status. Marks the finished failed or
  * unavailable review handled, once; true when it changed. Opening the card or Mark as read is not an action.
  */
-export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardEvent, "actor" | "action">, at: string): boolean {
+export function markReviewHandled(task: Pick<Task, "review">, event: Pick<BoardEvent, "actor" | "action" | "byUser">, at: string, turnStartedAt?: string): boolean {
   const review = task.review;
-  if (!review || review.handledAt || !review.finishedAt || (review.state !== "failed" && review.state !== "unavailable")) return false;
-  if (event.action !== "agent.turn_started" && !(event.actor === "human" && event.action === "status_changed")) return false;
+  if (!review || review.handledAt || !review.finishedAt || !calls(review.state)) return false;
+  const person = event.actor === "human" && event.action === "status_changed";
+  // needs_user asks a person to act: only a person's status change or a turn a person's message started (known when it
+  // ends) handles it, never a background wake, and only a turn that started after the result: the delivering turn's own
+  // end, recorded after the review finished, is not an answer to it. Failed and unavailable end at any turn start.
+  const turn = review.state === "needs_user"
+    ? event.action === "agent.turn_ended" && event.byUser === true && !!turnStartedAt && turnStartedAt >= review.finishedAt
+    : event.action === "agent.turn_started";
+  if (!person && !turn) return false;
   review.handledAt = at;
+  return true;
+}
+
+/**
+ * A person moved the card out of In review or archived it (§3.2, 2026-11-26): its running review is cancelled now, in
+ * the same write; a held result is dropped. True when a running review was stopped, so its work can be stopped too.
+ */
+export function stopReviewForPerson(task: Pick<Task, "review" | "status" | "archivedAt">, event: Pick<BoardEvent, "actor" | "action" | "to">, at: string): boolean {
+  const review = task.review;
+  if (!review || event.actor !== "human") return false;
+  if ((event.action === "status_changed" || event.action === "archive_changed") && review.held) delete review.held;
+  // An edit can move the card back to In review and archive it in one write: archived counts as away either way.
+  const away = !!task.archivedAt || (event.action === "status_changed" && event.to !== "in_review");
+  if (!away || review.state !== "running") return false;
+  task.review = { ...review, state: "cancelled", reason: "A person moved the card during the review.", finishedAt: at };
   return true;
 }
 
@@ -135,16 +200,116 @@ export function outputTail(text: string, max: number) {
 
 /** An item's result counts as passing: passed, or not applicable to this change. */
 export const itemPassed = (i: Pick<ReviewItem, "state">) => i.state === "passed" || i.state === "na";
+/** For the strip and the counts: passing, or a minor fail or needs_user, which never decides the review (§3.6). */
+const countsAsPassed = (i: Pick<ReviewItem, "state" | "severity">) => itemPassed(i) || ((i.state === "failed" || i.state === "needs_user") && isMinor(i));
+
+/** A minor finding is shown but never decides the review (AUTO-REVIEW-SPEC §3.6); a missing severity is major. */
+export const isMinor = (i: Pick<ReviewItem, "severity">) => i.severity === "minor";
+/** An item that decides the review (§3.6): gating and not minor. */
+export const decisive = (i: Pick<ReviewItem, "gating" | "severity">) => i.gating && !isMinor(i);
 
 /**
- * The overall result (GUARDRAILS-SPEC §6.3 step 3), from the gating items only (an observing command never counts):
- * any failed → failed; else any that could not finish → unavailable; else passed. Disputed items are not failures.
+ * The overall result (GUARDRAILS-SPEC §6.3 step 3, AUTO-REVIEW-SPEC §4.5), from the gating items only (an observing
+ * command or a demoted card item never counts): a decisive failed → failed; else any that could not finish →
+ * unavailable; else a decisive needs_user → needs_user; else passed. Disputed items and minor findings are not failures.
  */
-export function reviewVerdict(items: readonly Pick<ReviewItem, "gating" | "state">[]): "passed" | "failed" | "unavailable" {
+export function reviewVerdict(items: readonly Pick<ReviewItem, "gating" | "state" | "severity">[]): "passed" | "failed" | "unavailable" | "needs_user" {
   const gating = items.filter((i) => i.gating);
-  if (gating.some((i) => i.state === "failed")) return "failed";
+  if (gating.some((i) => i.state === "failed" && decisive(i))) return "failed";
   if (gating.some((i) => i.state === "unavailable" || i.state === "queued" || i.state === "running")) return "unavailable";
+  if (gating.some((i) => i.state === "needs_user" && decisive(i))) return "needs_user";
   return "passed";
+}
+
+/** What a Needs you review asks the person to do (§9.4): each decisive needs_user item's "name: detail", at most 500 characters. */
+export function needsUserReason(items: readonly ReviewItem[]): string {
+  const text = items
+    .filter((i) => i.state === "needs_user" && decisive(i))
+    .map((i) => `${i.kind === "goal" ? GOAL_NAME : i.name}: ${(i.detail || "").replace(/\s+/g, " ").trim()}`)
+    .join("; ");
+  return text.length > 500 ? `${text.slice(0, 499)}…` : text;
+}
+
+/** The reason on a card item that no longer decides the review (§3.6). */
+export const demotedReason = "Failed 3 times in a row with a different finding each time, so it no longer decides the review.";
+/** The reason on a rework-round finding that is not this round's regression (§3.6). */
+export const notThisRoundReason = "Not caused by this round's changes.";
+/** Decisive fails in a row, each different from the others, after which a card item is demoted (§3.6). */
+export const demoteAfter = 3;
+
+/** A review finding as the card item's history keeps it (GUARDRAILS-SPEC §3.3): `file:line — detail`, at most 200 characters. */
+export function demotionFinding(i: Pick<ReviewItem, "detail" | "file" | "line" | "reason">): string {
+  const where = i.file ? `${i.file}${i.line ? `:${i.line}` : ""} — ` : "";
+  const text = `${where}${(i.detail || i.reason || "").replace(/\s+/g, " ").trim()}`;
+  return text.length > 200 ? text.slice(0, 200) : text;
+}
+// The path may hold spaces: everything before the first ":<line> — ".
+const placeOf = (finding: string) => /^(.+?:\d+) — /.exec(finding)?.[1] ?? null;
+/** Words of a finding for comparison: English by word, Chinese, Japanese and Korean by character, lowercase. */
+function wordsOf(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.toLowerCase().matchAll(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}_]+/gu)) out.add(m[0]);
+  return out;
+}
+/**
+ * Two findings say the same thing (§3.6): they cite the same file and line, or their word sets overlap by a Jaccard
+ * index of at least 0.5.
+ */
+export function sameFinding(a: string, b: string): boolean {
+  const pa = placeOf(a);
+  if (pa && pa === placeOf(b)) return true;
+  const wa = wordsOf(a),
+    wb = wordsOf(b);
+  if (!wa.size && !wb.size) return true;
+  let shared = 0;
+  for (const w of wa) if (wb.has(w)) shared++;
+  return shared / (wa.size + wb.size - shared) >= 0.5;
+}
+/** The card item's earlier decisive fails plus this one are `demoteAfter` findings that all differ from each other (§3.6). */
+export function shouldDemote(earlier: readonly string[], finding: string): boolean {
+  const all = [...earlier.slice(-(demoteAfter - 1)), finding];
+  if (all.length < demoteAfter) return false;
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) if (sameFinding(all[i]!, all[j]!)) return false;
+  return true;
+}
+
+/**
+ * A card item's fail history after a review (§3.6): a decisive fail adds its finding (the last `demoteAfter` kept);
+ * passed, na and a minor fail clear it; needs_user, disputed, skipped and unavailable leave it as it is (undefined).
+ */
+export function nextFails(earlier: readonly string[] | undefined, item: ReviewItem): string[] | undefined {
+  if (item.state === "failed" && !isMinor(item)) return [...(earlier || []), demotionFinding(item)].slice(-demoteAfter);
+  if (item.state === "passed" || item.state === "na" || item.state === "failed") return [];
+  return undefined;
+}
+
+/** Files a `git diff` text touches: the new path of each `diff --git a/… b/…` header. */
+export function diffPaths(diff: string): Set<string> {
+  const out = new Set<string>();
+  // Either side may be C-quoted by Git (a non-ASCII byte, a tab, a quote…); the new path is the b side.
+  for (const m of diff.matchAll(/^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+?) (?:"b\/((?:[^"\\]|\\.)*)"|b\/(.+))$/gm))
+    out.add(m[1] !== undefined ? unquoteGitPath(`"${m[1]}"`) : m[2]!.trim());
+  return out;
+}
+
+const gitEscapes: Record<string, string> = { a: "\x07", b: "\b", t: "\t", n: "\n", v: "\v", f: "\f", r: "\r", '"': '"', "\\": "\\" };
+/**
+ * A path as Git prints it without `-z`: one with a non-ASCII byte, a tab, a quote, a backslash or another control
+ * character is C-quoted ("\346\226\207.ts"); octal escapes are UTF-8 bytes. Any other text is returned as it is.
+ */
+export function unquoteGitPath(path: string): string {
+  if (path.length < 2 || !path.startsWith('"') || !path.endsWith('"')) return path;
+  // The quoted body is ASCII: each escape becomes its byte as %XX, so one decode rebuilds the UTF-8 name.
+  const encoded = path.slice(1, -1).replace(/\\([0-7]{3}|.)|[^\\]/gu, (all: string, escape?: string) => {
+    if (escape === undefined) return encodeURIComponent(all);
+    if (/^[0-7]{3}$/.test(escape)) return `%${parseInt(escape, 8).toString(16).padStart(2, "0")}`;
+    return encodeURIComponent(gitEscapes[escape] ?? escape);
+  });
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return path;
+  }
 }
 
 const normalizedQuote = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
@@ -183,8 +348,8 @@ export type ReviewProgress = {
 export function reviewProgress(review: Pick<Review, "items" | "state">): ReviewProgress {
   const counted = review.items.filter((i) => i.gating && i.state !== "disputed");
   const out: ReviewProgress = {
-    passed: counted.filter(itemPassed).length,
-    failed: counted.filter((i) => i.state === "failed").length,
+    passed: counted.filter(countsAsPassed).length,
+    failed: counted.filter((i) => i.state === "failed" && !isMinor(i)).length,
     total: counted.length,
     phase: "done",
   };
@@ -207,13 +372,14 @@ function itemLabel(item: ReviewItem, words: ReadonlyMap<string, string>) {
 /** One line for an item that did not pass, for the rework message. Its id, so the agent can dispute it. */
 export function failureLine(item: ReviewItem, words: ReadonlyMap<string, string> = new Map()): string {
   const id = ` [id: ${item.id}]`;
+  if (item.state === "needs_user") return `? ${itemLabel(item, words)} — ${item.detail || "needs the user"}${id}`;
   if (item.kind === "command") {
     const command = (item.argv || []).join(" ");
     if (item.timedOut) return `✗ ${item.name} (${command}) timed out.${id}`;
     return `✗ ${item.name} (${command}) ${item.exitCode === null || item.exitCode === undefined ? "did not finish" : `exited ${item.exitCode}`}.${id}`;
   }
   const where = item.file ? ` (${item.file}${item.line ? `:${item.line}` : ""})` : "";
-  return `✗ ${itemLabel(item, words)} — ${item.detail || item.reason || "not met"}${where}${id}`;
+  return `✗ [${item.severity ?? "major"}] ${itemLabel(item, words)} — ${item.detail || item.reason || "not met"}${where}${id}`;
 }
 
 /**
@@ -232,9 +398,9 @@ export function findingText(item: ReviewItem): string {
   return text.length > 600 ? `${text.slice(0, 599)}…` : text;
 }
 
-/** The failed gating items as one short note. */
+/** The decisive failed items as one short note. */
 export const failureSummary = (review: Pick<Review, "items">) =>
-  review.items.filter((i) => i.gating && i.state === "failed").map((i) => (i.kind === "goal" ? GOAL_NAME : i.name)).join(", ");
+  review.items.filter((i) => i.state === "failed" && decisive(i)).map((i) => (i.kind === "goal" ? GOAL_NAME : i.name)).join(", ");
 
 /**
  * The marked rework message sent to the delivering session (GUARDRAILS-SPEC §6.5). `words`: the user's own words for
@@ -252,7 +418,13 @@ export function reworkMessage(review: Review, words: ReadonlyMap<string, string>
     }
   }
   if (judged.length && judged.every((i) => i.state === "skipped" || i.state === "disputed")) lines.push("Review: skipped (a command failed)");
-  else for (const i of judged.filter((x) => x.state === "failed")) lines.push(failureLine(i, words));
+  else for (const i of judged.filter((x) => x.state === "failed" && decisive(x))) lines.push(failureLine(i, words));
+  // What only the user can do (§3.6): the agent must not work around it.
+  const asks = judged.filter((x) => x.state === "needs_user" && decisive(x));
+  if (asks.length) {
+    lines.push("Needs the user (do not work around these; mention them in your delivery note):");
+    for (const i of asks) lines.push(failureLine(i, words));
+  }
   lines.push("Fix these, rerun the checks, update the acceptance list and deliver to In review again. If a finding is wrong, deliver with disputes=[{id, reason}].");
   return lines.join("\n");
 }
@@ -271,6 +443,7 @@ export function reviewContext(review: Review | undefined) {
       name: i.kind === "goal" ? GOAL_NAME : i.name,
       gating: i.gating,
       state: i.state,
+      ...(i.severity ? { severity: i.severity } : {}),
       ...(i.argv ? { command: i.argv.join(" ") } : {}),
       ...(i.exitCode !== undefined ? { exitCode: i.exitCode } : {}),
       ...(i.timedOut ? { timedOut: true } : {}),
