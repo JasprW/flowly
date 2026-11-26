@@ -371,7 +371,8 @@ async function fileDigest(path: string): Promise<string> {
   if (!info) return "-";
   if (info.isSymbolicLink()) {
     const target = await readlink(path).catch(() => null);
-    return target === null ? "-" : createHash("sha1").update(`link ${target}`).digest("hex");
+    // The marker stays outside the hash, so a file whose text equals the target never matches a link.
+    return target === null ? "-" : `link:${createHash("sha1").update(target).digest("hex")}`;
   }
   const hash = createHash("sha1");
   try {

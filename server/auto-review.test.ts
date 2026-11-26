@@ -2371,6 +2371,11 @@ test("contentDigest: a symbolic link counts by its target path, not the target's
   await rm(join(dir, "link.json"));
   await symlink("b.json", join(dir, "link.json"));
   expect(await contentDigest(dir, ["link.json"])).not.toBe(before);
+  // A regular file whose text is the target is not the same as the link.
+  const linked = await contentDigest(dir, ["link.json"]);
+  await rm(join(dir, "link.json"));
+  await writeFile(join(dir, "link.json"), "b.json");
+  expect(await contentDigest(dir, ["link.json"])).not.toBe(linked);
   // Outside the workspace: only the path is read.
   await rm(join(dir, "link.json"));
   await symlink("/nonexistent/flowly-target", join(dir, "link.json"));
