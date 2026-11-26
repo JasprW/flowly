@@ -1331,7 +1331,7 @@ test("a Codex answers message is read as the answers of the call it was sent for
         ref: () => ({ timeline: { refetch: async () => ({ hasOlder: false, entries: codexTimeline([{ asked: "two" }, { asked: "one" }, ...texts]) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
-  const read = (texts: string[], agentId?: string) => readConversation({ workspaceId: "w" }, paseo(texts, agentId), (id) => q.answers(id));
+  const read = (texts: string[], agentId?: string) => readConversation({ workspaceId: "w" }, paseo(texts, agentId), (id) => q.session(id));
   expect(await read([two, one])).toEqual([
     { ask: "Which label?", answer: 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".' },
     // The question is context: its line break is folded like any other in the review input.
@@ -1395,7 +1395,7 @@ test("two answered Codex calls that build the same message text are paired with 
         ref: () => ({ timeline: { refetch: async () => ({ hasOlder, entries: codexTimeline(lines) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
-  const read = (lines: (string | { asked: string })[], hasOlder = false) => readConversation({ workspaceId: "w" }, paseo(lines, hasOlder), (id) => q.answers(id));
+  const read = (lines: (string | { asked: string })[], hasOlder = false) => readConversation({ workspaceId: "w" }, paseo(lines, hasOlder), (id) => q.session(id));
   const a = [
     { ask: "Which label?", answer: "Rerun" },
     { ask: "Where?", answer: "Drawer only" },
@@ -1455,6 +1455,98 @@ test("two answered Codex calls that build the same message text are paired with 
     expect((seen!.conversation ?? []).every((entry) => entry === same)).toBe(true);
     expect(seen!.conversation?.length).toBeGreaterThan(0);
   }
+});
+
+test("a Codex answers message whose owner is not certain (a call from before a plugin reload, a message older than the call, a start out of reach) stays whole; a partial read pages back to the start (§4.2, E2)", async () => {
+  const same = "Answers to your questions:\n\nWhich label?\nRerun\n\nWhere?\nDrawer only";
+  const a = [
+    { ask: "Which label?", answer: "Rerun" },
+    { ask: "Where?", answer: "Drawer only" },
+  ];
+  const b = { ask: "Which label?", answer: "Rerun\n\nWhere?\nDrawer only" };
+  const questions = (...calls: [string, string[], string[]][]) => {
+    const q = new AsyncQuestionTitles();
+    for (const [callId, titles] of calls)
+      q.remember("a1", { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
+    for (const [callId, , answers] of calls)
+      q.resolved("a1", `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((x, i) => [`Question ${i + 1}`, x])) } });
+    return q;
+  };
+  const A: [string, string[], string[]] = ["A", ["Which label?", "Where?"], ["Rerun", "Drawer only"]];
+  const B: [string, string[], string[]] = ["B", ["Which label?"], ["Rerun\n\nWhere?\nDrawer only"]];
+  type Line = string | { asked: string };
+  // `pages`: the timeline from its start, one page per element; the review reads the last one first and pages back.
+  const read = async (q: AsyncQuestionTitles, pages: Line[][], options: { epochChange?: boolean } = {}) => {
+    const all = codexTimeline(pages.flat());
+    const ranges: [number, number][] = [];
+    let from = 0;
+    for (const page of pages) {
+      ranges.push([from, from + page.length]);
+      from += page.length;
+    }
+    const pageAt = (n: number) => ({
+      epoch: options.epochChange && n < pages.length - 1 ? "e2" : "e1",
+      hasOlder: n > 0,
+      startCursor: n > 0 ? { epoch: "e1", seq: n } : null,
+      entries: all.slice(ranges[n]![0], ranges[n]![1]),
+    });
+    const calls: unknown[] = [];
+    const paseo = {
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({
+          timeline: {
+            refetch: async (o: { direction: string; cursor?: { seq: number } }) => {
+              calls.push(o);
+              return o.direction === "before" ? pageAt(o.cursor!.seq - 1) : pageAt(pages.length - 1);
+            },
+          },
+        }),
+      },
+    } as unknown as Parameters<typeof readConversation>[1];
+    return { said: await readConversation({ workspaceId: "w" }, paseo, (id) => q.session(id)), reads: calls.length };
+  };
+
+  // A was answered before a plugin reload, so the hooks know only B; a rewind then removed B's answer and kept its question.
+  const onlyB = questions(B);
+  expect((await read(onlyB, [[{ asked: "A" }, same, { asked: "B" }]])).said).toEqual([same]);
+  // The message comes after B's question but A, asked before it and unknown to the hooks, may have sent it.
+  expect((await read(onlyB, [[{ asked: "A" }, { asked: "B" }, same]])).said).toEqual([same]);
+  // With both calls known, the same timeline is certain.
+  const both = questions(A, B);
+  expect((await read(both, [[{ asked: "A" }, same, { asked: "B" }, same]])).said).toEqual([...a, b]);
+  // A message older than the only call that built its text is not that call's.
+  expect((await read(both, [[same, { asked: "A" }, { asked: "B" }, same]])).said).toEqual([same, same]);
+  // A dismissed call is known: it sent nothing, so it does not block the answers after it.
+  const withDismissed = questions(A);
+  withDismissed.remember("a1", { id: "permission-D", name: "request_user_input_async", kind: "question", input: { questions: [{ id: "0", header: "Question 1", question: "Skip?" }] } });
+  withDismissed.resolved("a1", "permission-D", { behavior: "deny" });
+  expect((await read(withDismissed, [[{ asked: "D" }, { asked: "A" }, same]])).said).toEqual(a);
+
+  // A partial read pages back to the session's start to see every question call first.
+  const paged = await read(both, [[{ asked: "A" }], [same, { asked: "B" }], ["Thanks", same]]);
+  expect(paged.said).toEqual(["Thanks", b]);
+  expect(paged.reads).toBe(3);
+  // The window cut off A's question and kept both answers: read back to A, both are paired.
+  expect((await read(both, [[{ asked: "A" }, { asked: "B" }], [same, same]])).said).toEqual([...a, b]);
+  // Before the reload: paging back finds A, unknown to the hooks, so the message stays whole.
+  expect((await read(onlyB, [[{ asked: "A" }, same], [{ asked: "B" }, "Thanks", same]])).said).toEqual(["Thanks", same]);
+  // The timeline changed while paging back: nothing is paired.
+  expect((await read(both, [[{ asked: "A" }, { asked: "B" }], [same, same]], { epochChange: true })).said).toEqual([same, same]);
+  // No answers message to pair: the review does not page back.
+  expect((await read(both, [[{ asked: "A" }], ["Thanks"]])).reads).toBe(1);
+
+  // The reviewer's input never holds B's single answer for A's message, and A's second title is not B's answer.
+  let seen: LlmReviewInput | undefined;
+  const x = await setup({
+    conversation: async () => (await read(onlyB, [[{ asked: "A" }, same, { asked: "B" }]])).said,
+    llm: async (input) => {
+      seen = input;
+      return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote: "Drawer only" }] };
+    },
+  });
+  await x.deliver("development");
+  expect(seen!.conversation).toEqual([same]);
 });
 
 test("only the user's answer in a question tool counts as quoted evidence, not the agent's question (§4.2, B1)", async () => {

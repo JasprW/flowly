@@ -64,3 +64,21 @@ test("holds a bounded number of questions per session and of sessions", () => {
   q.resolved("long", "permission-c", allow("yes"));
   expect(q.answers("long")).toEqual([]);
 });
+
+test("knows a call's outcome only while it holds the call: open, answered, or closed without an answer", () => {
+  const q = new AsyncQuestionTitles();
+  q.remember("a1", ask("open", "Now?"));
+  q.remember("a1", ask("done", "Which?"));
+  q.resolved("a1", "permission-done", allow("This one"));
+  q.remember("a1", ask("d", "Keep it?"));
+  q.resolved("a1", "permission-d", { behavior: "deny" });
+  q.remember("a1", ask("m", "One?", "Two?"));
+  q.resolved("a1", "permission-m", allow("only one"));
+  q.remember("a1", ask("long", "x".repeat(asyncQuestionLimits.title + 1)));
+  const s = q.session("a1");
+  expect(s.answered.map((a) => a.callId)).toEqual(["done"]);
+  for (const callId of ["open", "done", "d", "m"]) expect(s.known(callId)).toBe(true);
+  // Asked before a plugin reload, or with titles too long to keep: its outcome is unknown.
+  for (const callId of ["before-reload", "long"]) expect(s.known(callId)).toBe(false);
+  expect(q.session("a2").known("done")).toBe(false);
+});

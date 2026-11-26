@@ -48,7 +48,7 @@ import { sizeOf, type CardItem, type GuardrailEntry } from "../shared/guardrails
 import type { BoardStore } from "./store";
 import { isSummarizer } from "../shared/summary";
 import { CODEX_ANSWERS_PREFIX, questionAnswers, type TurnItem } from "../shared/memory";
-import type { AnsweredQuestions } from "./async-questions";
+import type { AnsweredQuestions, SessionQuestions } from "./async-questions";
 import { logFailure } from "./error-report";
 import { resolveWorktree, worktreeBase } from "./review-worktree";
 
@@ -344,7 +344,7 @@ export function repoPath(directory: string, file: string): string | null {
 export async function readConversation(
   task: Pick<Task, "workspaceId">,
   paseo: PaseoApi,
-  answered: (agentId: string) => readonly AnsweredQuestions[] = () => [],
+  questions: (agentId: string) => SessionQuestions = () => ({ answered: [], known: () => false }),
 ): Promise<ConversationEntry[] | null> {
   const ids: string[] = [];
   let cursor: string | undefined;
@@ -360,12 +360,13 @@ export async function readConversation(
   }
   const messages: { at: string; text: string; ask?: string }[] = [];
   for (const id of ids) {
-    const res = await paseo.agents
-      .ref(id)
-      .timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" })
-      .catch(() => null);
+    const handle = paseo.agents.ref(id);
+    const res = await handle.timeline.refetch({ direction: "tail", limit: conversationLimits.perSession, projection: "projected" }).catch(() => null);
     const entries = ((res?.entries || []) as { timestamp?: string; item?: TurnItem }[]).filter((e) => e.item);
-    const calls = answeredCalls(entries, answered(id), res?.hasOlder === false);
+    const asked = questions(id);
+    // Pairing a Codex answers message needs every question call of the session; read back to its start only then.
+    const before = res && res.hasOlder !== false && entries.some((e) => answersText(e.item!, asked.answered) !== null) ? await olderEntries(handle, res) : res ? [] : null;
+    const calls = before ? answeredCalls([...before, ...entries], asked, before.length) : new Map<number, AnsweredQuestions>();
     for (const [index, entry] of entries.entries()) {
       const at = entry.timestamp || "";
       const item = entry.item!;
@@ -383,39 +384,69 @@ export async function readConversation(
 }
 
 
+/** How far back the review reads a session to find all its question calls before pairing (§4.2, E2). */
+export const pairingHistoryLimit = 2000;
+
+type TimelineEntry = { timestamp?: string; item?: TurnItem };
+type TimelinePage = { entries: unknown[]; hasOlder: boolean; startCursor: { epoch: string; seq: number } | null; epoch: string; reset?: boolean; staleCursor?: boolean; error?: string | null };
+
+/** A Codex answers message that some answered call of the session built, as trimmed; null otherwise. */
+function answersText(item: TurnItem, answered: readonly AnsweredQuestions[]): string | null {
+  if (item.type !== "user_message" || typeof item.text !== "string") return null;
+  const text = item.text.trim();
+  return text.startsWith(CODEX_ANSWERS_PREFIX) && answered.some((a) => a.message === text) ? text : null;
+}
+
+/** The session's entries before `first`, back to its start; null when the start is out of reach or the timeline changed. */
+async function olderEntries(handle: { timeline: { refetch: (options: never) => Promise<unknown> } }, first: TimelinePage): Promise<TimelineEntry[] | null> {
+  let out: TimelineEntry[] = [];
+  let last = first;
+  while (last.hasOlder) {
+    if (!last.startCursor || out.length >= pairingHistoryLimit) return null;
+    const options = { direction: "before", cursor: last.startCursor, limit: conversationLimits.perSession, projection: "projected" };
+    const next = (await handle.timeline.refetch(options as never).catch(() => null)) as TimelinePage | null;
+    if (!next || next.error || next.reset || next.staleCursor || next.epoch !== first.epoch || !next.entries.length) return null;
+    out = [...(next.entries as TimelineEntry[]).filter((e) => e.item), ...out];
+    last = next;
+  }
+  return out;
+}
+
 /**
- * Which Codex async answers message of a session was sent for which answered call (§4.2, E2): a message is read as a
- * call's answers only when it is the message Paseo built from that call's titles and answers, character for character,
- * and the pairing is certain. Two calls can build the same text (a later answer that spans what looks like the earlier
- * call's next question), so the messages of one text are paired with the calls of that text only when there are as
- * many of each, in order (the timeline shows the answers messages in the order the user answered, and the calls are
- * kept in that order too). A call counts when its own `request_user_input_async` tool call is in the timeline read.
- * When the read holds the whole timeline (`whole`), a call missing from it was removed by a rewind (Paseo keeps the
- * calls it finds there, `reconcileAsyncQuestionsAfterRewind`) and is left out; when it does not, a missing call may sit
- * before the window, so nothing of that text is paired. Any other mismatch (a rewind that removed an answer but kept
- * its question, a call no longer held in memory) leaves every message of that text whole.
+ * Which Codex async answers message of a session was sent for which answered call (§4.2, E2), from the session's whole
+ * timeline (`entries`; the review's own window starts at `offset`, and the map is keyed by window index). A message is
+ * read as a call's answers only when its owner is certain:
+ * - it is the message Paseo built from that call's titles and answers, character for character;
+ * - the call's own `request_user_input_async` tool call (its first one: Paseo may add the answered one later) is in
+ *   the timeline and comes before the message. A call the hooks answered that is not in the timeline was removed by a
+ *   rewind (Paseo keeps the calls it finds there, `reconcileAsyncQuestionsAfterRewind`) and is left out;
+ * - no call whose outcome the hooks do not know (asked before a plugin reload, for one) comes before the message: it
+ *   may have sent the same text;
+ * - two calls can build the same text, so the messages of one text are paired with the calls of that text only when
+ *   there are as many of each, in order (the timeline shows the answers messages in the order the user answered, and
+ *   the calls are kept in that order too), each call asked before its message.
+ * Anything else (a rewind that removed an answer but kept its question, a timeline whose start is out of reach) leaves
+ * every message of that text whole.
  */
-function answeredCalls(
-  entries: readonly { item?: TurnItem }[],
-  answeredNewestFirst: readonly AnsweredQuestions[],
-  whole: boolean,
-): Map<number, AnsweredQuestions> {
+function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQuestions, offset: number): Map<number, AnsweredQuestions> {
   const out = new Map<number, AnsweredQuestions>();
-  const asked = new Set<string>();
+  const askedAt = new Map<string, number>();
   const byText = new Map<string, number[]>();
   for (const [i, { item }] of entries.entries()) {
-    if (item?.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string") asked.add(item.callId);
-    if (item?.type !== "user_message" || typeof item.text !== "string") continue;
-    const text = item.text.trim();
-    if (text.startsWith(CODEX_ANSWERS_PREFIX)) byText.set(text, [...(byText.get(text) ?? []), i]);
+    if (item?.type === "tool_call" && item.name === "request_user_input_async" && typeof item.callId === "string" && !askedAt.has(item.callId)) askedAt.set(item.callId, i);
+    const text = item ? answersText(item, questions.answered) : null;
+    if (text) byText.set(text, [...(byText.get(text) ?? []), i]);
   }
-  const inAnswerOrder = [...answeredNewestFirst].reverse();
+  const inAnswerOrder = [...questions.answered].reverse();
   for (const [text, at] of byText) {
-    const calls = inAnswerOrder.filter((a) => a.message === text);
-    if (!whole && calls.some((a) => !asked.has(a.callId))) continue;
-    const kept = calls.filter((a) => asked.has(a.callId));
+    const kept = inAnswerOrder.filter((a) => a.message === text && askedAt.has(a.callId));
     if (kept.length !== at.length) continue;
-    at.forEach((index, n) => out.set(index, kept[n]!));
+    const last = at[at.length - 1]!;
+    if ([...askedAt].some(([callId, i]) => i < last && !questions.known(callId))) continue;
+    if (kept.some((a, n) => askedAt.get(a.callId)! > at[n]!)) continue;
+    at.forEach((index, n) => {
+      if (index >= offset) out.set(index - offset, kept[n]!);
+    });
   }
   return out;
 }

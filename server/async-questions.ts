@@ -16,6 +16,12 @@ type Request = { id?: unknown; name?: unknown; kind?: unknown; input?: unknown }
 type Resolution = { behavior?: unknown; updatedInput?: unknown };
 /** One answered question call: what the user answered to each title, and the message Paseo sent for it. */
 export type AnsweredQuestions = { callId: string; message: string; pairs: { ask: string; text: string }[] };
+/**
+ * What the hooks know of one session's question calls: the answered ones, newest first, and whether a call's outcome is
+ * known at all (asked since the plugin started and still held: open, answered, or closed without an answer). A call it
+ * does not know (asked before a reload, titles too long to keep, dropped by the limits) may have sent any message.
+ */
+export type SessionQuestions = { answered: readonly AnsweredQuestions[]; known: (callId: string) => boolean };
 
 const callIdOf = (requestId: string) => (requestId.startsWith(PERMISSION_PREFIX) ? requestId.slice(PERMISSION_PREFIX.length) : requestId);
 
@@ -29,6 +35,8 @@ export class AsyncQuestionTitles {
   private readonly pending = new Map<string, Map<string, string[]>>();
   /** Answered: session → call id → answers, oldest first. */
   private readonly answered = new Map<string, Map<string, AnsweredQuestions>>();
+  /** Closed without an answer (dismissed, interrupted, removed by a rewind while open): session → call id. */
+  private readonly closed = new Map<string, Map<string, true>>();
 
   /** Keeps the titles of a Codex async question request; anything else is ignored. */
   remember(agentId: string, request: Request): void {
@@ -52,16 +60,23 @@ export class AsyncQuestionTitles {
     if (!titles) return;
     this.pending.get(agentId)!.delete(callId);
     const answers = resolution.behavior === "allow" ? (resolution.updatedInput as { answers?: unknown } | undefined)?.answers : undefined;
-    if (!answers || typeof answers !== "object") return;
-    // Paseo reads the answers as "Question <n>" and trims them (CodexAsyncQuestions.prepareResponse).
     const pairs: { ask: string; text: string }[] = [];
+    // Paseo reads the answers as "Question <n>" and trims them, and refuses a missing one (CodexAsyncQuestions.prepareResponse).
     for (const [i, ask] of titles.entries()) {
-      const value = (answers as Record<string, unknown>)[`Question ${i + 1}`];
+      const value = answers && typeof answers === "object" ? (answers as Record<string, unknown>)[`Question ${i + 1}`] : undefined;
       const text = typeof value === "string" ? value.trim() : "";
-      if (!text) return;
+      if (!text) return void put(this.closed, agentId, callId, true);
       pairs.push({ ask, text });
     }
     put(this.answered, agentId, callId, { callId, message: codexAnswersMessage(pairs), pairs });
+  }
+
+  /** The session's calls as the auto review pairs them (§4.2). */
+  session(agentId: string): SessionQuestions {
+    return {
+      answered: this.answers(agentId),
+      known: (callId) => [this.pending, this.answered, this.closed].some((store) => store.get(agentId)?.has(callId) ?? false),
+    };
   }
 
   /** The session's answered question calls, newest first. */

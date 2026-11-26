@@ -571,7 +571,7 @@ export default function contribute(host: PluginServerContext) {
       return !!agent && !agent.archivedAt && agent.workspaceId === task.workspaceId;
     },
     send: (message, api) => composer.push(message, api),
-    conversation: (task, api) => readConversation(task, api, (agentId) => asyncQuestions.answers(agentId)),
+    conversation: (task, api) => readConversation(task, api, (agentId) => asyncQuestions.session(agentId)),
     guardrails,
     // A temporary session judges the built-in check, guidelines and card items, hard-deleted after like the summarizer.
     llm: llmReviewer({
