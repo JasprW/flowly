@@ -320,7 +320,8 @@ export class MemoryService {
   /** `min`: the shortest message kept; clues keep the 15-character rule (§4.0). */
   private openingClue(identity: { agentId: string }, timeline: readonly TurnItem[], board: Board, taskId: string, min?: number) {
     const first = timeline.find((i) => i.type === "user_message" && typeof i.text === "string");
-    return first && !String(first.text).trimStart().startsWith(CODEX_ANSWERS_PREFIX) ? this.messageClue(identity, String(first.text), board, taskId, min) : null;
+    // A Codex answers message read as answers is not also a message; one that cannot be split stays the user's message.
+    return first && !(String(first.text).trimStart().startsWith(CODEX_ANSWERS_PREFIX) && questionAnswers([first]).length) ? this.messageClue(identity, String(first.text), board, taskId, min) : null;
   }
   /** The turn's opening message as an answer (to a kind=question report), feedback (on a delivery) or a message; null when it is not the user's own words. */
   private messageClue(identity: { agentId: string }, message: string, board: Board, taskId: string, min?: number): Pick<MemoryClue, "kind" | "ask" | "text"> | null {

@@ -362,8 +362,10 @@ export async function readConversation(task: Pick<Task, "workspaceId">, paseo: P
     for (const entry of (res?.entries || []) as { timestamp?: string; item?: TurnItem }[]) {
       if (!entry.item) continue;
       const at = entry.timestamp || "";
-      // Answers given in AskUserQuestion or Codex request_user_input; a Codex answers message is replaced by its answers.
-      const answers = questionAnswers([entry.item]);
+      // Answers given in AskUserQuestion or Codex request_user_input (tool calls with structured questions). A Codex
+      // async answers message is never split: the timeline keeps no structured questions, so its question/answer
+      // boundaries are a guess, and it stays the user's whole message.
+      const answers = entry.item.type === "user_message" ? [] : questionAnswers([entry.item]);
       if (answers.length) for (const qa of answers) messages.push({ at, text: qa.text, ask: qa.ask });
       else if (entry.item.type === "user_message" && typeof entry.item.text === "string") messages.push({ at, text: entry.item.text });
     }

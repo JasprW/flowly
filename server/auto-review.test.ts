@@ -1280,7 +1280,7 @@ test("the review reads answers given in question tools as what the user said, in
   expect(said).toEqual([
     "Add a Rerun button to failed checks.",
     { ask: "Where should Rerun go?", answer: "Drawer only" },
-    { ask: "Keep the old label?", answer: "No" },
+    "Answers to your questions:\n\nKeep the old label?\nNo",
   ]);
   // It reaches the review session's input and counts as a source for quoted evidence.
   let seen: LlmReviewInput | undefined;
@@ -1297,27 +1297,37 @@ test("the review reads answers given in question tools as what the user said, in
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", quote: "Drawer only" });
 });
 
-test("a Codex answer that spans lines is kept whole from readConversation through the quote check (§4.2, E2)", async () => {
-  const text = 'Answers to your questions:\n\nWhat should the button say?\nKeep "Retry" on the card.\nRename the drawer one to "Rerun".\n\nKeep the old label?\nNo';
-  const paseo = {
-    agents: {
-      list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
-      ref: () => ({ timeline: { refetch: async () => ({ entries: [{ timestamp: "2026-11-26T10:00:00.000Z", item: { type: "user_message", text } }] }) } }),
-    },
-  } as unknown as Parameters<typeof readConversation>[1];
-  const said = await readConversation({ workspaceId: "w" }, paseo);
-  expect(said).toEqual([
-    { ask: "What should the button say?", answer: 'Keep "Retry" on the card.\nRename the drawer one to "Rerun".' },
-    { ask: "Keep the old label?", answer: "No" },
-  ]);
-  const run = async (quote: string) => {
-    const x = await setup({ conversation: () => readConversation({ workspaceId: "w" }, paseo), llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
+test("a Codex answers message stays the user's whole message, from readConversation through the quote check (§4.2, E2)", async () => {
+  // Paseo keeps no structured questions for request_user_input_async, so any split of its answers message would guess:
+  // a blank line inside an answer, a title that spans two lines, or a blank line followed by exactly two lines of answer
+  // all look like question boundaries. The message is read whole and none of the user's words are lost.
+  const blankLine = 'Answers to your questions:\n\nWhat should the button say?\nKeep "Retry" on the card.\n\nRename the drawer one to "Rerun".';
+  const longTitle = "Answers to your questions:\n\nShould the drawer keep the old label,\nor follow the card?\nFollow the card";
+  const twoLines = "Answers to your questions:\n\nWhat should change?\nKeep the card as it is.\n\nIn the drawer:\nrename Retry to Rerun";
+  const clear = "Answers to your questions:\n\nKeep the old label?\nNo";
+  const paseo = (text: string) =>
+    ({
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({ timeline: { refetch: async () => ({ entries: [{ timestamp: "2026-11-26T10:00:00.000Z", item: { type: "user_message", text } }] }) } }),
+      },
+    }) as unknown as Parameters<typeof readConversation>[1];
+  expect(await readConversation({ workspaceId: "w" }, paseo(blankLine))).toEqual([blankLine]);
+  expect(await readConversation({ workspaceId: "w" }, paseo(longTitle))).toEqual([longTitle]);
+  expect(await readConversation({ workspaceId: "w" }, paseo(twoLines))).toEqual([twoLines]);
+  expect(await readConversation({ workspaceId: "w" }, paseo(clear))).toEqual([clear]);
+  const judged = async (text: string, quote: string) => {
+    const x = await setup({ conversation: () => readConversation({ workspaceId: "w" }, paseo(text)), llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
     return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
   };
-  // The first line of a multi-line answer is the user's words, not part of the question.
-  expect(await run('Keep "Retry" on the card')).toMatchObject({ state: "failed", quote: 'Keep "Retry" on the card' });
-  expect(await run('rename the drawer one to "Rerun"')).toMatchObject({ state: "failed" });
-  expect(await run("What should the button say")).toMatchObject({ state: "na", reason: "no evidence" });
+  // The user's words after the blank line are not lost, and the second line of the title is not taken as an answer.
+  expect(await judged(blankLine, 'Rename the drawer one to "Rerun"')).toMatchObject({ state: "failed", quote: 'Rename the drawer one to "Rerun"' });
+  expect(await judged(blankLine, 'Keep "Retry" on the card')).toMatchObject({ state: "failed" });
+  expect(await judged(longTitle, "Follow the card")).toMatchObject({ state: "failed", quote: "Follow the card" });
+  // The first of two lines after a blank line is the user's answer, not a question: quoting it is evidence.
+  expect(await judged(twoLines, "In the drawer:")).toMatchObject({ state: "failed", quote: "In the drawer:" });
+  expect(await judged(twoLines, "rename Retry to Rerun")).toMatchObject({ state: "failed" });
+  expect(await judged(clear, "No")).toMatchObject({ state: "failed", quote: "No" });
 });
 
 test("only the user's answer in a question tool counts as quoted evidence, not the agent's question (§4.2, B1)", async () => {
