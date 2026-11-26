@@ -1332,11 +1332,25 @@ test("a Codex answers message is read as the answers of the call it was sent for
   expect(await read([two], "a2")).toEqual([two]);
   expect(await readConversation({ workspaceId: "w" }, paseo([two]))).toEqual([two]);
 
+  let seen: LlmReviewInput | undefined;
   const judged = async (quote: string, texts: string[], agentId?: string) => {
-    const x = await setup({ conversation: () => read(texts, agentId), llm: async () => ({ model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] }) });
+    const x = await setup({
+      conversation: () => read(texts, agentId),
+      llm: async (input) => {
+        seen = input;
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", detail: "Wrong.", quote }] };
+      },
+    });
     return (await x.deliver("development")).tasks[0]!.review!.items.find((i) => i.id === "goal");
   };
   const none = { state: "na", reason: "no evidence" };
+  // Both answers of the earlier call reach the same review session's input, each with its own question.
+  await judged("Follow the card", [two]);
+  expect(seen!.conversation).toEqual([
+    { ask: "Which label?", answer: 'Keep "Retry" on the card.\n\nRename the drawer one to "Rerun".' },
+    { ask: "Should the drawer keep the old label, or follow the card?", answer: "Follow the card" },
+  ]);
+  expect(reviewPrompt(seen!)).toContain('Answered the agent\'s question: "Should the drawer keep the old label, or follow the card?" → Follow the card');
   // Every line of both answers is evidence; no line of the second question is.
   expect(await judged('Rename the drawer one to "Rerun"', [two])).toMatchObject({ state: "failed", quote: 'Rename the drawer one to "Rerun"' });
   expect(await judged('Keep "Retry" on the card', [two])).toMatchObject({ state: "failed", quote: 'Keep "Retry" on the card' });
