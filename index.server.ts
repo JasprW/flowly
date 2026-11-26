@@ -801,8 +801,15 @@ export default function contribute(host: PluginServerContext) {
       .catch((e) => logFailure("Workflow insights commands not recorded:", e));
   });
   // The answers of a Codex async question, by the request actually answered (only requests kept above are matched).
-  server.addHook("agent.permission.after", async (event) => {
-    asyncQuestions.resolved(event.agent.id, event.requestId, event.resolution);
+  server.addHook("agent.permission.after", async (event, { paseo }) => {
+    if (!asyncQuestions.resolved(event.agent.id, event.requestId, event.resolution)) return;
+    // The timeline's epoch now: a rewind after this answer gives it a new one, and the review then keeps the
+    // session's answers messages whole (AUTO-REVIEW-SPEC §4.2 ⑥). Never blocks the hook.
+    void paseo.agents
+      .ref(event.agent.id)
+      .timeline.refetch({ direction: "tail", limit: 1, projection: "projected" })
+      .then((page) => asyncQuestions.answeredIn(event.agent.id, event.requestId, page.epoch))
+      .catch((e) => logFailure("Flowly could not read a session's timeline epoch after a Codex answer:", e, event.agent.id));
   });
   server.addHook("agent.permission.before", async (event, { paseo }) => {
     tools.attach(paseo);

@@ -24,6 +24,7 @@ test("pairs the answers of the request actually answered with its titles, as the
         { ask: "Where?", text: "Drawer only" },
       ],
       answeredAt: 1_000,
+      epoch: null,
     },
   ]);
   // The other request is still open and has no answers yet.
@@ -32,6 +33,14 @@ test("pairs the answers of the request actually answered with its titles, as the
   expect(q.answers("a1").map((a) => [a.callId, a.answeredAt])).toEqual([
     ["c2", 5_000],
     ["c1", 1_000],
+  ]);
+  // The timeline epoch read after the answer is kept once; a later read (after a rewind) does not replace it.
+  q.answeredIn("a1", "permission-c1", "e1");
+  q.answeredIn("a1", "permission-c1", "e2");
+  q.answeredIn("a1", "permission-unknown", "e1");
+  expect(q.answers("a1").map((a) => [a.callId, a.epoch])).toEqual([
+    ["c2", null],
+    ["c1", "e1"],
   ]);
   expect(codexAnswersMessage([{ ask: "Which label?", text: "Retry" }])).toBe("Answers to your questions:\n\nWhich label?\nRetry");
 });

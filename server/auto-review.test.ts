@@ -1323,7 +1323,8 @@ test("a Codex answers message is read as the answers of the call it was sent for
   const request = (agentId: string, callId: string, ...titles: string[]) =>
     q.remember(agentId, { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
   const answer = (agentId: string, callId: string, ...answers: string[]) =>
-    q.resolved(agentId, `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } });
+    q.resolved(agentId, `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } }) &&
+    q.answeredIn(agentId, `permission-${callId}`, "e1");
   // Two questions, then a single question with the same title as the first; the user answers the earlier call.
   request("a1", "two", "Which label?", "Should the drawer keep the old label,\nor follow the card?");
   request("a1", "one", "Which label?");
@@ -1336,7 +1337,7 @@ test("a Codex answers message is read as the answers of the call it was sent for
     ({
       agents: {
         list: async () => ({ entries: [{ agent: { id: agentId, workspaceId: "w" } }], pageInfo: {} }),
-        ref: () => ({ timeline: { refetch: async () => ({ hasOlder: false, entries: codexTimeline([{ asked: "two" }, { asked: "one" }, ...texts]) }) } }),
+        ref: () => ({ timeline: { refetch: async () => ({ epoch: "e1", hasOlder: false, entries: codexTimeline([{ asked: "two" }, { asked: "one" }, ...texts]) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
   const read = (texts: string[], agentId?: string) => readConversation({ workspaceId: "w" }, paseo(texts, agentId), (id) => q.session(id));
@@ -1388,7 +1389,8 @@ test("two answered Codex calls that build the same message text are paired with 
   const request = (callId: string, ...titles: string[]) =>
     q.remember("a1", { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
   const answer = (callId: string, ...answers: string[]) =>
-    q.resolved("a1", `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } });
+    q.resolved("a1", `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((a, i) => [`Question ${i + 1}`, a])) } }) &&
+    q.answeredIn("a1", `permission-${callId}`, "e1");
   request("A", "Which label?", "Where?");
   request("B", "Which label?");
   answer("A", "Rerun", "Drawer only");
@@ -1397,14 +1399,15 @@ test("two answered Codex calls that build the same message text are paired with 
   expect(q.answers("a1").map((a) => a.message)).toEqual([same, same]);
   // `hasOlder` false: the read holds the whole timeline; true: older entries lie before the window; "missing": Paseo
   // left it out, which may also mean older entries.
-  const paseo = (lines: CodexLine[], hasOlder: boolean | "missing") =>
+  // `epoch`: the timeline's now; the hooks read "e1" right after each answer, and a rewind since gives a new one.
+  const paseo = (lines: CodexLine[], hasOlder: boolean | "missing", epoch: string) =>
     ({
       agents: {
         list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
-        ref: () => ({ timeline: { refetch: async () => ({ ...(hasOlder === "missing" ? {} : { hasOlder }), entries: codexTimeline(lines) }) } }),
+        ref: () => ({ timeline: { refetch: async () => ({ epoch, ...(hasOlder === "missing" ? {} : { hasOlder }), entries: codexTimeline(lines) }) } }),
       },
     }) as unknown as Parameters<typeof readConversation>[1];
-  const read = (lines: CodexLine[], hasOlder: boolean | "missing" = false) => readConversation({ workspaceId: "w" }, paseo(lines, hasOlder), (id) => q.session(id));
+  const read = (lines: CodexLine[], hasOlder: boolean | "missing" = false, epoch = "e1") => readConversation({ workspaceId: "w" }, paseo(lines, hasOlder, epoch), (id) => q.session(id));
   const a = [
     { ask: "Which label?", answer: "Rerun" },
     { ask: "Where?", answer: "Drawer only" },
@@ -1429,7 +1432,13 @@ test("two answered Codex calls that build the same message text are paired with 
   // Only the exact text Paseo sends is paired: a trailing line break makes it the user's own message (the review input
   // trims it like any message).
   expect(await read([{ asked: "A" }, `${same}\n`])).toEqual([same]);
-  // A rewind removed A's answer and the user typed the same text again 20 minutes later: not A's answers message.
+  // A rewind kept A's question and removed its answer, and the user sent the same text again in a new turn 30 seconds
+  // after the answer: the rewind gave the timeline a new epoch, so the source is not certain and it stays whole.
+  expect(await read([{ asked: "A" }, { said: same, at: "2026-11-26T10:00:35.000Z" }], false, "e2")).toEqual([same]);
+  expect(await read([{ asked: "A" }, same], false, "e2")).toEqual([same]);
+  // A page without an epoch is not certain either.
+  expect(await read([{ asked: "A" }, same], false, "")).toEqual([same]);
+  // Typed again 20 minutes later: not A's answers message.
   const retyped = { said: same, at: "2026-11-26T10:20:00.000Z" };
   expect(await read([{ asked: "A" }, retyped])).toEqual([same]);
   // A's answer kept and B's removed, then retyped: B's message is far from B's answer, so neither text is paired.
@@ -1494,7 +1503,8 @@ test("a Codex answers message whose owner is not certain (a call from before a p
     for (const [callId, titles] of calls)
       q.remember("a1", { id: `permission-${callId}`, name: "request_user_input_async", kind: "question", input: { questions: titles.map((question, i) => ({ id: String(i), header: `Question ${i + 1}`, question })) } });
     for (const [callId, , answers] of calls)
-      q.resolved("a1", `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((x, i) => [`Question ${i + 1}`, x])) } });
+      q.resolved("a1", `permission-${callId}`, { behavior: "allow", updatedInput: { answers: Object.fromEntries(answers.map((x, i) => [`Question ${i + 1}`, x])) } }) &&
+        q.answeredIn("a1", `permission-${callId}`, "e1");
     return q;
   };
   const A: [string, string[], string[]] = ["A", ["Which label?", "Where?"], ["Rerun", "Drawer only"]];

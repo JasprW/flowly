@@ -366,7 +366,7 @@ export async function readConversation(
     const asked = questions(id);
     // Pairing a Codex answers message needs every question call of the session; read back to its start only then.
     const before = res && res.hasOlder !== false && entries.some((e) => answersText(e.item!, asked.answered) !== null) ? await olderEntries(handle, res) : res ? [] : null;
-    const calls = before ? answeredCalls([...before, ...entries], asked, before.length) : new Map<number, AnsweredQuestions>();
+    const calls = before ? answeredCalls([...before, ...entries], asked, before.length, (res as TimelinePage | null)?.epoch) : new Map<number, AnsweredQuestions>();
     for (const [index, entry] of entries.entries()) {
       const at = entry.timestamp || "";
       const item = entry.item!;
@@ -437,11 +437,14 @@ async function olderEntries(handle: { timeline: { refetch: (options: never) => P
  *   there are as many of each, in order (the timeline shows the answers messages in the order the user answered, and
  *   the calls are kept in that order too), each call asked before its message;
  * - each message is in the timeline within a minute of its call's answer: Paseo sends it when the user submits the
- *   answer, while the same text typed by hand after a rewind removed the real one comes much later.
+ *   answer;
+ * - the timeline has not been rewound since the call was answered (`epoch`, the one the hook read right after the
+ *   answer, is the read's): a rewind may have removed the real message, and the same text typed by hand afterwards,
+ *   however soon, cannot be told from it.
  * Anything else (a rewind that removed an answer but kept its question, the same text typed again after a rewind, a
  * timeline whose start is out of reach) leaves every message of that text whole.
  */
-function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQuestions, offset: number): Map<number, AnsweredQuestions> {
+function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQuestions, offset: number, epoch: string | undefined): Map<number, AnsweredQuestions> {
   const out = new Map<number, AnsweredQuestions>();
   const askedAt = new Map<string, number>();
   const byText = new Map<string, number[]>();
@@ -454,6 +457,7 @@ function answeredCalls(entries: readonly TimelineEntry[], questions: SessionQues
   for (const [text, at] of byText) {
     const kept = inAnswerOrder.filter((a) => a.message === text && askedAt.has(a.callId));
     if (kept.length !== at.length) continue;
+    if (!epoch || kept.some((a) => a.epoch !== epoch)) continue;
     const last = at[at.length - 1]!;
     if ([...askedAt].some(([callId, i]) => i < last && !questions.known(callId))) continue;
     if (kept.some((a, n) => askedAt.get(a.callId)! > at[n]!)) continue;

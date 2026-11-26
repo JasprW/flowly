@@ -15,10 +15,11 @@ const PERMISSION_PREFIX = "permission-";
 type Request = { id?: unknown; name?: unknown; kind?: unknown; input?: unknown };
 type Resolution = { behavior?: unknown; updatedInput?: unknown };
 /**
- * One answered question call: what the user answered to each title, the message Paseo sent for it, and when the hook saw
- * the answer (ms since epoch; Paseo sends the message at the same moment, §4.2 ⑤).
+ * One answered question call: what the user answered to each title, the message Paseo sent for it, when the hook saw the
+ * answer (ms since epoch; Paseo sends the message at the same moment, §4.2 ⑤), and the session's timeline epoch then
+ * (null until read; a rewind gives the timeline a new one, §4.2 ⑥).
  */
-export type AnsweredQuestions = { callId: string; message: string; pairs: { ask: string; text: string }[]; answeredAt: number };
+export type AnsweredQuestions = { callId: string; message: string; pairs: { ask: string; text: string }[]; answeredAt: number; epoch: string | null };
 /**
  * What the hooks know of one session's question calls: the answered ones, newest first, and whether a call's outcome is
  * known at all (asked since the plugin started and still held: open, answered, or closed without an answer). A call it
@@ -58,11 +59,14 @@ export class AsyncQuestionTitles {
     put(this.pending, agentId, callId, titles);
   }
 
-  /** Pairs the answers of the request that was actually answered with its titles; a dismissal drops the request. */
-  resolved(agentId: string, requestId: string, resolution: Resolution): void {
+  /**
+   * Pairs the answers of the request that was actually answered with its titles; a dismissal closes the request. True
+   * when it was kept as answered.
+   */
+  resolved(agentId: string, requestId: string, resolution: Resolution): boolean {
     const callId = callIdOf(requestId);
     const titles = this.pending.get(agentId)?.get(callId);
-    if (!titles) return;
+    if (!titles) return false;
     this.pending.get(agentId)!.delete(callId);
     const answers = resolution.behavior === "allow" ? (resolution.updatedInput as { answers?: unknown } | undefined)?.answers : undefined;
     const pairs: { ask: string; text: string }[] = [];
@@ -70,10 +74,20 @@ export class AsyncQuestionTitles {
     for (const [i, ask] of titles.entries()) {
       const value = answers && typeof answers === "object" ? (answers as Record<string, unknown>)[`Question ${i + 1}`] : undefined;
       const text = typeof value === "string" ? value.trim() : "";
-      if (!text) return void put(this.closed, agentId, callId, true);
+      if (!text) {
+        put(this.closed, agentId, callId, true);
+        return false;
+      }
       pairs.push({ ask, text });
     }
-    put(this.answered, agentId, callId, { callId, message: codexAnswersMessage(pairs), pairs, answeredAt: this.now() });
+    put(this.answered, agentId, callId, { callId, message: codexAnswersMessage(pairs), pairs, answeredAt: this.now(), epoch: null });
+    return true;
+  }
+
+  /** The session's timeline epoch read right after this answer (§4.2 ⑥); only the first one counts. */
+  answeredIn(agentId: string, requestId: string, epoch: string): void {
+    const answered = this.answered.get(agentId)?.get(callIdOf(requestId));
+    if (answered && answered.epoch === null && epoch) answered.epoch = epoch;
   }
 
   /** The session's calls as the auto review pairs them (§4.2). */
