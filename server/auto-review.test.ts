@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentFixture } from "./agent-fixture";
@@ -2307,6 +2307,13 @@ test("changedFrom: a path counts when its content differs from the snapshot; one
   await writeFile(join(dir, "b"), "3");
   await writeFile(join(dir, "c"), "new");
   expect([...(await changedFrom(dir, files, ["c"]))].sort()).toEqual(["b", "c"]);
+  // A mode change alone counts; a directory (a submodule) always counts.
+  const { files: now } = await contentSnapshot(dir, ["a", "b", "c"]);
+  await chmod(join(dir, "a"), 0o755);
+  await mkdir(join(dir, "sub"));
+  const { files: withSub } = await contentSnapshot(dir, ["sub"]);
+  expect([...(await changedFrom(dir, now, ["a", "b", "c"]))]).toEqual(["a"]);
+  expect([...(await changedFrom(dir, withSub, ["sub"]))]).toEqual(["sub"]);
   await rm(dir, { recursive: true, force: true });
 });
 

@@ -363,19 +363,24 @@ export async function linkedShape(repos: readonly LinkedRepo[], baseRef?: string
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
 
+/** A directory's digest (a Git submodule): its commit is not read, so the regression backstop always counts it (§3.6). */
+const directoryDigest = "dir";
 /**
- * One path's content as a digest: a file's bytes, read as a stream; a symbolic link's target path, never followed;
- * "-" when it is gone (deleted) or cannot be read.
+ * One path's content as a digest: a file's bytes, read as a stream, and whether it is executable; a symbolic link's
+ * target path, never followed; "dir" for a directory (a submodule); "-" when it is gone (deleted) or cannot be read.
  */
 async function fileDigest(path: string): Promise<string> {
   const info = await lstat(path).catch(() => null);
   if (!info) return "-";
+  if (info.isDirectory()) return directoryDigest;
   if (info.isSymbolicLink()) {
     const target = await readlink(path).catch(() => null);
     // The marker stays outside the hash, so a file whose text equals the target never matches a link.
     return target === null ? "-" : `link:${createHash("sha1").update(target).digest("hex")}`;
   }
   const hash = createHash("sha1");
+  // Git tracks the executable bit: a mode change alone is a change. Other files keep their earlier digest.
+  if (info.mode & 0o111) hash.update("exec:");
   try {
     for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
   } catch {
@@ -402,11 +407,15 @@ export async function contentSnapshot(directory: string, paths: Iterable<string>
 }
 /**
  * The paths whose content differs from `before` (path → digest at the previous review's start, §3.6): of `candidates`
- * and of `before`'s own paths. A path `before` does not hold had the previous commit's content then, so it differs.
+ * and of `before`'s own paths. A path `before` does not hold had the previous commit's content then, so it differs; a
+ * directory (a submodule, whose commit is not read) always counts.
  */
 export async function changedFrom(directory: string, before: ReadonlyMap<string, string>, candidates: Iterable<string>): Promise<Set<string>> {
   const out = new Set<string>();
-  for (const p of new Set([...candidates, ...before.keys()])) if ((await fileDigest(join(directory, p))) !== before.get(p)) out.add(p);
+  for (const p of new Set([...candidates, ...before.keys()])) {
+    const now = await fileDigest(join(directory, p));
+    if (now === directoryDigest || now !== before.get(p)) out.add(p);
+  }
   return out;
 }
 
