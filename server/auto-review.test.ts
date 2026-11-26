@@ -14,6 +14,7 @@ import {
   linkedReviewDiff,
   linkedShape,
   numstatShape,
+  pairingHistoryLimit,
   readConversation,
   repoPath,
   reviewDiff,
@@ -1063,7 +1064,7 @@ test("disputes: only failed findings of the latest review, kept on the card; the
   expect((await card(x)).disputes).toBeUndefined();
 });
 
-test("a disputed goal is still judged on every later delivery; failing again with new evidence ends the dispute (§6.3, E1)", async () => {
+test("a disputed goal is still judged on every later delivery; failing again ends the dispute (§6.3, E1)", async () => {
   const inputs: LlmReviewInput[] = [];
   const goalVerdicts: ("pass" | "fail")[] = ["fail", "fail", "pass"];
   const llm: LlmReview = async (input) => {
@@ -1153,6 +1154,28 @@ test("a disputed command is skipped only at the commit it failed on; new code ru
   expect(board.tasks[0]!.disputes).toBeUndefined();
 });
 
+test("a disputed command that the user edits runs again at the same commit: the dispute was about the old command (§6.3 step 1, E1)", async () => {
+  const x = await setup({ exits: { "npm test": 1 }, maxRounds: 3 });
+  await x.deliver("development");
+  await x.turnStarted();
+  let board = await x.deliver(undefined, { disputes: [{ id: "tests", reason: "The command itself is wrong." }] });
+  expect(board.tasks[0]!.disputes).toEqual([expect.objectContaining({ id: "tests", sha: "aaaaaaaaaaaa", argv: ["npm", "test"] })]);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "disputed" });
+  // The user fixes the command; the code did not change.
+  await x.guardrails.store.update((state) => {
+    state.entries.find((e) => e.id === "tests")!.argv = ["npm", "run", "test"];
+    return { value: undefined, changed: true };
+  });
+  await x.store.mutate((b) => {
+    b.tasks[0]!.status = "development";
+  });
+  const runs = x.runs.length;
+  board = await x.deliver();
+  expect(x.runs.slice(runs)).toEqual(["npm run test"]);
+  expect(board.tasks[0]!.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "passed", argv: ["npm", "run", "test"] });
+  expect(board.tasks[0]!.review).toMatchObject({ state: "passed" });
+});
+
 test("a command disputed from a worktree still runs when the same commit is delivered from a shared directory (§6.3 step 1)", async () => {
   const x = await setup({ exits: { "npm test": 1 }, maxRounds: 3 });
   await x.deliver("development");
@@ -1230,6 +1253,23 @@ test("a deciding command that fails runs once more at the same commit: a pass th
   // get_task shows it.
   const ctx = await x.service.get(x.identity);
   expect(ctx.review!.items.find((i) => i.id === "tests")).toMatchObject({ state: "passed", flaky: true });
+});
+
+test("a rerun that times out or cannot start keeps the first failure: the card goes back for rework (§6.3 step 1, E3)", async () => {
+  for (const second of [
+    { exitCode: null, timedOut: true, ms: 7, output: "slow\n" },
+    { exitCode: null, timedOut: false, spawnError: "spawn npm ENOENT", ms: 7, output: "" },
+  ]) {
+    let calls = 0;
+    const x = await setup({ run: async () => (++calls === 1 ? { exitCode: 1, timedOut: false, ms: 4, output: "FAIL a.test.ts\n" } : second) });
+    const board = await x.deliver("development");
+    expect(calls).toBe(2);
+    expect(board.tasks[0]!.review).toMatchObject({ state: "rework" });
+    const item = board.tasks[0]!.review!.items.find((i) => i.id === "tests")!;
+    expect(item).toMatchObject({ state: "failed", exitCode: 1, ms: 11, tail: "FAIL a.test.ts" });
+    expect(item.flaky).toBeUndefined();
+    expect(item.timedOut).toBeUndefined();
+  }
 });
 
 test("a failed command is not retried when the commit changed meanwhile (§6.3 step 1)", async () => {
@@ -1594,6 +1634,34 @@ test("a Codex answers message whose owner is not certain (a call from before a p
   expect((await read(both, [[{ asked: "A" }, { asked: "B" }], [same, same]], { epochChange: true })).said).toEqual([same, same]);
   // No answers message to pair: the review does not page back.
   expect((await read(both, [[{ asked: "A" }], ["Thanks"]])).reads).toBe(1);
+  // Paging back reads at most `pairingHistoryLimit` entries before the tail page, entries without an item included, and
+  // never asks for more than is left; reaching the start at exactly the limit still pairs.
+  const far = async (older: number) => {
+    const [askA, message] = codexTimeline([{ asked: "A" }, same]);
+    const all = [askA!, ...Array.from({ length: older - 1 }, () => ({})), message!];
+    const limits: number[] = [];
+    const page = (end: number, limit: number) => {
+      const start = Math.max(0, end - limit);
+      return { epoch: "e1", hasOlder: start > 0, startCursor: start > 0 ? { epoch: "e1", seq: start } : null, entries: all.slice(start, end) };
+    };
+    const paseo = {
+      agents: {
+        list: async () => ({ entries: [{ agent: { id: "a1", workspaceId: "w" } }], pageInfo: {} }),
+        ref: () => ({
+          timeline: {
+            refetch: async (o: { direction: string; limit: number; cursor?: { seq: number } }) => {
+              if (o.direction !== "before") return page(all.length, 1);
+              limits.push(o.limit);
+              return page(o.cursor!.seq, o.limit);
+            },
+          },
+        }),
+      },
+    } as unknown as Parameters<typeof readConversation>[1];
+    return { said: await readConversation({ workspaceId: "w" }, paseo, (id) => both.session(id)), asked: limits.reduce((n, l) => n + l, 0) };
+  };
+  expect(await far(pairingHistoryLimit)).toEqual({ said: a, asked: pairingHistoryLimit });
+  expect(await far(pairingHistoryLimit + 1)).toEqual({ said: [same], asked: pairingHistoryLimit });
 
   // The reviewer's input never holds B's single answer for A's message, and A's second title is not B's answer.
   let seen: LlmReviewInput | undefined;

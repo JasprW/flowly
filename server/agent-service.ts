@@ -1079,10 +1079,12 @@ export function disputedFindings(task: Pick<Task, "review" | "disputes">, given:
       "INVALID_INPUT",
       `disputes can only name findings that failed and decided this card's latest auto review${failed.length ? ` (${failed.map((i) => i.id).join(", ")})` : " (it has none)"}; unknown: ${unknown.join(", ")}.`,
     );
-  // The finding the dispute is about and the commit it failed on (E1): a command's dispute holds only at that sha.
+  // The finding the dispute is about and the commit it failed on (E1): a command's dispute holds only at that sha, and
+  // only for the command as it ran.
   const about = (item: (typeof failed)[number]) => ({
     round: task.review!.round,
     ...(task.review!.fingerprint.sha ? { sha: task.review!.fingerprint.sha } : {}),
+    ...(item.kind === "command" && item.argv ? { argv: [...item.argv] } : {}),
     finding: findingText(item),
   });
   for (const d of given) {
@@ -1091,7 +1093,7 @@ export function disputedFindings(task: Pick<Task, "review" | "disputes">, given:
     const item = failed.find((i) => i.id === d.id);
     if (index >= 0) {
       // Disputed again: the reason is updated; a finding that failed again replaces the old one.
-      const { sha: _sha, finding: _finding, ...known } = out[index];
+      const { sha: _sha, argv: _argv, finding: _finding, ...known } = out[index];
       out[index] = item ? { ...known, reason, ...about(item) } : { ...out[index], reason };
       continue;
     }

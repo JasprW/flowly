@@ -416,11 +416,15 @@ function sentFor(call: AnsweredQuestions, timestamp: string | undefined, epoch: 
 async function olderEntries(handle: { timeline: { refetch: (options: never) => Promise<unknown> } }, first: TimelinePage): Promise<TimelineEntry[] | null> {
   let out: TimelineEntry[] = [];
   let last = first;
+  // Every entry read counts toward the limit, with or without an item; reaching the start at exactly the limit is fine.
+  let read = 0;
   while (last.hasOlder !== false) {
-    if (!last.startCursor || out.length >= pairingHistoryLimit) return null;
-    const options = { direction: "before", cursor: last.startCursor, limit: conversationLimits.perSession, projection: "projected" };
+    const room = pairingHistoryLimit - read;
+    if (!last.startCursor || room <= 0) return null;
+    const options = { direction: "before", cursor: last.startCursor, limit: Math.min(conversationLimits.perSession, room), projection: "projected" };
     const next = (await handle.timeline.refetch(options as never).catch(() => null)) as TimelinePage | null;
-    if (!next || next.error || next.reset || next.staleCursor || next.epoch !== first.epoch || !next.entries.length) return null;
+    if (!next || next.error || next.reset || next.staleCursor || next.epoch !== first.epoch || !next.entries.length || next.entries.length > room) return null;
+    read += next.entries.length;
     out = [...(next.entries as TimelineEntry[]).filter((e) => e.item), ...out];
     last = next;
   }
@@ -850,11 +854,13 @@ export class AutoReviewService {
       const round = !manual && continuesRound(b.events, t.id, previous) ? previous!.round + 1 : 1;
       const disputes = new Map((t.disputes || []).map((d) => [d.id, d]));
       // A dispute is about one finding, not the whole check (E1): a judged check is judged again with the dispute in its
-      // input; a deciding command is skipped as disputed only at the commit it failed on. A command that does not decide
-      // (observing, or in a shared directory) always runs, so its result stays visible.
-      const queued = (id: string, gating: boolean) => {
+      // input; a deciding command is skipped as disputed only at the commit it failed on, and only while it is the command
+      // that failed (an edited command runs). A command that does not decide (observing, or in a shared directory) always
+      // runs, so its result stays visible.
+      const queued = (id: string, gating: boolean, argv: readonly string[]) => {
         const d = disputes.get(id);
-        return gating && d?.sha && d.sha === head?.sha ? { state: "disputed" as const, disputeReason: clip(d.reason, 300) } : { state: "queued" as const };
+        const same = !!d?.argv && d.argv.length === argv.length && d.argv.every((a, n) => a === argv[n]);
+        return gating && same && d?.sha && d.sha === head?.sha ? { state: "disputed" as const, disputeReason: clip(d.reason, 300) } : { state: "queued" as const };
       };
       const judgedState = (id: string) => ({ state: "queued" as const, ...(disputes.has(id) ? { disputeReason: clip(disputes.get(id)!.reason, 300) } : {}) });
       // In a shared directory commands run and show their result but do not decide (§6.3 step 1, E3).
@@ -867,7 +873,7 @@ export class AutoReviewService {
           // An observing command runs and shows its result but never decides the review (§4.5).
           gating: c.state === "active" && !shared,
           argv: [...(c.argv || [])],
-          ...queued(c.id, c.state === "active" && !shared),
+          ...queued(c.id, c.state === "active" && !shared, c.argv || []),
         })),
         { id: GOAL_ID, kind: "goal" as const, name: GOAL_NAME, gating: true, ...judgedState(GOAL_ID) },
         ...(guard?.guidelines || []).map((g) => ({ id: g.id, kind: "guideline" as const, name: clip(g.text, 200), gating: true, ...judgedState(g.id) })),
@@ -918,10 +924,11 @@ export class AutoReviewService {
         if (item.gating && run.exitCode !== 0 && !run.timedOut && !run.spawnError && head?.sha) {
           const now = linked.length ? (await linkedHead(linked, this.git, this.now())).head : await readHead(where.directory, this.git, this.now());
           const again = now?.sha === head.sha ? await once() : null;
-          if (again) {
-            if (again.exitCode === 0 && !again.timedOut && !again.spawnError) flaky = { ms: run.ms, output: run.output };
+          // A rerun that cannot start or times out says nothing about the code: the first failure stands.
+          if (again && !again.timedOut && !again.spawnError) {
+            if (again.exitCode === 0) flaky = { ms: run.ms, output: run.output };
             run = { ...again, ms: run.ms + again.ms };
-          }
+          } else if (again) run = { ...run, ms: run.ms + again.ms };
         }
         const tail = outputTail(flaky ? flaky.output : run.output, autoReviewLimits.tail);
         const passed = run.exitCode === 0 && !run.timedOut && !run.spawnError;

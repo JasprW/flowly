@@ -191,6 +191,8 @@ export const disputeSchema = z.object({
   at: timestamp,
   /** The commit the finding failed on: a disputed command is skipped only at this sha (§6.3 step 1, E1). */
   sha: z.string().max(80).optional(),
+  /** The disputed command as it ran: editing the command ends its dispute (§6.3 step 1, E1). */
+  argv: z.array(z.string()).max(autoReviewLimits.args).optional(),
   /** The disputed finding itself, shown to the reviewer next time (§6.3 step 2, E1). */
   finding: z.string().max(disputeLimits.finding).optional(),
 });
