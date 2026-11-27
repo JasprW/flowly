@@ -581,6 +581,7 @@ export default function contribute(host: PluginServerContext) {
     }),
   });
   tools.agents.onDelivered = (delivery, api) => void reviews.delivered(delivery, api);
+  tools.agents.onCardStatus = (previous, task, api) => afterStatus(previous, task, api);
   // A person moving the card away stops its review's commands and session at once (AUTO-REVIEW-SPEC §3.2).
   store.onReviewStop = (taskId) => reviews.stop(taskId);
   void reviews.recover().catch((e) => logFailure("Flowly auto review recovery failed:", e));
