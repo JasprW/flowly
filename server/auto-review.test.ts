@@ -2344,6 +2344,37 @@ test("rework round: a fail of what passed before must cite a file this round cha
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
 });
 
+test("rework round: a check that was only a minor finding last time and now fails for an old problem in a file this round did not change stays minor once the blocking problem is fixed; a changed file decides (§3.6)", async () => {
+  const scenario = async (file: string) => {
+    let round = 0;
+    const llm: LlmReview = async () => {
+      round++;
+      if (round === 1)
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "blocker", detail: "The Rerun button is missing.", file: "src/b.ts" }, { id: "g1", verdict: "fail", severity: "minor", detail: "Old nit in the parser.", file: "src/a.ts", line: 3 }] };
+      return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }, { id: "g1", verdict: "fail", severity: "major", detail: "Error strings are not translated.", file, line: 90 }] };
+    };
+    const x = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, maxRounds: 3, paths: ["src/a.ts", "src/b.ts"], diffText: () => "diff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/src/b.ts b/src/b.ts\n+y" });
+    await mkdir(join(x.a, "src"), { recursive: true });
+    await writeFile(join(x.a, "src/a.ts"), "uncommitted since round 1");
+    x.repo.changed = ["src/a.ts"];
+    const first = (await x.deliver("development")).tasks[0]!.review!;
+    expect(first).toMatchObject({ state: "rework", round: 1 });
+    expect(first.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor" });
+    await x.turnStarted();
+    // The agent fixes the blocking problem in src/b.ts; src/a.ts stays as it was at round 1.
+    await writeFile(join(x.a, "src/b.ts"), "this round");
+    x.repo.changed = ["src/a.ts", "src/b.ts"];
+    return (await x.deliver()).tasks[0]!.review!;
+  };
+  const old = await scenario("src/a.ts");
+  expect(old).toMatchObject({ state: "passed", round: 2 });
+  expect(old.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+  // The same check failing in the file this round changed is a regression: it decides.
+  const regression = await scenario("src/b.ts");
+  expect(regression).toMatchObject({ state: "rework", round: 2 });
+  expect(regression.items.find((i) => i.id === "g1")!.severity).toBe("major");
+});
+
 test("rework round after a plugin restart still compares with the previous review's snapshot, read from disk (§3.6)", async () => {
   let round = 0;
   const llm: LlmReview = async () => {

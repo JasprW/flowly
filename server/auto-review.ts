@@ -1432,8 +1432,10 @@ export class AutoReviewService {
           let gating = r.gating;
           let why = reason;
           const prior = incremental ? before.get(r.id) : undefined;
-          // A rework round re-checks what failed and looks for regressions (§3.6): a fail of what passed before must cite a file this round changed.
-          if (state === "failed" && severity !== "minor" && prior && itemPassed(prior) && !(v.file && changedNow.has(v.file))) {
+          // A rework round re-checks what failed and looks for regressions (§3.6): a fail of what passed before, or of what
+          // was only a minor finding (it did not decide either), must cite a file this round changed.
+          const settled = !!prior && (itemPassed(prior) || ((prior.state === "failed" || prior.state === "needs_user") && isMinor(prior)));
+          if (state === "failed" && severity !== "minor" && settled && !(v.file && changedNow.has(v.file))) {
             severity = "minor";
             why = notThisRoundReason;
           }
