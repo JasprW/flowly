@@ -2380,8 +2380,8 @@ test("rework round after a plugin restart still compares with the previous revie
   expect(corrupt.items.find((i) => i.id === "g1")!.severity).toBeUndefined();
 });
 
-test("rework round after a restart: a check that failed before and now fails for something new in a file this round did not change is minor; the same file, no earlier file or a changed file still decide (§3.6)", async () => {
-  type V = { detail: string; file?: string; quote?: string };
+test("rework round after a restart: a check that failed before and now fails for something new in a file this round did not change is minor, in the same file too; a nearby or unplaced fail in that file, no earlier file or a changed file still decide (§3.6)", async () => {
+  type V = { detail: string; file?: string; line?: number; quote?: string };
   const verdict = (v: V) => ({ id: "goal", verdict: "fail" as const, severity: "blocker" as const, ...v });
   const scenario = async (first: V, second: V) => {
     const seen: LlmReviewInput[] = [];
@@ -2412,10 +2412,17 @@ test("rework round after a restart: a check that failed before and now fails for
   const changed = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/b.ts" });
   expect(changed.review).toMatchObject({ state: "rework", round: 2 });
   expect(changed.goal.severity).toBe("blocker");
-  // The same untouched file as last time may be the unfixed problem worded differently: it keeps its severity.
-  const same = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
-  expect(same.review).toMatchObject({ state: "rework", round: 2 });
-  expect(same.goal.severity).toBe("blocker");
+  // The same untouched file, far from last time's line and worded differently: another old problem, minor (user decision 2026-11-27).
+  const same = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts", line: 10 }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts", line: 80 });
+  expect(same.review).toMatchObject({ state: "passed", round: 2 });
+  expect(same.goal).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+  // Within 20 lines of last time's, or either without a line: taken as the unfixed problem worded differently, it decides.
+  const near = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts", line: 10 }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts", line: 30 });
+  expect(near.review).toMatchObject({ state: "rework", round: 2 });
+  expect(near.goal.severity).toBe("blocker");
+  const lineless = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts", line: 80 });
+  expect(lineless.review).toMatchObject({ state: "rework", round: 2 });
+  expect(lineless.goal.severity).toBe("blocker");
   // Last time's fail cited no file: no way to tell it apart, so it keeps its severity.
   const unplaced = await scenario({ detail: "The Rerun button is missing from the drawer.", quote: "Card" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
   expect(unplaced.review).toMatchObject({ state: "rework", round: 2 });

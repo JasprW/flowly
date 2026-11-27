@@ -369,6 +369,14 @@ export async function linkedShape(repos: readonly LinkedRepo[], baseRef?: string
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
 
+/** Lines apart within which two fails in the same file count as the same finding (§3.6). */
+const sameFindingLines = 20;
+/** Two fails in the same file, near each other or either without a line: taken as the same finding (§3.6). */
+function nearPlace(a: { file?: string; line?: number }, b: { file?: string; line?: number }): boolean {
+  if (!a.file || a.file !== b.file) return false;
+  return !a.line || !b.line || Math.abs(a.line - b.line) <= sameFindingLines;
+}
+
 /** A directory's digest (a Git submodule): its commit is not read, so the regression backstop always counts it (§3.6). */
 const directoryDigest = "dir";
 /**
@@ -1429,9 +1437,9 @@ export class AutoReviewService {
             severity = "minor";
             why = notThisRoundReason;
           }
-          // A check that failed before and now fails for something new, in a file this round did not change and that the
-          // earlier fail did not cite, is not this round's either (§3.6). Without an earlier file, the same file, or the
-          // same finding, it keeps its severity: an unfixed problem must not pass by being worded differently.
+          // A check that failed before and now fails for something new, in a file this round did not change, is not this
+          // round's either, in the earlier fail's file too (§3.6, user decision 2026-11-27). Without an earlier file, or
+          // for the same finding, it keeps its severity: an unfixed problem must not pass by being worded differently.
           const finding = demotionFinding({ detail: v.detail, file: v.file, line: v.line });
           if (
             state === "failed" &&
@@ -1440,8 +1448,8 @@ export class AutoReviewService {
             !isMinor(prior) &&
             prior.file &&
             v.file &&
-            v.file !== prior.file &&
             !changedNow.has(v.file) &&
+            !nearPlace(prior, v) &&
             !sameFinding(demotionFinding(prior), finding)
           ) {
             severity = "minor";
