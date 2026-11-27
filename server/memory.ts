@@ -93,7 +93,8 @@ const notesOf = (state: GuardrailsState, projectId: string) => state.entries.fil
 
 /**
  * Duplicate, limit, secret and supersedes checks of a new note (§4.1, GUARDRAILS-SPEC §4.4). A note is live at
- * once, so one card may add at most five: MEMORY_LIMIT past that.
+ * once, so one card may add at most five new ones, whatever became of them since (archived, displaced, dismissed):
+ * MEMORY_LIMIT past that. A replacement (`supersedes`) swaps one active note for another and never counts.
  */
 export function checkProposal(state: GuardrailsState, p: Omit<Proposal, "by" | "eventId" | "agentId">) {
   if (containsSecret(`${p.title}\n${p.body}\n${p.keywords.join(" ")}`))
@@ -103,8 +104,11 @@ export function checkProposal(state: GuardrailsState, p: Omit<Proposal, "by" | "
   if (same) throw new MemoryError("MEMORY_DUPLICATE", `This project already has a memory with that title (${same.id}). To replace it, propose a new one with supersedes=${same.id}.`);
   if (p.supersedes && !own.some((e) => e.id === p.supersedes && e.state === "active"))
     throw new MemoryError("INVALID_INPUT", "supersedes must be the id of one of this project's active memories (see flowly_get_task memory or flowly_recall).");
-  if (p.taskId && own.filter((e) => e.by !== "user" && e.source?.taskId === p.taskId).length >= memoryLimits.openPerTask)
-    throw new MemoryError("MEMORY_LIMIT", `This card already added ${memoryLimits.openPerTask} memories. Mention anything else worth remembering in your reply instead.`);
+  if (!p.supersedes && p.taskId && own.filter((e) => e.by !== "user" && !e.supersedes && e.source?.taskId === p.taskId).length >= memoryLimits.newPerTask)
+    throw new MemoryError(
+      "MEMORY_LIMIT",
+      `This card already added ${memoryLimits.newPerTask} new memories. Corrections with supersedes are still accepted; mention anything else worth remembering in your reply instead.`,
+    );
 }
 
 /** AGENTS.md and CLAUDE.md at the project root (a CLAUDE.md that repeats AGENTS.md counts once); missing files are skipped. */

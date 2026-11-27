@@ -189,6 +189,29 @@ test("a stale revision is refused and changes nothing", async () => {
   expect((await one(x)).body).toBe("first");
 });
 
+test("the card limit counts new memories only: replacements never count, archived new ones still do", async () => {
+  const x = await setup();
+  const own = await x.remember({ title: "Lesson 0" });
+  // Correcting its own memory twice spends nothing.
+  const fixed = await x.remember({ title: "Lesson 0, corrected", supersedes: own.memoryId });
+  await x.remember({ title: "Lesson 0, corrected again", supersedes: fixed.memoryId });
+  for (let i = 1; i < 5; i++) await x.remember({ title: `Lesson ${i}` });
+  // One of the five new ones was dismissed by the user: it still counts.
+  const dismissed = (await x.entries()).find((e) => e.title === "Lesson 1")!;
+  await x.memory.store.update((state) => {
+    const e = state.entries.find((n) => n.id === dismissed.id)!;
+    e.state = "archived";
+    e.stateReason = "dismissed";
+    return { value: undefined, changed: true };
+  });
+  await expect(x.remember({ title: "Sixth" })).rejects.toMatchObject({ code: "MEMORY_LIMIT" });
+  // A full card can still correct its own memory and another card's.
+  const other = await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "decision", text: "Summaries every turn" });
+  await x.remember({ title: "Lesson 2, corrected", supersedes: (await x.entries()).find((e) => e.title === "Lesson 2")!.id });
+  await x.remember({ title: "Summaries every completed turn", supersedes: other.id });
+  await expect(x.remember({ title: "Seventh" })).rejects.toMatchObject({ code: "MEMORY_LIMIT" });
+});
+
 test("a replacement archives the old entry at once, in the same write", async () => {
   const x = await setup();
   const old = await x.guardrails.create({ projectId: "p", kind: "note", noteKind: "decision", text: "Summaries every turn" });

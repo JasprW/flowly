@@ -193,6 +193,8 @@ agent 提候选前、复盘提炼时、人审阅时，都用同一组规则，�
 
 ### 3.3 上限
 
+> 已被 GUARDRAILS-SPEC §3.4 取代（记忆写入即生效，没有候选）：每项目 active 备忘 100 条、满了挤掉最久没用的；每卡最多 5 条新增，带 `supersedes` 的修改不计数。下表只记录原设计。
+
 这些上限是给人审阅和注入预算定的，不是文件存不下：200 条 active 记忆，一个人还能逐条看一遍并维护，2000 条就做不到了。文件本身的容量见 §3.4。
 
 
@@ -308,7 +310,7 @@ agent 提候选前、复盘提炼时、人审阅时，都用同一组规则，�
 - 错误：
   - `MEMORY_DISABLED`：项目关闭了记忆（§9）。
   - `MEMORY_DUPLICATE`：本项目已有同标题的 candidate 或 active 条目（去首尾空白、忽略大小写），消息里带已有 ID，并提示可以用 `supersedes` 取代它。
-  - `MEMORY_LIMIT`：§3.3。
+  - `MEMORY_LIMIT`：本卡已新增 5 条（GUARDRAILS-SPEC §3.4；带 `supersedes` 的修改不计数，也不会被这条拒绝）。
   - `MEMORY_SECRET`：标题或正文命中密钥规则。复用 Workflow insights 的脱敏规则（`shared/workflow-insights.ts`），命中就拒绝，不做替换后保存。
   - `INVALID_INPUT`：`supersedes` 不是本项目的 active 条目。
 - 输出：`toolResultSchema`，多一个 `memoryId`。
