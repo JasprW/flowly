@@ -1355,7 +1355,14 @@ export class AutoReviewService {
     const changedNow = new Set<string>();
     if (incremental) {
       const parts = linked.length
-        ? await Promise.all(linked.map((r) => (previous!.fingerprint.repos?.[r.name] ? pathsChangedSince(r.directory, previous!.fingerprint.repos[r.name]!, this.git, `${r.name}/`) : new Set<string>())))
+        ? await Promise.all(
+            linked.map((r) =>
+              previous!.fingerprint.repos?.[r.name]
+                ? pathsChangedSince(r.directory, previous!.fingerprint.repos[r.name]!, this.git, `${r.name}/`)
+                : // Linked after the previous review: its whole change is this round's, from the uncut path list.
+                  new Set([...diffFiles].filter((p) => p.startsWith(`${r.name}/`))),
+            ),
+          )
         : [await pathsChangedSince(where.directory, previous!.fingerprint.sha!, this.git)];
       // The shown diff too, in case git could not list them.
       const candidates = [...parts.flatMap((x) => [...x]), ...diffPaths(input.diff)];

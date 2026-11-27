@@ -1972,6 +1972,45 @@ test("linked root review: shape from both repositories, commands per repository,
   expect(x.sent.at(-1)!.text).toContain("Admin/src/app.ts:1");
 }, 20_000);
 
+test("linked root rework: a repository linked after the previous review counts in full as this round's change, even past its diff share (§3.6)", async () => {
+  const { root, base, git } = await linkedRoot();
+  await writeFile(join(base, "repos/smith/src/app.ts"), "export const a = 2;\n");
+  let round = 0;
+  const seen: LlmReviewInput[] = [];
+  const x = await setup({
+    directory: root,
+    run: async () => ({ exitCode: 0, timedOut: false, ms: 1, output: "" }),
+    git: defaultGit,
+    entries: [],
+    maxRounds: 3,
+    exists: async (path) => existsSync(path),
+    llm: async (input) => {
+      seen.push(input);
+      round++;
+      if (round === 1) return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "major", detail: "Still returns 2 in SMITH.", file: "SMITH/src/app.ts", line: 1 }] };
+      return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "major", detail: "The new extra module never exports its handler.", file: "Extra/src/z.ts", line: 1 }] };
+    },
+  });
+  expect((await x.deliver("development")).tasks[0]!.review).toMatchObject({ state: "rework", round: 1 });
+  // A third repository is linked between the rounds; its first file is large enough to push src/z.ts out of its share.
+  const extra = join(base, "repos/extra");
+  await mkdir(join(extra, "src"), { recursive: true });
+  await git(extra, "init", "-q", "-b", "main");
+  await writeFile(join(extra, "a-big.ts"), "x\n");
+  await git(extra, "add", ".");
+  await git(extra, "commit", "-q", "-m", "init");
+  await writeFile(join(extra, "a-big.ts"), `${"const filler = 1;\n".repeat(3000)}`);
+  await writeFile(join(extra, "src/z.ts"), "export const handler = 0;\n");
+  await symlink(extra, join(root, "Extra"), "dir");
+  await x.turnStarted();
+  const review = (await x.deliver()).tasks[0]!.review!;
+  expect(seen[1]!.diff).toContain("[Extra: diff truncated]");
+  expect(seen[1]!.diff).not.toContain("Extra/src/z.ts");
+  expect(seen[1]!.changedThisRound).toContain("Extra/src/z.ts");
+  expect(review).toMatchObject({ state: "rework", round: 2 });
+  expect(review.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", severity: "major", file: "Extra/src/z.ts" });
+}, 20_000);
+
 test("linked root review: a command that fails in one repository fails, with that repository's output", async () => {
   const { root, base } = await linkedRoot();
   await writeFile(join(base, "repos/admin/src/app.ts"), "export const a = 2;\n");
