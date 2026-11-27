@@ -104,6 +104,10 @@ export function roundAwaitsTurnEnd(events: readonly BoardEvent[], taskId: string
 
 /** Reviews of one card that judged something before automatic rework stops (§3.3). */
 export const reviewCapPerCard = 10;
+/** The card reached the per-card cap (§3.3): an agent's delivery starts no automatic review; a person's Rerun still does. */
+export const reviewCapReached = (task: Pick<Task, "reviewCount">) => (task.reviewCount ?? 0) >= reviewCapPerCard;
+/** What the delivering agent is told when the cap kept its delivery from being reviewed (§3.3). */
+export const reviewCapNotice = `This card reached ${reviewCapPerCard} reviews, so no automatic review runs; a person decides the next step.`;
 /** The review counts toward the card's cap (§3.3): it judged something. Cancelled and unavailable do not. */
 export const countsTowardCap = (state: Review["state"]) => state === "passed" || state === "rework" || state === "failed" || state === "needs_user";
 

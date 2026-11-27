@@ -25,7 +25,7 @@ import { projectScripts } from "./workflow-insights";
 import { mergeWorkpad, plansOf, workpadEnabled, workpadNote, workpadOf, workpadUpdatedAction } from "../shared/workpad";
 import { deliveryReminders, outputsReminder, type DeliveryCall } from "./reminders";
 import { DeliveryGate } from "./delivery-gate";
-import { autoReviewOf, autoReviewRuns, findingText, reviewContext } from "../shared/auto-review";
+import { autoReviewOf, autoReviewRuns, findingText, reviewCapNotice, reviewCapReached, reviewContext } from "../shared/auto-review";
 import { prWorktree, resolveWorktree } from "./review-worktree";
 import type { DeliveredReview } from "./auto-review";
 import { setupContext, setupIncompleteMessage, setupMissing, setupReminder, type SetupItem } from "../shared/card-setup";
@@ -943,7 +943,9 @@ export class AgentService {
               ...(worktree ? { worktree } : {}),
             }));
       // An agent delivery starts the project's automatic review once this write commits (AUTO-REVIEW-SPEC §3.1).
-      if (next === "in_review" && next !== previous && autoReviewRuns(project) && this.onDelivered) {
+      // Past the per-card cap no automatic review starts; the agent is told so (§3.3).
+      if (next === "in_review" && next !== previous && autoReviewRuns(project) && this.onDelivered && reviewCapReached(task)) notice = [notice, reviewCapNotice].filter(Boolean).join("\n");
+      else if (next === "in_review" && next !== previous && autoReviewRuns(project) && this.onDelivered) {
         review = { taskId: task.id, projectId: project.id, eventId: event.id, agentId: identity.agentId, from: previous, ...(worktree ? { worktree } : {}) };
         // From now until that review starts, the card shows it is waiting, not the previous result (§3.1).
         task.reviewWaiting = { eventId: event.id, agentId: identity.agentId, from: previous, since: event.at, ...(worktree ? { worktree } : {}) };

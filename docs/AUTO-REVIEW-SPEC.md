@@ -104,7 +104,7 @@ stateDiagram-v2
 
 - `round` 从 1 开始，每次 Rework 后再交付 +1；已返工次数 = `round - 1`。`maxRounds = 2` 表示最多自动返工 2 次、最多评审 3 次；`maxRounds = 0` 表示第一次不通过就进 Blocked。
 - 重置为 1（2026-11-26 起只认人）：上一次评审不是 Rework；上一次评审结束后人改过卡片状态；人按 Rerun；上一次评审结束后，这张卡的 session 里有**人发消息开始的回合**（返工消息开始的那一回合除外）。回合是不是人发起的，看它 `agent.turn_ended` 事件的 `byUser`：Paseo 后台任务唤醒的回合（以 `<task-notification`、`<system-reminder` 等注入文本开始）为 false，不算；读不到 timeline 的回合（`byUser` 缺失）按人算。轮次取决于一个还没记下结束的回合（返工回合以外、上一次评审之后开始的回合，通常就是交付所在的回合）时，评审在开始前等它的 `agent.turn_ended` 写入，最多 15 秒；等不到时按已记下的事件判断（没结束的回合不算）。交付就在返工回合里时不等。
-- **每卡总上限**：一张卡评审过的次数（通过、Rework、Failed、Needs you；不含 Cancelled 与 Unavailable，返工消息没能发出而记为 Unavailable 的那次也退回不计；Rerun 也算）记在 `task.reviewCount`，卡进 Done 或 Cancelled 时清零。达到 10 次后，不通过的评审不再返工，按 R2 处理：移到 Blocked（Blocked 泳道关闭时留在 In review），note “Auto review stopped after 10 reviews of this card”，评审 `reason` “This card reached 10 reviews, so no more automatic rework.”。之后的交付和 Rerun 照常评审，通过照常通过；只是不再自动返工，由人决定下一步。
+- **每卡总上限**：一张卡评审过的次数（通过、Rework、Failed、Needs you；不含 Cancelled 与 Unavailable，返工消息没能发出而记为 Unavailable 的那次也退回不计；Rerun 也算）记在 `task.reviewCount`，卡进 Done 或 Cancelled 时清零。达到 10 次后，不通过的评审不再返工，按 R2 处理：移到 Blocked（Blocked 泳道关闭时留在 In review），note “Auto review stopped after 10 reviews of this card”，评审 `reason` “This card reached 10 reviews, so no more automatic rework.”。之后 agent 的交付不再启动自动评审：不跑命令，也不建评审会话。卡片留在 In review，交付结果的 `notice` 写 “This card reached 10 reviews, so no automatic review runs; a person decides the next step.”。人点的 Rerun 照常评审，通过照常通过，不通过也不再返工。下一步由人决定。
 
 ### 3.4 交付指定的 worktree（2026-11-13）
 
@@ -171,13 +171,13 @@ stateDiagram-v2
 
 - 缺 `severity` 的 `fail` 按 `major`（与以前一样会退回）。
 - **决定性**的项 = 参与判定（`gating`）且 `severity` 不是 `minor`。只有决定性的 `failed` 让评审不通过、发返工；`minor` 的 `failed` 照样记在评审记录里（抽屉显示 “Minor”，`get_task.review` 带 `severity`），不进返工消息，不计 Guardrails 的抓到、误判（§6.6 按 `na` 计）。
-- 返工轮（round ≥ 2，读增量 diff 时）：评审只复查上一轮没通过的项，并只找本轮改动引入的**回归**；上一轮没通过、这一轮仍以同样原因不通过的项保持原来的 severity；与本轮改动无关的新问题只能记 `minor`。daemon 确定性地兜底：上一轮通过（`passed` / `na`）的项这一轮判 `fail` 时，引用的 `file` 必须在本轮改动过的路径里，否则降为 `minor`（`reason` “Not caused by this round's changes.”）。本轮改动过的路径 = 从上一次评审记下的 HEAD sha 到现在 git 列出的全部路径（`git diff <sha> --name-only -z`）加未跟踪文件，linked root 按仓库各算一次并带仓库前缀；它不受评审 diff 64 KiB 截断的影响。git 失败时只看评审 diff 里出现的路径。
+- 返工轮（round ≥ 2，读增量 diff 时）：评审只复查上一轮没通过的项，并只找本轮改动引入的**回归**；上一轮没通过、这一轮仍以同样原因不通过的项保持原来的 severity；与本轮改动无关的新问题只能记 `minor`。daemon 确定性地兜底：上一轮通过（`passed` / `na`）的项这一轮判 `fail` 时，引用的 `file` 必须在本轮改动过的路径里，否则降为 `minor`（`reason` “Not caused by this round's changes.”）。本轮改动过的路径：先取候选路径，即从上一次评审记下的 HEAD sha 到现在 git 列出的全部路径（`git diff <sha> --name-only -z`），加上未跟踪文件和评审 diff 里出现的路径。linked root 按仓库各算一次，并带仓库前缀。候选不受评审 diff 64 KiB 截断的影响。候选中只有内容和上一次评审开始时的快照不同的路径才算本轮改动；快照里没有的路径当时还是上一个提交的内容，所以也算；目录（子模块）读不到提交，总是算。快照是每个路径的内容哈希，与 `fingerprint.content` 同时算。这样，上一轮交付时已有、本轮没动的未提交文件不算本轮改动。快照只存在内存里（每卡只留最近一次评审的），插件重启后没有快照，候选全部算本轮改动。
 
 **needs_user**：评审新增结论 `needs_user`（GUARDRAILS-SPEC §6.3），表示这一项 agent 做不到：要用户决定、要设备或账号、要别的团队、事情已经发生无法重做。`detail` 写人要做什么；没有 `detail` 的 `needs_user` 记为 `na`（`reason: "no detail"`）。不需要 `file` / `quote` 证据。总判定见 §4.5；不通过时返工消息另列这些项，告诉 agent 不要绕过、在交付说明里提一句（GUARDRAILS-SPEC §6.5）。
 
 **卡片项降级**：卡片专属项（GUARDRAILS-SPEC §3.3）连续 3 次决定性地不通过、而且 3 次的意见两两不同时，从第 3 次起降为不参与判定（`gating: false`，抽屉标 “observing”，`reason` “Failed 3 times in a row with a different finding each time, so it no longer decides the review.”），之后在这张卡上照常判定、显示，但不再退回。两次意见“相同”：引用同一文件同一行，或者词集合（英文按词、中日韩按字，小写）的 Jaccard ≥ 0.5。通过、`na`、`minor` 让连续计数归零；`needs_user`、`disputed`、`skipped`、`unavailable` 不改变计数。
 
-**内容指纹**：`fingerprint.content` 是本次改动内容的摘要：按 GUARDRAILS-SPEC §6.2 取本次改动涉及的路径（worktree 卡为分支以来的改动加未跟踪文件，目录卡为未提交改动、最近 5 个提交和未跟踪文件；linked root 带仓库前缀），卡片自己的 worktree 里再并上与评审开始时 HEAD 不同的路径（`git diff <开始时 sha> --name-only` 加未跟踪文件），所以评审中改了或新加了集合外的文件，路径集合就变了，摘要随之不同；共享目录不并（别的会话的改动会让每次评审都作废，D6），评审中新加的文件不计。对每个路径的工作区内容（不存在记为删除；符号链接只记其指向的路径，不跟随；文件逐个流式读取）算 SHA-1，再对排序后的“路径 + 内容哈希”算一次，取 16 位。提交本身不改内容，所以 agent 提交、推送不会让结果作废；共享目录里别的会话改了本卡改动之外的文件也不会。共享目录里，开始时就在 diff 里的别人的文件被改，仍会让评审作废（无法区分归属，D6）。读不到时（git 失败）回退到比较 HEAD sha 与 dirty。
+**内容指纹**：`fingerprint.content` 是本次改动内容的摘要：按 GUARDRAILS-SPEC §6.2 取本次改动涉及的路径（worktree 卡为分支以来的改动加未跟踪文件，目录卡为未提交改动、最近 5 个提交和未跟踪文件；linked root 带仓库前缀），卡片自己的 worktree 里再并上与评审开始时 HEAD 不同的路径（`git diff <开始时 sha> --name-only` 加未跟踪文件），所以评审中改了或新加了集合外的文件，路径集合就变了，摘要随之不同；共享目录不并（别的会话的改动会让每次评审都作废，D6），评审中新加的文件不计。对每个路径的工作区内容（不存在记为删除；符号链接只记其指向的路径，不跟随；可执行位也算在内；目录即子模块，记为固定值，不读其提交；文件逐个流式读取）算 SHA-1，再对排序后的“路径 + 内容哈希”算一次，取 16 位。提交本身不改内容，所以 agent 提交、推送不会让结果作废；共享目录里别的会话改了本卡改动之外的文件也不会。共享目录里，开始时就在 diff 里的别人的文件被改，仍会让评审作废（无法区分归属，D6）。读不到时（git 失败）回退到比较 HEAD sha 与 dirty。
 
 ## 4. 检查
 

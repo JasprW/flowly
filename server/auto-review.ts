@@ -46,6 +46,7 @@ import {
   notThisRoundReason,
   outputTail,
   reviewCapPerCard,
+  reviewCapReached,
   reviewFailedRule,
   reviewFinishedAction,
   reviewStartedAction,
@@ -362,19 +363,24 @@ export async function linkedShape(repos: readonly LinkedRepo[], baseRef?: string
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
 
+/** A directory's digest (a Git submodule): its commit is not read, so the regression backstop always counts it (§3.6). */
+const directoryDigest = "dir";
 /**
- * One path's content as a digest: a file's bytes, read as a stream; a symbolic link's target path, never followed;
- * "-" when it is gone (deleted) or cannot be read.
+ * One path's content as a digest: a file's bytes, read as a stream, and whether it is executable; a symbolic link's
+ * target path, never followed; "dir" for a directory (a submodule); "-" when it is gone (deleted) or cannot be read.
  */
 async function fileDigest(path: string): Promise<string> {
   const info = await lstat(path).catch(() => null);
   if (!info) return "-";
+  if (info.isDirectory()) return directoryDigest;
   if (info.isSymbolicLink()) {
     const target = await readlink(path).catch(() => null);
     // The marker stays outside the hash, so a file whose text equals the target never matches a link.
     return target === null ? "-" : `link:${createHash("sha1").update(target).digest("hex")}`;
   }
   const hash = createHash("sha1");
+  // Git tracks the executable bit: a mode change alone is a change. Other files keep their earlier digest.
+  if (info.mode & 0o111) hash.update("exec:");
   try {
     for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
   } catch {
@@ -388,11 +394,29 @@ async function fileDigest(path: string): Promise<string> {
  * over the sorted "path digest" lines. A commit or push leaves it as it is; editing one of these files changes it.
  */
 export async function contentDigest(directory: string, paths: Iterable<string>): Promise<string> {
+  return (await contentSnapshot(directory, paths)).digest;
+}
+/** The content digest with each path's own digest, kept for the next rework round's regression backstop (§3.6). */
+export async function contentSnapshot(directory: string, paths: Iterable<string>): Promise<{ digest: string; files: Map<string, string> }> {
   const sorted = [...new Set(paths)].sort();
   // One file at a time, so memory stays at one read chunk however large the delivery's files are.
-  const lines: string[] = [];
-  for (const p of sorted) lines.push(`${p} ${await fileDigest(join(directory, p))}`);
-  return createHash("sha1").update(lines.join("\n")).digest("hex").slice(0, 16);
+  const files = new Map<string, string>();
+  for (const p of sorted) files.set(p, await fileDigest(join(directory, p)));
+  const digest = createHash("sha1").update(sorted.map((p) => `${p} ${files.get(p)}`).join("\n")).digest("hex").slice(0, 16);
+  return { digest, files };
+}
+/**
+ * The paths whose content differs from `before` (path → digest at the previous review's start, §3.6): of `candidates`
+ * and of `before`'s own paths. A path `before` does not hold had the previous commit's content then, so it differs; a
+ * directory (a submodule, whose commit is not read) always counts.
+ */
+export async function changedFrom(directory: string, before: ReadonlyMap<string, string>, candidates: Iterable<string>): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const p of new Set([...candidates, ...before.keys()])) {
+    const now = await fileDigest(join(directory, p));
+    if (now === directoryDigest || now !== before.get(p)) out.add(p);
+  }
+  return out;
 }
 
 /** A file the model cited, as a repository-relative path; null when it points outside the workspace. */
@@ -748,6 +772,8 @@ export class AutoReviewService {
   private active = new Map<string, { startedAt: string; abort: AbortController }>();
   /** Results held while the card was out of In review (§3.2), by card. */
   private held = new Map<string, HeldReview>();
+  /** Each card's latest review start: its per-file content digests (§3.6), in memory only. */
+  private snapshots = new Map<string, { startedAt: string; files: ReadonlyMap<string, string> }>();
   private readonly run: RunCheck;
   private readonly git: Git;
   private readonly clock: () => number;
@@ -959,6 +985,8 @@ export class AutoReviewService {
     const task = board.tasks.find((t) => t.id === delivery.taskId);
     const project = task && board.projects.find((p) => p.id === task.projectId);
     if (!task || !project || task.archivedAt || project.archivedAt || task.status !== "in_review" || !autoReviewRuns(project)) return;
+    // Past the per-card cap only a person's Rerun reviews (§3.3).
+    if (!manual && reviewCapReached(task)) return;
     const workspace = await this.deps.workspace(task, paseo).catch(() => null);
     let where = workspace;
     let baseRef = task.baseRef;
@@ -1014,8 +1042,10 @@ export class AutoReviewService {
         : [startSha ? await pathsChangedSince(where.directory, startSha, this.git) : new Set<string>()];
       return sets.flatMap((set) => [...set]);
     };
-    const digestNow = async () => (where && contentPaths ? await contentDigest(where.directory, [...contentPaths, ...(await changedAfter())]).catch(() => undefined) : undefined);
-    const content = await digestNow();
+    const snapshotNow = async () => (where && contentPaths ? await contentSnapshot(where.directory, [...contentPaths, ...(await changedAfter())]).catch(() => undefined) : undefined);
+    const digestNow = async () => (await snapshotNow())?.digest;
+    const snapshot = await snapshotNow();
+    const content = snapshot?.digest;
     const measure = async (): Promise<Measured> => {
       if (!where) return {};
       if (content !== undefined) return { content: await digestNow() };
@@ -1082,10 +1112,15 @@ export class AutoReviewService {
     if (!started) return;
     // A new review replaces a held one (§3.2).
     this.held.delete(delivery.taskId);
+    // The previous review's per-file snapshot (§3.6), when it is the one this round continues; this review's replaces it.
+    const kept = this.snapshots.get(delivery.taskId);
+    const previousFiles = kept && kept.startedAt === started.previous?.startedAt ? kept.files : undefined;
+    if (snapshot) this.snapshots.set(delivery.taskId, { startedAt, files: snapshot.files });
+    else this.snapshots.delete(delivery.taskId);
     const abort = new AbortController();
     this.active.set(delivery.taskId, { startedAt, abort });
     try {
-      await this.conduct(delivery, manual, paseo, lifecycleRecorded, { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal: abort.signal, head });
+      await this.conduct(delivery, manual, paseo, lifecycleRecorded, { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal: abort.signal, head, previousFiles });
     } finally {
       if (this.active.get(delivery.taskId)?.abort === abort) this.active.delete(delivery.taskId);
     }
@@ -1112,9 +1147,11 @@ export class AutoReviewService {
       signal: AbortSignal;
       /** HEAD when the review started: a failed command is rerun only at this commit (flaky, §6.3 step 1). */
       head: { sha?: string } | null;
+      /** Each path's digest at the previous review's start (§3.6); absent after a plugin restart. */
+      previousFiles?: ReadonlyMap<string, string>;
     },
   ) {
-    const { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal, head } = ctx;
+    const { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal, head, previousFiles } = ctx;
     const items = (await this.current(delivery.taskId, startedAt))?.items ?? [];
     const set = (id: string, patch: Partial<ReviewItem>) => this.updateItems(delivery.taskId, startedAt, [id], patch);
     if (!where) {
@@ -1162,7 +1199,7 @@ export class AutoReviewService {
           ...(run.timedOut ? { reason: `Timed out after ${timeout / 1000} s.` } : {}),
         });
       }
-      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual && started.previous?.worktree === delivery.worktree ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo, signal);
+      await this.judge(delivery, startedAt, baseRef === task.baseRef ? task : { ...task, baseRef }, started.round > 1 && !manual && started.previous?.worktree === delivery.worktree ? started.previous : undefined, guard, where, linked, measured?.paths ?? new Set(), paseo, signal, previousFiles);
       if (signal.aborted) return;
     }
     const after = await measure();
@@ -1233,6 +1270,7 @@ export class AutoReviewService {
     diffFiles: ReadonlySet<string>,
     paseo: PaseoApi,
     signal?: AbortSignal,
+    previousFiles?: ReadonlyMap<string, string>,
   ) {
     const now = await this.current(delivery.taskId, startedAt);
     if (!now) return;
@@ -1320,7 +1358,10 @@ export class AutoReviewService {
         ? await Promise.all(linked.map((r) => (previous!.fingerprint.repos?.[r.name] ? pathsChangedSince(r.directory, previous!.fingerprint.repos[r.name]!, this.git, `${r.name}/`) : new Set<string>())))
         : [await pathsChangedSince(where.directory, previous!.fingerprint.sha!, this.git)];
       // The shown diff too, in case git could not list them.
-      for (const p of [...parts.flatMap((x) => [...x]), ...diffPaths(input.diff)]) changedNow.add(p);
+      const candidates = [...parts.flatMap((x) => [...x]), ...diffPaths(input.diff)];
+      // A file that was already changed at the previous delivery and is unchanged since is not this round's (§3.6):
+      // compare with the previous review's per-file snapshot; without one (a plugin restart), every path counts.
+      for (const p of previousFiles ? await changedFrom(where.directory, previousFiles, candidates) : candidates) changedNow.add(p);
     }
     const cardItems = new Map((guard?.items || []).map((i) => [i.id, i]));
     // B1: a cited file outside the diff counts when it exists in the repository (a missing entry, say).
