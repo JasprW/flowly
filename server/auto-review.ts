@@ -113,6 +113,8 @@ export type LlmReviewInput = {
   incremental?: boolean;
   /** Rework round with the previous review's snapshot (§3.6): the paths this round actually changed, at most 200. */
   changedThisRound?: string[];
+  /** How many paths this round changed in all; more than `changedThisRound` holds when the list was cut. */
+  changedThisRoundTotal?: number;
   /** The git worktree the delivery named (§3.4): where the delivered code is, outside the session's working directory. */
   worktree?: string;
   /** The delivering session, as the review session's parent. */
@@ -1361,7 +1363,10 @@ export class AutoReviewService {
       // compare with the previous review's per-file snapshot; without one, every path counts.
       for (const p of previousFiles ? await changedFrom(where.directory, previousFiles, candidates) : candidates) changedNow.add(p);
       // Only a snapshot tells the reviewer more than the diff already does.
-      if (previousFiles) input.changedThisRound = [...changedNow].sort().slice(0, 200);
+      if (previousFiles) {
+        input.changedThisRound = [...changedNow].sort().slice(0, 200);
+        input.changedThisRoundTotal = changedNow.size;
+      }
     }
     const started = this.clock();
     let result: Awaited<ReturnType<LlmReview>>;
