@@ -49,7 +49,7 @@
 
 - `counts.usedBy` 存 `{ taskId, at }[]`（一小时节流和“被几张卡用过”都要时间）；另有 `lastMissedAt`、`misfireAt[]`（最近 10 条）、`unavailableRun`，§6.7 的三条规则靠它们计算。
 - 备忘保留旧的 `source { taskId, agentId, eventId }`，`flowly_remember` 据此幂等；复盘的依据放在 `sources[0].quote`。
-- `flowly_remember` 每卡最多 5 条（`MEMORY_LIMIT`），因为备忘现在写入即生效。
+- `flowly_remember` 每卡最多 5 条新增（`MEMORY_LIMIT`），因为备忘现在写入即生效。计数规则见 §3.4（2026-11-27 改：修改不计数）。
 - pinned 备忘不被挤出、不因 90 天没用归档。
 - 大小未知视为在范围内（同类型未知）；升级时范围取已知类型与大小之并，都未知为 `all`。
 - 迁移的 LLM 规则：`text` 取 prompt 前 200 字，更长的全文进 `body`；`off` 的命令规则也迁为 paused。
@@ -191,8 +191,16 @@ CardItem {
 | 每项目 `command` active + observing | 10 | 新识别到的不加入，Insights 记一行 |
 | 每项目 `note` active | 100 | 挤掉最久没用过的一条（归档） |
 | 每项目 pinned 备忘 | 5 | 拒绝 |
+| 每卡 agent 新增的备忘 | 5 | `MEMORY_LIMIT`，见下 |
 | 每卡 `open` CardItem | 5 | 关闭最早的 |
 | 每项目 archived | 300 | 删除最早的，写 `removed/` 备份 |
+
+每卡备忘上限（用户 2026-11-27 决定，卡片 `82e2cd0a`）：
+
+- 只数这张卡由 agent 或复盘写下的、不带 `supersedes` 的备忘，不管它后来是否被归档、挤出或被用户忽略。数的是这张卡往项目里加过多少新内容；被否掉的也算，免得换个说法再提。
+- 按库里现存的条目数：被人永久删除、或因归档上限（上表 300 条）被清理出库的条目不再计入。已知边界，用户 2026-11-27 接受、不另存每卡计数：一张满额的卡可以靠反复修改产生归档，把自己较早、已归档的新增挤出库，再多写一条。要做到得改动约 300 次（2026-11-27 最多的项目只有 24 条归档），只有 agent 陷入循环才会发生，后果只是多一条记忆。
+- 带 `supersedes` 的修改不计数，也不另设上限，额度满了照样接受：修改是一条换一条，active 数量不变、不会挤掉别人的备忘，而且是 agent 纠正备忘的唯一途径。反复修改只会多出归档版本，归档区有自己的上限（上表）。
+- 之前的实现（§0.2）数的是本卡写过的全部条目，修改和被它取代的旧版本都占额度；SQE 项目两张卡因此只剩 3 条 active 就触顶。
 
 ### 3.5 删除、归档与移除
 
@@ -255,7 +263,7 @@ CardItem {
 
 ### 4.4 备忘
 
-- `flowly_remember`：输入不变（PROJECT-MEMORY-SPEC §4.1），写入即 active；`supersedes` 立即归档旧条目（`stateReason: "superseded"`）。校验不变：`MEMORY_DUPLICATE`、`MEMORY_LIMIT`（按 §3.4）、`MEMORY_SECRET`、`MEMORY_DISABLED`。回执与幂等不变。
+- `flowly_remember`：输入不变（PROJECT-MEMORY-SPEC §4.1），写入即 active；`supersedes` 立即归档旧条目（`stateReason: "superseded"`）。校验不变：`MEMORY_DUPLICATE`、`MEMORY_LIMIT`（按 §3.4，修改不计数）、`MEMORY_SECRET`、`MEMORY_DISABLED`。回执与幂等不变。
 - Done 复盘：触发、跳过、运行位置、输入、通用性检验、0–1 条，全部沿用 PROJECT-MEMORY-SPEC §4.2；结果直接 active，`by: "retro"`。
 - 人手写：Guardrails 页 Add。
 

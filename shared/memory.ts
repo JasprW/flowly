@@ -18,12 +18,8 @@ export const memoryLimits = {
   keywords: 12,
   keyword: 40,
   evidence: 300,
-  activePerProject: 200,
-  /** The Memory page warns from here (§6.5). */
-  warnAt: 180,
-  candidatesPerProject: 50,
-  openPerTask: 5,
-  closedPerProject: 200,
+  /** New memories (without supersedes) one card may add (GUARDRAILS-SPEC §3.4); replacements never count. */
+  newPerTask: 5,
   pinnedPerProject: 5,
   clueText: 600,
   clueMin: 15,

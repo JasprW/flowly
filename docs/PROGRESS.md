@@ -6,6 +6,14 @@
 
 # Implementation progress
 
+## Memory card limit counts new memories only (card "单个任务记忆条数上限优化") — 2026-11-27
+
+- Problem: `MEMORY_LIMIT` counted every note a card had written, so a `supersedes` correction spent a slot and the note it replaced kept one too. Two SQE cards hit the limit with 3 active notes; one Flowly card spent 4 slots on a single note it corrected 3 times.
+- User decision: the 5-per-card limit counts only new notes (no `supersedes`), archived, displaced or dismissed ones included; corrections never count and get no separate cap. Spec: [GUARDRAILS-SPEC](GUARDRAILS-SPEC.md) §3.4, §0.2, §4.4; [PROJECT-MEMORY-SPEC](PROJECT-MEMORY-SPEC.md) §3.3 marked as superseded, §4.1 `MEMORY_LIMIT`.
+- Code: `checkProposal` (`server/memory.ts`), `memoryLimits.newPerTask` (`shared/memory.ts`, was `openPerTask`; the unused `activePerProject`, `warnAt`, `candidatesPerProject`, `closedPerProject` removed, the live limits are in `guardrailLimits`), `flowly_remember` description and the `MEMORY_LIMIT` message.
+- Auto review rounds 1–2 asked for a per-card counter that survives archive pruning (a full card could correct its notes ~300 times to push an archived new one out, then add a sixth). User decision: not added; the boundary is recorded in GUARDRAILS-SPEC §3.4 and the finding disputed.
+- Test: `server/memory.test.ts` "the card limit counts new memories only". Onboarding and telemetry: no change (no new UI or switch).
+
 ## Auto review P0 fixes after the evaluation (card "Auto review P0：争议只针对一条意见、评审读取问答、共享目录里命令不参与判定") — 2026-11-26
 
 - Source: evaluation report `docs/verification/auto-review-eval-2026-11-26/REPORT.md` §4.1–4.3, §5 P0 (untracked in the main checkout, not in this change).
