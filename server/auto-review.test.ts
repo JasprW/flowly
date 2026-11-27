@@ -2312,7 +2312,8 @@ test("changedFrom: a path counts when its content differs from the snapshot; one
   await chmod(join(dir, "a"), 0o755);
   await mkdir(join(dir, "sub"));
   const { files: withSub } = await contentSnapshot(dir, ["sub"]);
-  expect([...(await changedFrom(dir, now, ["a", "b", "c"]))]).toEqual(["a"]);
+  // Windows has no executable bit.
+  if (process.platform !== "win32") expect([...(await changedFrom(dir, now, ["a", "b", "c"]))]).toEqual(["a"]);
   expect([...(await changedFrom(dir, withSub, ["sub"]))]).toEqual(["sub"]);
   await rm(dir, { recursive: true, force: true });
 });
