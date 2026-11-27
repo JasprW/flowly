@@ -1972,6 +1972,45 @@ test("linked root review: shape from both repositories, commands per repository,
   expect(x.sent.at(-1)!.text).toContain("Admin/src/app.ts:1");
 }, 20_000);
 
+test("linked root rework: a repository linked after the previous review counts in full as this round's change, even past its diff share (§3.6)", async () => {
+  const { root, base, git } = await linkedRoot();
+  await writeFile(join(base, "repos/smith/src/app.ts"), "export const a = 2;\n");
+  let round = 0;
+  const seen: LlmReviewInput[] = [];
+  const x = await setup({
+    directory: root,
+    run: async () => ({ exitCode: 0, timedOut: false, ms: 1, output: "" }),
+    git: defaultGit,
+    entries: [],
+    maxRounds: 3,
+    exists: async (path) => existsSync(path),
+    llm: async (input) => {
+      seen.push(input);
+      round++;
+      if (round === 1) return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "major", detail: "Still returns 2 in SMITH.", file: "SMITH/src/app.ts", line: 1 }] };
+      return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "major", detail: "The new extra module never exports its handler.", file: "Extra/src/z.ts", line: 1 }] };
+    },
+  });
+  expect((await x.deliver("development")).tasks[0]!.review).toMatchObject({ state: "rework", round: 1 });
+  // A third repository is linked between the rounds; its first file is large enough to push src/z.ts out of its share.
+  const extra = join(base, "repos/extra");
+  await mkdir(join(extra, "src"), { recursive: true });
+  await git(extra, "init", "-q", "-b", "main");
+  await writeFile(join(extra, "a-big.ts"), "x\n");
+  await git(extra, "add", ".");
+  await git(extra, "commit", "-q", "-m", "init");
+  await writeFile(join(extra, "a-big.ts"), `${"const filler = 1;\n".repeat(3000)}`);
+  await writeFile(join(extra, "src/z.ts"), "export const handler = 0;\n");
+  await symlink(extra, join(root, "Extra"), "dir");
+  await x.turnStarted();
+  const review = (await x.deliver()).tasks[0]!.review!;
+  expect(seen[1]!.diff).toContain("[Extra: diff truncated]");
+  expect(seen[1]!.diff).not.toContain("Extra/src/z.ts");
+  expect(seen[1]!.changedThisRound).toContain("Extra/src/z.ts");
+  expect(review).toMatchObject({ state: "rework", round: 2 });
+  expect(review.items.find((i) => i.id === "goal")).toMatchObject({ state: "failed", severity: "major", file: "Extra/src/z.ts" });
+}, 20_000);
+
 test("linked root review: a command that fails in one repository fails, with that repository's output", async () => {
   const { root, base } = await linkedRoot();
   await writeFile(join(base, "repos/admin/src/app.ts"), "export const a = 2;\n");
@@ -2339,6 +2378,51 @@ test("rework round after a plugin restart still compares with the previous revie
   });
   expect(corrupt).toMatchObject({ state: "rework", round: 2 });
   expect(corrupt.items.find((i) => i.id === "g1")!.severity).toBeUndefined();
+});
+
+test("rework round after a restart: a check that failed before and now fails for something new in a file this round did not change is minor; the same file, no earlier file or a changed file still decide (§3.6)", async () => {
+  type V = { detail: string; file?: string; quote?: string };
+  const verdict = (v: V) => ({ id: "goal", verdict: "fail" as const, severity: "blocker" as const, ...v });
+  const scenario = async (first: V, second: V) => {
+    const seen: LlmReviewInput[] = [];
+    const llm: LlmReview = async (input) => {
+      seen.push(input);
+      return { model: "m", verdicts: [verdict(seen.length === 1 ? first : second)] };
+    };
+    const x = await setup({ entries: [], llm, maxRounds: 3, paths: ["src/a.ts", "src/b.ts"], diffText: () => "diff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/src/b.ts b/src/b.ts\n+y" });
+    await mkdir(join(x.a, "src"), { recursive: true });
+    await writeFile(join(x.a, "src/a.ts"), "uncommitted since round 1");
+    x.repo.changed = ["src/a.ts"];
+    expect((await x.deliver("development")).tasks[0]!.review).toMatchObject({ state: "rework", round: 1 });
+    x.restart();
+    await x.turnStarted();
+    await writeFile(join(x.a, "src/b.ts"), "this round");
+    x.repo.changed = ["src/a.ts", "src/b.ts"];
+    const review = (await x.deliver()).tasks[0]!.review!;
+    return { review, goal: review.items.find((i) => i.id === "goal")!, seen };
+  };
+  // Round 1 failed on src/b.ts; round 2 finds something else in src/a.ts, untouched since round 1: not this round's.
+  const old = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/b.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
+  expect(old.review).toMatchObject({ state: "passed", round: 2 });
+  expect(old.goal).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+  // The reviewer was told which files this round changed (from the snapshot read after the restart).
+  expect(old.seen[1]!.changedThisRound).toEqual(["src/b.ts"]);
+  expect(reviewPrompt(old.seen[1]!)).toContain("Files this round actually changed (other files in the diff were already changed at the previous delivery and are not this round's work): src/b.ts");
+  // A new problem in a file this round changed is a regression: it decides.
+  const changed = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/b.ts" });
+  expect(changed.review).toMatchObject({ state: "rework", round: 2 });
+  expect(changed.goal.severity).toBe("blocker");
+  // The same untouched file as last time may be the unfixed problem worded differently: it keeps its severity.
+  const same = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
+  expect(same.review).toMatchObject({ state: "rework", round: 2 });
+  expect(same.goal.severity).toBe("blocker");
+  // Last time's fail cited no file: no way to tell it apart, so it keeps its severity.
+  const unplaced = await scenario({ detail: "The Rerun button is missing from the drawer.", quote: "Card" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
+  expect(unplaced.review).toMatchObject({ state: "rework", round: 2 });
+  expect(unplaced.goal.severity).toBe("blocker");
+  // The same finding in another untouched file (largely the same words) keeps its severity too.
+  const reworded = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/b.ts" }, { detail: "The Rerun button is still missing from the drawer.", file: "src/a.ts" });
+  expect(reworded.review).toMatchObject({ state: "rework", round: 2 });
 });
 
 test("review snapshots: written atomically per card, unreadable or wrong-shaped files read as none, removed with the card and at start when the card is gone (§3.6)", async () => {

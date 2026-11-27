@@ -37,6 +37,7 @@ import {
   unquoteGitPath,
   failureSummary,
   demotionFinding,
+  sameFinding,
   goalPrompt,
   hasEvidence,
   isMinor,
@@ -110,6 +111,10 @@ export type LlmReviewInput = {
   diff: string;
   /** Round ≥ 2 of a rework: `diff` holds only what changed since the previous delivery (§6.3). */
   incremental?: boolean;
+  /** Rework round with the previous review's snapshot (§3.6): the paths this round actually changed, at most 200. */
+  changedThisRound?: string[];
+  /** How many paths this round changed in all; more than `changedThisRound` holds when the list was cut. */
+  changedThisRoundTotal?: number;
   /** The git worktree the delivery named (§3.4): where the delivered code is, outside the session's working directory. */
   worktree?: string;
   /** The delivering session, as the review session's parent. */
@@ -1346,6 +1351,30 @@ export class AutoReviewService {
     };
     const running = await deliveringBackgroundWork(paseo, delivery.agentId);
     if (running) input.backgroundWork = running;
+    // Rework round (§3.6): what this round changed, for the reviewer and the regression backstop.
+    const changedNow = new Set<string>();
+    if (incremental) {
+      const parts = linked.length
+        ? await Promise.all(
+            linked.map((r) =>
+              previous!.fingerprint.repos?.[r.name]
+                ? pathsChangedSince(r.directory, previous!.fingerprint.repos[r.name]!, this.git, `${r.name}/`)
+                : // Linked after the previous review: its whole change is this round's, from the uncut path list.
+                  new Set([...diffFiles].filter((p) => p.startsWith(`${r.name}/`))),
+            ),
+          )
+        : [await pathsChangedSince(where.directory, previous!.fingerprint.sha!, this.git)];
+      // The shown diff too, in case git could not list them.
+      const candidates = [...parts.flatMap((x) => [...x]), ...diffPaths(input.diff)];
+      // A file that was already changed at the previous delivery and is unchanged since is not this round's (§3.6):
+      // compare with the previous review's per-file snapshot; without one, every path counts.
+      for (const p of previousFiles ? await changedFrom(where.directory, previousFiles, candidates) : candidates) changedNow.add(p);
+      // Only a snapshot tells the reviewer more than the diff already does.
+      if (previousFiles) {
+        input.changedThisRound = [...changedNow].sort().slice(0, 200);
+        input.changedThisRoundTotal = changedNow.size;
+      }
+    }
     const started = this.clock();
     let result: Awaited<ReturnType<LlmReview>>;
     try {
@@ -1357,18 +1386,6 @@ export class AutoReviewService {
       return;
     }
     const ms = Math.max(0, Math.round(this.clock() - started));
-    // Rework round (§3.6): what this round changed, for the regression backstop.
-    const changedNow = new Set<string>();
-    if (incremental) {
-      const parts = linked.length
-        ? await Promise.all(linked.map((r) => (previous!.fingerprint.repos?.[r.name] ? pathsChangedSince(r.directory, previous!.fingerprint.repos[r.name]!, this.git, `${r.name}/`) : new Set<string>())))
-        : [await pathsChangedSince(where.directory, previous!.fingerprint.sha!, this.git)];
-      // The shown diff too, in case git could not list them.
-      const candidates = [...parts.flatMap((x) => [...x]), ...diffPaths(input.diff)];
-      // A file that was already changed at the previous delivery and is unchanged since is not this round's (§3.6):
-      // compare with the previous review's per-file snapshot; without one (a plugin restart), every path counts.
-      for (const p of previousFiles ? await changedFrom(where.directory, previousFiles, candidates) : candidates) changedNow.add(p);
-    }
     const cardItems = new Map((guard?.items || []).map((i) => [i.id, i]));
     // B1: a cited file outside the diff counts when it exists in the repository (a missing entry, say).
     const exists = this.deps.exists ?? fileExists;
@@ -1409,6 +1426,24 @@ export class AutoReviewService {
           const prior = incremental ? before.get(r.id) : undefined;
           // A rework round re-checks what failed and looks for regressions (§3.6): a fail of what passed before must cite a file this round changed.
           if (state === "failed" && severity !== "minor" && prior && itemPassed(prior) && !(v.file && changedNow.has(v.file))) {
+            severity = "minor";
+            why = notThisRoundReason;
+          }
+          // A check that failed before and now fails for something new, in a file this round did not change and that the
+          // earlier fail did not cite, is not this round's either (§3.6). Without an earlier file, the same file, or the
+          // same finding, it keeps its severity: an unfixed problem must not pass by being worded differently.
+          const finding = demotionFinding({ detail: v.detail, file: v.file, line: v.line });
+          if (
+            state === "failed" &&
+            severity !== "minor" &&
+            prior?.state === "failed" &&
+            !isMinor(prior) &&
+            prior.file &&
+            v.file &&
+            v.file !== prior.file &&
+            !changedNow.has(v.file) &&
+            !sameFinding(demotionFinding(prior), finding)
+          ) {
             severity = "minor";
             why = notThisRoundReason;
           }
