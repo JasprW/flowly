@@ -1470,5 +1470,9 @@ const catalog: Catalog = {
   "Images in descriptions": "説明の画像",
   "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "Web ではカードの説明欄に画像を貼り付けるかドロップできます。エージェントは説明と一緒に画像を見ます。スマートフォンでは表示できます。",
   "Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent.": "セッションのタイムラインで提案された次のステップをタップすると、スマートフォンでもメッセージ欄に入力できます。送信はされません。",
+  "Copy agent ID": "エージェント ID をコピー",
+  "Agent ID copied": "エージェント ID をコピーしました",
+  "Copy session ID": "セッション ID をコピー",
+  "Session ID copied": "セッション ID をコピーしました",
 };
 export default catalog;

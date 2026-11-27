@@ -58,6 +58,7 @@ import { currentWrapup } from "../shared/wrapup-state";
 import { useComposer } from "./composer";
 import { eventPoint, menuHandlers, useMenuOpener, type MenuEntry, type Point } from "./context-menu";
 import { openNativeSession } from "./session-state";
+import { copyIdEntries } from "./session-copy";
 import { cardQuestions } from "../shared/progress";
 import { PendingRequests } from "./session-question";
 import { pendingRequests, type PendingRequest, type PermissionReply } from "../shared/permission-question";
@@ -554,6 +555,7 @@ function TaskDrawerView({
               void perform(() => configure({ taskId: task.id, agentId: a.id, stop: true }), t("Session stopped")),
           }]
         : []),
+      ...copyIdEntries(a, toast),
       ...(!a.archivedAt
         ? [
             { kind: "separator" as const, id: "s1" },
