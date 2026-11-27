@@ -2341,6 +2341,51 @@ test("rework round after a plugin restart still compares with the previous revie
   expect(corrupt.items.find((i) => i.id === "g1")!.severity).toBeUndefined();
 });
 
+test("rework round after a restart: a check that failed before and now fails for something new in a file this round did not change is minor; the same file, no earlier file or a changed file still decide (§3.6)", async () => {
+  type V = { detail: string; file?: string; quote?: string };
+  const verdict = (v: V) => ({ id: "goal", verdict: "fail" as const, severity: "blocker" as const, ...v });
+  const scenario = async (first: V, second: V) => {
+    const seen: LlmReviewInput[] = [];
+    const llm: LlmReview = async (input) => {
+      seen.push(input);
+      return { model: "m", verdicts: [verdict(seen.length === 1 ? first : second)] };
+    };
+    const x = await setup({ entries: [], llm, maxRounds: 3, paths: ["src/a.ts", "src/b.ts"], diffText: () => "diff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/src/b.ts b/src/b.ts\n+y" });
+    await mkdir(join(x.a, "src"), { recursive: true });
+    await writeFile(join(x.a, "src/a.ts"), "uncommitted since round 1");
+    x.repo.changed = ["src/a.ts"];
+    expect((await x.deliver("development")).tasks[0]!.review).toMatchObject({ state: "rework", round: 1 });
+    x.restart();
+    await x.turnStarted();
+    await writeFile(join(x.a, "src/b.ts"), "this round");
+    x.repo.changed = ["src/a.ts", "src/b.ts"];
+    const review = (await x.deliver()).tasks[0]!.review!;
+    return { review, goal: review.items.find((i) => i.id === "goal")!, seen };
+  };
+  // Round 1 failed on src/b.ts; round 2 finds something else in src/a.ts, untouched since round 1: not this round's.
+  const old = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/b.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
+  expect(old.review).toMatchObject({ state: "passed", round: 2 });
+  expect(old.goal).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+  // The reviewer was told which files this round changed (from the snapshot read after the restart).
+  expect(old.seen[1]!.changedThisRound).toEqual(["src/b.ts"]);
+  expect(reviewPrompt(old.seen[1]!)).toContain("Files this round actually changed (other files in the diff were already changed at the previous delivery and are not this round's work): src/b.ts");
+  // A new problem in a file this round changed is a regression: it decides.
+  const changed = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/b.ts" });
+  expect(changed.review).toMatchObject({ state: "rework", round: 2 });
+  expect(changed.goal.severity).toBe("blocker");
+  // The same untouched file as last time may be the unfixed problem worded differently: it keeps its severity.
+  const same = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/a.ts" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
+  expect(same.review).toMatchObject({ state: "rework", round: 2 });
+  expect(same.goal.severity).toBe("blocker");
+  // Last time's fail cited no file: no way to tell it apart, so it keeps its severity.
+  const unplaced = await scenario({ detail: "The Rerun button is missing from the drawer.", quote: "Card" }, { detail: "Variable naming in the parser is inconsistent.", file: "src/a.ts" });
+  expect(unplaced.review).toMatchObject({ state: "rework", round: 2 });
+  expect(unplaced.goal.severity).toBe("blocker");
+  // The same finding in another untouched file (largely the same words) keeps its severity too.
+  const reworded = await scenario({ detail: "The Rerun button is missing from the drawer.", file: "src/b.ts" }, { detail: "The Rerun button is still missing from the drawer.", file: "src/a.ts" });
+  expect(reworded.review).toMatchObject({ state: "rework", round: 2 });
+});
+
 test("review snapshots: written atomically per card, unreadable or wrong-shaped files read as none, removed with the card and at start when the card is gone (§3.6)", async () => {
   const dir = await mkdtemp(join(tmpdir(), "flowly-snapshots-"));
   roots.push(dir);
