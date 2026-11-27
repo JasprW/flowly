@@ -2375,6 +2375,36 @@ test("rework round: a check that was only a minor finding last time and now fail
   expect(regression.items.find((i) => i.id === "g1")!.severity).toBe("major");
 });
 
+test("rework round: a check that was only minor and is left out keeps its minor result, so fixing the only blocking problem passes; a disputed one left out is unavailable (§3.6, E1)", async () => {
+  const scenario = async (extra: Record<string, unknown> = {}) => {
+    let round = 0;
+    const seen: LlmReviewInput[] = [];
+    const llm: LlmReview = async (input) => {
+      seen.push(input);
+      round++;
+      if (round === 1)
+        return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "blocker", detail: "The Rerun button is missing.", file: "src/b.ts" }, { id: "g1", verdict: "fail", severity: "minor", detail: "Old nit in the parser.", file: "src/a.ts", line: 3 }] };
+      // The reviewer judges only the blocking check and leaves the minor one out.
+      return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }] };
+    };
+    const x = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, maxRounds: 3, paths: ["src/a.ts", "src/b.ts"], diffText: () => "diff --git a/src/b.ts b/src/b.ts\n+y" });
+    expect((await x.deliver("development")).tasks[0]!.review).toMatchObject({ state: "rework", round: 1 });
+    await x.turnStarted();
+    await mkdir(join(x.a, "src"), { recursive: true });
+    await writeFile(join(x.a, "src/b.ts"), "this round");
+    x.repo.changed = ["src/b.ts"];
+    return { review: (await x.deliver(undefined, extra)).tasks[0]!.review!, seen };
+  };
+  const { review, seen } = await scenario();
+  expect(reviewPrompt(seen[1]!)).toContain("A check that passed before, or was only minor, and is not touched by these changes needs no verdict; leave it out and its previous result stays");
+  expect(review).toMatchObject({ state: "passed", round: 2 });
+  expect(review.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", detail: "Old nit in the parser.", file: "src/a.ts", line: 3, reason: "Minor in the previous round; not judged again." });
+  // A disputed check always needs a verdict of its own: left out, it is unavailable.
+  const disputed = await scenario({ disputes: [{ id: "g1", reason: "Not part of this card." }] });
+  expect(disputed.review.items.find((i) => i.id === "g1")).toMatchObject({ state: "unavailable" });
+  expect(disputed.review.state).not.toBe("passed");
+});
+
 test("rework round after a plugin restart still compares with the previous review's snapshot, read from disk (§3.6)", async () => {
   let round = 0;
   const llm: LlmReview = async () => {

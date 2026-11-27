@@ -369,6 +369,8 @@ export async function linkedShape(repos: readonly LinkedRepo[], baseRef?: string
   return { shape: { files: paths.size, lines, size: sizeOf(lines) }, paths };
 }
 
+/** A minor fail or needs_user: shown, but it never decided the review (§3.6). */
+const minorResult = (i: Pick<ReviewItem, "state" | "severity">) => (i.state === "failed" || i.state === "needs_user") && isMinor(i);
 /** Lines apart within which two fails in the same file count as the same finding (§3.6). */
 const sameFindingLines = 20;
 /** Two fails in the same file, near each other or either without a line: taken as the same finding (§3.6). */
@@ -1414,10 +1416,25 @@ export class AutoReviewService {
           if (!ids.includes(r.id)) return r;
           const v = verdicts.get(r.id);
           if (!v) {
-            // Round ≥ 2 re-checks only what failed; a check that passed before and was not judged again keeps its pass,
-            // unless it is still disputed: a disputed check always needs a verdict of its own (§6.3 step 2, E1).
+            // Round ≥ 2 re-checks only what failed; a check that passed before and was not judged again keeps its pass, and
+            // one that was only minor keeps that minor result (§3.6), unless it is still disputed: a disputed check always
+            // needs a verdict of its own (§6.3 step 2, E1).
             const prior = incremental ? before.get(r.id) : undefined;
             if (prior && itemPassed(prior) && !r.disputeReason) return { ...r, state: prior.state, ms, ...(prior.detail ? { detail: prior.detail } : {}), reason: "Passed in the previous round; not judged again." };
+            if (prior && minorResult(prior) && !r.disputeReason) {
+              const { reason: _old, severity: _oldSeverity, file: _oldFile, line: _oldLine, quote: _oldQuote, detail: _oldDetail, ...base } = r;
+              return {
+                ...base,
+                state: prior.state,
+                severity: "minor" as const,
+                ms,
+                ...(prior.detail ? { detail: prior.detail } : {}),
+                ...(prior.file ? { file: prior.file } : {}),
+                ...(prior.line ? { line: prior.line } : {}),
+                ...(prior.quote ? { quote: prior.quote } : {}),
+                reason: "Minor in the previous round; not judged again.",
+              };
+            }
             return { ...r, state: "unavailable" as const, ms, reason: "The review session gave no verdict for this check." };
           }
           // An answer in a question tool counts by the user's answer only; the agent's question is context (§4.2, E2).
@@ -1434,7 +1451,7 @@ export class AutoReviewService {
           const prior = incremental ? before.get(r.id) : undefined;
           // A rework round re-checks what failed and looks for regressions (§3.6): a fail of what passed before, or of what
           // was only a minor finding (it did not decide either), must cite a file this round changed.
-          const settled = !!prior && (itemPassed(prior) || ((prior.state === "failed" || prior.state === "needs_user") && isMinor(prior)));
+          const settled = !!prior && (itemPassed(prior) || minorResult(prior));
           if (state === "failed" && severity !== "minor" && settled && !(v.file && changedNow.has(v.file))) {
             severity = "minor";
             why = notThisRoundReason;
