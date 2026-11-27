@@ -78,3 +78,11 @@ Status: implemented 2026-10-19 (user choice: automatic by parent, option 1). Car
 2. Under a main session with subagents, one row (`↳`, the Subagents chip's summary such as "2 working, 1 needs input", a chevron) shows or hides them. The rows reveal and hide with the shared measured-height `Collapse` and the chevron turns with the same progress (Motion: Reduce Motion honoured, interruptible). It is folded unless a subagent needs input or failed, or the selected session is one of them; the user's toggle wins until the sidebar closes.
 3. Subagent rows are the normal session rows, indented and slightly shorter; opening, unread state, attention and the menu are unchanged. The section count is the number of main sessions; the collapsed summary (`n running`) still counts every session. Archived sessions use the same grouping.
 4. No data or setting changes. The Subagents chip above the composer opens a subagent in the side bar when it is one of this card's sessions, and falls back to a Paseo agent pane otherwise (SUBAGENTS-SPEC).
+
+## Session menu: copy IDs
+
+Status: user request 2026-11-27 (card "task session contextual menu").
+
+1. A session row's menu (right-click / long-press in the sidebar) and the session view header's overflow menu have **Copy agent ID** after Stop and before Archive, in their own group (`copyIdEntries`, `client/session-copy.ts`). It copies the Paseo agent id and shows the native "Agent ID copied" toast. Archived sessions have it too.
+2. When the provider's own session id differs from the agent id, the same group also has **Copy session ID** ("Session ID copied"). The id is the agent's `persistence.sessionId`, else `runtimeInfo.sessionId`; a plugin provider's `plugin:{"version":1,"data":{"sessionId":…}}` handle gives its inner `sessionId`. No id, an id equal to the agent id, or a plugin handle without an inner id shows no entry (`providerSessionId`, `shared/session-ids.ts`).
+3. Copying touches no board data and needs no active drawer or lock. A clipboard failure shows the error as a toast.

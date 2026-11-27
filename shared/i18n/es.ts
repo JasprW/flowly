@@ -1470,5 +1470,9 @@ const catalog: Catalog = {
   "Images in descriptions": "Imágenes en descripciones",
   "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "En la web, pega o suelta imágenes en la descripción de una tarjeta. Los agentes las ven con la descripción; los teléfonos las muestran.",
   "Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent.": "Toca un siguiente paso sugerido en la cronología de la sesión para rellenar el cuadro de mensaje, también en el móvil. No se envía nada.",
+  "Copy agent ID": "Copiar ID del agente",
+  "Agent ID copied": "ID del agente copiado",
+  "Copy session ID": "Copiar ID de la sesión",
+  "Session ID copied": "ID de la sesión copiado",
 };
 export default catalog;

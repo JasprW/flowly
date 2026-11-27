@@ -1470,5 +1470,9 @@ const catalog: Catalog = {
   "Images in descriptions": "描述中的圖片",
   "Paste or drop images into a card's description on the web. Agents see them with the description; phones show them.": "在網頁端把圖片貼上或拖到卡片描述裡。智慧體隨描述一起看到它們；手機上可以檢視。",
   "Tap a suggested next step in the session timeline to fill the message box, including on your phone. Nothing is sent.": "點選 session 時間軸中建議的下一步，即可填入輸入框，手機上也可以。不會傳送訊息。",
+  "Copy agent ID": "複製 Agent ID",
+  "Agent ID copied": "已複製 Agent ID",
+  "Copy session ID": "複製工作階段 ID",
+  "Session ID copied": "已複製工作階段 ID",
 };
 export default catalog;

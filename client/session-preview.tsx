@@ -76,6 +76,7 @@ import { RunningDots } from "./running-motion";
 import { useKeyboardInset } from "./keyboard";
 import { composerEnterAction, createDraftBuffer, createDraftReporter, restoredDraft, type ComposerKey } from "./session-input";
 import { t, tn } from "../shared/i18n";
+import { copyIdEntries } from "./session-copy";
 
 /** Composer text area: vertical padding and the one-line height (20 px line). */
 const inputPad = 4;
@@ -395,6 +396,7 @@ function SessionPreviewView({
       ...(runningNow
         ? [{ id: "stop", label: t("Stop"), icon: "Square", onPress: () => void config.apply({ stop: true }, t("Session stopped")) }]
         : []),
+      ...copyIdEntries(active, toast),
       ...(!active.archivedAt
         ? [
             { kind: "separator" as const, id: "s" },
