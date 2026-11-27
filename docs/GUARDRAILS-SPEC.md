@@ -62,7 +62,7 @@
 - 被质疑的内置目标项与卡片专属项没有条目可记 misfire，`insights.guardrails.misfires` 只统计准则与命令的误判；§3.4 “发现新命令但已到上限”的 Insights 提示没有通道，不做。
 - 旧 skill 的会话向 `flowly_update_workpad` 发 `validation`/`confusions` 时返回 `WORKPAD_INVALID` 并说明只收 `acceptance`；旧版 workpad 记录读取时丢掉这些字段，不迁移。
 - `autoReviewRuns(project)` 只看项目开关；旧的 `reviewSetup` 卡片、`reviewDraft`、`memory.*` RPC、`reviews.detect-commands|analyze-history|analysis-status|apply-draft|discard-draft|setup-card`、`insights.add-review-check|pause-review-check|dismiss-review-nudge`、`workpads.resolve-confusion|refresh` 全部删除；存过的 `review_rule`/`review_pause` 建议读取时丢弃。
-- 评审在第 2 轮起用 `git diff <上一轮 sha>` 做增量；上一轮通过且这一轮没给结论的项沿用通过。
+- 评审在第 2 轮起用 `git diff <上一轮 sha>` 做增量；上一轮通过且这一轮没给结论的项沿用通过，上一轮只记 `minor` 且这一轮没给结论的项沿用那条 `minor` 结果（2026-11-27）。
 - 新项目与“编辑项目”的 Auto review 只有开关、成本一句和 Max rework rounds；客户端不调用 `guardrails.detect`，由 daemon 在创建项目和保存开关时识别命令（取消表单不留副作用）。
 - What's new 1.8.0 带“Turn on for this project”按钮，打开当前项目的 Auto review 设置；已有项目的 Auto review 保持关闭，新项目默认开、2 轮。
 
@@ -368,7 +368,7 @@ Project memory (<n> of <m> shown, flowly_recall finds the others):
    - `na` 按通过处理，不计抓到也不计误判。
    - 返工第 2 轮起：评审输入只给上一轮交付以来的增量 diff（`git diff <上一轮 sha>`）加上一轮的结果，指令写明（2026-11-26）：复查上一轮没通过的项，仍以同样原因不通过的保持原来的 severity；其余只找本轮改动引入的回归，与本轮改动无关的新问题只能记 `minor`；不重复已经通过的。daemon 兜底：上一轮通过或只记了 `minor` 的项这一轮判 `fail` 时，`file` 不在本轮改动过的路径里就降为 `minor`（`reason` “Not caused by this round's changes.”）。本轮改动过的路径：git 从上一轮 sha 列出的路径中，内容和上一轮开始时的快照不同的那些（AUTO-REVIEW-SPEC §3.6）。上一轮没通过的项这一轮因新问题判 `fail`、引用的文件本轮没改时，同样降为 `minor`，同一文件里与上一轮不同的意见也一样（同一文件时行号相差 ≤ 20 行或没写行号算同一意见，保持原 severity；用户 2026-11-27 决定）；有快照时评审前就把本轮改动过的路径列进提示（AUTO-REVIEW-SPEC §3.6，2026-11-27）。
    - 卡片专属项连续 3 次决定性地不通过、意见两两不同时，第 3 次起 `gating: false`（AUTO-REVIEW-SPEC §3.6）。
-   - 争议（E1，2026-11-26 改；之前是“不交给评审 session，直接记为 `disputed`”）：`task.disputes` 里的判断类检查照样交给评审 session 判定。这一项的输入附上被争议的那条意见（`finding`、所在轮次）和 agent 的理由，指令写明：这条意见被 agent 争议过，没有争议没回答的新证据时，不要以同一条意见再判 fail；有新证据时在 `detail` 里说明新在哪里；别的问题照常判。结果照常记（`passed` / `failed` / `na`），条目带 `disputeReason` 供人查看。返工第 2 轮起，仍在 `task.disputes` 里的项必须由评审重新给结论，不沿用上一轮的通过（提示词写明；评审没给时记 `unavailable`）。命令的争议见步骤 1。
+   - 争议（E1，2026-11-26 改；之前是“不交给评审 session，直接记为 `disputed`”）：`task.disputes` 里的判断类检查照样交给评审 session 判定。这一项的输入附上被争议的那条意见（`finding`、所在轮次）和 agent 的理由，指令写明：这条意见被 agent 争议过，没有争议没回答的新证据时，不要以同一条意见再判 fail；有新证据时在 `detail` 里说明新在哪里；别的问题照常判。结果照常记（`passed` / `failed` / `na`），条目带 `disputeReason` 供人查看。返工第 2 轮起，仍在 `task.disputes` 里的项必须由评审重新给结论，不沿用上一轮的通过或 `minor` 结果（提示词写明；评审没给时记 `unavailable`）。命令的争议见步骤 1。
 3. **总判定**：有决定性的 `failed` → 不通过（R1，或到上限、到每卡 10 次评审时 R2）；否则有参与判定的 `unavailable` → Unavailable；否则有决定性的 `needs_user` → Needs you（卡片留在 In review，进 Attention，不返工，AUTO-REVIEW-SPEC §3.2）；否则 Passed。`disputed` 与 `minor` 不算不通过。
 
 参与判定的集合（B4）：命令与内置检查总是参与；准则和专属项只在 Guardrails 开着时参与（host `features.memory` 为开且 `Project.memory !== false`）。关闭时它们也不注入、不学、不显示在 `get_task.guardrails` 里。

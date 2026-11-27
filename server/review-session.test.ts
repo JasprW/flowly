@@ -184,7 +184,7 @@ test("needs_user and severity (AUTO-REVIEW-SPEC §3.6): parsed for fail and need
   expect(prompt).toContain("Give every fail and needs_user a severity: blocker");
   expect(prompt).toContain("Every fail needs evidence (needs_user does not)");
   const rework = reviewPrompt({ ...base, incremental: true });
-  expect(rework).toContain("Re-check only the checks that did not pass last time, and look only for regressions these changes introduced. A check that still fails as it did last time keeps its severity; only a new problem that these changes did not cause may be at most minor.");
+  expect(rework).toContain("Re-check only the checks that did not pass last time (a previous minor result counts as passed), and look only for regressions these changes introduced. A check that still fails as it did last time keeps its severity; only a new problem that these changes did not cause may be at most minor.");
   expect(rework).not.toContain("look for new problems");
 });
 
