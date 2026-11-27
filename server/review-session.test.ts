@@ -188,7 +188,7 @@ test("needs_user and severity (AUTO-REVIEW-SPEC §3.6): parsed for fail and need
   expect(rework).not.toContain("look for new problems");
 });
 
-it("rework prompt lists this round's changed files and says when the list is cut (AUTO-REVIEW-SPEC §3.6)", () => {
+test("rework prompt lists this round's changed files and says when the list is cut (AUTO-REVIEW-SPEC §3.6)", () => {
   const full = reviewPrompt({ ...base, incremental: true, changedThisRound: ["a.ts"], changedThisRoundTotal: 1 });
   expect(full).toContain("Files this round actually changed (other files in the diff were already changed at the previous delivery and are not this round's work): a.ts");
   const cut = reviewPrompt({ ...base, incremental: true, changedThisRound: ["a.ts", "b.ts"], changedThisRoundTotal: 250 });
