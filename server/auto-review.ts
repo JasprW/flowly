@@ -1116,15 +1116,16 @@ export class AutoReviewService {
     if (!started) return;
     // A new review replaces a held one (§3.2).
     this.held.delete(delivery.taskId);
-    // The previous review's per-file snapshot (§3.6), when it is the one this round continues; this review's replaces it.
-    const kept = await this.snapshots.get(delivery.taskId).catch(() => undefined);
-    const previousFiles = kept && kept.startedAt === started.previous?.startedAt ? kept.files : undefined;
-    await this.snapshots
-      .set(delivery.taskId, snapshot ? { startedAt, files: snapshot.files } : undefined)
-      .catch((e) => logFailure("Auto review snapshot not saved:", e, delivery.taskId));
+    // Registered before any further wait, so a person's move stops it from here on (§3.2).
     const abort = new AbortController();
     this.active.set(delivery.taskId, { startedAt, abort });
     try {
+      // The previous review's per-file snapshot (§3.6), when it is the one this round continues; this review's replaces it.
+      const kept = await this.snapshots.get(delivery.taskId).catch(() => undefined);
+      const previousFiles = kept && kept.startedAt === started.previous?.startedAt ? kept.files : undefined;
+      await this.snapshots
+        .set(delivery.taskId, snapshot ? { startedAt, files: snapshot.files } : undefined)
+        .catch((e) => logFailure("Auto review snapshot not saved:", e, delivery.taskId));
       await this.conduct(delivery, manual, paseo, lifecycleRecorded, { task, baseRef, where, whereUnavailable, linked, measured, guard, words, startedAt, started, measure, signal: abort.signal, head, previousFiles });
     } finally {
       if (this.active.get(delivery.taskId)?.abort === abort) this.active.delete(delivery.taskId);
