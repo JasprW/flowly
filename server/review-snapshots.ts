@@ -40,9 +40,10 @@ export class ReviewSnapshots {
     await writeFileAtomic(path, JSON.stringify({ version: 1, startedAt: snapshot.startedAt, files: Object.fromEntries(snapshot.files) }));
   }
 
-  /** Card delete and project Remove. */
+  /** Card delete and project Remove: tries every card, then reports the first failure. */
   async remove(taskIds: Iterable<string>) {
-    for (const id of taskIds) await this.set(id, undefined);
+    const failed = (await Promise.allSettled([...taskIds].map((id) => this.set(id, undefined)))).find((r) => r.status === "rejected");
+    if (failed) throw failed.reason;
   }
 
   /** Plugin start: drops the files of cards that no longer exist. Returns how many went. */

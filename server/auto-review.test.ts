@@ -2360,8 +2360,14 @@ test("review snapshots: written atomically per card, unreadable or wrong-shaped 
   await store.remove(["t1"]);
   expect(existsSync(join(dir, "review-snapshots", "t1.json"))).toBe(false);
   expect(await store.get("t1")).toBeUndefined();
+  // One failed removal does not skip the others; the failure is still reported.
+  await new ReviewSnapshots(dir).set("t4", { startedAt: "x", files });
+  await mkdir(join(dir, "review-snapshots", "t5.json", "child"), { recursive: true });
+  await expect(new ReviewSnapshots(dir).remove(["t5", "t4"])).rejects.toThrow();
+  expect(existsSync(join(dir, "review-snapshots", "t4.json"))).toBe(false);
   // At start: files of cards that no longer exist go; a write in progress (.tmp) stays.
   await writeFile(join(dir, "review-snapshots", "t3.json.123.tmp"), "{}");
+  await rm(join(dir, "review-snapshots", "t5.json"), { recursive: true });
   expect(await new ReviewSnapshots(dir).cleanup(new Set(["t2"]))).toBe(1);
   expect(existsSync(join(dir, "review-snapshots", "t2.json"))).toBe(true);
   expect(existsSync(join(dir, "review-snapshots", "bad.json"))).toBe(false);
