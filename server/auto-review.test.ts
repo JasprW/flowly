@@ -32,6 +32,7 @@ import {
 import { GuardrailsService } from "./guardrails";
 import { reviewPrompt } from "./review-session";
 import { AsyncQuestionTitles } from "./async-questions";
+import { ReviewSnapshots } from "./review-snapshots";
 import type { AgentService } from "./agent-service";
 import type { ChangeShape, Lane } from "../shared/model";
 import type { ConversationEntry } from "../shared/auto-review";
@@ -162,7 +163,8 @@ async function setup(
   const diffs: (string | undefined)[] = [];
   const bases: (string | undefined)[] = [];
   const sent: { agentId: string; text: string }[] = [];
-  const reviews = new AutoReviewService(x.store, {
+  // A plugin restart builds a new service on the same store (`restart`).
+  const make = () => new AutoReviewService(x.store, {
     workspace: async () => ({ directory: options.directory ?? x.a, worktree: !place.shared }),
     sessionBusy: async (agentId) => x.actors[agentId]?.status === "running",
     sessionLive: async (agentId) => !!x.actors[agentId] && !x.actors[agentId]!.archivedAt,
@@ -186,10 +188,15 @@ async function setup(
         }),
     exists: options.exists ?? (async () => false),
   });
+  let reviews = make();
   x.store.onReviewStop = (taskId) => reviews.stop(taskId);
   let delivering: Promise<void> = Promise.resolve();
   x.service.onDelivered = (delivery, paseo) => {
     delivering = reviews.delivered(delivery, paseo);
+  };
+  const restart = () => {
+    reviews = make();
+    return reviews;
   };
   /** Moves the card to `stage` and then delivers it, as the agent; waits for the review. */
   const deliver = async (stage?: "design" | "development" | "test", extra: Record<string, unknown> = {}) => {
@@ -216,7 +223,7 @@ async function setup(
       x.store.event(b, { taskId: "t", actor: "system", action: "agent.turn_ended", agentId: "actor", ...(byUser === undefined ? {} : { byUser }) });
     });
   const entry = async (id: string) => (await guardrails.store.read()).entries.find((e) => e.id === id)!;
-  return { ...x, reviews, guardrails, sent, runs, exits, repo, place, diffs, bases, deliver, turnStarted, turnEnded, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
+  return { ...x, get reviews() { return reviews; }, restart, guardrails, sent, runs, exits, repo, place, diffs, bases, deliver, turnStarted, turnEnded, entry, setDuring: (fn: () => Promise<void>) => (during = fn) };
 }
 
 const card = async (x: { store: { read(): Promise<import("../shared/model").Board> } }) => (await x.store.read()).tasks[0]!;
@@ -2296,6 +2303,69 @@ test("rework round: a fail of what passed before must cite a file this round cha
   board = await z.deliver();
   expect(board.tasks[0]!.review).toMatchObject({ state: "passed", round: 2 });
   expect(board.tasks[0]!.review!.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+});
+
+test("rework round after a plugin restart still compares with the previous review's snapshot, read from disk (§3.6)", async () => {
+  let round = 0;
+  const llm: LlmReview = async () => {
+    round++;
+    if (round === 1) return { model: "m", verdicts: [{ id: "goal", verdict: "fail", severity: "blocker", detail: "Missing.", file: "src/b.ts" }, { id: "g1", verdict: "pass", detail: "ok" }] };
+    return { model: "m", verdicts: [{ id: "goal", verdict: "pass", detail: "Fixed." }, { id: "g1", verdict: "fail", detail: "Old nit.", file: "src/a.ts" }] };
+  };
+  const scenario = async (between?: (x: Awaited<ReturnType<typeof setup>>) => Promise<void>) => {
+    round = 0;
+    const x = await setup({ entries: [guideline("g1", "i18n everywhere")], llm, maxRounds: 3, paths: ["src/a.ts", "src/b.ts"], diffText: () => "diff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/src/b.ts b/src/b.ts\n+y" });
+    await mkdir(join(x.a, "src"), { recursive: true });
+    await writeFile(join(x.a, "src/a.ts"), "uncommitted since round 1");
+    x.repo.changed = ["src/a.ts"];
+    expect((await x.deliver("development")).tasks[0]!.review).toMatchObject({ state: "rework", round: 1 });
+    // The plugin restarts between the rounds: a new service with nothing in memory.
+    x.restart();
+    await between?.(x);
+    await x.turnStarted();
+    await writeFile(join(x.a, "src/b.ts"), "this round");
+    x.repo.changed = ["src/a.ts", "src/b.ts"];
+    return (await x.deliver()).tasks[0]!.review!;
+  };
+  // src/a.ts was already uncommitted at round 1 and is untouched since: a fail citing it is minor, as without a restart.
+  const kept = await scenario();
+  expect(kept).toMatchObject({ state: "passed", round: 2 });
+  expect(kept.items.find((i) => i.id === "g1")).toMatchObject({ state: "failed", severity: "minor", reason: "Not caused by this round's changes." });
+  // An unreadable snapshot file reads as none: every candidate path counts, so the same fail decides.
+  const corrupt = await scenario(async (x) => {
+    const file = join(x.store.directory, "review-snapshots", "t.json");
+    expect(existsSync(file)).toBe(true);
+    await writeFile(file, "{ not json");
+  });
+  expect(corrupt).toMatchObject({ state: "rework", round: 2 });
+  expect(corrupt.items.find((i) => i.id === "g1")!.severity).toBeUndefined();
+});
+
+test("review snapshots: written atomically per card, unreadable or wrong-shaped files read as none, removed with the card and at start when the card is gone (§3.6)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "flowly-snapshots-"));
+  roots.push(dir);
+  const files = new Map([["src/a.ts", "abc"], ["src/b c.ts", "exec:def"]]);
+  await new ReviewSnapshots(dir).set("t1", { startedAt: "2026-11-27T00:00:00.000Z", files });
+  await new ReviewSnapshots(dir).set("t2", { startedAt: "2026-11-27T00:00:01.000Z", files });
+  // A fresh instance (a restart) reads what an earlier one wrote.
+  expect(await new ReviewSnapshots(dir).get("t1")).toEqual({ startedAt: "2026-11-27T00:00:00.000Z", files });
+  expect(await new ReviewSnapshots(dir).get("missing")).toBeUndefined();
+  // Ids that are not card ids never reach the file system.
+  expect(await new ReviewSnapshots(dir).get("../t1")).toBeUndefined();
+  for (const bad of ["{", JSON.stringify({ version: 2, startedAt: "x", files: {} }), JSON.stringify({ version: 1, startedAt: "x", files: { a: 1 } }), JSON.stringify({ version: 1, startedAt: "x", files: [] })]) {
+    await writeFile(join(dir, "review-snapshots", "bad.json"), bad);
+    expect(await new ReviewSnapshots(dir).get("bad")).toBeUndefined();
+  }
+  const store = new ReviewSnapshots(dir);
+  await store.remove(["t1"]);
+  expect(existsSync(join(dir, "review-snapshots", "t1.json"))).toBe(false);
+  expect(await store.get("t1")).toBeUndefined();
+  // At start: files of cards that no longer exist go; a write in progress (.tmp) stays.
+  await writeFile(join(dir, "review-snapshots", "t3.json.123.tmp"), "{}");
+  expect(await new ReviewSnapshots(dir).cleanup(new Set(["t2"]))).toBe(1);
+  expect(existsSync(join(dir, "review-snapshots", "t2.json"))).toBe(true);
+  expect(existsSync(join(dir, "review-snapshots", "bad.json"))).toBe(false);
+  expect(existsSync(join(dir, "review-snapshots", "t3.json.123.tmp"))).toBe(true);
 });
 
 test("changedFrom: a path counts when its content differs from the snapshot; one the snapshot lacks counts", async () => {

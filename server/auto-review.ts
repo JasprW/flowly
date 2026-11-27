@@ -65,6 +65,7 @@ import { CODEX_ANSWERS_PREFIX, questionAnswers, type TurnItem } from "../shared/
 import type { AnsweredQuestions, SessionQuestions } from "./async-questions";
 import { logFailure } from "./error-report";
 import { resolveWorktree, worktreeBase } from "./review-worktree";
+import { ReviewSnapshots } from "./review-snapshots";
 
 /** The waiting marker of a person's Rerun (§3.5) carries this id prefix instead of a delivery event id. */
 const rerunWaitPrefix = "rerun:";
@@ -736,6 +737,8 @@ export type AutoReviewDeps = {
   run?: RunCheck;
   git?: Git;
   clock?: () => number;
+  /** Where review snapshots persist (§3.6); `<plugin data>/review-snapshots` by default. */
+  snapshots?: ReviewSnapshots;
 };
 
 const fileExists = (path: string) =>
@@ -772,8 +775,8 @@ export class AutoReviewService {
   private active = new Map<string, { startedAt: string; abort: AbortController }>();
   /** Results held while the card was out of In review (§3.2), by card. */
   private held = new Map<string, HeldReview>();
-  /** Each card's latest review start: its per-file content digests (§3.6), in memory only. */
-  private snapshots = new Map<string, { startedAt: string; files: ReadonlyMap<string, string> }>();
+  /** Each card's latest review start: its per-file content digests (§3.6), kept on disk across restarts. */
+  readonly snapshots: ReviewSnapshots;
   private readonly run: RunCheck;
   private readonly git: Git;
   private readonly clock: () => number;
@@ -784,6 +787,7 @@ export class AutoReviewService {
     this.run = deps.run ?? runCheck;
     this.git = deps.git ?? defaultGit;
     this.clock = deps.clock ?? (() => Date.now());
+    this.snapshots = deps.snapshots ?? new ReviewSnapshots(store.directory);
   }
 
   /**
@@ -1113,10 +1117,11 @@ export class AutoReviewService {
     // A new review replaces a held one (§3.2).
     this.held.delete(delivery.taskId);
     // The previous review's per-file snapshot (§3.6), when it is the one this round continues; this review's replaces it.
-    const kept = this.snapshots.get(delivery.taskId);
+    const kept = await this.snapshots.get(delivery.taskId).catch(() => undefined);
     const previousFiles = kept && kept.startedAt === started.previous?.startedAt ? kept.files : undefined;
-    if (snapshot) this.snapshots.set(delivery.taskId, { startedAt, files: snapshot.files });
-    else this.snapshots.delete(delivery.taskId);
+    await this.snapshots
+      .set(delivery.taskId, snapshot ? { startedAt, files: snapshot.files } : undefined)
+      .catch((e) => logFailure("Auto review snapshot not saved:", e, delivery.taskId));
     const abort = new AbortController();
     this.active.set(delivery.taskId, { startedAt, abort });
     try {
