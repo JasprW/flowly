@@ -285,6 +285,29 @@ export const typeInputSchema = z.strictObject({
     "feature: new behavior; bugfix: wrong behavior fixed; research: investigation or analysis without a shipped change; refactor: restructuring without behavior change; docs: documentation only; chore: build, tooling, dependencies, maintenance.",
   ),
 });
+/**
+ * flowly_edit_card: change another card of the session's own project. The project is the session card's, never an
+ * input; the target's revision guards against a human edit in between. The session's own card keeps its own tools.
+ */
+export const editCardInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  request: requestSchema,
+  cardId: z.string().min(1).describe("The id of the card to change, from flowly_search or the board; another card of this project."),
+  cardRevision: z.number().int().positive().describe("That card's current revision; a human edit in between returns REVISION_CONFLICT."),
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().max(20000).optional().describe("Replaces the whole description."),
+  priority: prioritySchema.optional(),
+  type: taskTypeSchema.optional(),
+  status: statusSchema.optional().describe("Any lane of this project, Done and Cancelled included."),
+  addTags: z.array(z.string().max(200)).max(tagLimits.perCall).default([]),
+  removeTags: z
+    .array(z.string().max(200))
+    .max(tagLimits.perCall)
+    .default([])
+    .describe("Only tags an agent added can be removed."),
+  note: z.string().trim().min(1).max(10000).describe("Why the card changes; recorded on the card's activity."),
+});
+export type EditCardInput = z.infer<typeof editCardInputSchema>;
 /** flowly_suggest_next_moves (NEXT-MOVES-SPEC §2): the session's candidate next messages for the user. */
 export const nextMovesInputSchema = z.strictObject({
   expectedRevision: revisionSchema,

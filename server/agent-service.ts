@@ -65,6 +65,7 @@ import {
   type WorkpadInput,
   type ExternalContext,
   type ReadExternalInput,
+  editCardInputSchema,
 } from "../shared/tools";
 import { BoardStore } from "./store";
 import { BoardService } from "./service";
@@ -112,6 +113,8 @@ export class AgentService {
   guardrails?: GuardrailsService;
   /** Starts the automatic review of an agent delivery (AUTO-REVIEW-SPEC §3.1); set by the plugin entry. Never awaited. */
   onDelivered?: (delivery: DeliveredReview, paseo: PaseoApi) => void;
+  /** The board's after-status work (reopen restore, Done review, wrap-up) for a card flowly_edit_card moved; set by the plugin entry. */
+  onCardStatus?: (previous: string, task: Task, paseo: PaseoApi) => void;
   /** flowly_recall (PROJECT-MEMORY-SPEC §6.4): read-only. */
   async recall(identity: ToolIdentity, raw: RecallInput) {
     const input = recallInputSchema.parse(raw);
@@ -446,6 +449,91 @@ export class AgentService {
   async writeAgent(identity: ToolIdentity, action: Parameters<AgentService["write"]>[1], raw: unknown) {
     const { responseDetail, ...input } = agentCallSchema.parse(raw);
     return responseDetail === "full" ? this.write(identity, action, input) : this.write(identity, action, input, "compact");
+  }
+  /**
+   * flowly_edit_card: changes another card of the session's own project through the store edit the board form
+   * uses, recorded as the agent's. The project comes from the session's card; the target's revision must match.
+   */
+  async editCard(identity: ToolIdentity, raw: unknown) {
+    const input = editCardInputSchema.parse(raw);
+    this.secrets.validateRequest(identity, input.request, input.expectedRevision);
+    const r = await this.resources(identity);
+    if (r.task.revision !== input.expectedRevision.task || r.project.revision !== input.expectedRevision.project)
+      throw new ToolError("REVISION_CONFLICT", "This session's card or project changed. Re-read flowly_get_task.");
+    if (input.cardId === r.task.id)
+      throw new ToolError(
+        "INVALID_INPUT",
+        "This is the session's own card; use flowly_update_status, flowly_set_tags and flowly_set_type for it.",
+      );
+    const target = (await this.store.read()).tasks.find((t) => t.id === input.cardId);
+    if (!target || target.projectId !== r.project.id)
+      throw new ToolError("NOT_FOUND", "No card with that id in this session's project.");
+    if (target.archivedAt || r.project.archivedAt) throw new ToolError("INVALID_INPUT", "Archived cards can't be changed.");
+    if (target.revision !== input.cardRevision)
+      throw new ToolError("REVISION_CONFLICT", `The card is at revision ${target.revision}. Re-read it before changing it.`);
+    const fields = {
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.priority !== undefined ? { priority: input.priority } : {}),
+      ...(input.type !== undefined ? { type: input.type } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    };
+    const add = normalizeTags(input.addTags),
+      remove = normalizeTags(input.removeTags),
+      tagEdit = add.length > 0 || remove.length > 0;
+    if (!Object.keys(fields).length && !tagEdit)
+      throw new ToolError("INVALID_INPUT", "Pass at least one field or tag to change.");
+    const by = { actor: "agent" as const, agentId: identity.agentId, at: new Date().toISOString() };
+    // A refused tag change (a human's tag, the tag limit) must leave the card untouched, so it is checked first.
+    try {
+      if (tagEdit) changeTags(target.tags || [], { add, remove }, by);
+    } catch (e) {
+      throw new ToolError("INVALID_INPUT", e instanceof Error ? e.message : String(e));
+    }
+    const previous = target.status;
+    let task: Task = target;
+    if (Object.keys(fields).length)
+      try {
+        task = await this.store.editTask({
+          id: target.id,
+          revision: target.revision,
+          ...fields,
+          note: input.note,
+          actor: "agent",
+          agentId: identity.agentId,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        throw new ToolError(message.startsWith("Revision conflict") ? "REVISION_CONFLICT" : "INVALID_INPUT", message);
+      }
+    if (tagEdit)
+      task = await this.store.mutate((board) => {
+        const card = board.tasks.find((t) => t.id === target.id)!;
+        const change = changeTags(card.tags || [], { add, remove }, by);
+        if (change.added.length || change.removed.length) {
+          setTags(card, change.tags);
+          this.store.event(board, {
+            taskId: card.id,
+            agentId: identity.agentId,
+            actor: "agent",
+            action: "tags_changed",
+            note: Object.keys(fields).length ? tagChangeNote(change) : `${tagChangeNote(change)} ${input.note}`,
+          });
+        }
+        return card;
+      });
+    if (task.status !== previous) this.onCardStatus?.(previous, task, r.paseo);
+    return {
+      card: {
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        priority: task.priority,
+        type: task.type ?? null,
+        tags: (task.tags || []).map((t) => t.tag),
+        revision: task.revision,
+      },
+    };
   }
   private async continuation(identity: ToolIdentity, revision: ToolContext["revision"]): Promise<Continuation> {
     const r = await this.resources(identity);

@@ -35,6 +35,7 @@ import {
   typeInputSchema,
   nextMovesInputSchema,
   workpadInputSchema,
+  editCardInputSchema,
   progressInputSchema,
   statusInputSchema,
   type ToolIdentity,
@@ -383,6 +384,27 @@ export class ToolServer {
           },
           (input) => wrap(() => this.agents.writeAgent(identity, "workpad", input)),
         );
+        mcp.registerTool(
+          "flowly_edit_card",
+          {
+            description:
+              "Change another card of this session's project: title, description, priority, type, status (any lane of the project, Done and Cancelled included) and tags (add; remove only tags an agent added). Only when the user asked you to edit board cards. Find cards with flowly_search; pass the card's id and current revision (a human edit in between returns REVISION_CONFLICT) and a note that says why. The session's own card is refused: use its own tools. Copy expectedRevision and request from get_task. Does not change this card's revision.",
+            inputSchema: editCardInputSchema,
+            outputSchema: z.object({
+              card: z.object({
+                id: z.string(),
+                title: z.string(),
+                status: z.string(),
+                priority: z.string(),
+                type: z.string().nullable(),
+                tags: z.array(z.string()),
+                revision: z.number(),
+              }),
+            }),
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+          },
+          (input) => wrap(() => this.agents.editCard(identity, input)),
+        );
         return mcp;
       },
       // A request with multi-byte text can exceed 64 KiB (WORKPAD-SPEC §3).
@@ -468,7 +490,7 @@ export class ToolServer {
     }
     const body = z
       .strictObject({
-        action: z.enum(["get", "status", "progress", "idea", "idea_update", "idea_remove", "remember", "recall", "search", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "external", "ticket"]),
+        action: z.enum(["get", "status", "progress", "idea", "idea_update", "idea_remove", "remember", "recall", "search", "artifact", "artifact_remove", "tags", "type", "next_moves", "workpad", "edit_card", "external", "ticket"]),
         input: z.unknown(),
       })
       .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
@@ -481,6 +503,8 @@ export class ToolServer {
             ? await this.agents.recall(identity, recallInputSchema.parse(body.input))
             : body.action === "search"
               ? await this.agents.searchCards(identity, agentSearchInputSchema.parse(body.input))
+            : body.action === "edit_card"
+              ? await this.agents.editCard(identity, body.input)
             : await this.agents.writeAgent(identity, body.action, body.input);
     this.json(res, { ok: true, result: value });
   }
