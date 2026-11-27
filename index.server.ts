@@ -528,6 +528,7 @@ export default function contribute(host: PluginServerContext) {
     const taskIds = new Set((await store.read()).tasks.filter((t) => t.projectId === input.id).map((t) => t.id));
     const removed = await service.removeProject(input, paseo);
     await cardImages.removeTasks(taskIds).catch((e) => logFailure("Card images not moved to removed:", e));
+    await reviews.snapshots.remove(taskIds).catch((e) => logFailure("Auto review snapshots not removed:", e));
     await summaries.store.removeTasks(input.id, taskIds).catch((e) =>
       logFailure("Kanban summaries not removed:", e),
     );
@@ -583,6 +584,11 @@ export default function contribute(host: PluginServerContext) {
   // A person moving the card away stops its review's commands and session at once (AUTO-REVIEW-SPEC §3.2).
   store.onReviewStop = (taskId) => reviews.stop(taskId);
   void reviews.recover().catch((e) => logFailure("Flowly auto review recovery failed:", e));
+  // Snapshots of cards that no longer exist go at start (§3.6).
+  void store
+    .read()
+    .then((board) => reviews.snapshots.cleanup(new Set(board.tasks.map((t) => t.id))))
+    .catch((e) => logFailure("Auto review snapshots not cleaned:", e));
   server.handle(rpc.rerunReview, (input, { paseo }) => reviews.rerun(input.taskId, paseo));
   server.handle(rpc.listConnections, async () => {
     const [connections, board] = await Promise.all([connectors.list(), store.read()]);
@@ -650,6 +656,7 @@ export default function contribute(host: PluginServerContext) {
     const projectId = (await store.read()).tasks.find((t) => t.id === input.id)?.projectId;
     const deleted = await store.deleteTask(input);
     await cardImages.removeTasks([deleted.id]).catch((e) => logFailure("Card images not moved to removed:", e));
+    await reviews.snapshots.remove([deleted.id]).catch((e) => logFailure("Auto review snapshots not removed:", e));
     if (projectId)
       await flow.removeTask(projectId, deleted.id).catch((e) =>
         logFailure("Kanban flow log not cleaned:", e),
